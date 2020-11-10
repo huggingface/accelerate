@@ -1,6 +1,9 @@
 import torch
 
-from .config import DistributedState, DistributedType
+from .config import DistributedState, DistributedType, is_tpu_available
+
+if is_tpu_available():
+    import torch_xla.core.xla_model as xm
 
 class AcceleratedOptimizer(torch.optim.Optimizer):
     def __init__(self, optimizer):

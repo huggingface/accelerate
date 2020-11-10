@@ -3,8 +3,10 @@ import numpy as np
 import os
 import torch
 
-from .config import DistributedState, DistributedType
+from .config import DistributedState, DistributedType, is_tpu_available
 
+if is_tpu_available():
+    import torch_xla.core.xla_model as xm
 
 def set_seed(seed: int):
     """
