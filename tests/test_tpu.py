@@ -113,7 +113,7 @@ def training_check():
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
 
-if __name__ == "__main__":
+def main():
     state = DistributedState()
     if state.process_index == 0:
         print("**Initialization**")
@@ -130,3 +130,10 @@ if __name__ == "__main__":
     if state.process_index == 0:
         print("\n**Training integration test**")
     training_check()
+
+def _mp_fn(index):
+    # For xla_spawn (TPUs)
+    main()
+
+if __name__ == "__main__":
+    main()
