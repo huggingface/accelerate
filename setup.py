@@ -62,7 +62,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     python_requires=">3.6.0",
-    install_requires=[],
+    install_requires=["torch"],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
