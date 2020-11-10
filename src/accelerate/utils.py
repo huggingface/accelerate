@@ -22,17 +22,21 @@ def set_seed(seed: int):
     # ^^ safe to call this function even if cuda is not available
 
 
+def my_cat(*args):
+    state = DistributedState()
+    if state.process_index == 0:
+        print(args)
+    return torch.cat(args[0])
+
 def synchronize_rng_states():
     """
     Helper function to synchronize the rng states in distributed / TPU training.
     """
     state = DistributedState()
     if state.distributed_type == DistributedType.TPU:
-        rng_state = torch.get_rng_state()
-        size = rng_state.shape[0]
-        rng_state = rng_state.to(state.device)
-        xm.mesh_reduce("random seed", rng_state, torch.cat)
-        torch.set_rng_state(rng_state[:size].cpu())
+        rng_state = torch.get_rng_state()[None]
+        rng_state = xm.mesh_reduce("random_seed", rng_state, torch.cat)
+        torch.set_rng_state(rng_state[0])
     elif state.distributed_type == DistributedType.MULTI_GPU:
         rng_state = torch.get_rng_state().to(state.device)
         # Broadcast the state from process 0 to all the others.
