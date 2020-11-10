@@ -13,7 +13,7 @@ def _tpu_gather(tensor, name="tensor"):
         return type(tensor)({k: _tpu_gather(v, name=f"{name}_{k}") for k, v in tensor.items()})
     elif not isinstance(tensor, torch.Tensor):
         raise TypeError(f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors.")
-    return nested_xla_mesh_reduce(name, t, torch.cat)
+    return xm.mesh_reduce(name, t, torch.cat)
 
 
 def _gpu_gather(tensor):
