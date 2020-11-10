@@ -50,6 +50,5 @@ class DistributedState:
             f"Distributed environment: {self.distributed_type}\n"
             f"Num processes: {self.num_processes}\n"
             f"Process index: {self.process_index}\n"
-            f"Local rank: {self.local_rank}\n"
             f"Device: {self.device}"
         )
