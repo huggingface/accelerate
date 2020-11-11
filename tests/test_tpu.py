@@ -24,8 +24,7 @@ class MultiTPUTester(unittest.TestCase):
         self.test_file_path = inspect.getfile(self.__class__)
         self.test_dir = Path(self.test_file_path).parent
 
-    def test_multigpu(self):
-        print(f"Found {torch.cuda.device_count()} devices.")
+    def test_tpu(self):
         distributed_args = f"""
             {self.test_dir}/xla_spawn.py
             --num_cores 8
@@ -59,9 +58,9 @@ def dl_preparation_check():
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result)
-    #assert torch.equal(result.cpu(), torch.arange(0, 64).long())
+    assert result.cpu().tolist() == list(range(256))
     if state.process_index == 0:
-        print("Non-shuffled dataloader passing.", result)
+        print("Non-shuffled dataloader passing.")
 
     dl = DataLoader(range(256), batch_size=8, shuffle=True)
     dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index, put_on_device=True)
@@ -70,9 +69,9 @@ def dl_preparation_check():
         result.append(gather(batch))
     result = torch.cat(result).tolist()
     result.sort()
-    # assert result == list(range(256))
+    assert result == list(range(256))
     if state.process_index == 0:
-        print("Shuffled dataloader passing.", result)
+        print("Shuffled dataloader passing.")
 
 
 def mock_training():
@@ -93,18 +92,19 @@ def mock_training():
 
 def training_check():
     train_set, old_model = mock_training()
-    # assert are_the_same_tensors(old_model.a)
-    # assert are_the_same_tensors(old_model.b)
+    assert are_the_same_tensors(old_model.a)
+    assert are_the_same_tensors(old_model.b)
 
     accelerator = Accelerator(put_objects_on_device=True)
     train_dl = DataLoader(train_set, batch_size=2, shuffle=True)
     model = RegressionModel()
-    #model.to(accelerator.device)
+    # TODO: Fix, but the model parameters need to be put on the XLA device before creating the optimizer otherwise
+    # the optimizer gets other parameters.
+    model.to(accelerator.device)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
     
     train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
     model.train()
-    #optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
     set_seed(42)
     for _ in range(3):
         for batch in train_dl:
@@ -115,11 +115,10 @@ def training_check():
             xm.optimizer_step(optimizer.optimizer)
     
     model = model.cpu()
-    accelerator.print(old_model.a, model.a)
-    accelerator.print(old_model.b, model.b)
 
-    # assert torch.allclose(old_model.a, model.a)
-    # assert torch.allclose(old_model.b, model.b)
+    assert torch.allclose(old_model.a, model.a)
+    assert torch.allclose(old_model.b, model.b)
+    accelerator.print("Training yielded the same results on one or 8 TPUs.")
 
 def main():
     state = DistributedState()

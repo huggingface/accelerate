@@ -9,6 +9,7 @@ from .config import DistributedState, DistributedType, is_tpu_available
 from .utils import send_to_device, set_seed, synchronize_rng_states
 
 if is_tpu_available():
+    import torch_xla.core.xla_model as xm
     import torch_xla.distributed.parallel_loader as pl
 
 class BatchSamplerShard(BatchSampler):
@@ -129,6 +130,8 @@ class DataLoaderShard(DataLoader):
     def __iter__(self):
         synchronize_rng_states()
         for batch in super().__iter__():
+            if is_tpu_available():
+                xm.mark_step()
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 def prepare_data_loader(
@@ -205,8 +208,8 @@ def prepare_data_loader(
         # persistent_workers=dataloader.persistent_workers,
 
     )
-    if is_tpu_available():
+    # if is_tpu_available():
         # TODO: check if this works:
         # return pl.MpDeviceLoader(dataloader, device)
-        return pl.ParallelLoader(dataloader, [device]).per_device_loader(device)
+        # return pl.ParallelLoader(dataloader, [device]).per_device_loader(device)
     return dataloader
