@@ -38,8 +38,11 @@ class Accelerator:
     def is_main_process(self):
         return self.process_index == 0
 
+    def is_main_local_process(self):
+        return self.local_rank == 0
+
     def print(self, *args, **kwargs):
-        if self.is_main_process():
+        if self.is_main_local_process():
             print(*args, **kwargs)
 
     def _prepare_one(self, obj):

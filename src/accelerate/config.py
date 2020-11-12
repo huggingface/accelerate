@@ -32,7 +32,7 @@ class DistributedState:
             if is_tpu_available():
                 self.distributed_type = DistributedType.TPU
                 self.num_processes = xm.xrt_world_size()
-                self.process_index = xm.get_ordinal()
+                self.process_index = self.local_rank = xm.get_ordinal()
                 self.device = xm.xla_device()
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1:
                 self.distributed_type = DistributedType.MULTI_GPU
@@ -44,7 +44,7 @@ class DistributedState:
             else:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
-                self.process_index = 0
+                self.process_index = self.local_rank = 0
                 self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.initialized = True
 
@@ -53,5 +53,6 @@ class DistributedState:
             f"Distributed environment: {self.distributed_type}\n"
             f"Num processes: {self.num_processes}\n"
             f"Process index: {self.process_index}\n"
+            f"Local rank: {self.local_rank}\n"
             f"Device: {self.device}"
         )
