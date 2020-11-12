@@ -2,13 +2,14 @@ import torch
 
 from .config import DistributedState, DistributedType, is_tpu_available
 
+
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
 def _tpu_gather(tensor, name="tensor"):
     if isinstance(tensor, (list, tuple)):
-        return type(tensor)(_tpu_gather(t, name=f"{name}_{i}") for i, t in enumerate (tensor))
+        return type(tensor)(_tpu_gather(t, name=f"{name}_{i}") for i, t in enumerate(tensor))
     elif isinstance(tensor, dict):
         return type(tensor)({k: _tpu_gather(v, name=f"{name}_{k}") for k, v in tensor.items()})
     elif not isinstance(tensor, torch.Tensor):

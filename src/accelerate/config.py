@@ -3,12 +3,14 @@ from enum import Enum
 
 import torch
 
+
 try:
     import torch_xla.core.xla_model as xm
 
     _tpu_available = True
 except ImportError:
     _tpu_available = False
+
 
 def is_tpu_available():
     return _tpu_available
@@ -23,6 +25,7 @@ class DistributedType(Enum):
 # Inspired by Alex Martelli's 'Borg'
 class DistributedState:
     _shared_state = {}
+
     def __init__(self):
         self.__dict__ = self._shared_state
         if not getattr(self, "initialized", False):
@@ -42,9 +45,9 @@ class DistributedState:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
                 self.process_index = 0
-                self.device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
+                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.initialized = True
-    
+
     def __repr__(self):
         return (
             f"Distributed environment: {self.distributed_type}\n"

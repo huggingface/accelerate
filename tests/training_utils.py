@@ -1,6 +1,4 @@
-import pickle
 import numpy as np
-
 import torch
 
 
@@ -24,6 +22,6 @@ class RegressionModel(torch.nn.Module):
         super().__init__()
         self.a = torch.nn.Parameter(torch.tensor(a).float())
         self.b = torch.nn.Parameter(torch.tensor(b).float())
-        
+
     def forward(self, x=None):
         return x * self.a + self.b

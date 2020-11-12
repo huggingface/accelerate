@@ -1,12 +1,14 @@
 import random
+
 import numpy as np
-import os
 import torch
 
 from .config import DistributedState, DistributedType, is_tpu_available
 
+
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
+
 
 def set_seed(seed: int):
     """
@@ -20,6 +22,7 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
+
 
 def synchronize_rng_states():
     """

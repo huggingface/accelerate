@@ -4,7 +4,6 @@ import sys
 import unittest
 
 import torch
-import torch.distributed.launch as launcher
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
@@ -12,9 +11,9 @@ from accelerate.config import DistributedState
 from accelerate.data_loader import prepare_data_loader
 from accelerate.gather import gather
 from accelerate.utils import set_seed, synchronize_rng_states
-
 from testing_utils import are_the_same_tensors, execute_subprocess_async
 from training_utils import RegressionDataset, RegressionModel
+
 
 class MultiGPUTester(unittest.TestCase):
     def setUp(self):
@@ -35,7 +34,7 @@ def init_state_check():
     # Test we can instantiate this twice in a row.
     state = DistributedState()
     if state.process_index == 0:
-        print(f"Testing, testing. 1, 2, 3.")
+        print("Testing, testing. 1, 2, 3.")
     print(state)
 
 
@@ -87,6 +86,7 @@ def mock_training():
             optimizer.step()
     return train_set, model
 
+
 def training_check():
     train_set, old_model = mock_training()
     assert are_the_same_tensors(old_model.a)
@@ -96,7 +96,7 @@ def training_check():
     train_dl = DataLoader(train_set, batch_size=8, shuffle=True)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-    
+
     train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
     set_seed(42)
     for _ in range(3):
@@ -106,10 +106,11 @@ def training_check():
             loss = torch.nn.functional.mse_loss(output, batch["y"])
             loss.backward()
             optimizer.step()
-    
+
     model = model.module.cpu()
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
+
 
 if __name__ == "__main__":
     state = DistributedState()
@@ -120,7 +121,7 @@ if __name__ == "__main__":
     if state.process_index == 0:
         print("\n**Test random number generator synchronization**")
     rng_sync_check()
-    
+
     if state.process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()

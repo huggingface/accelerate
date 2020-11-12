@@ -1,11 +1,11 @@
 import asyncio
-import os
 import sys
 
 import torch
 
 from accelerate.config import DistributedState
 from accelerate.gather import gather
+
 
 def are_the_same_tensors(tensor):
     state = DistributedState()
