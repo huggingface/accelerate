@@ -97,9 +97,6 @@ def training_check():
     accelerator = Accelerator(put_objects_on_device=True)
     train_dl = DataLoader(train_set, batch_size=2, shuffle=True)
     model = RegressionModel()
-    # TODO: Fix, but the model parameters need to be put on the XLA device before creating the optimizer otherwise
-    # the optimizer gets other parameters.
-    model.to(accelerator.device)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
     train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
