@@ -56,3 +56,9 @@ def send_to_device(tensor, device):
             "of tensors."
         )
     return tensor.to(device)
+
+
+def extract_model_from_parallel(model):
+    while isinstance(model, (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)):
+        model = model.module
+    return model

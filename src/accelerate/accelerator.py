@@ -3,6 +3,7 @@ import torch
 from .config import DistributedState, DistributedType
 from .data_loader import prepare_data_loader
 from .optimizer import AcceleratedOptimizer
+from .utils import extract_model_from_parallel
 
 
 class Accelerator:
@@ -56,7 +57,27 @@ class Accelerator:
             return obj
 
     def prepare(self, *args):
-        return tuple(self._prepare_one(obj) for obj in args)
+        # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
+        # have parameters disconnected from the model (so no training :-( ). This deals with that by...
+        tpu_should_fix_optimizer = self.put_objects_on_device and self.distributed_state == DistributedType.TPU
+        if tpu_should_fix_optimizer:
+            # 1. grabbing old model parameters
+            old_named_params = self._get_named_parameters(*args)
+
+        result = tuple(self._prepare_one(obj) for obj in args)
+
+        if tpu_should_fix_optimizer:
+            # 2. grabbing new model parameters
+            new_named_params = self._get_named_parameters(*result)
+            print(old_named_params, new_named_params)
+            # 3. building a map from the first to the second
+            mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
+            # 4. using that map to update the parameters of the optimizer
+            for obj in result:
+                if isinstance(obj, torch.optim.Optimizer):
+                    obj._switch_parameters(mapping)
+
+        return result
 
     def prepare_model(self, model):
         if self.put_objects_on_device:
@@ -81,3 +102,11 @@ class Accelerator:
 
     def prepare_optimizer(self, optimizer):
         return AcceleratedOptimizer(optimizer)
+
+    def _get_named_parameters(self, *args):
+        named_parameters = {}
+        for obj in args:
+            if isinstance(obj, torch.nn.Module):
+                obj = extract_model_from_parallel(obj)
+                named_parameters.update({n: p for n, p in obj.named_parameters()})
+        return named_parameters

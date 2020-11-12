@@ -22,8 +22,13 @@ class DistributedType(Enum):
     TPU = 2
 
 
-# Inspired by Alex Martelli's 'Borg'
+# Inspired by Alex Martelli's 'Borg'.
 class DistributedState:
+    """
+    This is a variation of a `singleton class <https://en.wikipedia.org/wiki/Singleton_pattern>`__ in the sense that
+    all instance of :obj:`DistributedState` share the same state, which is initialized on the first instantiation.
+    """
+
     _shared_state = {}
 
     def __init__(self):
