@@ -58,7 +58,20 @@ class Accelerator:
 
     def prepare(self, *args):
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
-        # have parameters disconnected from the model (so no training :-( ). This deals with that by...
+        # have parameters disconnected from the model (so no training :-( ).
+        # If the model and optimizer have parameters on different devices we raise an error.
+        if self.distributed_state == DistributedType.TPU:
+            model_device, optimizer_device = self._get_devices()
+            if model_device is not None and optimizer_device is not None and model_device != optimizer_device:
+                raise ValueError(
+                    "The model and the optimizer parameters are not on the same device, which probably means you "
+                    "created an optimizer around your model **before** putting on the device. Make sure the line "
+                    "model.to(device) is before the optimizer creation in your script or remove it entirely and use "
+                    "the flag `put_objects_on_device = True` in your `Accelerator` creation to let it handle that "
+                    "part for you."
+                )
+
+        # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.put_objects_on_device and self.distributed_state == DistributedType.TPU
         if tpu_should_fix_optimizer:
             # 1. grabbing old model parameters
@@ -110,3 +123,18 @@ class Accelerator:
                 obj = extract_model_from_parallel(obj)
                 named_parameters.update({n: p for n, p in obj.named_parameters()})
         return named_parameters
+
+    def _get_devices(self, *args):
+        model_device = None
+        optimizer_device = None
+        for obj in args:
+            if isinstance(obj, torch.nn.Module):
+                for param in obj.parameters():
+                    model_device = param.device
+                    break
+            if isinstance(obj, torch.optim.Optimizer):
+                for param_group in obj.param_groups:
+                    if len(param_group["params"]) > 0:
+                        optimizer_device = param_group["params"][0].device
+                        break
+        return (model_device, optimizer_device)
