@@ -71,12 +71,13 @@ class BatchSamplerShard(BatchSampler):
 
     def _iter_with_split(self):
         initial_data = []
+        batch_length = self.batch_sampler.batch_size // self.num_processes
         for idx, batch in enumerate(self.batch_sampler):
             if idx == 0:
                 initial_data = batch
             if len(batch) == self.batch_size:
                 # If the batch is full, we yield the part of it this process is responsible of.
-                yield batch[self.num_processes * self.process_index : self.num_processes * (self.process_index + 1)]
+                yield batch[batch_length * self.process_index : batch_length * (self.process_index + 1)]
 
         # If drop_last is True of the last batch was full, iteration is over, otherwise...
         if not self.drop_last and len(initial_data) > 0 and len(batch) < self.batch_size:
@@ -84,7 +85,7 @@ class BatchSamplerShard(BatchSampler):
             while len(initial_data) < self.batch_size:
                 initial_data += initial_data
             batch = batch + initial_data
-            yield batch[self.num_processes * self.process_index : self.num_processes * (self.process_index + 1)]
+            yield batch[batch_length * self.process_index : batch_length * (self.process_index + 1)]
 
     def _iter_with_no_split(self):
         initial_data = []

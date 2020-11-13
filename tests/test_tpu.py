@@ -13,7 +13,7 @@ from accelerate.config import DistributedState
 from accelerate.data_loader import prepare_data_loader
 from accelerate.gather import gather
 from accelerate.utils import set_seed, synchronize_rng_states
-from testing_utils import are_the_same_tensors, execute_subprocess_async
+from testing_utils import are_the_same_tensors, execute_subprocess_async, require_tpu
 from training_utils import RegressionDataset, RegressionModel
 
 
@@ -22,6 +22,7 @@ class MultiTPUTester(unittest.TestCase):
         self.test_file_path = inspect.getfile(self.__class__)
         self.test_dir = Path(self.test_file_path).parent
 
+    @require_tpu
     def test_tpu(self):
         distributed_args = f"""
             {self.test_dir}/xla_spawn.py
@@ -49,36 +50,70 @@ def rng_sync_check():
 
 
 def dl_preparation_check():
-    dl = DataLoader(range(256), batch_size=8)
     state = DistributedState()
+    length = 32 * state.num_processes
+
+    dl = DataLoader(range(length), batch_size=8)
     dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index, put_on_device=True)
     result = []
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result)
-    assert result.cpu().tolist() == list(range(256))
+    assert result.cpu().tolist() == list(range(length))
+
+    dl = DataLoader(range(length), batch_size=8)
+    dl = prepare_data_loader(
+        dl,
+        state.device,
+        state.num_processes,
+        state.process_index,
+        put_on_device=True,
+        split_batches_across_devices=True,
+    )
+    result = []
+    for batch in dl:
+        result.append(gather(batch))
+    result = torch.cat(result)
+    assert torch.equal(result.cpu(), torch.arange(0, length).long())
+
     if state.process_index == 0:
         print("Non-shuffled dataloader passing.")
 
-    dl = DataLoader(range(256), batch_size=8, shuffle=True)
+    dl = DataLoader(range(length), batch_size=8, shuffle=True)
     dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index, put_on_device=True)
     result = []
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result).tolist()
     result.sort()
-    assert result == list(range(256))
+    assert result == list(range(length))
+
+    dl = DataLoader(range(length), batch_size=8, shuffle=True)
+    dl = prepare_data_loader(
+        dl,
+        state.device,
+        state.num_processes,
+        state.process_index,
+        put_on_device=True,
+        split_batches_across_devices=True,
+    )
+    result = []
+    for batch in dl:
+        result.append(gather(batch))
+    result = torch.cat(result).tolist()
+    result.sort()
+    assert result == list(range(length))
+
     if state.process_index == 0:
         print("Shuffled dataloader passing.")
 
 
-def mock_training():
+def mock_training(length, batch_size):
     set_seed(42)
-    train_set = RegressionDataset()
-    train_dl = DataLoader(train_set, batch_size=16, shuffle=True)
+    train_set = RegressionDataset(length=length)
+    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-    model.train()
     for _ in range(3):
         for batch in train_dl:
             model.zero_grad()
@@ -90,12 +125,16 @@ def mock_training():
 
 
 def training_check():
-    train_set, old_model = mock_training()
+    state = DistributedState()
+    batch_size = 2
+    length = batch_size * 4 * state.num_processes
+
+    train_set, old_model = mock_training(length, batch_size * state.num_processes)
     assert are_the_same_tensors(old_model.a)
     assert are_the_same_tensors(old_model.b)
 
     accelerator = Accelerator(put_objects_on_device=True)
-    train_dl = DataLoader(train_set, batch_size=2, shuffle=True)
+    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
@@ -114,7 +153,29 @@ def training_check():
 
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
-    accelerator.print("Training yielded the same results on one CPU or 8 TPUs.")
+    accelerator.print("Training yielded the same results on one CPU or 8 TPUs with no batch split.")
+
+    accelerator = Accelerator(put_objects_on_device=True, split_batches_across_devices=True)
+    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    model = RegressionModel()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+    train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
+    model.train()
+    set_seed(42)
+    for _ in range(3):
+        for batch in train_dl:
+            optimizer.zero_grad()
+            output = model(batch["x"])
+            loss = torch.nn.functional.mse_loss(output, batch["y"])
+            loss.backward()
+            xm.optimizer_step(optimizer.optimizer)
+
+    model = model.cpu()
+
+    assert torch.allclose(old_model.a, model.a)
+    assert torch.allclose(old_model.b, model.b)
+    accelerator.print("Training yielded the same results on one CPU or 8 TPUs with batch split.")
 
 
 def main():

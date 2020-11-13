@@ -1,9 +1,10 @@
 import asyncio
 import sys
+import unittest
 
 import torch
 
-from accelerate.config import DistributedState
+from accelerate.config import DistributedState, is_tpu_available
 from accelerate.gather import gather
 
 
@@ -16,6 +17,28 @@ def are_the_same_tensors(tensor):
         if not torch.equal(tensors[i], tensor):
             return False
     return True
+
+
+def require_tpu(test_case):
+    """
+    Decorator marking a test that requires TPUs. These tests are skipped when there are no TPUs available.
+
+    """
+    if not is_tpu_available():
+        return unittest.skip("test requires TPU")(test_case)
+    else:
+        return test_case
+
+
+def require_multi_gpu(test_case):
+    """
+    Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
+    GPUs.
+    """
+    if torch.cuda.device_count() < 2:
+        return unittest.skip("test requires multiple GPUs")(test_case)
+    else:
+        return test_case
 
 
 class _RunOutput:
