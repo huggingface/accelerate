@@ -223,6 +223,8 @@ def prepare_data_loader(
     # We ignore all of those since they are all dealt with by our new_batch_sampler
     ignore_kwargs = [
         "dataset",
+        "args",
+        "kwds",
         "batch_size",
         "shuffle",
         "sampler",

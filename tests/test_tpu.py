@@ -114,7 +114,7 @@ def training_check():
 
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
-    accelerator.print("Training yielded the same results on one or 8 TPUs.")
+    accelerator.print("Training yielded the same results on one CPU or 8 TPUs.")
 
 
 def main():

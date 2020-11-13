@@ -60,7 +60,7 @@ class Accelerator:
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
-        if self.distributed_state == DistributedType.TPU:
+        if self.distributed_type == DistributedType.TPU:
             model_device, optimizer_device = self._get_devices()
             if model_device is not None and optimizer_device is not None and model_device != optimizer_device:
                 raise ValueError(
@@ -72,7 +72,7 @@ class Accelerator:
                 )
 
         # If we're dealing with device placement, this deals with that by...
-        tpu_should_fix_optimizer = self.put_objects_on_device and self.distributed_state == DistributedType.TPU
+        tpu_should_fix_optimizer = self.put_objects_on_device and self.distributed_type == DistributedType.TPU
         if tpu_should_fix_optimizer:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
@@ -82,7 +82,6 @@ class Accelerator:
         if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
-            print(old_named_params, new_named_params)
             # 3. building a map from the first to the second
             mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
             # 4. using that map to update the parameters of the optimizer
