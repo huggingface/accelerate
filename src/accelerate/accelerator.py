@@ -1,5 +1,7 @@
 import torch
 
+from packaging import version
+
 from .config import DistributedState, DistributedType
 from .data_loader import prepare_data_loader
 from .optimizer import AcceleratedOptimizer
@@ -9,10 +11,19 @@ from .utils import extract_model_from_parallel
 class Accelerator:
     def __init__(
         self,
+        fp16: bool = False,
         put_objects_on_device: bool = False,
         split_batches_across_devices: bool = False,
     ):
         self.distributed_state = DistributedState()
+
+        # Mixed precision attributes
+        self.scaler = None
+        self.native_amp = False
+        self.fp16 = fp16
+        if fp16:
+            self.native_amp = version.parse(torch.__version__) >= version.parse("1.6")
+            self.scaler = torch.cuda.amp.GradScaler()
         self.put_objects_on_device = put_objects_on_device
         self.split_batches_across_devices = split_batches_across_devices
 
@@ -100,6 +111,8 @@ class Accelerator:
                 device_ids=[self.local_rank],
                 output_device=self.local_rank,
             )
+        if self.native_amp:
+            model.forward = torch.cuda.amp.autocast()(model.forward)
         return model
 
     def prepare_data_loader(self, data_loader):
@@ -113,7 +126,25 @@ class Accelerator:
         )
 
     def prepare_optimizer(self, optimizer):
-        return AcceleratedOptimizer(optimizer)
+        return AcceleratedOptimizer(optimizer, scaler=self.scaler)
+
+    def backward(self, loss):
+        if self.scaler is not None:
+            self.scaler.scale(loss).backward()
+        else:
+            loss.backward()
+
+    # TODO, add a reference to the optimizer for here.
+    def clip_grad_norm_(parameters, max_norm, norm_type=2):
+        if self.fp16 and self.native_amp:
+            self.scaler.unscale_(xxx_optimizer)
+        torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+
+    # TODO, add a reference to the optimizer for here.
+    def clip_grad_value_(parameters, clip_value):
+        if self.fp16 and self.native_amp:
+            self.scaler.unscale_(xxx_optimizer)
+        torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
     def _get_named_parameters(self, *args):
         named_parameters = {}

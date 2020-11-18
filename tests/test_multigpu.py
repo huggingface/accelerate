@@ -169,12 +169,29 @@ def training_check():
             optimizer.step()
 
     model = model.module.cpu()
-    accelerator.print(old_model.a, model.a)
-    accelerator.print(old_model.b, model.b)
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
 
     accelerator.print("Training yielded the same results on one CPU or 2 GPUs with batch split.")
+
+    accelerator = Accelerator(put_objects_on_device=True, fp16=True)
+    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    model = RegressionModel()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+    train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
+    set_seed(42)
+    for _ in range(3):
+        for batch in train_dl:
+            model.zero_grad()
+            output = model(batch["x"])
+            loss = torch.nn.functional.mse_loss(output, batch["y"])
+            accelerator.backward(loss)
+            optimizer.step()
+
+    model = model.module.cpu()
+    assert torch.allclose(old_model.a, model.a)
+    assert torch.allclose(old_model.b, model.b)
 
 
 if __name__ == "__main__":

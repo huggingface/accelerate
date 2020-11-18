@@ -8,8 +8,9 @@ if is_tpu_available():
 
 
 class AcceleratedOptimizer(torch.optim.Optimizer):
-    def __init__(self, optimizer):
+    def __init__(self, optimizer, scaler=None):
         self.optimizer = optimizer
+        self.scaler = scaler
         self.state = DistributedState()
 
     def add_param_group(self, param_group):
@@ -27,6 +28,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def step(self):
         if self.state.distributed_type == DistributedType.TPU:
             xm.optimizer_step(self.optimizer)
+        elif self.scaler is not None:
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
         else:
             self.optimizer.step()
 
