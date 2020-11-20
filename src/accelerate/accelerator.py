@@ -24,7 +24,7 @@ class Accelerator:
                 :obj:`USE_FP16`, which will use the default value in the accelerate config of the current system or the
                 flag passed with the :obj:`accelerate.launch` command.
             put_objects_on_device (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the accelerator should put objects on device (tensors yielded by the datalaoder, model, 
+                Whether or not the accelerator should put objects on device (tensors yielded by the datalaoder, model,
                 etc...).
             split_batches_across_devices (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the accelerator should split the batches yielded by the datalaoders across the devices.
@@ -43,7 +43,7 @@ class Accelerator:
         if fp16:
             self.native_amp = version.parse(torch.__version__) >= version.parse("1.6")
             self.scaler = torch.cuda.amp.GradScaler()
-        
+
         # Internal references to the training objects
         self._optimizers = []
 
@@ -160,18 +160,18 @@ class Accelerator:
         else:
             loss.backward()
 
-    def clip_grad_norm_(parameters, max_norm, norm_type=2):
+    def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
         # TODO: this unscale all optimizers where we should only unscale the one where parameters are.
         if self.fp16 and self.native_amp:
             for optimizer in self._optimizers:
-                self.scaler.unscale_(xxx_optimizer)
+                self.scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
-    def clip_grad_value_(parameters, clip_value):
+    def clip_grad_value_(self, parameters, clip_value):
         # TODO: this unscale all optimizers where we should only unscale the one where parameters are.
         if self.fp16 and self.native_amp:
             for optimizer in self._optimizers:
-                self.scaler.unscale_(xxx_optimizer)
+                self.scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
     def _get_named_parameters(self, *args):

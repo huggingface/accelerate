@@ -19,7 +19,7 @@ def is_tpu_available():
 
 def parse_flag_from_env(key, default=False):
     value = os.environ.get(key, str(default))
-    return strtobool(value) == 1 # As its name indicates `strtobool` actually returns an int...
+    return strtobool(value) == 1  # As its name indicates `strtobool` actually returns an int...
 
 
 class DistributedType(Enum):

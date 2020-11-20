@@ -189,10 +189,11 @@ def training_check():
             loss = torch.nn.functional.mse_loss(output, batch["y"])
             accelerator.backward(loss)
             optimizer.step()
-        
+
     model = model.module.cpu()
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
+
 
 if __name__ == "__main__":
     state = DistributedState()
