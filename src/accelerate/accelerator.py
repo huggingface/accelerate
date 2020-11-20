@@ -11,21 +11,41 @@ from .utils import extract_model_from_parallel
 class Accelerator:
     def __init__(
         self,
-        fp16: bool = False,
+        fp16: bool = None,
         put_objects_on_device: bool = False,
         split_batches_across_devices: bool = False,
     ):
+        """
+        Creates an instance of an accelerator for distributed training (on multi-GPU, TPU) or mixed precision training.
+
+        Args:
+            fp16 (:obj:`bool`, `optional`):
+                Whether or not to use mixed precision training. Will default to the value in the environment variable
+                :obj:`USE_FP16`, which will use the default value in the accelerate config of the current system or the
+                flag passed with the :obj:`accelerate.launch` command.
+            put_objects_on_device (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the accelerator should put objects on device (tensors yielded by the datalaoder, model, 
+                etc...).
+            split_batches_across_devices (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the accelerator should split the batches yielded by the datalaoders across the devices.
+                If :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it
+                must be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size
+                used will be the one set in your script multiplied by the number of processes.
+        """
         self.distributed_state = DistributedState()
+        self.put_objects_on_device = put_objects_on_device
+        self.split_batches_across_devices = split_batches_across_devices
 
         # Mixed precision attributes
         self.scaler = None
         self.native_amp = False
-        self.fp16 = fp16
+        self.fp16 = fp16 if fp16 is not None else self.distributed_state.use_fp16
         if fp16:
             self.native_amp = version.parse(torch.__version__) >= version.parse("1.6")
             self.scaler = torch.cuda.amp.GradScaler()
-        self.put_objects_on_device = put_objects_on_device
-        self.split_batches_across_devices = split_batches_across_devices
+        
+        # Internal references to the training objects
+        self._optimizers = []
 
     @property
     def distributed_type(self):
@@ -40,8 +60,8 @@ class Accelerator:
         return self.distributed_state.process_index
 
     @property
-    def local_rank(self):
-        return self.distributed_state.local_rank
+    def local_process_index(self):
+        return self.distributed_state.local_process_index
 
     @property
     def device(self):
@@ -51,7 +71,7 @@ class Accelerator:
         return self.process_index == 0
 
     def is_main_local_process(self):
-        return self.local_rank == 0
+        return self.local_process_index == 0
 
     def print(self, *args, **kwargs):
         if self.is_main_local_process():
@@ -63,11 +83,17 @@ class Accelerator:
         elif isinstance(obj, torch.nn.Module):
             return self.prepare_model(obj)
         elif isinstance(obj, torch.optim.Optimizer):
-            return self.prepare_optimizer(obj)
+            optimizer = self.prepare_optimizer(obj)
+            self._optimizers.append(optimizer)
+            return optimizer
         else:
             return obj
 
     def prepare(self, *args):
+        """
+        Prepare all objects passed in :obj:`args` for distributed training and mixed precision, then return them in the
+        same order.
+        """
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
@@ -108,8 +134,8 @@ class Accelerator:
         if self.distributed_type == DistributedType.MULTI_GPU:
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
-                device_ids=[self.local_rank],
-                output_device=self.local_rank,
+                device_ids=[self.local_process_index],
+                output_device=self.local_process_index,
             )
         if self.native_amp:
             model.forward = torch.cuda.amp.autocast()(model.forward)
@@ -134,16 +160,18 @@ class Accelerator:
         else:
             loss.backward()
 
-    # TODO, add a reference to the optimizer for here.
     def clip_grad_norm_(parameters, max_norm, norm_type=2):
+        # TODO: this unscale all optimizers where we should only unscale the one where parameters are.
         if self.fp16 and self.native_amp:
-            self.scaler.unscale_(xxx_optimizer)
+            for optimizer in self._optimizers:
+                self.scaler.unscale_(xxx_optimizer)
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
-    # TODO, add a reference to the optimizer for here.
     def clip_grad_value_(parameters, clip_value):
+        # TODO: this unscale all optimizers where we should only unscale the one where parameters are.
         if self.fp16 and self.native_amp:
-            self.scaler.unscale_(xxx_optimizer)
+            for optimizer in self._optimizers:
+                self.scaler.unscale_(xxx_optimizer)
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
     def _get_named_parameters(self, *args):
@@ -158,10 +186,12 @@ class Accelerator:
         model_device = None
         optimizer_device = None
         for obj in args:
+            # Loop through model parameters and stop at the first once we have its device.
             if isinstance(obj, torch.nn.Module):
                 for param in obj.parameters():
                     model_device = param.device
                     break
+            # Loop through optimizer parameters groups and stop at the first once we have its device.
             if isinstance(obj, torch.optim.Optimizer):
                 for param_group in obj.param_groups:
                     if len(param_group["params"]) > 0:

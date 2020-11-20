@@ -174,6 +174,7 @@ def training_check():
 
     accelerator.print("Training yielded the same results on one CPU or 2 GPUs with batch split.")
 
+    # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
     accelerator = Accelerator(put_objects_on_device=True, fp16=True)
     train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
     model = RegressionModel()
@@ -188,11 +189,10 @@ def training_check():
             loss = torch.nn.functional.mse_loss(output, batch["y"])
             accelerator.backward(loss)
             optimizer.step()
-
+        
     model = model.module.cpu()
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
-
 
 if __name__ == "__main__":
     state = DistributedState()
