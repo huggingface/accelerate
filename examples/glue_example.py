@@ -16,7 +16,7 @@ EVAL_BATCH_SIZE = 32
 
 
 def train_epoch(
-    model, device, optimizer, lr_scheduler, train_dataloader, eval_dataloader, metric, gradient_accumulation_steps
+    model, accelerator, optimizer, lr_scheduler, train_dataloader, eval_dataloader, metric, gradient_accumulation_steps
 ):
     """
     This method train the model for one epoch and evaluate it at the end.
@@ -24,11 +24,12 @@ def train_epoch(
     """
     model.train()
     for step, batch in enumerate(train_dataloader):
-        batch.to(device)
+        # We could avoid this line if we set the accelerator with `put_objects_on_device=True`.
+        batch.to(accelerator.device)
         outputs = model(**batch)
         loss = outputs.loss
         loss = loss / gradient_accumulation_steps
-        loss.backward()
+        accelerator.backward(loss)
         if step % gradient_accumulation_steps == 0:
             optimizer.step()
             lr_scheduler.step()
@@ -37,7 +38,7 @@ def train_epoch(
     model.eval()
     for step, batch in enumerate(eval_dataloader):
         # We could avoid this line if we set the accelerator with `put_objects_on_device=True`.
-        batch.to(device)
+        batch.to(accelerator.device)
         outputs = model(**batch)
         predictions = outputs.logits.argmax(dim=-1)
         metric.add_batch(predictions=gather(predictions), references=gather(batch["labels"]))
@@ -55,7 +56,6 @@ def training_function(config):
     correct_bias = config["correct_bias"]
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
-    device = accelerator.device
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")
@@ -131,7 +131,7 @@ def training_function(config):
     for epoch in range(num_epochs):
         eval_metric = train_epoch(
             model,
-            device,
+            accelerator,
             optimizer,
             lr_scheduler,
             train_dataloader,
