@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
 
-from .launch import LaunchCommand
+from .launch import launch_command_parser
 
 def main():
     parser = ArgumentParser("Accelerate CLI tool", usage="accelerate <command> [<args>]")
-    commands_parser = parser.add_subparsers(help="accelerate command helpers")
+    subparsers = parser.add_subparsers(help="accelerate command helpers")
 
     # Register commands
-    LaunchCommand.register_subcommand(parser=commands_parser)
+    launch_command_parser(subparsers=subparsers)
 
     # Let's go
     args = parser.parse_args()
@@ -18,8 +18,8 @@ def main():
         exit(1)
 
     # Run
-    service = args.func(args)
-    service.run()
+    args.func(args)
+
 
 if __name__ == "__main__":
     main()
