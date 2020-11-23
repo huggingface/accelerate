@@ -47,7 +47,7 @@ To create the package for pypi.
 from setuptools import setup
 from setuptools import find_packages
 
-extra = {}
+extras = {}
 extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
 
 setup(
@@ -63,8 +63,13 @@ setup(
     url="https://github.com/huggingface/accelerate",
     package_dir={"": "src"},
     packages=find_packages("src"),
+    entry_points={"console_scripts": [
+        "accelerate=accelerate.commands.accelerate_cli:main",
+        #"accelerate-launch=accelerate.commands.launch:main",
+    ]},
     python_requires=">=3.6.0",
     install_requires=["torch"],
+    extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
