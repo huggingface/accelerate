@@ -22,10 +22,11 @@ def parse_flag_from_env(key, default=False):
     return strtobool(value) == 1  # As its name indicates `strtobool` actually returns an int...
 
 
-class DistributedType(Enum):
-    NO = 0
-    MULTI_GPU = 1
-    TPU = 2
+class DistributedType(str, Enum):
+    # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
+    NO = "NO"
+    MULTI_GPU = "MULTI_GPU"
+    TPU = "TPU"
 
 
 # Inspired by Alex Martelli's 'Borg'.

@@ -19,6 +19,7 @@ setup(
     packages=find_packages("src"),
     entry_points={"console_scripts": [
         "accelerate=accelerate.commands.accelerate_cli:main",
+        "accelerate-config=accelerate.commands.config:main",
         "accelerate-launch=accelerate.commands.launch:main",
     ]},
     python_requires=">=3.6.0",
