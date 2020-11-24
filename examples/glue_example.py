@@ -15,41 +15,7 @@ MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
 
-def train_epoch(
-    model, accelerator, optimizer, lr_scheduler, train_dataloader, eval_dataloader, metric, gradient_accumulation_steps
-):
-    """
-    This method train the model for one epoch and evaluate it at the end.
-    We use gradient accumulation to be able to train with large batch size on a singel GPU in Google Colab.
-    """
-    model.train()
-    for step, batch in enumerate(train_dataloader):
-        # We could avoid this line if we set the accelerator with `put_objects_on_device=True`.
-        batch.to(accelerator.device)
-        outputs = model(**batch)
-        loss = outputs.loss
-        loss = loss / gradient_accumulation_steps
-        accelerator.backward(loss)
-        if step % gradient_accumulation_steps == 0:
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
-
-    model.eval()
-    for step, batch in enumerate(eval_dataloader):
-        # We could avoid this line if we set the accelerator with `put_objects_on_device=True`.
-        batch.to(accelerator.device)
-        outputs = model(**batch)
-        predictions = outputs.logits.argmax(dim=-1)
-        metric.add_batch(predictions=gather(predictions), references=gather(batch["labels"]))
-
-    return metric.compute()
-
-
 def training_function(config):
-    # Initialize accelerator
-    accelerator = Accelerator()
-
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
@@ -59,10 +25,7 @@ def training_function(config):
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")
-    metric = load_metric(
-        "glue",
-        "mrpc",
-    )
+    metric = load_metric("glue", "mrpc")
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
@@ -87,10 +50,19 @@ def training_function(config):
         batch_size = MAX_GPU_BATCH_SIZE
 
     def collate_fn(examples):
-        """ Our collate function pads the sequences to the longest sequence in the batch and returns PyTorch Tensors. """
         return tokenizer.pad(examples, padding="longest", return_tensors="pt")
 
+    # Instantiate dataloaders.
+    train_dataloader = DataLoader(
+        tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size
+    )
+    eval_dataloader = DataLoader(
+        tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE
+    )
+
     set_seed(seed)
+    # Initialize accelerator
+    accelerator = Accelerator()
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
@@ -98,20 +70,6 @@ def training_function(config):
     # If setting devices manually, this line absolutely needs to be before the optimizer creation otherwise training
     # will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
     model = model.to(accelerator.device)
-
-    # Instantiate dataloaders.
-    train_dataloader = DataLoader(
-        tokenized_datasets["train"],
-        shuffle=True,
-        collate_fn=collate_fn,
-        batch_size=batch_size,
-    )
-    eval_dataloader = DataLoader(
-        tokenized_datasets["validation"],
-        shuffle=False,
-        collate_fn=collate_fn,
-        batch_size=EVAL_BATCH_SIZE,
-    )
 
     # Instantiate optimizer and learning rate schedule based on the hyper-parameters
     optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
@@ -129,21 +87,33 @@ def training_function(config):
     )
     # Now we train the model - We prune bad trials after each epoch if needed
     for epoch in range(num_epochs):
-        eval_metric = train_epoch(
-            model,
-            accelerator,
-            optimizer,
-            lr_scheduler,
-            train_dataloader,
-            eval_dataloader,
-            metric,
-            gradient_accumulation_steps,
-        )
+        model.train()
+        for step, batch in enumerate(train_dataloader):
+            # We could avoid this line if we set the accelerator with `put_objects_on_device=True`.
+            batch.to(accelerator.device)
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss = loss / gradient_accumulation_steps
+            accelerator.backward(loss)
+            if step % gradient_accumulation_steps == 0:
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+
+        model.eval()
+        for step, batch in enumerate(eval_dataloader):
+            # We could avoid this line if we set the accelerator with `put_objects_on_device=True`.
+            batch.to(accelerator.device)
+            outputs = model(**batch)
+            predictions = outputs.logits.argmax(dim=-1)
+            metric.add_batch(
+                predictions=accelerator.gather(predictions),
+                references=accelerator.gather(batch["labels"]),
+            )
+
+        eval_metric = metric.compute()
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
-        sum_metrics = sum(eval_metric.values()) if eval_metric is not None else None
-
-    return sum_metrics
 
 
 def main():

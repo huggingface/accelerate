@@ -4,6 +4,7 @@ from packaging import version
 
 from .config import DistributedState, DistributedType
 from .data_loader import prepare_data_loader
+from .gather import gather
 from .optimizer import AcceleratedOptimizer
 from .utils import extract_model_from_parallel
 
@@ -173,6 +174,9 @@ class Accelerator:
             for optimizer in self._optimizers:
                 self.scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
+
+    def gather(self, tensor, name=None):
+        return gather(tensor, name=name)
 
     def _get_named_parameters(self, *args):
         named_parameters = {}
