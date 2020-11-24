@@ -91,6 +91,8 @@ def get_user_input():
             default=False,
             error_message="Please enter yes or no.",
         )
+    else:
+        fp16 = False
 
     return LaunchConfig(distributed_type=distributed_type, num_processes=num_processes, fp16=fp16)
 
