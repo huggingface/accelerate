@@ -33,7 +33,7 @@ def launch_command_parser(subparsers=None):
         "--fp16", default=False, action="store_true", help="Whether or not to use mixed precision training."
     )
     parser.add_argument(
-        "--num_processes", type=Optional[int], default=None, help="The number of processes to be launched in parallel."
+        "--num_processes", type=int, default=-1, help="The number of processes to be launched in parallel."
     )
     parser.add_argument(
         "training_script",
@@ -104,12 +104,12 @@ def launch_command(args):
         if not args.multi_gpu and not args.tpu:
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType
-        if args.num_processes is None:
+        if args.num_processes == -1:
             args.num_processes = defaults.num_processes
         if not args.fp16:
             args.fp16 = defaults.fp16
     else:
-        if args.num_processes is None:
+        if args.num_processes == -1:
             args.num_processes = 1
 
     # Use the proper launcher
