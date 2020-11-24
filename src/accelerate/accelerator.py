@@ -161,14 +161,14 @@ class Accelerator:
             loss.backward()
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
-        # TODO: this unscale all optimizers where we should only unscale the one where parameters are.
+        # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
         if self.fp16 and self.native_amp:
             for optimizer in self._optimizers:
                 self.scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
     def clip_grad_value_(self, parameters, clip_value):
-        # TODO: this unscale all optimizers where we should only unscale the one where parameters are.
+        # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
         if self.fp16 and self.native_amp:
             for optimizer in self._optimizers:
                 self.scaler.unscale_(optimizer)
