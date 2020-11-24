@@ -64,8 +64,6 @@ def _ask_field(input_text, convert_value, default=None, error_message=None):
         except:
             if error_message is not None:
                 print(error_message)
-            else:
-                pass
 
 
 def get_user_input():
