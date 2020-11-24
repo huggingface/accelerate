@@ -103,7 +103,7 @@ def launch_command(args):
         defaults = LaunchConfig.from_json_file(json_file=args.config_file)
         if not args.multi_gpu and not args.tpu:
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
-            args.tpu = defaults.distributed_type == DistributedType
+            args.tpu = defaults.distributed_type == DistributedType.TPU
         if args.num_processes == -1:
             args.num_processes = defaults.num_processes
         if not args.fp16:

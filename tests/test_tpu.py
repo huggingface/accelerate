@@ -156,7 +156,7 @@ def training_check():
     accelerator.print("Training yielded the same results on one CPU or 8 TPUs with no batch split.")
 
     accelerator = Accelerator(put_objects_on_device=True, split_batches_across_devices=True)
-    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    train_dl = DataLoader(train_set, batch_size=batch_size * state.num_processes, shuffle=True)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
