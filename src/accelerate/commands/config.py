@@ -90,12 +90,6 @@ def get_user_input():
     main_process_ip = None
     main_process_port = None
     if distributed_type == DistributedType.MULTI_GPU:
-        multi_host = _ask_field(
-            "Are you using several machines (multi-node training)? ",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
-        )
         num_machines = _ask_field(
                 "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
                 lambda x: int(x),
