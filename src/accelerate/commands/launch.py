@@ -82,7 +82,7 @@ def simple_launcher(args):
 def multi_gpu_launcher(args):
     cmd = [sys.executable, "-m", "torch.distributed.launch"]
     cmd.extend(["--nproc_per_node", str(args.num_processes)])
-    if args.main_process_ip is not None:
+    if args.num_machines > 1:
         cmd.extend(
             [
                 "--nproc_per_node",
