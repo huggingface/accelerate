@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 from ..config import DistributedType
 from .config import LaunchConfig, default_config_file
@@ -32,7 +33,22 @@ def launch_command_parser(subparsers=None):
         "--fp16", default=False, action="store_true", help="Whether or not to use mixed precision training."
     )
     parser.add_argument(
-        "--num_processes", type=int, default=None, help="The number of processes to be launched in parallel."
+        "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
+    )
+    parser.add_argument(
+        "--num_machines", type=int, default=1, help="The total number of machines used in this training."
+    )
+    parser.add_argument(
+        "--machine_rank", type=int, default=0, help="The rank of the machine on which this script is launched."
+    )
+    parser.add_argument(
+        "--main_process_ip", type=Optional[str], default=None, help="The IP address of the machine of rank 0."
+    )
+    parser.add_argument(
+        "--main_process_port",
+        type=Optional[int],
+        default=None,
+        help="The port to use to communicate with the machine of rank 0.",
     )
     parser.add_argument(
         "training_script",
