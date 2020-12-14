@@ -58,14 +58,14 @@ def config_command_parser(subparsers=None):
     return parser
 
 
-def _ask_field(input_text, convert_value, default=None, error_message=None):
+def _ask_field(input_text, convert_value=None, default=None, error_message=None):
     ask_again = True
     while ask_again:
         result = input(input_text)
         try:
             if default is not None and len(result) == 0:
                 return default
-            return convert_value(result)
+            return convert_value(result) if convert_value is not None else result
         except:
             if error_message is not None:
                 print(error_message)
@@ -91,21 +91,21 @@ def get_user_input():
     main_process_port = None
     if distributed_type == DistributedType.MULTI_GPU:
         multi_host = _ask_field(
-            "Are you using several machines (multi-node training)?",
+            "Are you using several machines (multi-node training)? ",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
         )
         if multi_host:
-            machine_rank = _ask_field(
-                "What is the rank of this machine (from 0 to the number of machines - 1 )? [0]: ",
-                lambda x: int(x),
-                default=0,
-            )
             num_machines = _ask_field(
                 "How many machines will you use? [1]: ",
                 lambda x: int(x),
                 default=1,
+            )
+            machine_rank = _ask_field(
+                "What is the rank of this machine (from 0 to the number of machines - 1 )? [0]: ",
+                lambda x: int(x),
+                default=0,
             )
             main_process_ip = _ask_field(
                 "What is the IP address of the machine that will host the main process? ",
