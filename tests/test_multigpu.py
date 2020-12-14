@@ -34,7 +34,7 @@ class MultiGPUTester(unittest.TestCase):
 def init_state_check():
     # Test we can instantiate this twice in a row.
     state = DistributedState()
-    if state.process_index == 0:
+    if state.local_process_index == 0:
         print("Testing, testing. 1, 2, 3.")
     print(state)
 
@@ -44,7 +44,7 @@ def rng_sync_check():
     synchronize_rng_states()
     assert are_the_same_tensors(torch.get_rng_state())
     assert are_the_same_tensors(torch.cuda.get_rng_state())
-    if state.process_index == 0:
+    if state.local_process_index == 0:
         print("All rng are properly synched.")
 
 
@@ -103,7 +103,7 @@ def dl_preparation_check():
     result.sort()
     assert result == list(range(length))
 
-    if state.process_index == 0:
+    if state.local_process_index == 0:
         print("Shuffled dataloader passing.")
 
 
@@ -197,18 +197,18 @@ def training_check():
 
 if __name__ == "__main__":
     state = DistributedState()
-    if state.process_index == 0:
+    if state.local_process_index == 0:
         print("**Initialization**")
     init_state_check()
 
-    if state.process_index == 0:
+    if state.local_process_index == 0:
         print("\n**Test random number generator synchronization**")
     rng_sync_check()
 
-    if state.process_index == 0:
+    if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
 
-    if state.process_index == 0:
+    if state.local_process_index == 0:
         print("\n**Training integration test**")
     training_check()

@@ -1,6 +1,6 @@
 from torch.utils.data import DataLoader
 
-from accelerate import Accelerator, gather
+from accelerate import Accelerator
 from datasets import load_dataset, load_metric
 from transformers import (
     AdamW,

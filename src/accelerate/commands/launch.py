@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 from ..config import DistributedType
 from .config import LaunchConfig, default_config_file
@@ -67,6 +66,23 @@ def simple_launcher(args):
 def multi_gpu_launcher(args):
     cmd = [sys.executable, "-m", "torch.distributed.launch"]
     cmd.extend(["--nproc_per_node", str(args.num_processes)])
+    if args.main_process_ip is not None:
+        cmd.extend(
+            [
+                "--nproc_per_node",
+                str(args.num_processes // args.num_machines),
+                "--nnodes",
+                str(args.num_machines),
+                "--node_rank",
+                str(args.machine_rank),
+                "--master_addr",
+                args.main_process_ip,
+                "--node_rank",
+                str(args.main_process_port),
+            ]
+        )
+    else:
+        cmd.extend(["--nproc_per_node", str(args.num_processes)])
     cmd.append(args.training_script)
     cmd.extend(args.training_script_args)
 

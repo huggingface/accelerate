@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 from ..config import DistributedType
 
@@ -18,6 +19,10 @@ class LaunchConfig:
     distributed_type: DistributedType
     num_processes: int
     fp16: bool
+    machine_rank: int = 0
+    num_machines: int = 1
+    main_process_ip: Optional[str] = None
+    main_process_port: Optional[int] = None
 
     @classmethod
     def from_json_file(cls, json_file=None):
@@ -42,8 +47,8 @@ def config_command_parser(subparsers=None):
         default=None,
         help=(
             "The path to use to store the config file. Will default to a file named default_config.json in the cache "
-            "location, which is the content of the enviromnent `HF_HOME` suffixed with 'accelerate', or if you don't have "
-            "such an enviromnent variable, your cache directory ('~/.cache' or the content of `XDG_CACHE_HOME`) suffixed "
+            "location, which is the content of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have "
+            "such an environment variable, your cache directory ('~/.cache' or the content of `XDG_CACHE_HOME`) suffixed "
             "with 'huggingface'."
         ),
     )
@@ -71,30 +76,71 @@ def get_user_input():
         value = int(value)
         return DistributedType(["NO", "MULTI_GPU", "TPU"][value])
 
+    def _convert_yes_no_to_bool(value):
+        return {"yes": True, "no": False}[value.lower()]
+
     distributed_type = _ask_field(
         "Which type of machine are you using? ([0] No distributed training, [1] multi-GPU, [2] TPU): ",
         _convert_distributed_mode,
         error_message="Please enter 0, 1 or 2.",
     )
 
-    num_processes = _ask_field(
-        "How many processes will you use? [1]: ", lambda x: int(x), default=1, error_message="Please enter an integer."
-    )
+    machine_rank = 0
+    num_machines = 1
+    main_process_ip = None
+    main_process_port = None
+    if distributed_type == DistributedType.MULTI_GPU:
+        multi_host = _ask_field(
+            "Are you using several machines (multi-node training)?",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+        if multi_host:
+            machine_rank = _ask_field(
+                "What is the rank of this machine (from 0 to the number of machines - 1 )? [0]: ",
+                lambda x: int(x),
+                default=0,
+            )
+            num_machines = _ask_field(
+                "How many machines will you use? [1]: ",
+                lambda x: int(x),
+                default=1,
+            )
+            main_process_ip = _ask_field(
+                "What is the IP address of the machine that will host the main process? ",
+            )
+            main_process_ip = _ask_field(
+                "What is the port you will use to communicate with the main process? ",
+                lambda x: int(x),
+            )
 
-    def _convert_fp16(value):
-        return {"yes": True, "no": False}[value.lower()]
+    num_processes = _ask_field(
+        "How many processes in total will you use? [1]: ",
+        lambda x: int(x),
+        default=1,
+        error_message="Please enter an integer.",
+    )
 
     if distributed_type != DistributedType.TPU:
         fp16 = _ask_field(
             "Do you wish to use FP16 (mixed precision)? [yes/NO]: ",
-            _convert_fp16,
+            _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
         )
     else:
         fp16 = False
 
-    return LaunchConfig(distributed_type=distributed_type, num_processes=num_processes, fp16=fp16)
+    return LaunchConfig(
+        distributed_type=distributed_type,
+        num_processes=num_processes,
+        fp16=fp16,
+        machine_rank=machine_rank,
+        num_machines=num_machines,
+        main_process_ip=main_process_ip,
+        main_process_port=main_process_port,
+    )
 
 
 def config_command(args):
