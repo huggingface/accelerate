@@ -96,12 +96,12 @@ def get_user_input():
             default=False,
             error_message="Please enter yes or no.",
         )
-        if multi_host:
-            num_machines = _ask_field(
-                "How many machines will you use? [1]: ",
+        num_machines = _ask_field(
+                "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
                 lambda x: int(x),
                 default=1,
             )
+        if num_machines > 1:
             machine_rank = _ask_field(
                 "What is the rank of this machine (from 0 to the number of machines - 1 )? [0]: ",
                 lambda x: int(x),
