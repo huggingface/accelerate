@@ -1,6 +1,6 @@
 import torch
 
-from .config import DistributedState, DistributedType, is_tpu_available
+from .config import AcceleratorState, DistributedType, is_tpu_available
 
 
 if is_tpu_available():
@@ -31,9 +31,9 @@ def _gpu_gather(tensor):
 
 def gather(tensor, name=None):
     """Gather tensor from all devices."""
-    if DistributedState().distributed_type == DistributedType.TPU:
+    if AcceleratorState().distributed_type == DistributedType.TPU:
         return _tpu_gather(tensor, name="tensor" if name is None else name)
-    elif DistributedState().distributed_type == DistributedType.MULTI_GPU:
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
         return _gpu_gather(tensor)
     else:
         return tensor

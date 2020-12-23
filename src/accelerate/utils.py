@@ -3,7 +3,7 @@ import random
 import numpy as np
 import torch
 
-from .config import DistributedState, DistributedType, is_tpu_available
+from .config import AcceleratorState, DistributedType, is_tpu_available
 
 
 if is_tpu_available():
@@ -28,7 +28,7 @@ def synchronize_rng_states():
     """
     Helper function to synchronize the rng states in distributed / TPU training.
     """
-    state = DistributedState()
+    state = AcceleratorState()
     if state.distributed_type == DistributedType.TPU:
         rng_state = torch.get_rng_state()
         rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
@@ -50,10 +50,10 @@ def send_to_device(tensor, device):
         return type(tensor)(send_to_device(t, device) for t in tensor)
     elif isinstance(tensor, dict):
         return type(tensor)({k: send_to_device(v, device) for k, v in tensor.items()})
-    elif not isinstance(tensor, torch.Tensor):
+    elif not hasattr(tensor, "to"):
         raise TypeError(
             f"Can't send the values of type {type(tensor)} to device {device}, only of nested list/tuple/dicts "
-            "of tensors."
+            "of tensors or objects having a `to` method."
         )
     return tensor.to(device)
 

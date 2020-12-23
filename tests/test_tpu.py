@@ -9,7 +9,7 @@ import torch_xla.core.xla_model as xm
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
-from accelerate.config import DistributedState
+from accelerate.config import AcceleratorState
 from accelerate.data_loader import prepare_data_loader
 from accelerate.gather import gather
 from accelerate.utils import set_seed, synchronize_rng_states
@@ -35,14 +35,14 @@ class MultiTPUTester(unittest.TestCase):
 
 def init_state_check():
     # Test we can instantiate this twice in a row.
-    state = DistributedState()
+    state = AcceleratorState()
     if state.local_process_index == 0:
         print("Testing, testing. 1, 2, 3.")
     print(state)
 
 
 def rng_sync_check():
-    state = DistributedState()
+    state = AcceleratorState()
     synchronize_rng_states()
     assert are_the_same_tensors(torch.get_rng_state())
     if state.local_process_index == 0:
@@ -50,7 +50,7 @@ def rng_sync_check():
 
 
 def dl_preparation_check():
-    state = DistributedState()
+    state = AcceleratorState()
     length = 32 * state.num_processes
 
     dl = DataLoader(range(length), batch_size=8)
@@ -125,7 +125,7 @@ def mock_training(length, batch_size):
 
 
 def training_check():
-    state = DistributedState()
+    state = AcceleratorState()
     batch_size = 2
     length = batch_size * 4 * state.num_processes
 
@@ -179,7 +179,7 @@ def training_check():
 
 
 def main():
-    state = DistributedState()
+    state = AcceleratorState()
     if state.local_process_index == 0:
         print("**Initialization**")
     init_state_check()

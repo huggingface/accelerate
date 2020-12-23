@@ -1,6 +1,6 @@
 import torch
 
-from .config import DistributedState, DistributedType, is_tpu_available
+from .config import AcceleratorState, DistributedType, is_tpu_available
 
 
 if is_tpu_available():
@@ -11,7 +11,11 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def __init__(self, optimizer, scaler=None):
         self.optimizer = optimizer
         self.scaler = scaler
-        self.state = DistributedState()
+        self.state = AcceleratorState()
+
+    @property
+    def param_groups(self):
+        return self.optimizer.param_groups
 
     def add_param_group(self, param_group):
         self.optimizer.add_param_group(param_group)

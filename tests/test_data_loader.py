@@ -9,6 +9,8 @@ class DataLoaderTester(unittest.TestCase):
     def check_batch_sampler_shards(self, batch_sampler, expected, split_batches=False):
         batch_sampler_shards = [BatchSamplerShard(batch_sampler, 2, i, split_batches) for i in range(2)]
         batch_sampler_lists = [list(batch_sampler_shard) for batch_sampler_shard in batch_sampler_shards]
+        if not split_batches:
+            self.assertListEqual([len(shard) for shard in batch_sampler_shards], [len(e) for e in expected])
         self.assertListEqual(batch_sampler_lists, expected)
 
     def test_batch_sampler_shards_with_no_splits(self):

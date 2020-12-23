@@ -30,10 +30,10 @@ class DistributedType(str, Enum):
 
 
 # Inspired by Alex Martelli's 'Borg'.
-class DistributedState:
+class AcceleratorState:
     """
     This is a variation of a `singleton class <https://en.wikipedia.org/wiki/Singleton_pattern>`__ in the sense that
-    all instance of :obj:`DistributedState` share the same state, which is initialized on the first instantiation.
+    all instance of :obj:`AcceleratorState` share the same state, which is initialized on the first instantiation.
     """
 
     _shared_state = {}

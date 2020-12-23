@@ -4,12 +4,12 @@ import unittest
 
 import torch
 
-from accelerate.config import DistributedState, is_tpu_available
+from accelerate.config import AcceleratorState, is_tpu_available
 from accelerate.gather import gather
 
 
 def are_the_same_tensors(tensor):
-    state = DistributedState()
+    state = AcceleratorState()
     tensor = tensor[None].clone().to(state.device)
     tensors = gather(tensor).cpu()
     tensor = tensor[0].cpu()

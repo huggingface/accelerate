@@ -2,7 +2,7 @@ import torch
 
 from packaging import version
 
-from .config import DistributedState, DistributedType
+from .config import AcceleratorState, DistributedType
 from .data_loader import prepare_data_loader
 from .gather import gather
 from .optimizer import AcceleratedOptimizer
@@ -33,14 +33,14 @@ class Accelerator:
                 must be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size
                 used will be the one set in your script multiplied by the number of processes.
         """
-        self.distributed_state = DistributedState()
+        self.state = AcceleratorState()
         self.put_objects_on_device = put_objects_on_device
         self.split_batches_across_devices = split_batches_across_devices
 
         # Mixed precision attributes
         self.scaler = None
         self.native_amp = False
-        self.fp16 = fp16 if fp16 is not None else self.distributed_state.use_fp16
+        self.fp16 = fp16 if fp16 is not None else self.state.use_fp16
         if fp16:
             self.native_amp = version.parse(torch.__version__) >= version.parse("1.6")
             self.scaler = torch.cuda.amp.GradScaler()
@@ -50,32 +50,34 @@ class Accelerator:
 
     @property
     def distributed_type(self):
-        return self.distributed_state.distributed_type
+        return self.state.distributed_type
 
     @property
     def num_processes(self):
-        return self.distributed_state.num_processes
+        return self.state.num_processes
 
     @property
     def process_index(self):
-        return self.distributed_state.process_index
+        return self.state.process_index
 
     @property
     def local_process_index(self):
-        return self.distributed_state.local_process_index
+        return self.state.local_process_index
 
     @property
     def device(self):
-        return self.distributed_state.device
+        return self.state.device
 
+    @property
     def is_main_process(self):
         return self.process_index == 0
 
-    def is_main_local_process(self):
+    @property
+    def is_local_main_process(self):
         return self.local_process_index == 0
 
     def print(self, *args, **kwargs):
-        if self.is_main_local_process():
+        if self.is_local_main_process:
             print(*args, **kwargs)
 
     def _prepare_one(self, obj):

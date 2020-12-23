@@ -51,6 +51,12 @@ def launch_command_parser(subparsers=None):
         help="The port to use to communicate with the machine of rank 0.",
     )
     parser.add_argument(
+        "--main_training_function",
+        type=str,
+        default=None,
+        help="The name of the main function to be executed in your script (only for TPU training).",
+    )
+    parser.add_argument(
         "training_script",
         type=str,
         help=(
@@ -81,7 +87,7 @@ def simple_launcher(args):
 
 def multi_gpu_launcher(args):
     cmd = [sys.executable, "-m", "torch.distributed.launch"]
-    cmd.extend(["--nproc_per_node", str(args.num_processes)])
+    cmd.extend(["--nproc_per_node", str(args.num_processes), "--use_env"])
     if args.num_machines > 1:
         cmd.extend(
             [
@@ -119,10 +125,16 @@ def tpu_launcher(args):
     sys.path.append(str(script_path.parent.resolve()))
     mod_name = script_path.stem
     mod = importlib.import_module(mod_name)
+    if not hasattr(mod, args.main_function_name):
+        raise ValueError(
+            f"Your training script should have a function named {args.main_function_name}, or you should pass a "
+            "different value to `--main_function_name`."
+        )
+    main_function = getattr(mod, args.main_function_name)
 
     # Patch sys.argv
     sys.argv = [args.training_script] + args.training_script_args + ["--tpu_num_cores", str(args.num_processes)]
-    xmp.spawn(mod._mp_fn, args=(), nprocs=args.num_processes)
+    xmp.spawn(main_function, args=(), nprocs=args.num_processes)
 
 
 def launch_command(args):

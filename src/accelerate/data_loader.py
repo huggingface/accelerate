@@ -4,7 +4,7 @@ from typing import Optional
 import torch
 from torch.utils.data import BatchSampler, DataLoader
 
-from .config import DistributedState, DistributedType, is_tpu_available
+from .config import AcceleratorState, DistributedType, is_tpu_available
 from .utils import send_to_device, synchronize_rng_states
 
 
@@ -63,7 +63,9 @@ class BatchSamplerShard(BatchSampler):
         self.drop_last = batch_sampler.drop_last
 
     def __len__(self):
-        length = (len(self.batch_sampler) + self.num_processes - 1) // self.num_processes
+        if len(self.batch_sampler) % self.num_processes == 0:
+            return len(self.batch_sampler) // self.num_processes
+        length = len(self.batch_sampler) // self.num_processes
         return length if self.drop_last else length + 1
 
     def __iter__(self):
@@ -136,7 +138,7 @@ class DataLoaderShard(DataLoader):
 
     def __iter__(self):
         synchronize_rng_states()
-        state = DistributedState()
+        state = AcceleratorState()
         for batch in super().__iter__():
             if state.distributed_type == DistributedType.TPU:
                 xm.mark_step()
@@ -165,9 +167,9 @@ def prepare_data_loader(
             The target device for the returned :obj:`DataLoader`.
         num_processes (:obj:`int`, `optional`):
             The number of processes running concurrently. Will default to the value given by
-            :class:`~accelerate.DistributedState`.
+            :class:`~accelerate.AcceleratorState`.
         process_index (:obj:`int`, `optional`):
-            The index of the current process. Will default to the value given by :class:`~accelerate.DistributedState`.
+            The index of the current process. Will default to the value given by :class:`~accelerate.AcceleratorState`.
         split_batches_across_devices (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether the resulting :obj:`DataLoader` should split the batches of the original data loader across devices
             or yield full batches (in which case it will yield batches starting at the :obj:`process_index`-th and
@@ -190,8 +192,8 @@ def prepare_data_loader(
 
         This does not support :obj:`BatchSampler` with varying batch size yet or :obj:`IterableDataset` yet.
     """
-    # Grab defaults from DistributedState
-    state = DistributedState()
+    # Grab defaults from AcceleratorState
+    state = AcceleratorState()
     if num_processes is None:
         num_processes = state.num_processes
     if process_index is None:
@@ -206,15 +208,15 @@ def prepare_data_loader(
 
     # No change if no multiprocess
     if num_processes == 1:
-        return dataloader
-
-    # New batch sampler for the current process.
-    new_batch_sampler = BatchSamplerShard(
-        dataloader.batch_sampler,
-        num_processes=num_processes,
-        process_index=process_index,
-        split_batches=split_batches_across_devices,
-    )
+        new_batch_sampler = dataloader.batch_sampler
+    else:
+        # New batch sampler for the current process.
+        new_batch_sampler = BatchSamplerShard(
+            dataloader.batch_sampler,
+            num_processes=num_processes,
+            process_index=process_index,
+            split_batches=split_batches_across_devices,
+        )
 
     # To support different versions of PyTorch, we read the kwargs in the DataLoader signature.
     pytorch_dl_sig = inspect.signature(DataLoader)
