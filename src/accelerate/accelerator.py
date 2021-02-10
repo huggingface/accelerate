@@ -190,9 +190,9 @@ class Accelerator:
                 An optional name for the tensor (only used in TPU settings).
 
         Returns:
-            :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s).
-            Note that the first dimension of the result is `num_processes` multiplied by the first dimension of the
-            input tensors.
+            :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s). Note
+            that the first dimension of the result is `num_processes` multiplied by the first dimension of the input
+            tensors.
         """
         return gather(tensor, name=name)
 
