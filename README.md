@@ -1,6 +1,6 @@
 <p align="center">
     <br>
-    <img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/accelerate_logo.png" width="400"/>
+    <img src="docs/source/imgs/accelerate_logo.png" width="400"/>
     <br>
 <p>
 
