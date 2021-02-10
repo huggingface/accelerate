@@ -1,8 +1,12 @@
-# 🤗 Accelerate
+<p align="center">
+    <br>
+    <img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/accelerate_logo.png" width="400"/>
+    <br>
+<p>
 
 
 <h3 align="center">
-<p>Run your own *raw* PyTorch training loop on any kind of device with just three lines of code.
+<p>Run your *raw* PyTorch training script on any kind of device
 </h3>
 
 ## Installation
