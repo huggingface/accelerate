@@ -2,9 +2,9 @@ import torch
 
 from packaging import version
 
+from .state import AcceleratorState, DistributedType
 from .data_loader import prepare_data_loader
 from .optimizer import AcceleratedOptimizer
-from .state import AcceleratorState, DistributedType
 from .utils import extract_model_from_parallel, gather
 
 
@@ -26,10 +26,10 @@ class Accelerator:
                 If :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it
                 must be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size
                 used will be the one set in your script multiplied by the number of processes.
-
+        
         Attribute:
             state (:class:`~accelerate.AcceleratorState`):
-                The
+                The 
         """
         self.state = AcceleratorState()
         self.device_placement = device_placement
@@ -162,6 +162,9 @@ class Accelerator:
             loss.backward()
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
+        """
+        Should be used in place of :func:`torch.nn.utils.clip_grad_norm_`.
+        """
         # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
         if self.fp16 and self.native_amp:
             for optimizer in self._optimizers:
@@ -169,6 +172,9 @@ class Accelerator:
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
     def clip_grad_value_(self, parameters, clip_value):
+        """
+        Should be used in place of :func:`torch.nn.utils.clip_grad_value_`.
+        """
         # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
         if self.fp16 and self.native_amp:
             for optimizer in self._optimizers:
@@ -190,9 +196,9 @@ class Accelerator:
                 An optional name for the tensor (only used in TPU settings).
 
         Returns:
-            :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s). Note
-            that the first dimension of the result is `num_processes` multiplied by the first dimension of the input
-            tensors.
+            :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s).
+            Note that the first dimension of the result is `num_processes` multiplied by the first dimension of the
+            input tensors.
         """
         return gather(tensor, name=name)
 
