@@ -10,7 +10,10 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-Quick tour
+Accelerator
 =======================================================================================================================
 
-Let's have a quick look at the 🤗 Accelerate
+The :class:`~accelerate.Accelerator` is the main class provided by 🤗 Accelerate.
+
+.. autoclass:: accelerate.Accelerator
+    :members:

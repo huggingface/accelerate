@@ -1,4 +1,9 @@
-# accelerate
+# 🤗 Accelerate
+
+
+<h3 align="center">
+<p>Run your own *raw* PyTorch training loop on any kind of device with just three lines of code.
+</h3>
 
 ## Installation
 

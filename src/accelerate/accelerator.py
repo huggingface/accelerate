@@ -9,28 +9,28 @@ from .utils import extract_model_from_parallel, gather
 
 
 class Accelerator:
-    def __init__(self, fp16: bool = None, device_placement: bool = True, split_batches: bool = False):
-        """
-        Creates an instance of an accelerator for distributed training (on multi-GPU, TPU) or mixed precision training.
+    """
+    Creates an instance of an accelerator for distributed training (on multi-GPU, TPU) or mixed precision training.
 
-        Args:
-            fp16 (:obj:`bool`, `optional`):
-                Whether or not to use mixed precision training. Will default to the value in the environment variable
-                :obj:`USE_FP16`, which will use the default value in the accelerate config of the current system or the
-                flag passed with the :obj:`accelerate.launch` command.
-            device_placement (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not the accelerator should put objects on device (tensors yielded by the datalaoder, model,
-                etc...).
-            split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the accelerator should split the batches yielded by the dataloaders across the devices.
-                If :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it
-                must be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size
-                used will be the one set in your script multiplied by the number of processes.
-        
-        Attribute:
-            state (:class:`~accelerate.AcceleratorState`):
-                The 
-        """
+    Args:
+        fp16 (:obj:`bool`, `optional`):
+            Whether or not to use mixed precision training. Will default to the value in the environment variable
+            :obj:`USE_FP16`, which will use the default value in the accelerate config of the current system or the
+            flag passed with the :obj:`accelerate.launch` command.
+        device_placement (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the accelerator should put objects on device (tensors yielded by the datalaoder, model,
+            etc...).
+        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices.
+            If :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it
+            must be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size
+            used will be the one set in your script multiplied by the number of processes.
+    
+    Attribute:
+        state (:class:`~accelerate.AcceleratorState`):
+            The distributed setup state.
+    """
+    def __init__(self, fp16: bool = None, device_placement: bool = True, split_batches: bool = False):
         self.state = AcceleratorState()
         self.device_placement = device_placement
         self.split_batches = split_batches

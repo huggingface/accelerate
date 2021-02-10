@@ -9,3 +9,10 @@ Super title
 
     quicktour
     installation
+
+
+.. toctree::
+    :maxdepth: 2
+    :caption: API reference
+
+    accelerator
