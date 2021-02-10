@@ -9,10 +9,9 @@ import torch_xla.core.xla_model as xm
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
-from accelerate.config import AcceleratorState
 from accelerate.data_loader import prepare_data_loader
-from accelerate.gather import gather
-from accelerate.utils import set_seed, synchronize_rng_states
+from accelerate.state import AcceleratorState
+from accelerate.utils import gather, set_seed, synchronize_rng_states
 from testing_utils import are_the_same_tensors, execute_subprocess_async, require_tpu
 from training_utils import RegressionDataset, RegressionModel
 
@@ -68,7 +67,7 @@ def dl_preparation_check():
         state.num_processes,
         state.process_index,
         put_on_device=True,
-        split_batches_across_devices=True,
+        split_batches=True,
     )
     result = []
     for batch in dl:
@@ -95,7 +94,7 @@ def dl_preparation_check():
         state.num_processes,
         state.process_index,
         put_on_device=True,
-        split_batches_across_devices=True,
+        split_batches=True,
     )
     result = []
     for batch in dl:
@@ -133,7 +132,7 @@ def training_check():
     assert are_the_same_tensors(old_model.a)
     assert are_the_same_tensors(old_model.b)
 
-    accelerator = Accelerator(put_objects_on_device=True)
+    accelerator = Accelerator()
     train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -155,7 +154,7 @@ def training_check():
     assert torch.allclose(old_model.b, model.b)
     accelerator.print("Training yielded the same results on one CPU or 8 TPUs with no batch split.")
 
-    accelerator = Accelerator(put_objects_on_device=True, split_batches_across_devices=True)
+    accelerator = Accelerator(split_batches=True)
     train_dl = DataLoader(train_set, batch_size=batch_size * state.num_processes, shuffle=True)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)

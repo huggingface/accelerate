@@ -5,4 +5,4 @@
 __version__ = "0.0.1"
 
 from .accelerator import Accelerator
-from .gather import gather
+from .utils import synchronize_rng_states

@@ -62,11 +62,11 @@ def training_function(config):
 
     set_seed(seed)
     # Initialize accelerator
-    accelerator = Accelerator()
+    accelerator = Accelerator(device_placement=False)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
-    # We could avoid this line if we set the accelerator with `put_objects_on_device=True`.
+    # We could avoid this line if we set the accelerator with `device_placement=True`.
     # If setting devices manually, this line absolutely needs to be before the optimizer creation otherwise training
     # will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
     model = model.to(accelerator.device)
@@ -89,7 +89,7 @@ def training_function(config):
     for epoch in range(num_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
-            # We could avoid this line if we set the accelerator with `put_objects_on_device=True`.
+            # We could avoid this line if we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
             loss = outputs.loss
@@ -102,7 +102,7 @@ def training_function(config):
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
-            # We could avoid this line if we set the accelerator with `put_objects_on_device=True`.
+            # We could avoid this line if we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)

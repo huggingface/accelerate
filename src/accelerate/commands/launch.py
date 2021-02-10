@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from ..config import DistributedType
+from ..state import DistributedType
 from .config import LaunchConfig, default_config_file
 
 

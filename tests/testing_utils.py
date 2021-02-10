@@ -4,8 +4,8 @@ import unittest
 
 import torch
 
-from accelerate.config import AcceleratorState, is_tpu_available
-from accelerate.gather import gather
+from accelerate.state import AcceleratorState, is_tpu_available
+from accelerate.utils import gather
 
 
 def are_the_same_tensors(tensor):

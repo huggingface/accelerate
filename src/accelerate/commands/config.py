@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from ..config import DistributedType
+from ..state import DistributedType
 
 
 hf_cache_home = os.path.expanduser(

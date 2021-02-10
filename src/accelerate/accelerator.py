@@ -2,20 +2,14 @@ import torch
 
 from packaging import version
 
-from .config import AcceleratorState, DistributedType
 from .data_loader import prepare_data_loader
-from .gather import gather
 from .optimizer import AcceleratedOptimizer
-from .utils import extract_model_from_parallel
+from .state import AcceleratorState, DistributedType
+from .utils import extract_model_from_parallel, gather
 
 
 class Accelerator:
-    def __init__(
-        self,
-        fp16: bool = None,
-        put_objects_on_device: bool = False,
-        split_batches_across_devices: bool = False,
-    ):
+    def __init__(self, fp16: bool = None, device_placement: bool = True, split_batches: bool = False):
         """
         Creates an instance of an accelerator for distributed training (on multi-GPU, TPU) or mixed precision training.
 
@@ -24,18 +18,22 @@ class Accelerator:
                 Whether or not to use mixed precision training. Will default to the value in the environment variable
                 :obj:`USE_FP16`, which will use the default value in the accelerate config of the current system or the
                 flag passed with the :obj:`accelerate.launch` command.
-            put_objects_on_device (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            device_placement (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the accelerator should put objects on device (tensors yielded by the datalaoder, model,
                 etc...).
-            split_batches_across_devices (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the accelerator should split the batches yielded by the datalaoders across the devices.
+            split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the accelerator should split the batches yielded by the dataloaders across the devices.
                 If :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it
                 must be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size
                 used will be the one set in your script multiplied by the number of processes.
+
+        Attribute:
+            state (:class:`~accelerate.AcceleratorState`):
+                The
         """
         self.state = AcceleratorState()
-        self.put_objects_on_device = put_objects_on_device
-        self.split_batches_across_devices = split_batches_across_devices
+        self.device_placement = device_placement
+        self.split_batches = split_batches
 
         # Mixed precision attributes
         self.scaler = None
@@ -107,12 +105,12 @@ class Accelerator:
                     "The model and the optimizer parameters are not on the same device, which probably means you "
                     "created an optimizer around your model **before** putting on the device. Make sure the line "
                     "model.to(device) is before the optimizer creation in your script or remove it entirely and use "
-                    "the flag `put_objects_on_device = True` in your `Accelerator` creation to let it handle that "
+                    "the flag default value for `devicement_placement` in your `Accelerator` to let it handle that "
                     "part for you."
                 )
 
         # If we're dealing with device placement, this deals with that by...
-        tpu_should_fix_optimizer = self.put_objects_on_device and self.distributed_type == DistributedType.TPU
+        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
         if tpu_should_fix_optimizer:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
@@ -132,7 +130,7 @@ class Accelerator:
         return result
 
     def prepare_model(self, model):
-        if self.put_objects_on_device:
+        if self.device_placement:
             model = model.to(self.device)
         if self.distributed_type == DistributedType.MULTI_GPU:
             model = torch.nn.parallel.DistributedDataParallel(
@@ -150,8 +148,8 @@ class Accelerator:
             self.device,
             num_processes=self.num_processes,
             process_index=self.process_index,
-            split_batches_across_devices=self.split_batches_across_devices,
-            put_on_device=self.put_objects_on_device,
+            split_batches=self.split_batches,
+            put_on_device=self.device_placement,
         )
 
     def prepare_optimizer(self, optimizer):
@@ -178,6 +176,24 @@ class Accelerator:
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
     def gather(self, tensor, name=None):
+        """
+        Gather the values in `tensor` accross all processes and concatenate them on the first dimension. Useful to
+        regroup the predictions from all processes when doing evaluation.
+
+        Note:
+            This gather happens in all processes.
+
+        Args:
+            tensor (:obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`):
+                The tensors to gather accross all processes.
+            name (:obj:`str`, `optional`):
+                An optional name for the tensor (only used in TPU settings).
+
+        Returns:
+            :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s).
+            Note that the first dimension of the result is `num_processes` multiplied by the first dimension of the
+            input tensors.
+        """
         return gather(tensor, name=name)
 
     def _get_named_parameters(self, *args):

@@ -1,6 +1,6 @@
 import torch
 
-from .config import AcceleratorState, DistributedType, is_tpu_available
+from .state import AcceleratorState, DistributedType, is_tpu_available
 
 
 if is_tpu_available():

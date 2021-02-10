@@ -4,7 +4,7 @@ from typing import Optional
 import torch
 from torch.utils.data import BatchSampler, DataLoader
 
-from .config import AcceleratorState, DistributedType, is_tpu_available
+from .state import AcceleratorState, DistributedType, is_tpu_available
 from .utils import send_to_device, synchronize_rng_states
 
 
@@ -150,7 +150,7 @@ def prepare_data_loader(
     device: Optional[torch.device] = None,
     num_processes: Optional[int] = None,
     process_index: Optional[int] = None,
-    split_batches_across_devices: bool = False,
+    split_batches: bool = False,
     put_on_device: bool = False,
 ) -> DataLoader:
     """
@@ -170,7 +170,7 @@ def prepare_data_loader(
             :class:`~accelerate.AcceleratorState`.
         process_index (:obj:`int`, `optional`):
             The index of the current process. Will default to the value given by :class:`~accelerate.AcceleratorState`.
-        split_batches_across_devices (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether the resulting :obj:`DataLoader` should split the batches of the original data loader across devices
             or yield full batches (in which case it will yield batches starting at the :obj:`process_index`-th and
             advancing of :obj:`num_processes` batches at each iteration).
@@ -200,9 +200,9 @@ def prepare_data_loader(
         process_index = state.process_index
 
     # Sanity check
-    if split_batches_across_devices and dataloader.batch_size % num_processes != 0:
+    if split_batches and dataloader.batch_size % num_processes != 0:
         raise ValueError(
-            f"Using `split_batches_across_devices=True` requires that the batch size ({dataloader.batch_size}) "
+            f"Using `split_batches=True` requires that the batch size ({dataloader.batch_size}) "
             f"to be a round multiple of the number of processes ({num_processes})."
         )
 
@@ -215,7 +215,7 @@ def prepare_data_loader(
             dataloader.batch_sampler,
             num_processes=num_processes,
             process_index=process_index,
-            split_batches=split_batches_across_devices,
+            split_batches=split_batches,
         )
 
     # To support different versions of PyTorch, we read the kwargs in the DataLoader signature.
