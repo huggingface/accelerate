@@ -112,8 +112,8 @@ for epoch in range(10):
   )
 
 + model, optim, data = accelerator.prepare(
-      model, optim, data
-  )
++     model, optim, data
++ )
 
   model.train()
   for epoch in range(10):
