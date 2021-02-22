@@ -34,6 +34,8 @@
 <p>Run your *raw* PyTorch training script on any kind of device
 </h3>
 
+## Easy to integrate
+
 🤗 Accelerate was created for PyTorch users who like to write the training loop of PyTorch models but are reluctant to write and maintain the boiler code needed to use multi-GPUs/TPU/fp16.
 
 🤗 Accelerate abstracts exactly and only the boiler code related to multi-GPUs/TPU/fp16 and let the rest of your code unchanged.
@@ -139,83 +141,110 @@ for epoch in range(10):
 
 As you can see on this example, by adding 5-lines to any standard PyTorch training script you can now run on any kind of single or distributed node setting (single CPU, single GPU, multi-GPUs and TPUs) as well as with or without mixed precision (fp16).
 
-The same code can then in paticular run without modification on your local machine for debugging or your training environment.
+The same code can then in particular run without modification on your local machine for debugging or your training environment.
 
-🤗 Accelerate also provides a CLI tool that allows you to quickly configure and test your training environment then launch the scripts.
+If you let 🤗 Accelerate handle the device placement for you (a bit more changes but safer), the previous diff looks like this:
 
-## Easy to integrate
-
-A traditional training loop in PyTorch looks like this:
-
-```python
-my_model.to(device)
-
-for batch in my_training_dataloader:
-    my_optimizer.zero_grad()
-    inputs, targets = batch
-    inputs = inputs.to(device)
-    targets = targets.to(device)
-    outputs = my_model(inputs)
-    loss = my_loss_function(outputs, targets)
-    loss.backward()
-    my_optimizer.step()
-```
-
-Changing it to work with accelerate is really easy and only adds a few lines of code:
+<table>
+<tr>
+<th> Original training code <br> (CPU or mono-GPU only)</th>
+<th> With Accelerate <br> (CPU/GPU/multi-GPUs/TPUs/fp16) </th>
+</tr>
+<tr>
+<td>
 
 ```python
-from accelerate import Accelerator
+import torch
+import torch.nn.functional as F
+from datasets import load_dataset
 
-accelerator = Accelerator(device_placement=False)
-# Use the device given by the `accelerator` object.
-device = accelerator.device
-my_model.to(device)
-# Pass every important object (model, optimizer, dataloader) to `accelerator.prepare`
-my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
-    my_model, my_optimizer, my_training_dataloader
+
+
+device = 'cpu'
+
+model = torch.nn.Transformer().to(device)
+optim = torch.optim.Adam(
+    model.parameters()
 )
 
-for batch in my_training_dataloader:
-    my_optimizer.zero_grad()
-    inputs, targets = batch
-    inputs = inputs.to(device)
-    targets = targets.to(device)
-    outputs = my_model(inputs)
-    loss = my_loss_function(outputs, targets)
-    # Just a small change for the backward instruction
-    accelerate.backward(loss)
-    my_optimizer.step()
-```
-
-and with this, your script can now run in a distributed environment (multi-GPU, TPU).
-
-You can even simplify your script a bit by letting 🤗 Accelerate handle the device placement for you (which is safer, especially for TPU training):
-
-```python
-from accelerate import Accelerator
-
-accelerator = Accelerator()
-# Pass every important object (model, optimizer, dataloader) to `accelerator.prepare`
-my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
-    my_model, my_optimizer, my_training_dataloader
+dataset = load_dataset('my_dataset')
+data = torch.utils.data.Dataloader(
+    dataset
 )
 
-for batch in my_training_dataloader:
-    my_optimizer.zero_grad()
-    inputs, targets = batch
-    outputs = my_model(inputs)
-    loss = my_loss_function(outputs, targets)
-    # Just a small change for the backward instruction
-    accelerate.backward(loss)
-    my_optimizer.step()
+
+
+
+
+model.train()
+for epoch in range(10):
+    for source, targets in data:
+        source = source.to(device)
+        targets = targets.to(device)
+
+        optimizer.zero_grad()
+
+        output = model(source, targets)
+        loss = F.cross_entropy(
+            output, targets
+        )
+
+        loss.backward()
+
+        optimizer.step()
 ```
 
-Checkout our [example](/examples) to see how it can be used on a variety of scripts!
+</td>
+<td>
 
-## Script launcher
+```python
+  import torch
+  import torch.nn.functional as F
+  from datasets import load_dataset
 
-No need to remember how to use `torch.distributed.launch` or to write a specific launcher for TPU training! 🤗 Accelerate comes with a CLI tool that will make your life easier when launching distributed scripts.
++ from accelerate import Accelerator
++ accelerator = Accelerator()
++ device = accelerator.device
 
++ model = torch.nn.Transformer()
+  optim = torch.optim.Adam(
+      model.parameters()
+  )
+
+  dataset = load_dataset('my_dataset')
+  data = torch.utils.data.Dataloader(
+      dataset
+  )
+
++ model, optim, data = accelerator.prepare(
++     model, optim, data
++ )
+
+  model.train()
+  for epoch in range(10):
+      for source, targets in data:
+-
+-
+
+          optimizer.zero_grad()
+
+          output = model(source, targets)
+          loss = F.cross_entropy(
+              output, targets
+          )
+
++         accelerate.backward(loss)
+
+          optimizer.step()
+```
+
+</td>
+</tr>
+</table>
+
+## Launching script
+
+🤗 Accelerate also provides a CLI tool that allows you to quickly configure and test your training environment then launch the scripts. No need to remember how to use `torch.distributed.launch` or to write a specific launcher for TPU training!
 On your machine(s) just run:
 
 ```bash
