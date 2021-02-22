@@ -2,9 +2,9 @@ import torch
 
 from packaging import version
 
-from .state import AcceleratorState, DistributedType
 from .data_loader import prepare_data_loader
 from .optimizer import AcceleratedOptimizer
+from .state import AcceleratorState, DistributedType
 from .utils import extract_model_from_parallel, gather
 
 
@@ -13,33 +13,38 @@ class Accelerator:
     Creates an instance of an accelerator for distributed training (on multi-GPU, TPU) or mixed precision training.
 
     Args:
-        fp16 (:obj:`bool`, `optional`):
-            Whether or not to use mixed precision training. Will default to the value in the environment variable
-            :obj:`USE_FP16`, which will use the default value in the accelerate config of the current system or the
-            flag passed with the :obj:`accelerate.launch` command.
         device_placement (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the accelerator should put objects on device (tensors yielded by the datalaoder, model,
             etc...).
         split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices.
-            If :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it
-            must be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size
-            used will be the one set in your script multiplied by the number of processes.
-    
+            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
+            :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it must
+            be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size used will
+            be the one set in your script multiplied by the number of processes.
+        fp16 (:obj:`bool`, `optional`):
+            Whether or not to use mixed precision training. Will default to the value in the environment variable
+            :obj:`USE_FP16`, which will use the default value in the accelerate config of the current system or the
+            flag passed with the :obj:`accelerate.launch` command.
+        cpu (:obj:`bool`, `optional`):
+            Whether or not to force the script to execute on CPU. Will ignore GPU available if set to :obj:`True` and
+            force the execution on one process only.
+
     Attribute:
         state (:class:`~accelerate.AcceleratorState`):
             The distributed setup state.
     """
-    def __init__(self, fp16: bool = None, device_placement: bool = True, split_batches: bool = False):
-        self.state = AcceleratorState()
+
+    def __init__(
+        self, device_placement: bool = True, split_batches: bool = False, fp16: bool = None, cpu: bool = False
+    ):
+        self.state = AcceleratorState(fp16=fp16, cpu=cpu, _from_accelerator=True)
         self.device_placement = device_placement
         self.split_batches = split_batches
 
         # Mixed precision attributes
         self.scaler = None
         self.native_amp = False
-        self.fp16 = fp16 if fp16 is not None else self.state.use_fp16
-        if fp16:
+        if self.state.use_fp16:
             self.native_amp = version.parse(torch.__version__) >= version.parse("1.6")
             self.scaler = torch.cuda.amp.GradScaler()
 
@@ -166,7 +171,7 @@ class Accelerator:
         Should be used in place of :func:`torch.nn.utils.clip_grad_norm_`.
         """
         # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
-        if self.fp16 and self.native_amp:
+        if self.state.use_fp16 and self.native_amp:
             for optimizer in self._optimizers:
                 self.scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
@@ -176,7 +181,7 @@ class Accelerator:
         Should be used in place of :func:`torch.nn.utils.clip_grad_value_`.
         """
         # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
-        if self.fp16 and self.native_amp:
+        if self.state.use_fp16 and self.native_amp:
             for optimizer in self._optimizers:
                 self.scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
@@ -196,9 +201,9 @@ class Accelerator:
                 An optional name for the tensor (only used in TPU settings).
 
         Returns:
-            :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s).
-            Note that the first dimension of the result is `num_processes` multiplied by the first dimension of the
-            input tensors.
+            :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s). Note
+            that the first dimension of the result is `num_processes` multiplied by the first dimension of the input
+            tensors.
         """
         return gather(tensor, name=name)
 
