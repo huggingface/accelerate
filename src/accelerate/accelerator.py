@@ -14,7 +14,7 @@ class Accelerator:
 
     Args:
         device_placement (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the accelerator should put objects on device (tensors yielded by the datalaoder, model,
+            Whether or not the accelerator should put objects on device (tensors yielded by the dataloader, model,
             etc...).
         split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
@@ -38,6 +38,7 @@ class Accelerator:
         self, device_placement: bool = True, split_batches: bool = False, fp16: bool = None, cpu: bool = False
     ):
         self.state = AcceleratorState(fp16=fp16, cpu=cpu, _from_accelerator=True)
+
         self.device_placement = device_placement
         self.split_batches = split_batches
 
@@ -99,6 +100,13 @@ class Accelerator:
         """
         Prepare all objects passed in :obj:`args` for distributed training and mixed precision, then return them in the
         same order.
+
+        Accepts the following type of objects:
+
+            - :obj:`torch.utils.data.DataLoader`: PyTorch Dataloader
+            - :obj:`torch.nn.Module`: PyTorch Module
+            - :obj:`torch.optim.Optimizer`: PyTorch Optimizer
+
         """
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).

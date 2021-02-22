@@ -33,6 +33,9 @@ def launch_command_parser(subparsers=None):
         "--fp16", default=False, action="store_true", help="Whether or not to use mixed precision training."
     )
     parser.add_argument(
+        "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
+    )
+    parser.add_argument(
         "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
     )
     parser.add_argument(
@@ -77,6 +80,7 @@ def simple_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
+    current_env["USE_CPU"] = str(args.cpu)
     current_env["USE_FP16"] = str(args.fp16)
 
     process = subprocess.Popen(cmd, env=current_env)
@@ -143,7 +147,7 @@ def launch_command(args):
         raise ValueError("You can only pick one between `--multi_gpu` and `--tpu`.")
 
     # Get the default from the config file.
-    if args.config_file is not None or os.path.isfile(default_config_file):
+    if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = LaunchConfig.from_json_file(json_file=args.config_file)
         if not args.multi_gpu and not args.tpu:
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
@@ -157,9 +161,9 @@ def launch_command(args):
             args.num_processes = 1
 
     # Use the proper launcher
-    if args.multi_gpu:
+    if args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)
-    elif args.tpu:
+    elif args.tpu and not args.cpu:
         tpu_launcher(args)
     else:
         simple_launcher(args)
