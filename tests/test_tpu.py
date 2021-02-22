@@ -178,6 +178,7 @@ def training_check():
 
 
 def main():
+    accelerator = Accelerator()
     state = AcceleratorState()
     if state.local_process_index == 0:
         print("**Initialization**")
