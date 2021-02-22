@@ -61,7 +61,8 @@ Changing it to work with accelerate is really easy and only adds a few lines of 
 
 and with this, your script can now run in a distributed environment (multi-GPU, TPU).
 
-You can even simplify your script a bit by letting 🤗 Accelerate handle the device placement for you (which is safer, especially for TPU training):
+You can even simplify your script a bit by letting 🤗 Accelerate handle the device placement for you (which is safer,
+especially for TPU training):
 
 .. code-block:: python
 
@@ -86,7 +87,7 @@ You can even simplify your script a bit by letting 🤗 Accelerate handle the de
 Script launcher
 -----------------------------------------------------------------------------------------------------------------------
 
-No need to remember how to use ``torch.distributed.launch`` or to write a specific launcher for TPU training! 🤗 
+No need to remember how to use ``torch.distributed.launch`` or to write a specific launcher for TPU training! 🤗
 Accelerate comes with a CLI tool that will make your life easier when launching distributed scripts.
 
 On your machine(s) just run:

@@ -10,6 +10,7 @@ from transformers import (
     set_seed,
 )
 
+
 ########################################################################
 # This is a fully working simple example to use Accelerate
 #
@@ -23,7 +24,7 @@ from transformers import (
 # To run it in each of these various modes, follow the instructions
 # in the readme for examples:
 # https://github.com/huggingface/accelerate/examples
-# 
+#
 ########################################################################
 
 
@@ -31,7 +32,7 @@ MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
 
-def training_function(config):
+def training_function(config, args):
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
@@ -78,7 +79,7 @@ def training_function(config):
 
     set_seed(seed)
     # Initialize accelerator
-    accelerator = Accelerator(device_placement=False)
+    accelerator = Accelerator(device_placement=False, fp16=args.fp16, cpu=args.cpu)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
@@ -133,8 +134,20 @@ def training_function(config):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Simple example of training script.")
+    parser.add_argument(
+        "--fp16",
+        action="store_true",
+        help="If passed, will use FP16 training.",
+    )
+    parser.add_argument(
+        "--cpu",
+        action="store_true",
+        help="If passed, will train on the CPU.",
+    )
+    args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
-    training_function(config)
+    training_function(config, args)
 
 
 if __name__ == "__main__":

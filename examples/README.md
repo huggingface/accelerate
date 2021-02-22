@@ -16,18 +16,26 @@ To run it in each of these various modes, use the following commands:
         ```bash
         python ./simple_example.py
         ```
-    * from any server
+    * from any server by passing `cpu=True` to the `Accelerator`.
         ```bash
-        python ./simple_example.py --on_cpu
+        python ./simple_example.py --cpu
+        ```
+    * from any server with Accelerate launcher
+        ```bash
+        accelerate launch --cpu ./simple_example.py
         ```
 - single GPU:
     ```bash
     python ./simple_example.py  # from a server with a GPU
     ```
 - with fp16 (mixed-precision)
-    ```bash
-    python ./simple_example.py --fp16
-    ```
+    * from any server by passing `fp16=True` to the `Accelerator`.
+        ```bash
+        python ./simple_example.py --fp16
+        ```
+    * from any server with Accelerate launcher
+        ```bash
+        accelerate launch --fb16 ./simple_example.py
 - multi GPUS (using PyTorch distributed mode)
     * With Accelerate config and launcher
         ```bash
