@@ -42,8 +42,8 @@ Here is an example:
 
 <table>
 <tr>
-<th> Original training code (CPU or mono-GPU only)</th>
-<th> With Accelerate for CPU/GPU/multi-GPUs/TPUs/fp16 </th>
+<th> Original training code <br> (CPU or mono-GPU only)</th>
+<th> With Accelerate <br> (CPU/GPU/multi-GPUs/TPUs/fp16) </th>
 </tr>
 <tr>
 <td>
@@ -58,10 +58,14 @@ from datasets import load_dataset
 device = 'cpu'
 
 model = torch.nn.Transformer().to(device)
-optim = torch.optim.Adam(model.parameters())
+optim = torch.optim.Adam(
+    model.parameters()
+)
 
 dataset = load_dataset('my_dataset')
-data = torch.utils.data.Dataloader(dataset)
+data = torch.utils.data.Dataloader(
+    dataset
+)
 
 
 
@@ -75,7 +79,9 @@ for epoch in range(10):
         optimizer.zero_grad()
 
         output = model(source, targets)
-        loss = F.cross_entropy(output, targets)
+        loss = F.cross_entropy(
+            output, targets
+        )
 
         loss.backward()
 
@@ -91,17 +97,22 @@ for epoch in range(10):
   from datasets import load_dataset
 
 + from accelerate import Accelerator
-+ accelerator = Accelerator()
++ accelerator = Accelerator(device_placement=False)
 + device = accelerator.device
 
   model = torch.nn.Transformer().to(device)
-  optim = torch.optim.Adam(model.parameters())
+  optim = torch.optim.Adam(
+      model.parameters()
+  )
 
   dataset = load_dataset('my_dataset')
-  data = torch.utils.data.Dataloader(dataset)
+  data = torch.utils.data.Dataloader(
+      dataset
+  )
 
 + model, optim, data = accelerator.prepare(
-                            model, optim, data)
+      model, optim, data
+  )
 
   model.train()
   for epoch in range(10):
@@ -112,7 +123,9 @@ for epoch in range(10):
           optimizer.zero_grad()
 
           output = model(source, targets)
-          loss = F.cross_entropy(output, targets)
+          loss = F.cross_entropy(
+              output, targets
+          )
 
 +         accelerate.backward(loss)
 
