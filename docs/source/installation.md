@@ -38,7 +38,7 @@ pip install accelerate
 Alternatively, for CPU-support only, you can install 🤗 Accelerate and PyTorch in one line with:
 
 ```bash
-pip install transformers[torch]
+pip install accelerate[torch]
 ```
 
 To check 🤗 Accelerate is properly installed, run the following command:

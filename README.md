@@ -129,41 +129,115 @@ The same code can then in paticular run without modification on your local machi
 
 🤗 Accelerate also provides a CLI tool that allows you to quickly configure and test your training environment then launch the scripts.
 
+## Easy to integrate
 
+A traditional training loop in PyTorch looks like this:
 
-## Installation
+```python
+my_model.to(device)
 
-Install PyTorch, then
-
-```bash
-git clone https://github.com/huggingface/accelerate.git
-cd accelerate
-pip install -e .
+for batch in my_training_dataloader:
+    my_optimizer.zero_grad()
+    inputs, targets = batch
+    inputs = inputs.to(device)
+    targets = targets.to(device)
+    outputs = my_model(inputs)
+    loss = my_loss_function(outputs, targets)
+    loss.backward()
+    my_optimizer.step()
 ```
 
-## Tests
+Changing it to work with accelerate is really easy and only adds a few lines of code:
 
-### Using the accelerate CLI
+```python
+from accelerate import Accelerator
 
-Create a default config for your environment with
+accelerator = Accelerator(device_placement=False)
+# Use the device given by the `accelerator` object.
+device = accelerator.device
+my_model.to(device)
+# Pass every important object (model, optimizer, dataloader) to `accelerator.prepare`
+my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
+    my_model, my_optimizer, my_training_dataloader
+)
+
+for batch in my_training_dataloader:
+    my_optimizer.zero_grad()
+    inputs, targets = batch
+    inputs = inputs.to(device)
+    targets = targets.to(device)
+    outputs = my_model(inputs)
+    loss = my_loss_function(outputs, targets)
+    # Just a small change for the backward instruction
+    accelerate.backward(loss)
+    my_optimizer.step()
+```
+
+and with this, your script can now run in a distributed environment (multi-GPU, TPU).
+
+You can even simplify your script a bit by letting 🤗 Accelerate handle the device placement for you (which is safer, especially for TPU training):
+
+```python
+from accelerate import Accelerator
+
+accelerator = Accelerator()
+# Pass every important object (model, optimizer, dataloader) to `accelerator.prepare`
+my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
+    my_model, my_optimizer, my_training_dataloader
+)
+
+for batch in my_training_dataloader:
+    my_optimizer.zero_grad()
+    inputs, targets = batch
+    outputs = my_model(inputs)
+    loss = my_loss_function(outputs, targets)
+    # Just a small change for the backward instruction
+    accelerate.backward(loss)
+    my_optimizer.step()
+```
+
+Checkout our [example](/examples) to see how it can be used on a variety of scripts!
+
+## Script launcher
+
+No need to remember how to use `torch.distributed.launch` or to write a specific launcher for TPU training! 🤗 Accelerate comes with a CLI tool that will make your life easier when launching distributed scripts.
+
+On your machine(s) just run:
+
 ```bash
 accelerate config
 ```
-then launch the GLUE example with
+
+and answer the questions asked. This will generate a config file that will be used automatically to properly set the default options when doing
+
+```bash
+accelerate launch my_script.py --args_to_my_script
+``` 
+
+For instance, here is how you would run the GLUE example on the MRPC task (from the root of the repo):
+
 ```bash
 accelerate launch examples/glue_example.py --task_name mrpc --model_name_or_path bert-base-cased
 ```
 
-### Traditional launchers
+## Why should I use 🤗 Accelerate?
 
-To run the example script on multi-GPU:
-```bash
-python -m torch.distributed.launch --nproc_per_node 2 --use_env examples/glue_example.py \
-    --task_name mrpc --model_name_or_path bert-base-cased
-```
+You should use 🤗 Accelerate when you want to easily run your training scripts in a distributed environment without having to renounce full control over your training loop. This is not a high-level framework above PyTorch, just a thin wrapper so you don't have to learn a new library, In fact the whole API of 🤗 Accelerate is in one class, the `Accelerator` object.
 
-To run the example script on TPUs:
+## Why shouldn't use 🤗 Accelerate?
+
+You shouldn't use 🤗 Accelerate if you don't want to write a training loop yourself. There are plenty of high-level libraries above PyTorch that will offer you that, 🤗 Accelerate is not one of them.
+
+## Installation
+
+This repository is tested on Python 3.6+ and PyTorch 1.4.0+
+
+You should install 🤗 Accelerate in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
+
+First, create a virtual environment with the version of Python you're going to use and activate it.
+
+Then, you will need to install PyTorch: refer to the [official installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific install command for your platform. Then 🤗 Accelerate can be installed using pip as follows:
+
 ```bash
-python tests/xla_spawn.py --num_cores 8 examples/glue_example.py\
-    --task_name mrpc --model_name_or_path bert-base-cased
+pip install accelerate
 ```
