@@ -10,6 +10,22 @@ from transformers import (
     set_seed,
 )
 
+########################################################################
+# This is a fully working simple example to use Accelerate
+#
+# This example train a Bert base model on GLUE MRPC
+# in any of the following settings (with the same script):
+#   - single CPU or single GPU
+#   - multi GPUS (using PyTorch distributed mode)
+#   - (multi) TPUs
+#   - fp16 (mixed-precision) or fp32 (normal precision)
+#
+# To run it in each of these various modes, follow the instructions
+# in the readme for examples:
+# https://github.com/huggingface/accelerate/examples
+# 
+########################################################################
+
 
 MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
