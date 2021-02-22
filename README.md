@@ -150,6 +150,3 @@ Then, you will need to install PyTorch: refer to the [official installation page
 ```bash
 pip install accelerate
 ```
-
-
-```
