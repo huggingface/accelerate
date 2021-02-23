@@ -94,3 +94,10 @@ def gather(tensor, name=None):
         return _gpu_gather(tensor)
     else:
         return tensor
+
+
+def wait_for_everyone(name=None):
+    if AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+        torch.distributed.barrier()
+    elif AcceleratorState().distributed_type == DistributedType.TPU:
+        xm.rendezvous("rendezvous" if name is None else name)

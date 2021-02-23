@@ -39,7 +39,7 @@ Changing it to work with accelerate is really easy and only adds a few lines of 
 
     from accelerate import Accelerator
 
-    accelerator = Accelerator(device_placement=False)
+    accelerator = Accelerator()
     # Use the device given by the `accelerator` object.
     device = accelerator.device
     my_model.to(device)

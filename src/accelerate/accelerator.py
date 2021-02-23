@@ -5,7 +5,7 @@ from packaging import version
 from .data_loader import prepare_data_loader
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType
-from .utils import extract_model_from_parallel, gather
+from .utils import extract_model_from_parallel, gather, wait_for_everyone
 
 
 class Accelerator:
@@ -214,6 +214,28 @@ class Accelerator:
             tensors.
         """
         return gather(tensor, name=name)
+
+    def unwrap_model(self, model):
+        """
+        Unwraps the :obj:`model` from the additional layer possible added by :meth:`~accelerate.Accelerator.prepare`.
+        Useful before saving the model.
+
+        Args:
+            model (:obj:`torch.nn.Module`):
+                The model to unwrap.
+        """
+        return extract_model_from_parallel(model)
+
+    def wait_for_everyone(self, name=None):
+        """
+        Will stop the execution of the current process until every other process has reached that point (so this does
+        nothing when the script is only run in one process). Useful to do before saving a model.
+
+        Args:
+            name (:obj:`str`, `optional`):
+                An optional name for this rendezvous point (only used in TPU settings).
+        """
+        wait_for_everyone(name)
 
     def _get_named_parameters(self, *args):
         named_parameters = {}
