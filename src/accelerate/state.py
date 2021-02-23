@@ -55,7 +55,8 @@ class AcceleratorState:
                 self.use_fp16 = False
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
-                torch.distributed.init_process_group(backend="nccl")
+                if not torch.distributed.is_initialized():
+                    torch.distributed.init_process_group(backend="nccl")
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))

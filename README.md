@@ -100,7 +100,7 @@ for epoch in range(10):
   from datasets import load_dataset
 
 + from accelerate import Accelerator
-+ accelerator = Accelerator(device_placement=False)
++ accelerator = Accelerator()
 + device = accelerator.device
 
   model = torch.nn.Transformer().to(device)
@@ -143,7 +143,7 @@ As you can see on this example, by adding 5-lines to any standard PyTorch traini
 
 The same code can then in particular run without modification on your local machine for debugging or your training environment.
 
-If you let 🤗 Accelerate handle the device placement for you (a bit more changes but safer), the previous diff looks like this:
+🤗 Accelerate even handles the device placement for you (a bit more changes to your code but safer in general), so you can even simplify your training loop further:
 
 <table>
 <tr>
