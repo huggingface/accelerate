@@ -4,6 +4,7 @@ set -ex
 function deploy_doc(){
 	echo "Creating doc at commit $1 and pushing to folder $2"
 	git checkout $1
+	cd "$GITHUB_WORKSPACE"
 	pip install -U .
 	cd "$GITHUB_WORKSPACE/docs"
 	if [ ! -z "$2" ]
