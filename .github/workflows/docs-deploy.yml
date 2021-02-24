@@ -19,6 +19,7 @@ jobs:
         with:
           key: ${{ secrets.DOC_SSH_KEY }}
           name: id_rsa
+          known_hosts: ${{ secrets.DOC_KNOWN_HOST }}
 
       - name: Install Python
         uses: actions/setup-python@v1
