@@ -3,7 +3,7 @@
 const stableVersion = "v0.0.1"
 // Dictionary doc folder to label. The last stable version should have an empty key.
 const versionMapping = {
-    "master": "master",
+    "main": "main",
     "": "v0.0.1 (stable)",
 }
 
