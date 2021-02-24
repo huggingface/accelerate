@@ -18,7 +18,7 @@ jobs:
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.DOC_SSH_KEY }}
-          name: id_rsa- name: Install SSH Key
+          name: id_rsa
 
       - name: Install Python
         uses: actions/setup-python@v1
