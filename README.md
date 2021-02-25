@@ -284,3 +284,12 @@ Then, you will need to install PyTorch: refer to the [official installation page
 ```bash
 pip install accelerate
 ```
+
+## Supported integrations
+
+- CPU only
+- single GPU
+- multi-GPU on one node (machine)
+- multi-GPU on several nodes (machines)
+- TPU
+- FP16 with native AMP (apex on the roadmap)

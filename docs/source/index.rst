@@ -109,6 +109,17 @@ For instance, here is how you would run the NLP example (from the root of the re
 
     accelerate launch examples/nlp_example.py
 
+
+Supported integrations
+-----------------------------------------------------------------------------------------------------------------------
+
+- CPU only
+- single GPU
+- multi-GPU on one node (machine)
+- multi-GPU on several nodes (machines)
+- TPU
+- FP16 with native AMP (apex on the roadmap)
+
 .. toctree::
     :maxdepth: 2
     :caption: Get started

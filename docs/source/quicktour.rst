@@ -33,8 +33,7 @@ distributed training. You don't need to indicate the kind of environment you are
 match with several GPUs, several machines with multiple GPUs or a TPU), the library will detect this automatically.
 
 2. Remove the call :obj:`.to(device)` or :obj:`.cuda()` for your model and input data. The :obj:`accelerator` object
-   will
-handle this for you and place all those objects on the right device for you. If you know what you're doing, you can
+will handle this for you and place all those objects on the right device for you. If you know what you're doing, you can
 leave those :obj:`.to(device)` calls but you should use the device provided by the :obj:`accelerator` object:
 :obj:`accelerator.device`.
 
