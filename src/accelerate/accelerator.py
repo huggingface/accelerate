@@ -29,9 +29,9 @@ class Accelerator:
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to :obj:`True` and
             force the execution on one process only.
 
-    Attribute:
-        state (:class:`~accelerate.AcceleratorState`):
-            The distributed setup state.
+    Attributes
+
+        - **state** (:class:`~accelerate.AcceleratorState`) -- The distributed setup state.
     """
 
     def __init__(
@@ -74,13 +74,18 @@ class Accelerator:
 
     @property
     def is_main_process(self):
+        """True for one process only."""
         return self.process_index == 0
 
     @property
     def is_local_main_process(self):
+        """True for one process per server."""
         return self.local_process_index == 0
 
     def print(self, *args, **kwargs):
+        """
+        Use in replacement of :obj:`print()` to only print once per server.
+        """
         if self.is_local_main_process:
             print(*args, **kwargs)
 
@@ -169,6 +174,9 @@ class Accelerator:
         return AcceleratedOptimizer(optimizer, scaler=self.scaler)
 
     def backward(self, loss):
+        """
+        Use :obj:`accelerator.backward(loss)` in lieu of :obj:`loss.backward()`.
+        """
         if self.scaler is not None:
             self.scaler.scale(loss).backward()
         else:

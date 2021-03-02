@@ -33,8 +33,8 @@ distributed training. You don't need to indicate the kind of environment you are
 match with several GPUs, several machines with multiple GPUs or a TPU), the library will detect this automatically.
 
 2. Remove the call :obj:`.to(device)` or :obj:`.cuda()` for your model and input data. The :obj:`accelerator` object
-will handle this for you and place all those objects on the right device for you. If you know what you're doing, you can
-leave those :obj:`.to(device)` calls but you should use the device provided by the :obj:`accelerator` object:
+will handle this for you and place all those objects on the right device for you. If you know what you're doing, you
+can leave those :obj:`.to(device)` calls but you should use the device provided by the :obj:`accelerator` object:
 :obj:`accelerator.device`.
 
 To fully deactivate the automatic device placement, pass along :obj:`device_placement=False` when initializing your
@@ -200,7 +200,7 @@ statement. To do this, wrap the statement in a test like this:
 
 .. code-block:: python
 
-    if accelerator.is_local_main_process():
+    if accelerator.is_local_main_process:
         # Is executed once per server
 
 The `local` means per machine: if you are running your training on two servers with several GPUs, the instruction will
@@ -209,7 +209,7 @@ machine) for instance, uploading the final model to the 🤗 model hub, wrap it 
 
 .. code-block:: python
 
-    if accelerator.is_main_process():
+    if accelerator.is_main_process:
         # Is executed once only
 
 For printing statements you only want executed once per machine, you can just replace the :obj:`print` function by
