@@ -16,6 +16,7 @@
 import argparse
 import logging
 import math
+import os
 import random
 
 from torch.utils.data.dataloader import DataLoader
@@ -139,6 +140,7 @@ def parse_args():
     parser.add_argument(
         "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
     )
+    parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
     args = parser.parse_args()
 
@@ -152,7 +154,11 @@ def parse_args():
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
             assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-        return args
+    
+    if args.output_dir is not None:
+        os.makedirs(args.output_dir, exist_ok=True)
+    
+    return args
 
 
 def main():
@@ -313,7 +319,7 @@ def main():
         # Otherwise, `DataCollatorWithPadding` will apply dynamic padding for us (by padding to the maximum length of
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
         # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if accelerator.fp16 else None))
+        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None))
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
@@ -397,6 +403,10 @@ def main():
 
         eval_metric = metric.compute()
         logger.info(f"epoch {epoch}: {eval_metric}")
+    
+    accelerator.wait_for_everyone()
+    state_dict = accelerator.unwrap_model(model).state_dict()
+    accelerator.save(state_dict, os.path.join(args.output_dir, "pytorch_model.bin"))
 
     if args.task_name == "mnli":
         # Final evaluation on mismatched validation set

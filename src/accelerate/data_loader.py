@@ -1,4 +1,5 @@
 import inspect
+from packaging import version
 from typing import Optional
 
 import torch
@@ -10,6 +11,32 @@ from .utils import send_to_device, synchronize_rng_states
 
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
+
+
+# kwargs of the DataLoader in min version 1.4.0.
+_PYTORCH_DATALOADER_KWARGS = {
+    "batch_size": 1,
+    "shuffle": False,
+    "sampler": None,
+    "batch_sampler": None, 
+    "num_workers": 0,
+    "collate_fn": None,
+    "pin_memory": False,
+    "drop_last": False,
+    "timeout": 0,
+    "worker_init_fn": None,
+    "multiprocessing_context": None,
+}
+
+#kwargs added after by version
+_PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {
+    "1.6.0": {"generator": None},
+    "1.7.0": {"prefetch_factor": 2, "persistent_workers" : False},
+}
+
+for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
+    if version.parse(torch.__version__) >= version.parse(v):
+        _PYTORCH_DATALOADER_KWARGS.update(additional_kwargs)
 
 
 class BatchSamplerShard(BatchSampler):
@@ -218,16 +245,8 @@ def prepare_data_loader(
             split_batches=split_batches,
         )
 
-    # To support different versions of PyTorch, we read the kwargs in the DataLoader signature.
-    pytorch_dl_sig = inspect.signature(DataLoader)
-    pytorch_dl_params = pytorch_dl_sig.parameters
-    pytorch_dl_kwargs = list(pytorch_dl_params.keys())
-
     # We ignore all of those since they are all dealt with by our new_batch_sampler
     ignore_kwargs = [
-        "dataset",
-        "args",
-        "kwds",
         "batch_size",
         "shuffle",
         "sampler",
@@ -236,7 +255,7 @@ def prepare_data_loader(
     ]
 
     kwargs = {
-        k: getattr(dataloader, k, pytorch_dl_params[k].default) for k in pytorch_dl_kwargs if k not in ignore_kwargs
+        k: getattr(dataloader, k, _PYTORCH_DATALOADER_KWARGS[k]) for k in _PYTORCH_DATALOADER_KWARGS if k not in ignore_kwargs
     }
     return DataLoaderShard(
         dataloader.dataset,

@@ -81,6 +81,10 @@ class Accelerator:
     def is_local_main_process(self):
         """True for one process per server."""
         return self.local_process_index == 0
+    
+    @property
+    def use_fp16(self):
+        return self.state.use_fp16
 
     def print(self, *args, **kwargs):
         """
@@ -171,7 +175,7 @@ class Accelerator:
         )
 
     def prepare_optimizer(self, optimizer):
-        return AcceleratedOptimizer(optimizer, scaler=self.scaler)
+        return AcceleratedOptimizer(optimizer, device_placement=self.device_placement, scaler=self.scaler)
 
     def backward(self, loss):
         """
@@ -202,7 +206,7 @@ class Accelerator:
                 self.scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
-    def gather(self, tensor, name=None):
+    def gather(self, tensor):
         """
         Gather the values in `tensor` accross all processes and concatenate them on the first dimension. Useful to
         regroup the predictions from all processes when doing evaluation.
@@ -213,15 +217,13 @@ class Accelerator:
         Args:
             tensor (:obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`):
                 The tensors to gather accross all processes.
-            name (:obj:`str`, `optional`):
-                An optional name for the tensor (only used in TPU settings).
 
         Returns:
             :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s). Note
             that the first dimension of the result is `num_processes` multiplied by the first dimension of the input
             tensors.
         """
-        return gather(tensor, name=name)
+        return gather(tensor)
 
     def unwrap_model(self, model):
         """
@@ -238,12 +240,8 @@ class Accelerator:
         """
         Will stop the execution of the current process until every other process has reached that point (so this does
         nothing when the script is only run in one process). Useful to do before saving a model.
-
-        Args:
-            name (:obj:`str`, `optional`):
-                An optional name for this rendezvous point (only used in TPU settings).
         """
-        wait_for_everyone(name)
+        wait_for_everyone()
 
     def save(self, obj, f):
         """
