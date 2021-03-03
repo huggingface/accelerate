@@ -5,7 +5,7 @@ from packaging import version
 from .data_loader import prepare_data_loader
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType
-from .utils import extract_model_from_parallel, gather, wait_for_everyone
+from .utils import extract_model_from_parallel, gather, save, wait_for_everyone
 
 
 class Accelerator:
@@ -234,7 +234,7 @@ class Accelerator:
         """
         return extract_model_from_parallel(model)
 
-    def wait_for_everyone(self, name=None):
+    def wait_for_everyone(self):
         """
         Will stop the execution of the current process until every other process has reached that point (so this does
         nothing when the script is only run in one process). Useful to do before saving a model.
@@ -244,6 +244,17 @@ class Accelerator:
                 An optional name for this rendezvous point (only used in TPU settings).
         """
         wait_for_everyone(name)
+
+    def save(self, obj, f):
+        """
+        Save the object passed to disk once per machine. Use in place of :obj:`torch.save`.
+
+        Args:
+            obj: The object to save.
+            f (:obj:`str` or :obj:`os.PathLike`):
+                Where to save the content of :obj:`obj`.
+        """
+        save(obj, f)
 
     def _get_named_parameters(self, *args):
         named_parameters = {}

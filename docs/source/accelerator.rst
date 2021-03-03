@@ -35,6 +35,7 @@ should search for and replace by the corresponding methods of your :obj:`acceler
 - Use :meth:`~accelerate.Accelerator.wait_for_everyone` to make sure all processes join that point before continuing
   (useful before a model save for instance).
 - Use :meth:`~accelerate.Accelerator.unwrap_model` to unwrap your model before saving it.
+- Use :meth:`~accelerate.Accelerator.save` instead of :obj:`torch.save`.
 - Use :meth:`~accelerate.Accelerator.clip_grad_norm_` instead of :obj:`torch.nn.utils.clip_grad_norm_` and
   :meth:`~accelerate.Accelerator.clip_grad_value_` instead of :obj:`torch.nn.utils.clip_grad_value_`.
 

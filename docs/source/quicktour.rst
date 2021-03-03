@@ -254,7 +254,7 @@ This is why it's recommended to `unwrap` your model first. Here is an example:
 
     accelerator.wait_for_everyone()
     unwrapped_model = accelerator.unwrap_model(model)
-    torch.save(unwrapped_model, filename)
+    accelerator.save(unwrapped_model.state_dict(), filename)
 
 If your script contains a logic to load checkpoint, we also recommend you load your weights in the unwrapped model
 (this is only useful if you use the load function after making your model go through

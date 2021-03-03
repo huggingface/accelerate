@@ -86,18 +86,25 @@ def _gpu_gather(tensor):
     return torch.cat(output_tensors, dim=0)
 
 
-def gather(tensor, name=None):
+def gather(tensor):
     """Gather tensor from all devices."""
     if AcceleratorState().distributed_type == DistributedType.TPU:
-        return _tpu_gather(tensor, name="tensor" if name is None else name)
+        return _tpu_gather(tensor, name="accelerate.utils.gather")
     elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
         return _gpu_gather(tensor)
     else:
         return tensor
 
 
-def wait_for_everyone(name=None):
+def wait_for_everyone():
     if AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
         torch.distributed.barrier()
     elif AcceleratorState().distributed_type == DistributedType.TPU:
-        xm.rendezvous("rendezvous" if name is None else name)
+        xm.rendezvous("accelerate.utils.wait_for_everyone")
+
+
+def save(obj, f):
+    if AcceleratorState().distributed_type == DistributedType.TPU:
+        xm.save(obj, f)
+    elif AcceleratorState().local_process_index == 0:
+        torch.save(obj, f)
