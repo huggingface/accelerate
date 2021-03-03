@@ -21,6 +21,8 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.optimizer.add_param_group(param_group)
 
     def load_state_dict(self, state_dict):
+        if self.state.distributed_type == DistributedType.TPU:
+            xm.send_cpu_data_to_device(state_dict, self.state.device)
         self.optimizer.load_state_dict(state_dict)
 
     def state_dict(self):
