@@ -5,16 +5,17 @@ import unittest
 from pathlib import Path
 
 import torch
-import torch_xla.core.xla_model as xm
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
 from accelerate.data_loader import prepare_data_loader
 from accelerate.state import AcceleratorState
-from accelerate.utils import gather, set_seed, synchronize_rng_states
+from accelerate.utils import gather, is_tpu_available, set_seed, synchronize_rng_states
 from testing_utils import are_the_same_tensors, execute_subprocess_async, require_tpu
 from training_utils import RegressionDataset, RegressionModel
 
+if is_tpu_available():
+    import torch_xla.core.xla_model as xm
 
 class MultiTPUTester(unittest.TestCase):
     def setUp(self):

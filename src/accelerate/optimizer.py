@@ -10,11 +10,13 @@ if is_tpu_available():
 def move_to_device(state, device):
     if isinstance(state, (list, tuple)):
         return type(state)(move_to_device(t, device) for t in state)
-    elif isinstance(tensor, dict):
+    elif isinstance(state, dict):
         return type(state)({k: move_to_device(v, device) for k, v in state.items()})
     elif isinstance(state, torch.Tensor):
         return state.to(device)
     return state
+
+
 class AcceleratedOptimizer(torch.optim.Optimizer):
     def __init__(self, optimizer, device_placement=True, scaler=None):
         self.optimizer = optimizer
@@ -27,7 +29,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             if self.state.distributed_type == DistributedType.TPU:
                 xm.send_cpu_data_to_device(state_dict, self.state.device)
             else:
-                state_dict = move_to_device(state_dict, device)
+                state_dict = move_to_device(state_dict, self.state.device)
             self.optimizer.load_state_dict(state_dict)
 
     @property
