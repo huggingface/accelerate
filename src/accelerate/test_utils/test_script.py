@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
 from accelerate.data_loader import prepare_data_loader
-from accelerate.state import AcceleratorState
+from accelerate.state import AcceleratorState, DistributedType
 from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
 from accelerate.utils import gather, set_seed, synchronize_rng_states
 
@@ -20,7 +20,8 @@ def rng_sync_check():
     state = AcceleratorState()
     synchronize_rng_states()
     assert are_the_same_tensors(torch.get_rng_state())
-    assert are_the_same_tensors(torch.cuda.get_rng_state())
+    if state.distributed_type == DistributedType.MULTI_GPU:
+        assert are_the_same_tensors(torch.cuda.get_rng_state())
     if state.local_process_index == 0:
         print("All rng are properly synched.")
 
@@ -172,7 +173,10 @@ def training_check():
     assert torch.allclose(old_model.b, model.b)
 
 
-if __name__ == "__main__":
+def tpu_spawn(index):
+    main()
+
+def main():
     accelerator = Accelerator()
     state = accelerator.state
     if state.local_process_index == 0:
@@ -190,3 +194,6 @@ if __name__ == "__main__":
     if state.local_process_index == 0:
         print("\n**Training integration test**")
     training_check()
+
+if __name__ == "__main__":
+    main()

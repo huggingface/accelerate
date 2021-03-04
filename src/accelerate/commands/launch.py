@@ -137,7 +137,7 @@ def tpu_launcher(args):
     main_function = getattr(mod, args.main_training_function)
 
     # Patch sys.argv
-    sys.argv = [args.training_script] + args.training_script_args + ["--tpu_num_cores", str(args.num_processes)]
+    sys.argv = [args.training_script] + args.training_script_args
     xmp.spawn(main_function, args=(), nprocs=args.num_processes)
 
 

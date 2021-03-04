@@ -69,7 +69,7 @@ def training_function(config, args):
         batch_size = MAX_GPU_BATCH_SIZE
 
     def collate_fn(examples):
-        return tokenizer.pad(examples, padding="longest", return_tensors="pt")
+        return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
 
     # Instantiate dataloaders.
     train_dataloader = DataLoader(
@@ -150,6 +150,10 @@ def main():
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
     training_function(config, args)
+
+
+def tpu_spawn(index):
+    main()
 
 
 if __name__ == "__main__":
