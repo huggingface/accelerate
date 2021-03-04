@@ -23,7 +23,7 @@ class LaunchConfig:
     num_machines: int = 1
     main_process_ip: Optional[str] = None
     main_process_port: Optional[int] = None
-    main_function_name: str = "main"
+    main_training_function: str = "main"
 
     @classmethod
     def from_json_file(cls, json_file=None):
@@ -110,12 +110,12 @@ def get_user_input():
                 lambda x: int(x),
             )
     if distributed_type == DistributedType.TPU:
-        main_function_name = _ask_field(
+        main_training_function = _ask_field(
             "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
             default="main",
         )
     else:
-        main_function_name = "main"
+        main_training_function = "main"
 
     num_processes = _ask_field(
         "How many processes in total will you use? [1]: ",
@@ -142,7 +142,7 @@ def get_user_input():
         num_machines=num_machines,
         main_process_ip=main_process_ip,
         main_process_port=main_process_port,
-        main_function_name=main_function_name,
+        main_training_function=main_training_function,
     )
 
 
