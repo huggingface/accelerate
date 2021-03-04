@@ -1,9 +1,9 @@
-import inspect
-from packaging import version
 from typing import Optional
 
 import torch
-from torch.utils.data import BatchSampler, DataLoader
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+
+from packaging import version
 
 from .state import AcceleratorState, DistributedType, is_tpu_available
 from .utils import send_to_device, synchronize_rng_states
@@ -18,7 +18,7 @@ _PYTORCH_DATALOADER_KWARGS = {
     "batch_size": 1,
     "shuffle": False,
     "sampler": None,
-    "batch_sampler": None, 
+    "batch_sampler": None,
     "num_workers": 0,
     "collate_fn": None,
     "pin_memory": False,
@@ -28,10 +28,10 @@ _PYTORCH_DATALOADER_KWARGS = {
     "multiprocessing_context": None,
 }
 
-#kwargs added after by version
+# kwargs added after by version
 _PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {
     "1.6.0": {"generator": None},
-    "1.7.0": {"prefetch_factor": 2, "persistent_workers" : False},
+    "1.7.0": {"prefetch_factor": 2, "persistent_workers": False},
 }
 
 for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
@@ -48,7 +48,7 @@ class BatchSamplerShard(BatchSampler):
     beginning.
 
     Args:
-        batch_sampler (:obj:`BatchSampler`):
+        batch_sampler (:obj:`torch.utils.data.sampler.BatchSampler`):
             The batch sampler to split in several shards.
         num_processes (:obj:`int`, `optional`, defaults to 1):
             The number of processes running concurrently.
@@ -158,7 +158,100 @@ class BatchSamplerShard(BatchSampler):
                 idx += 1
 
 
+class IterableDatasetShard(IterableDataset):
+    """
+    Wraps a PyTorch :obj:`IterableDataset` to generate samples for one of the processes only. Instances of this class
+    will always yield a number of samples that is a round multiple of the actual batch size (depending of the value of
+    :obj:`split_batches`, this is either :obj:`batch_size` or :obj:`batch_size x num_processes`). Depending on the
+    value of the :obj:`drop_last` attribute of the batch sampler passed, it will either stop the iteration at the first
+    batch that would be too small or loop with indices from the beginning.
+
+    Args:
+        dataset (:obj:`torch.utils.data.dataset.IterableDataset`):
+            The batch sampler to split in several shards.
+        batch_size (:obj:`int`, `optional`, defaults to 1):
+            The size of the batches per shard (if :obj:`split_batches=False`) or the size of the batches (if
+            :obj:`split_batches=True`).
+        drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to drop the last incomplete batch or complete the last batches by using the samples from the
+            beginning.
+        num_processes (:obj:`int`, `optional`, defaults to 1):
+            The number of processes running concurrently.
+        process_index (:obj:`int`, `optional`, defaults to 0):
+            The index of the current process.
+        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether the shards should be created by splitting a batch to give a piece of it on each process, or by
+            yielding different full batches on each process.
+
+            On two processes with an iterable dataset yielding of :obj:`[0, 1, 2, 3, 4, 5, 6, 7]`, this will result in:
+
+            - the shard on process 0 to yield :obj:`[0, 1, 2, 3]` and the shard on process 1 to yield :obj:`[4, 5, 6,
+              7]` if this argument is set to :obj:`False`.
+            - the shard on process 0 to yield :obj:`[0, 1, 4, 5]` and the sampler on process 1 to yield :obj:`[2, 3, 6,
+              7]` if this argument is set to :obj:`True`.
+    """
+
+    def __init__(
+        self,
+        dataset: IterableDataset,
+        batch_size: int = 1,
+        drop_last: bool = False,
+        num_processes: int = 1,
+        process_index: int = 0,
+        split_batches: bool = False,
+    ):
+        if split_batches and batch_size % num_processes != 0:
+            raise ValueError(
+                f"To use `IterableDatasetShard` in `split_batches` mode, the batch size ({batch_size}) "
+                f"needs to be a round multiple of the number of processes ({num_processes})."
+            )
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.drop_last = drop_last
+        self.num_processes = num_processes
+        self.process_index = process_index
+        self.split_batches = split_batches
+
+    def __iter__(self):
+        real_batch_size = self.batch_size if self.split_batches else (self.batch_size * self.num_processes)
+        process_batch_size = (self.batch_size // self.num_processes) if self.split_batches else self.batch_size
+        process_slice = range(self.process_index * process_batch_size, (self.process_index + 1) * process_batch_size)
+
+        first_batch = None
+        current_batch = []
+        for element in self.dataset:
+            current_batch.append(element)
+            # Wait to have a full batch before yielding elements.
+            if len(current_batch) == real_batch_size:
+                for i in process_slice:
+                    yield current_batch[i]
+                if first_batch is None:
+                    first_batch = current_batch.copy()
+                current_batch = []
+
+        # Finished if drop_last is True, otherwise complete the last batch with elements from the beginning.
+        if not self.drop_last and len(current_batch) > 0:
+            if first_batch is None:
+                first_batch = current_batch.copy()
+            while len(current_batch) < real_batch_size:
+                current_batch += first_batch
+            for i in process_slice:
+                yield current_batch[i]
+
+
 class DataLoaderShard(DataLoader):
+    """
+    Subclass of a PyTorch :obj:`DataLoader` that will deal with device placement and current distributed setup.
+
+    Args:
+        dataset (:obj:`torch.utils.data.dataset.Dataset`):
+            The dataset to use to build this datalaoder.
+        device (:obj:`torch.device`, `optional`):
+            If passed, the device to put all batches on.
+        kwargs:
+            All other keyword arguments to pass to the regular :obj:`DataLoader` initialization.
+    """
+
     def __init__(self, dataset, device=None, **kwargs):
         super().__init__(dataset, **kwargs)
         self.device = device
@@ -233,17 +326,27 @@ def prepare_data_loader(
             f"to be a round multiple of the number of processes ({num_processes})."
         )
 
+    new_dataset = dataloader.dataset
+    new_batch_sampler = dataloader.batch_sampler
     # No change if no multiprocess
-    if num_processes == 1:
-        new_batch_sampler = dataloader.batch_sampler
-    else:
-        # New batch sampler for the current process.
-        new_batch_sampler = BatchSamplerShard(
-            dataloader.batch_sampler,
-            num_processes=num_processes,
-            process_index=process_index,
-            split_batches=split_batches,
-        )
+    if num_processes != 1:
+        if isinstance(new_dataset, IterableDataset):
+            new_dataset = IterableDatasetShard(
+                new_dataset,
+                batch_size=dataloader.batch_size,
+                drop_last=dataloader.drop_last,
+                num_processes=num_processes,
+                process_index=process_index,
+                split_batches=split_batches,
+            )
+        else:
+            # New batch sampler for the current process.
+            new_batch_sampler = BatchSamplerShard(
+                dataloader.batch_sampler,
+                num_processes=num_processes,
+                process_index=process_index,
+                split_batches=split_batches,
+            )
 
     # We ignore all of those since they are all dealt with by our new_batch_sampler
     ignore_kwargs = [
@@ -255,10 +358,12 @@ def prepare_data_loader(
     ]
 
     kwargs = {
-        k: getattr(dataloader, k, _PYTORCH_DATALOADER_KWARGS[k]) for k in _PYTORCH_DATALOADER_KWARGS if k not in ignore_kwargs
+        k: getattr(dataloader, k, _PYTORCH_DATALOADER_KWARGS[k])
+        for k in _PYTORCH_DATALOADER_KWARGS
+        if k not in ignore_kwargs
     }
     return DataLoaderShard(
-        dataloader.dataset,
+        new_dataset,
         device=device if put_on_device else None,
         batch_sampler=new_batch_sampler,
         **kwargs,

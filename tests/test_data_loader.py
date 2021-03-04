@@ -1,8 +1,24 @@
+import random
 import unittest
 
-from torch.utils.data import BatchSampler
+from torch.utils.data import BatchSampler, IterableDataset
 
-from accelerate.data_loader import BatchSamplerShard
+from accelerate.data_loader import BatchSamplerShard, IterableDatasetShard
+
+
+class RandomIterableDataset(IterableDataset):
+    # For testing, an iterable dataset of random length
+    def __init__(self, p_stop=0.01, max_length=1000):
+        self.p_stop = p_stop
+        self.max_length = max_length
+
+    def __iter__(self):
+        count = 0
+        stop = False
+        while not stop and count < self.max_length:
+            yield count
+            count += 1
+            stop = random.random() < self.p_stop
 
 
 class DataLoaderTester(unittest.TestCase):
@@ -133,3 +149,60 @@ class DataLoaderTester(unittest.TestCase):
         batch_sampler = BatchSampler(range(2), batch_size=4, drop_last=True)
         expected = [[], []]
         self.check_batch_sampler_shards(batch_sampler, expected, split_batches=True)
+
+    def check_iterable_dataset_shards(
+        self, dataset, seed, batch_size, drop_last=False, num_processes=2, split_batches=False
+    ):
+        random.seed(seed)
+        reference = list(dataset)
+
+        iterable_dataset_shards = [
+            IterableDatasetShard(
+                dataset,
+                batch_size=batch_size,
+                drop_last=drop_last,
+                num_processes=num_processes,
+                process_index=i,
+                split_batches=split_batches,
+            )
+            for i in range(num_processes)
+        ]
+        iterable_dataset_lists = []
+        for iterable_dataset_shard in iterable_dataset_shards:
+            # Since our random iterable dataset will be... random... we need to use a seed to get reproducible results.
+            random.seed(seed)
+            iterable_dataset_lists.append(list(iterable_dataset_shard))
+
+        shard_batch_size = batch_size // num_processes if split_batches else batch_size
+        # All iterable dataset shard should have the same length, a round multiple of shard_batch_size
+        first_list = iterable_dataset_lists[0]
+        for l in iterable_dataset_lists[1:]:
+            self.assertEqual(len(l), len(first_list))
+            self.assertTrue(len(l) % shard_batch_size == 0)
+
+        observed = []
+        for idx in range(0, len(first_list), shard_batch_size):
+            for l in iterable_dataset_lists:
+                observed += l[idx : idx + shard_batch_size]
+
+        if not drop_last:
+            while len(reference) < len(observed):
+                reference += reference
+        self.assertListEqual(observed, reference[: len(observed)])
+
+    def test_iterable_dataset_shard(self):
+        seed = 42
+        dataset = RandomIterableDataset()
+
+        self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=False, split_batches=False)
+        self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=False)
+        self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=False, split_batches=True)
+        self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=True)
+
+        # Edge case with a very small dataset
+        dataset = RandomIterableDataset(max_length=2)
+
+        self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=False, split_batches=False)
+        self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=False)
+        self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=False, split_batches=True)
+        self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=True)

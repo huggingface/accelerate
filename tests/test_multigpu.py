@@ -196,7 +196,7 @@ def training_check():
 
 if __name__ == "__main__":
     accelerator = Accelerator()
-    state = AcceleratorState()
+    state = accelerator.state
     if state.local_process_index == 0:
         print("**Initialization**")
     init_state_check()

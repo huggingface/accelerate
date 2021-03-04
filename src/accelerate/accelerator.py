@@ -81,7 +81,7 @@ class Accelerator:
     def is_local_main_process(self):
         """True for one process per server."""
         return self.local_process_index == 0
-    
+
     @property
     def use_fp16(self):
         return self.state.use_fp16

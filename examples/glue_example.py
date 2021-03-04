@@ -154,10 +154,10 @@ def parse_args():
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
             assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-    
+
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
-    
+
     return args
 
 
@@ -403,10 +403,10 @@ def main():
 
         eval_metric = metric.compute()
         logger.info(f"epoch {epoch}: {eval_metric}")
-    
+
     accelerator.wait_for_everyone()
-    state_dict = accelerator.unwrap_model(model).state_dict()
-    accelerator.save(state_dict, os.path.join(args.output_dir, "pytorch_model.bin"))
+    unwrapped_model = accelerator.unwrap_model(model)
+    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
 
     if args.task_name == "mnli":
         # Final evaluation on mismatched validation set

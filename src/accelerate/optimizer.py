@@ -18,6 +18,19 @@ def move_to_device(state, device):
 
 
 class AcceleratedOptimizer(torch.optim.Optimizer):
+    """
+    Internal wrapper around a torch optimizer.
+
+    Args:
+        optimizer (:obj:`torch.optim.optimizer.Optimizer`):
+            The optimizer to wrap.
+        device_placement (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the optimizer should handle device placement. If so, it will place the state dictionary of
+            :obj:`optimizer` on the right device.
+        scaler (:obj:`torch.cuda.amp.grad_scaler.GradScaler`, `optional`):
+            The scaler to use in the step function if training with mixed precision.
+    """
+
     def __init__(self, optimizer, device_placement=True, scaler=None):
         self.optimizer = optimizer
         self.scaler = scaler
@@ -40,7 +53,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.optimizer.add_param_group(param_group)
 
     def load_state_dict(self, state_dict):
-        if self.state.distributed_type == DistributedType.TPU:
+        if self.state.distributed_type == DistributedType.TPU and self.device_placement:
             xm.send_cpu_data_to_device(state_dict, self.state.device)
         self.optimizer.load_state_dict(state_dict)
 

@@ -14,8 +14,10 @@ from accelerate.utils import gather, is_tpu_available, set_seed, synchronize_rng
 from testing_utils import are_the_same_tensors, execute_subprocess_async, require_tpu
 from training_utils import RegressionDataset, RegressionModel
 
+
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
+
 
 class MultiTPUTester(unittest.TestCase):
     def setUp(self):
@@ -180,7 +182,7 @@ def training_check():
 
 def main():
     accelerator = Accelerator()
-    state = AcceleratorState()
+    state = accelerator.state
     if state.local_process_index == 0:
         print("**Initialization**")
     init_state_check()
