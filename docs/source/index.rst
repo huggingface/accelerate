@@ -133,3 +133,4 @@ Supported integrations
     :caption: API reference
 
     accelerator
+    internal

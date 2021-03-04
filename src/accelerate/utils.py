@@ -26,7 +26,7 @@ def set_seed(seed: int):
 
 def synchronize_rng_states():
     """
-    Helper function to synchronize the rng states in distributed / TPU training.
+    Helper function to synchronize the rng states in distributed training.
     """
     state = AcceleratorState()
     if state.distributed_type == DistributedType.TPU:
@@ -46,6 +46,18 @@ def synchronize_rng_states():
 
 
 def send_to_device(tensor, device):
+    """
+    Recursively sends the elements in a nested list/tuple/dictionary of tensors to a given device.
+
+    Args:
+        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            The data to send to a given device.
+        device (:obj:`torch.device`):
+            The device to send the data to
+
+    Returns:
+        The same data structure as :obj:`tensor` with all tensors sent to the proper device.
+    """
     if isinstance(tensor, (list, tuple)):
         return type(tensor)(send_to_device(t, device) for t in tensor)
     elif isinstance(tensor, dict):
@@ -59,6 +71,15 @@ def send_to_device(tensor, device):
 
 
 def extract_model_from_parallel(model):
+    """
+    Extract a model from its distributed containers.
+
+    Args:
+        model (:obj:`torch.nn.Module`): The model to extract.
+
+    Returns:
+        :obj:`torch.nn.Module`: The extracted model.
+    """
     while isinstance(model, (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)):
         model = model.module
     return model
@@ -87,7 +108,16 @@ def _gpu_gather(tensor):
 
 
 def gather(tensor):
-    """Gather tensor from all devices."""
+    """
+    Recusrively gather tensor in a nested list/tuple/dictionary of tensors from all devices.
+
+    Args:
+        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            The data to gather.
+
+    Returns:
+        The same data structure as :obj:`tensor` with all tensors sent to the proper device.
+    """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         return _tpu_gather(tensor, name="accelerate.utils.gather")
     elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
@@ -97,6 +127,13 @@ def gather(tensor):
 
 
 def wait_for_everyone():
+    """
+    Introduces a blocking point in the script, making sure all processes have reached this point before continuing.
+
+    Warning::
+
+        Make sure all processes will reach this instruction otherwise one of your processes will hang forever.
+    """
     if AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
         torch.distributed.barrier()
     elif AcceleratorState().distributed_type == DistributedType.TPU:
@@ -104,6 +141,13 @@ def wait_for_everyone():
 
 
 def save(obj, f):
+    """
+    Save the data to disk. Use in place of :obj:`torch.save()`.
+
+    Args:
+        obj: The data to save
+        f: The file (or file-like object) to use to save the data
+    """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
     elif AcceleratorState().local_process_index == 0:

@@ -31,6 +31,7 @@ class Accelerator:
 
     Attributes
 
+        - **device** (:obj:`torch.device`) -- The device to use.
         - **state** (:class:`~accelerate.AcceleratorState`) -- The distributed setup state.
     """
 

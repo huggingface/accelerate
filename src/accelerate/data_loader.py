@@ -310,7 +310,7 @@ def prepare_data_loader(
 
     .. warning::
 
-        This does not support :obj:`BatchSampler` with varying batch size yet or :obj:`IterableDataset` yet.
+        This does not support :obj:`BatchSampler` with varying batch size yet.
     """
     # Grab defaults from AcceleratorState
     state = AcceleratorState()

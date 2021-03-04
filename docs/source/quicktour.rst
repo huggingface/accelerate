@@ -203,6 +203,15 @@ statement. To do this, wrap the statement in a test like this:
     if accelerator.is_local_main_process:
         # Is executed once per server
 
+Another example is progress bars: to avoid having multiple progress bars in your output, you should only display one on
+the local main process:
+
+.. code-block:: python
+
+    from tqdm.auto import tqdm
+
+    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
+
 The `local` means per machine: if you are running your training on two servers with several GPUs, the instruction will
 be executed once on each of those servers. If you need to execute something only once for all processes (and not per
 machine) for instance, uploading the final model to the 🤗 model hub, wrap it in a test like this:
@@ -273,3 +282,44 @@ Gradient clipping
 If you are using gradient clipping in your script, you should replace the calls to
 :obj:`torch.nn.utils.clip_grad_norm_` or :obj:`torch.nn.utils.clip_grad_value_` with :obj:`accelerator.clip_grad_norm_`
 and :obj:`accelerator.clip_grad_value_` respectively.
+
+
+Internal mechanism
+-----------------------------------------------------------------------------------------------------------------------
+
+Internally, the library works by first analyzing the environment in which the script is launched to determine which
+kind of distributed setup is used, how many different processes there are and which one the current script is in. All
+that information is stored in the :class:`~accelerate.state.AcceleratorState`.
+
+This class is initialized the first time you instantiate a :class:`~accelerate.Accelerator` as well as performing any
+specific initialization your distributed setup needs. Its state is then uniquely shared through all instances of
+:class:`~accelerate.state.AcceleratorState`.
+
+Then, when calling :meth:`~accelerate.Accelerator.prepare`, the library:
+
+- wraps your model(s) in the container adapted for the distributed setup,
+- wraps your optimizer(s) in a :class:`~accelerate.optimizer.AcceleratedOptimizer`,
+- creates a new version of your dataloader(s) in a :class:`~accelerate.data_loader.DataLoaderShard`.
+
+While the model(s) and optimizer(s) are just put in simple wrappers, the dataloader(s) are re-created. This is mostly
+because PyTorch does not let the user change the :obj:`batch_sampler` of a dataloader once it's been created and the
+library handles the sharding of your data between processes by changing that :obj:`batch_sampler` to yield every other
+:obj:`num_processes` batches.
+
+The :class:`~accelerate.data_loader.DataLoaderShard` subclasses :obj:`DataLoader` to add the following functionality:
+
+- it synchronizes the random number generators of all processes at each new iteration, to ensure any randomization
+  (like shuffling) is done the exact same way across processes.
+- it puts the batches on the proper device before yielding them (unless you have opted out of
+  :obj:`device_placement=True`).
+
+.. Warning::
+
+    The random number generator synchronization will affect any other potential random artifacts you could have in your
+    dataset (like random data augmentation) in the sense all processes will get the same random numbers (so will apply
+    the same random data augmentation). While this is usually fine, you can select the random number generator to
+    synchronize with the :obj:`rng_synchronize` argument of :class:`~accelerate.Accelerator`. If using the traditional
+    :obj:`RandomSampler` (with :obj:`shuffle=True` in your :obj:`DataLoader` creation) the only seed you need to
+    synchronize is "torch".
+
+See more details about the internal in the :doc:`Internals page <internal>`.

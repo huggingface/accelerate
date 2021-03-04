@@ -23,6 +23,16 @@ def parse_flag_from_env(key, default=False):
 
 
 class DistributedType(str, Enum):
+    """
+    Represents a type of distributed environment.
+
+    Values:
+
+        - **NO** -- Not a distributed environment, just a single process.
+        - **MULTI_GPU** -- Distributed on multiple GPUs.
+        - **TPU** -- Distributed on TPUs.
+    """
+
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
     NO = "NO"
     MULTI_GPU = "MULTI_GPU"
@@ -34,6 +44,16 @@ class AcceleratorState:
     """
     This is a variation of a `singleton class <https://en.wikipedia.org/wiki/Singleton_pattern>`__ in the sense that
     all instance of :obj:`AcceleratorState` share the same state, which is initialized on the first instantiation.
+
+    Attributes
+
+        - **device** (:obj:`torch.device`) -- The device to use.
+        - **distributed_type** (:obj:`~accelerate.state.DistributedType`) -- The type of distributed environment
+          currently in use.
+        - **num_processes** (:obj:`int`) -- The number of processes currently launched in parallel.
+        - **process_index** (:obj:`int`) -- The index of the current process.
+        - **local_process_index** (:obj:`int`) -- The index of the current process on the current server.
+        - **use_fp16** (:obj:`bool`) -- Whether or not the current script will use mixed precision.
     """
 
     _shared_state = {}
