@@ -129,12 +129,12 @@ def tpu_launcher(args):
     sys.path.append(str(script_path.parent.resolve()))
     mod_name = script_path.stem
     mod = importlib.import_module(mod_name)
-    if not hasattr(mod, args.main_function_name):
+    if not hasattr(mod, args.main_training_function):
         raise ValueError(
-            f"Your training script should have a function named {args.main_function_name}, or you should pass a "
-            "different value to `--main_function_name`."
+            f"Your training script should have a function named {args.main_training_function}, or you should pass a "
+            "different value to `--main_training_function`."
         )
-    main_function = getattr(mod, args.main_function_name)
+    main_function = getattr(mod, args.main_training_function)
 
     # Patch sys.argv
     sys.argv = [args.training_script] + args.training_script_args + ["--tpu_num_cores", str(args.num_processes)]
