@@ -156,6 +156,8 @@ def launch_command(args):
             args.num_processes = defaults.num_processes
         if not args.fp16:
             args.fp16 = defaults.fp16
+        if args.main_training_function is None:
+            args.main_training_function = defaults.main_training_function
     else:
         if args.num_processes is None:
             args.num_processes = 1
