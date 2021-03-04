@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 
 from .config import config_command_parser
 from .launch import launch_command_parser
+from .test import test_command_parser
 
 
 def main():
@@ -12,6 +13,7 @@ def main():
     # Register commands
     config_command_parser(subparsers=subparsers)
     launch_command_parser(subparsers=subparsers)
+    test_command_parser(subparsers=subparsers)
 
     # Let's go
     args = parser.parse_args()

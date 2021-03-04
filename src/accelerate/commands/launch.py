@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from ..state import DistributedType
-from .config import LaunchConfig, default_config_file
+from accelerate.commands.config import LaunchConfig, default_config_file
+from accelerate.state import DistributedType
 
 
 def launch_command_parser(subparsers=None):

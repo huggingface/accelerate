@@ -404,9 +404,10 @@ def main():
         eval_metric = metric.compute()
         logger.info(f"epoch {epoch}: {eval_metric}")
 
-    accelerator.wait_for_everyone()
-    unwrapped_model = accelerator.unwrap_model(model)
-    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+    if args.output_dir is not None:
+        accelerator.wait_for_everyone()
+        unwrapped_model = accelerator.unwrap_model(model)
+        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
 
     if args.task_name == "mnli":
         # Final evaluation on mismatched validation set
