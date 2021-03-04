@@ -5,4 +5,5 @@
 __version__ = "0.0.1"
 
 from .accelerator import Accelerator
+from .state import DistributedType
 from .utils import synchronize_rng_states

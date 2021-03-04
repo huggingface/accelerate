@@ -2,7 +2,7 @@ import argparse
 
 from torch.utils.data import DataLoader
 
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedType
 from datasets import load_dataset, load_metric
 from transformers import (
     AdamW,
@@ -69,7 +69,10 @@ def training_function(config, args):
         batch_size = MAX_GPU_BATCH_SIZE
 
     def collate_fn(examples):
-        return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
+        # On TPU it's best to pad everything to the same length or training will be very slow.
+        if accelerator.distributed_type == DistributedType.TPU:
+            return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
+        return tokenizer.pad(examples, padding="longest", return_tensors="pt")
 
     # Instantiate dataloaders.
     train_dataloader = DataLoader(
