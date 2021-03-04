@@ -308,18 +308,20 @@ library handles the sharding of your data between processes by changing that :ob
 
 The :class:`~accelerate.data_loader.DataLoaderShard` subclasses :obj:`DataLoader` to add the following functionality:
 
-- it synchronizes the random number generators of all processes at each new iteration, to ensure any randomization
-  (like shuffling) is done the exact same way across processes.
+- it synchronizes the torch random number generators of all processes at each new iteration, to ensure any
+  randomization (like shuffling) is done the exact same way across processes.
 - it puts the batches on the proper device before yielding them (unless you have opted out of
   :obj:`device_placement=True`).
 
 .. Warning::
 
     The random number generator synchronization will affect any other potential random artifacts you could have in your
-    dataset (like random data augmentation) in the sense all processes will get the same random numbers (so will apply
-    the same random data augmentation). While this is usually fine, you can select the random number generator to
-    synchronize with the :obj:`rng_synchronize` argument of :class:`~accelerate.Accelerator`. If using the traditional
-    :obj:`RandomSampler` (with :obj:`shuffle=True` in your :obj:`DataLoader` creation) the only seed you need to
-    synchronize is "torch".
+    dataset (like random data augmentation) in the sense all processes will get the same random numbers from the torch
+    random modules (so will apply the same random data augmentation if it's controlled by torch). While this is usually
+    fine, you should use the random number generator from the Python :obj:`random` module or NumPy for your data
+    augmentation if you think this will be a problem.
+
+    The randomization part of your sampler on the other hand should absolutely be done using the torch random number
+    generator (like in the traditional :obj:`RandomSampler`).
 
 See more details about the internal in the :doc:`Internals page <internal>`.
