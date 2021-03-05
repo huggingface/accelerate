@@ -21,7 +21,7 @@ extras["docs"] = ["recommonmark", "sphinx==3.2.1", "sphinx-markdown-tables", "sp
 
 setup(
     name="accelerate",
-    version="0.0.1",
+    version="0.1.0",
     description="Accelerate",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
