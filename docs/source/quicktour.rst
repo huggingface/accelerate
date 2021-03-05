@@ -130,6 +130,7 @@ do with the :meth:`~accelerate.Accelerator.gather` method.
     Any instruction using your training dataloader length (for instance if you need the number of total training steps
     to create a learning rate scheduler) should go after the call to :meth:`~accelerate.Accelerator.prepare`.
 
+
 Launching your distributed script
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -185,6 +186,40 @@ If you stored the config file in a non-default location, you can indicate it to 
     accelerate launch --config_file path_to_config.json path_to_script.py --args_for_the_script
 
 You can also override any of the arguments determined by your config file, see TODO: insert ref here.
+
+
+Training on TPU
+-----------------------------------------------------------------------------------------------------------------------
+
+If you want to launch your script on TPUs, there are a few caveats you should be aware of. Behind the scenes, the TPUs
+will create a graph of all the operations happening im your training step (forward pass, backward pass and optimizer
+step). This is why your first step of training will always be very long as building and compiling this graph for
+optimizations takes some time.
+
+The good news is that this compilation will be cached so the second step and all the following will be much faster. The
+bas news is that it only applies if all of your steps do exactly the same operations, which implies:
+
+- having all tensors of the same length in all your lenghts
+- having static code (i.e., not a foor loop of length that could change from step to step)
+
+Having any of the things above change between two steps will trigger a new compilation which will, once again, take a
+lof of time. In practice, that means you must take special care to have all your tensors in your inputs of the same
+shape (so no dynamic padding for instance if you are in an NLP problem) and should not use layer with for loops that
+have different lengths depending on the inputs (such as an LSTM) or the training will be excruciatingly slow.
+
+To introduce special behavior in your script for TPUs you can check the :obj:`distributed_type` of your :obj:`accelerator`:
+
+.. code-block:: python
+
+    from accelerate import DistributedType
+
+    if accelerator.distributed_type == DistributedType.TPU:
+        # do something of static shape
+    else:
+        # go crazy and be dynamic
+
+The `NLP example <https://github.com/huggingface/accelerate/blob/main/examples/nlp_example.py>`__ shows an example in
+situation with dynamic padding.
 
 
 Other caveats
