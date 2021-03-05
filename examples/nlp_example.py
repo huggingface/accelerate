@@ -39,7 +39,7 @@ from transformers import (
 #
 # To run it in each of these various modes, follow the instructions
 # in the readme for examples:
-# https://github.com/huggingface/accelerate/examples
+# https://github.com/huggingface/accelerate/tree/main/examples
 #
 ########################################################################
 
