@@ -35,4 +35,4 @@ function deploy_doc(){
 
 # You can find the commit for each tag on https://github.com/huggingface/accelerate/tags
 deploy_doc "main" main
-deploy_doc "main" # No stable-release yet
+deploy_doc "0fbbbc5" # v0.1.0 Latest stable release
