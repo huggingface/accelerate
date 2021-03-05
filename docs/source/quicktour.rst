@@ -279,9 +279,6 @@ This instruction will block all the processes that arrive them first until all t
 point (if you run your script on just one GPU or CPU, this wont' do anything).
 
 
-TODO: Context manager for local/absolute main process
-
-
 Saving/loading a model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
