@@ -12,6 +12,14 @@ from accelerate.commands.config import LaunchConfig, default_config_file
 from accelerate.state import DistributedType
 
 
+class _AddOneArg():
+    def __init__(self, launcher):
+        self.launcher = launcher
+    
+    def __call__(self, index):
+        launcher()
+
+
 def launch_command_parser(subparsers=None):
     if subparsers is not None:
         parser = subparsers.add_parser("launch")
@@ -143,10 +151,7 @@ def tpu_launcher(args):
     # If the function does not take one argument, launch will fail
     launcher_sig = inspect.signature(main_function)
     if len(launcher_sig.parameters) == 0:
-        def wrapped_launcher(index):
-            main_function()
-
-        xmp.spawn(wrapped_launcher, args=(), nprocs=args.num_processes)
+        xmp.spawn(_AddOneArg(main_function), args=(), nprocs=args.num_processes)
     else:
         xmp.spawn(main_function, args=(), nprocs=args.num_processes)
 
