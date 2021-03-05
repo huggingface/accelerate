@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import argparse
 
 from torch.utils.data import DataLoader
@@ -84,22 +98,17 @@ def training_function(config, args):
 
     set_seed(seed)
     # Initialize accelerator
-    accelerator = Accelerator(device_placement=False, fp16=args.fp16, cpu=args.cpu)
+    accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
-    # We could avoid this line if we set the accelerator with `device_placement=True`.
+    # We could avoid this line since we set the accelerator with `device_placement=True`.
     # If setting devices manually, this line absolutely needs to be before the optimizer creation otherwise training
     # will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
     model = model.to(accelerator.device)
 
-    # Instantiate optimizer and learning rate schedule based on the hyper-parameters
+    # Instantiate optimizer
     optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
-    lr_scheduler = get_linear_schedule_with_warmup(
-        optimizer=optimizer,
-        num_warmup_steps=100,
-        num_training_steps=len(train_dataloader) * num_epochs,
-    )
 
     # Prepare everything
     # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
@@ -107,11 +116,20 @@ def training_function(config, args):
     model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader
     )
+
+    # Instantiate learning rate scheduler after preparing the training dataloader as the prepare method
+    # may change its length.
+    lr_scheduler = get_linear_schedule_with_warmup(
+        optimizer=optimizer,
+        num_warmup_steps=100,
+        num_training_steps=len(train_dataloader) * num_epochs,
+    )
+
     # Now we train the model - We prune bad trials after each epoch if needed
     for epoch in range(num_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
-            # We could avoid this line if we set the accelerator with `device_placement=True`.
+            # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
             loss = outputs.loss
@@ -124,7 +142,7 @@ def training_function(config, args):
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
-            # We could avoid this line if we set the accelerator with `device_placement=True`.
+            # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
