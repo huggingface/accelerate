@@ -267,7 +267,7 @@ and answer the questions asked. This will generate a config file that will be us
 accelerate launch my_script.py --args_to_my_script
 ``` 
 
-For instance, here is how you would run the GLUE example on the MRPC task (from the root of the repo):
+For instance, here is how you would run the GLUE example of the huggingface/transformers repo on the MRPC task (from the root of the repo):
 
 ```bash
 accelerate launch examples/glue_example.py --task_name mrpc --model_name_or_path bert-base-cased
