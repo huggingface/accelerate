@@ -49,6 +49,9 @@ EVAL_BATCH_SIZE = 32
 
 
 def training_function(config, args):
+    # Initialize accelerator
+    accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu)
+
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
@@ -97,14 +100,13 @@ def training_function(config, args):
     )
 
     set_seed(seed)
-    # Initialize accelerator
-    accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
-    # We could avoid this line since we set the accelerator with `device_placement=True`.
-    # If setting devices manually, this line absolutely needs to be before the optimizer creation otherwise training
-    # will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
+
+    # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
+    # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
+    # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
     model = model.to(accelerator.device)
 
     # Instantiate optimizer
