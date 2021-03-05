@@ -254,7 +254,7 @@ for epoch in range(10):
 
 ## Launching script
 
-🤗 Accelerate also provides a CLI tool that allows you to quickly configure and test your training environment then launch the scripts. No need to remember how to use `torch.distributed.launch` or to write a specific launcher for TPU training!
+🤗 Accelerate also provides an optional CLI tool that allows you to quickly configure and test your training environment then launch the scripts. No need to remember how to use `torch.distributed.launch` or to write a specific launcher for TPU training!
 On your machine(s) just run:
 
 ```bash
