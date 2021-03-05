@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import importlib
+import inspect
 import os
 import subprocess
 import sys
@@ -138,7 +139,16 @@ def tpu_launcher(args):
 
     # Patch sys.argv
     sys.argv = [args.training_script] + args.training_script_args
-    xmp.spawn(main_function, args=(), nprocs=args.num_processes)
+
+    # If the function does not take one argument, launch will fail
+    launcher_sig = inspect.signature(main_function)
+    if len(launcher_sig.parameters) == 0:
+        def wrapped_launcher(index):
+            main_function()
+
+        xmp.spawn(wrapped_launcher, args=(), nprocs=args.num_processes)
+    else:
+        xmp.spawn(main_function, args=(), nprocs=args.num_processes)
 
 
 def launch_command(args):

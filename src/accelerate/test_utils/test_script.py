@@ -172,10 +172,6 @@ def training_check():
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
 
-
-def tpu_spawn(index):
-    main()
-
 def main():
     accelerator = Accelerator()
     state = accelerator.state

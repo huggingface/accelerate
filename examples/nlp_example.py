@@ -155,9 +155,5 @@ def main():
     training_function(config, args)
 
 
-def tpu_spawn(index):
-    main()
-
-
 if __name__ == "__main__":
     main()

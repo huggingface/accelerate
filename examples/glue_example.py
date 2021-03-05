@@ -430,9 +430,5 @@ def main():
         logger.info(f"mnli-mm: {eval_metric}")
 
 
-def tpu_spawn(index):
-    main()
-
-
 if __name__ == "__main__":
     main()
