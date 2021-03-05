@@ -270,7 +270,7 @@ accelerate launch my_script.py --args_to_my_script
 For instance, here is how you would run the GLUE example on the MRPC task (from the root of the repo):
 
 ```bash
-accelerate launch examples/glue_example.py --task_name mrpc --model_name_or_path bert-base-cased
+accelerate launch examples/nlp_example.py
 ```
 
 ## Why should I use 🤗 Accelerate?
