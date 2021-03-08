@@ -140,7 +140,7 @@ for epoch in range(10):
               output, targets
           )
 
-+         accelerate.backward(loss)
++         accelerator.backward(loss)
 
           optimizer.step()
 ```
@@ -243,7 +243,7 @@ for epoch in range(10):
               output, targets
           )
 
-+         accelerate.backward(loss)
++         accelerator.backward(loss)
 
           optimizer.step()
 ```
