@@ -46,9 +46,9 @@ limitations under the License.
 
 ## Easy to integrate
 
-🤗 Accelerate was created for PyTorch users who like to write the training loop of PyTorch models but are reluctant to write and maintain the boiler code needed to use multi-GPUs/TPU/fp16.
+🤗 Accelerate was created for PyTorch users who like to write the training loop of PyTorch models but are reluctant to write and maintain the boilerplate code needed to use multi-GPUs/TPU/fp16.
 
-🤗 Accelerate abstracts exactly and only the boiler code related to multi-GPUs/TPU/fp16 and let the rest of your code unchanged.
+🤗 Accelerate abstracts exactly and only the boilerplate code related to multi-GPUs/TPU/fp16 and leaves the rest of your code unchanged.
 
 Here is an example:
 
@@ -149,11 +149,11 @@ for epoch in range(10):
 </tr>
 </table>
 
-As you can see on this example, by adding 5-lines to any standard PyTorch training script you can now run on any kind of single or distributed node setting (single CPU, single GPU, multi-GPUs and TPUs) as well as with or without mixed precision (fp16).
+As you can see in this example, by adding 5-lines to any standard PyTorch training script you can now run on any kind of single or distributed node setting (single CPU, single GPU, multi-GPUs and TPUs) as well as with or without mixed precision (fp16).
 
-The same code can then in particular run without modification on your local machine for debugging or your training environment.
+In particular, the same code can then be run without modification on your local machine for debugging or your training environment.
 
-🤗 Accelerate even handles the device placement for you (a bit more changes to your code but safer in general), so you can even simplify your training loop further:
+🤗 Accelerate even handles the device placement for you (which requires a few more changes to your code, but is safer in general), so you can even simplify your training loop further:
 
 <table>
 <tr>
@@ -254,7 +254,7 @@ for epoch in range(10):
 
 ## Launching script
 
-🤗 Accelerate also provides an optional CLI tool that allows you to quickly configure and test your training environment then launch the scripts. No need to remember how to use `torch.distributed.launch` or to write a specific launcher for TPU training!
+🤗 Accelerate also provides an optional CLI tool that allows you to quickly configure and test your training environment before launching the scripts. No need to remember how to use `torch.distributed.launch` or to write a specific launcher for TPU training!
 On your machine(s) just run:
 
 ```bash
@@ -277,7 +277,7 @@ accelerate launch examples/nlp_example.py
 
 You should use 🤗 Accelerate when you want to easily run your training scripts in a distributed environment without having to renounce full control over your training loop. This is not a high-level framework above PyTorch, just a thin wrapper so you don't have to learn a new library, In fact the whole API of 🤗 Accelerate is in one class, the `Accelerator` object.
 
-## Why shouldn't use 🤗 Accelerate?
+## Why shouldn't I use 🤗 Accelerate?
 
 You shouldn't use 🤗 Accelerate if you don't want to write a training loop yourself. There are plenty of high-level libraries above PyTorch that will offer you that, 🤗 Accelerate is not one of them.
 
