@@ -44,9 +44,9 @@ def set_seed(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    # ^^ safe to call this function even if cuda is not available
     if is_tpu_available():
         xm.set_rng_state(seed)
-    # ^^ safe to call this function even if cuda is not available
 
 
 def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optional[torch.Generator] = None):
