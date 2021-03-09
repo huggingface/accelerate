@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import List, Optional, Union
+
 import torch
 
 from packaging import version
@@ -19,7 +21,7 @@ from packaging import version
 from .data_loader import prepare_data_loader
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType
-from .utils import extract_model_from_parallel, gather, save, wait_for_everyone
+from .utils import RNGType, extract_model_from_parallel, gather, save, wait_for_everyone
 
 
 class Accelerator:
@@ -42,6 +44,18 @@ class Accelerator:
         cpu (:obj:`bool`, `optional`):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to :obj:`True` and
             force the execution on one process only.
+        rng_types (list of :obj:`str` or :class:`~accelerate.utils.RNGType`):
+            The list of random number generators to synchronize at the beginning of each iteration in your prepared
+            dataloaders. Should be one or several of:
+
+            - :obj:`"torch"`: the base torch random number generator
+            - :obj:`"cuda"`: the CUDA random number generator (GPU only)
+            - :obj:`"xla"`: the XLA random number generator (TPU only)
+            - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler
+              in your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
+            
+            Will default to :obj:`["torch"]` for PyTorch versions <=1.5.1 and :obj:`["generator"]` for PyTorch versions
+            >= 1.6.
 
     Attributes
 
@@ -50,7 +64,12 @@ class Accelerator:
     """
 
     def __init__(
-        self, device_placement: bool = True, split_batches: bool = False, fp16: bool = None, cpu: bool = False
+        self,
+        device_placement: bool = True,
+        split_batches: bool = False,
+        fp16: bool = None,
+        cpu: bool = False,
+        rng_types: Optional[List[Union[str, RNGType]]] = None,
     ):
         self.state = AcceleratorState(fp16=fp16, cpu=cpu, _from_accelerator=True)
 
@@ -66,6 +85,10 @@ class Accelerator:
 
         # Internal references to the training objects
         self._optimizers = []
+
+        # RNG Types
+        if rng_types is None:
+            self.rng_types = ["torch"] if version.parse(torch.__version__) <= version.parse("1.5.1") else ["generator"]
 
     @property
     def distributed_type(self):
@@ -187,6 +210,7 @@ class Accelerator:
             process_index=self.process_index,
             split_batches=self.split_batches,
             put_on_device=self.device_placement,
+            rng_types=self.rng_types,
         )
 
     def prepare_optimizer(self, optimizer):

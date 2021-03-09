@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import random
+from enum import Enum
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
@@ -22,6 +24,13 @@ from .state import AcceleratorState, DistributedType, is_tpu_available
 
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
+
+
+class RNGType(Enum):
+    TORCH = "torch"
+    CUDA = "cuda"
+    XLA = "xla"
+    GENERATOR = "generator"
 
 
 def set_seed(seed: int):
@@ -36,27 +45,46 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
+    if is_tpu_available():
+        xm.set_rng_state(seed)
 
 
-def synchronize_rng_states():
-    """
-    Helper function to synchronize the rng states in distributed training.
-    """
+def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optional[torch.Generator] = None):
+    # Get the proper rng state
+    if rng_type == RNGType.TORCH:
+        rng_state = torch.get_rng_state()
+    elif rng_type == RNGType.CUDA:
+        rng_state = torch.cuda.get_rng_state()
+    elif rng_type == RNGType.XLA:
+        assert is_tpu_available(), "Can't synchronize XLA seeds on an environment without TPUs."
+        rng_state = torch.tensor(xm.get_rng_state())
+    elif rng_type == RNGType.GENERATOR:
+        assert generator is not None, "Need a generator to synchronize its seed."
+        rng_state = generator.get_state()
+    
+    # Broadcast the rng state from device 0 to other devices
     state = AcceleratorState()
     if state.distributed_type == DistributedType.TPU:
-        rng_state = torch.get_rng_state()
         rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
-        torch.set_rng_state(rng_state)
     elif state.distributed_type == DistributedType.MULTI_GPU:
-        rng_state = torch.get_rng_state().to(state.device)
-        # Broadcast the state from process 0 to all the others.
+        rng_state = rng_state.to(state.device)
         torch.distributed.broadcast(rng_state, 0)
-        torch.set_rng_state(rng_state.cpu())
+        rng_state = rng_state.cpu()
 
-        # Broadcast the state from process 0 to all the others.
-        rng_state = torch.cuda.get_rng_state().to(state.device)
-        torch.distributed.broadcast(rng_state, 0)
-        torch.cuda.set_rng_state(rng_state.cpu())
+    # Set the broadcast rng state
+    if rng_type == RNGType.TORCH:
+        torch.set_rng_state(rng_state)
+    elif rng_type == RNGType.CUDA:
+        torch.cuda.set_rng_state(rng_state)
+    elif rng_type == RNGType.XLA:
+        xm.set_rng_state(rng_state.item())
+    elif rng_type == RNGType.GENERATOR:
+        generator.set_state(rng_state)
+
+
+def synchronize_rng_states(rng_types: List[Union[str, RNGType]], generator: Optional[torch.Generator] = None):
+    for rng_type in rng_types:
+        synchronize_rng_state(RNGType(rng_type), generator=generator)
 
 
 def send_to_device(tensor, device):

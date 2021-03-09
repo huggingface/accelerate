@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from packaging import version
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -34,10 +36,16 @@ def init_state_check():
 
 def rng_sync_check():
     state = AcceleratorState()
-    synchronize_rng_states()
+    synchronize_rng_states(["torch"])
     assert are_the_same_tensors(torch.get_rng_state())
     if state.distributed_type == DistributedType.MULTI_GPU:
+        synchronize_rng_states(["cuda"])
         assert are_the_same_tensors(torch.cuda.get_rng_state())
+    if version.parse(torch.__version__) >= version.parse("1.6.0"):
+        generator = torch.Generator()
+        synchronize_rng_states(["generator"], generator=generator)
+        assert are_the_same_tensors(generator.get_state())
+
     if state.local_process_index == 0:
         print("All rng are properly synched.")
 
@@ -101,13 +109,14 @@ def dl_preparation_check():
         print("Shuffled dataloader passing.")
 
 
-def mock_training(length, batch_size):
+def mock_training(length, batch_size, generator):
     set_seed(42)
+    generator.manual_seed(42)
     train_set = RegressionDataset(length=length)
-    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-    for _ in range(3):
+    for epoch in range(3):
         for batch in train_dl:
             model.zero_grad()
             output = model(batch["x"])
@@ -119,21 +128,23 @@ def mock_training(length, batch_size):
 
 def training_check():
     state = AcceleratorState()
+    generator = torch.Generator()
     batch_size = 8
     length = batch_size * 4 * state.num_processes
 
-    train_set, old_model = mock_training(length, batch_size * state.num_processes)
+    train_set, old_model = mock_training(length, batch_size * state.num_processes, generator)
     assert are_the_same_tensors(old_model.a)
     assert are_the_same_tensors(old_model.b)
 
     accelerator = Accelerator()
-    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
     train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
     set_seed(42)
-    for _ in range(3):
+    generator.manual_seed(42)
+    for epoch in range(3):
         for batch in train_dl:
             model.zero_grad()
             output = model(batch["x"])
@@ -145,15 +156,16 @@ def training_check():
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
 
-    accelerator.print("Training yielded the same results on one CPU or distributes setup with no batch split.")
+    accelerator.print("Training yielded the same results on one CPU or distributed setup with no batch split.")
 
     accelerator = Accelerator(split_batches=True)
-    train_dl = DataLoader(train_set, batch_size=batch_size * state.num_processes, shuffle=True)
+    train_dl = DataLoader(train_set, batch_size=batch_size * state.num_processes, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
     train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
     set_seed(42)
+    generator.manual_seed(42)
     for _ in range(3):
         for batch in train_dl:
             model.zero_grad()
@@ -170,12 +182,13 @@ def training_check():
 
     # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
     accelerator = Accelerator(fp16=True)
-    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
     train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
     set_seed(42)
+    generator.manual_seed(42)
     for _ in range(3):
         for batch in train_dl:
             model.zero_grad()

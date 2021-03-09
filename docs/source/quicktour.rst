@@ -340,20 +340,29 @@ library handles the sharding of your data between processes by changing that :ob
 
 The :class:`~accelerate.data_loader.DataLoaderShard` subclasses :obj:`DataLoader` to add the following functionality:
 
-- it synchronizes the torch random number generators of all processes at each new iteration, to ensure any
+- it synchronizes the appropriate random number generator of all processes at each new iteration, to ensure any
   randomization (like shuffling) is done the exact same way across processes.
 - it puts the batches on the proper device before yielding them (unless you have opted out of
   :obj:`device_placement=True`).
 
+The random number generator synchronization will by default synchronize:
+
+- the :obj:`generator` attribute of a given sampler (like the PyTorch :obj:`RandomSampler`) for PyTorch >= 1.6
+- the main random number generator in PyTorch <=1.5.1
+
+You can choose which random number generator(s) to synchronize with the :obj:`rng_types` argument of the main
+:class:`~accelerate.Accelerator`. In PyTorch >= 1.6, it is recommended to rely on local :obj:`generator`s to avoid
+setting the same seed in the main random number generator in all processes.
+
 .. Warning::
 
-    The random number generator synchronization will affect any other potential random artifacts you could have in your
+    Synchronization the main torch (or CUDA or XLA) random number generator will affect any other potential random artifacts you could have in your
     dataset (like random data augmentation) in the sense all processes will get the same random numbers from the torch
-    random modules (so will apply the same random data augmentation if it's controlled by torch). While this is usually
-    fine, you should use the random number generator from the Python :obj:`random` module or NumPy for your data
-    augmentation if you think this will be a problem.
+    random modules (so will apply the same random data augmentation if it's controlled by torch).
 
-    The randomization part of your sampler on the other hand should absolutely be done using the torch random number
-    generator (like in the traditional :obj:`RandomSampler`).
+.. Note::
+
+    The randomization part of your custom sampler, batch sampler or iterable dataset should be done using a local
+    :obj:`torch.Generator` object (in PyTorch >= 1.6), see the traditional :obj:`RandomSampler`, as an example.
 
 See more details about the internal in the :doc:`Internals page <internal>`.
