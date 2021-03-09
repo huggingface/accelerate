@@ -214,7 +214,7 @@ for epoch in range(10):
 
 + from accelerate import Accelerator
 + accelerator = Accelerator()
-+ device = accelerator.device
+-
 
 + model = torch.nn.Transformer()
   optim = torch.optim.Adam(
