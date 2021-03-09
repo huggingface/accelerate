@@ -78,6 +78,8 @@ Utilities
 
 .. autofunction:: accelerate.utils.set_seed
 
+.. autofunction:: accelerate.utils.synchronize_rng_state
+
 .. autofunction:: accelerate.utils.synchronize_rng_states
 
 .. autofunction:: accelerate.utils.wait_for_everyone

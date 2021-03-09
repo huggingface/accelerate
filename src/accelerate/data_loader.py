@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import List, Optional, Union
 
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
@@ -20,7 +20,7 @@ from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 from packaging import version
 
 from .state import AcceleratorState, DistributedType, is_tpu_available
-from .utils import send_to_device, synchronize_rng_states
+from .utils import RNGType, send_to_device, synchronize_rng_states
 
 
 if is_tpu_available():
@@ -262,16 +262,29 @@ class DataLoaderShard(DataLoader):
             The dataset to use to build this datalaoder.
         device (:obj:`torch.device`, `optional`):
             If passed, the device to put all batches on.
+        rng_types (list of :obj:`str` or :class:`~accelerate.utils.RNGType`):
+            The list of random number generators to synchronize at the beginning of each iteration. Should be one or
+            several of:
+
+            - :obj:`"torch"`: the base torch random number generator
+            - :obj:`"cuda"`: the CUDA random number generator (GPU only)
+            - :obj:`"xla"`: the XLA random number generator (TPU only)
+            - :obj:`"generator"`: an optional :obj:`torch.Generator`
+        generator (:obj:`torch.Generator`, `optional`):
+            A random number generator to keep synchronized accross processes.
         kwargs:
             All other keyword arguments to pass to the regular :obj:`DataLoader` initialization.
     """
 
-    def __init__(self, dataset, device=None, **kwargs):
+    def __init__(self, dataset, device=None, rng_types=None, generator=None, **kwargs):
         super().__init__(dataset, **kwargs)
         self.device = device
+        self.rng_types = rng_types
+        self.generator = generator
 
     def __iter__(self):
-        synchronize_rng_states()
+        if self.rng_types is not None:
+            synchronize_rng_states(self.rng_types, self.generator)
         state = AcceleratorState()
         for batch in super().__iter__():
             if state.distributed_type == DistributedType.TPU:
@@ -286,6 +299,7 @@ def prepare_data_loader(
     process_index: Optional[int] = None,
     split_batches: bool = False,
     put_on_device: bool = False,
+    rng_types: Optional[List[Union[str, RNGType]]] = None,
 ) -> DataLoader:
     """
     Wraps a PyTorch :obj:`DataLoader` to generate batches for one of the processes only.
@@ -318,6 +332,15 @@ def prepare_data_loader(
         put_on_device (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to put the batches on :obj:`device` (only works if the batches are nested list, tuples or
             dictionaries of tensors).
+        rng_types (list of :obj:`str` or :class:`~accelerate.utils.RNGType`):
+            The list of random number generators to synchronize at the beginning of each iteration. Should be one or
+            several of:
+
+            - :obj:`"torch"`: the base torch random number generator
+            - :obj:`"cuda"`: the CUDA random number generator (GPU only)
+            - :obj:`"xla"`: the XLA random number generator (TPU only)
+            - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler
+              in your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
     Returns:
         :obj:`torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -342,9 +365,12 @@ def prepare_data_loader(
 
     new_dataset = dataloader.dataset
     new_batch_sampler = dataloader.batch_sampler
+    generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
     if num_processes != 1:
         if isinstance(new_dataset, IterableDataset):
+            if getattr(dataloader.dataset, "generator", None) is not None:
+                generator = dataloader.dataset.generator
             new_dataset = IterableDatasetShard(
                 new_dataset,
                 batch_size=dataloader.batch_size,
@@ -355,6 +381,13 @@ def prepare_data_loader(
             )
         else:
             # New batch sampler for the current process.
+            if hasattr(dataloader.sampler, "generator"):
+                if dataloader.sampler.generator is None:
+                    dataloader.sampler.generator = torch.Generator()
+                    generator = dataloader.sampler.generator
+                    generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
+            elif getattr(dataloader.batch_sampler, "generator", None) is not None:
+                generator = dataloader.batch_sampler.generator
             new_batch_sampler = BatchSamplerShard(
                 dataloader.batch_sampler,
                 num_processes=num_processes,
@@ -369,7 +402,11 @@ def prepare_data_loader(
         "sampler",
         "batch_sampler",
         "drop_last",
+        "generator",
     ]
+
+    if rng_types is not None and generator is None and "generator" in rng_types:
+        rng_types.remove("generator")
 
     kwargs = {
         k: getattr(dataloader, k, _PYTORCH_DATALOADER_KWARGS[k])
@@ -380,5 +417,7 @@ def prepare_data_loader(
         new_dataset,
         device=device if put_on_device else None,
         batch_sampler=new_batch_sampler,
+        rng_types=rng_types,
+        generator=generator,
         **kwargs,
     )
