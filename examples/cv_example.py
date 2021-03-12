@@ -45,11 +45,17 @@ from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
 ########################################################################
 
 
+# Function to get the label from the filename
+def extract_label(fname):
+    stem = fname.split(os.path.sep)[-1]
+    return re.search(r"^(.*)_\d+\.jpg$", stem).groups()[0]
+
+
 class PetsDataset(Dataset):
-    def __init__(self, file_names, image_transform=None, get_label=None):
+    def __init__(self, file_names, image_transform=None, label_to_id=None):
         self.file_names = file_names
         self.image_transform = image_transform
-        self.get_label = get_label
+        self.label_to_id = label_to_id
 
     def __len__(self):
         return len(self.file_names)
@@ -60,9 +66,10 @@ class PetsDataset(Dataset):
         image = raw_image.convert("RGB")
         if self.image_transform is not None:
             image = self.image_transform(image)
-        if self.get_label is not None:
-            return {"image": image, "label": self.get_label(fname)}
-        return {"image": image}
+        label = extract_label(fname)
+        if self.label_to_id is not None:
+            label = self.label_to_id[label]
+        return {"image": image, "label": label}
 
 
 def training_function(config, args):
@@ -81,19 +88,11 @@ def training_function(config, args):
     # Grab all the image filenames
     file_names = [os.path.join(args.data_dir, fname) for fname in os.listdir(args.data_dir) if fname.endswith(".jpg")]
 
-    # Function to get the label from the filename
-    def extract_label(fname):
-        stem = fname.split(os.path.sep)[-1]
-        return re.search(r"^(.*)_\d+\.jpg$", stem).groups()[0]
-
     # Build the label correspondences
     all_labels = [extract_label(fname) for fname in file_names]
     id_to_label = list(set(all_labels))
     id_to_label.sort()
     label_to_id = {lbl: i for i, lbl in enumerate(id_to_label)}
-
-    def get_label(fname):
-        return label_to_id[extract_label(fname)]
 
     # Set the seed before splitting the data.
     np.random.seed(seed)
@@ -108,11 +107,13 @@ def training_function(config, args):
 
     # For training we use a simple RandomResizedCrop
     train_tfm = Compose([RandomResizedCrop(image_size, scale=(0.5, 1.0)), ToTensor()])
-    train_dataset = PetsDataset([file_names[i] for i in train_split], image_transform=train_tfm, get_label=get_label)
+    train_dataset = PetsDataset(
+        [file_names[i] for i in train_split], image_transform=train_tfm, label_to_id=label_to_id
+    )
 
     # For evaluation, we use a deterministic Resize
     eval_tfm = Compose([Resize(image_size), ToTensor()])
-    eval_dataset = PetsDataset([file_names[i] for i in eval_split], image_transform=eval_tfm, get_label=get_label)
+    eval_dataset = PetsDataset([file_names[i] for i in eval_split], image_transform=eval_tfm, label_to_id=label_to_id)
 
     # Instantiate dataloaders.
     train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, num_workers=4)
