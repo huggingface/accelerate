@@ -61,7 +61,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     elif rng_type == RNGType.GENERATOR:
         assert generator is not None, "Need a generator to synchronize its seed."
         rng_state = generator.get_state()
-    
+
     # Broadcast the rng state from device 0 to other devices
     state = AcceleratorState()
     if state.distributed_type == DistributedType.TPU:

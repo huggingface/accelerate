@@ -30,7 +30,7 @@ from transformers import (
 ########################################################################
 # This is a fully working simple example to use Accelerate
 #
-# This example train a Bert base model on GLUE MRPC
+# This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):
 #   - single CPU or single GPU
 #   - multi GPUS (using PyTorch distributed mode)
@@ -127,7 +127,7 @@ def training_function(config, args):
         num_training_steps=len(train_dataloader) * num_epochs,
     )
 
-    # Now we train the model - We prune bad trials after each epoch if needed
+    # Now we train the model
     for epoch in range(num_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
@@ -146,7 +146,8 @@ def training_function(config, args):
         for step, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
-            outputs = model(**batch)
+            with torch.no_grad():
+                outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             metric.add_batch(
                 predictions=accelerator.gather(predictions),
@@ -160,16 +161,8 @@ def training_function(config, args):
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
-    parser.add_argument(
-        "--fp16",
-        action="store_true",
-        help="If passed, will use FP16 training.",
-    )
-    parser.add_argument(
-        "--cpu",
-        action="store_true",
-        help="If passed, will train on the CPU.",
-    )
+    parser.add_argument("--fp16", action="store_true", help="If passed, will use FP16 training.")
+    parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
     training_function(config, args)

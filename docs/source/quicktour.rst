@@ -207,7 +207,8 @@ lof of time. In practice, that means you must take special care to have all your
 shape (so no dynamic padding for instance if you are in an NLP problem) and should not use layer with for loops that
 have different lengths depending on the inputs (such as an LSTM) or the training will be excruciatingly slow.
 
-To introduce special behavior in your script for TPUs you can check the :obj:`distributed_type` of your :obj:`accelerator`:
+To introduce special behavior in your script for TPUs you can check the :obj:`distributed_type` of your
+:obj:`accelerator`:
 
 .. code-block:: python
 
@@ -356,9 +357,10 @@ setting the same seed in the main random number generator in all processes.
 
 .. Warning::
 
-    Synchronization the main torch (or CUDA or XLA) random number generator will affect any other potential random artifacts you could have in your
-    dataset (like random data augmentation) in the sense all processes will get the same random numbers from the torch
-    random modules (so will apply the same random data augmentation if it's controlled by torch).
+    Synchronization the main torch (or CUDA or XLA) random number generator will affect any other potential random
+    artifacts you could have in your dataset (like random data augmentation) in the sense all processes will get the
+    same random numbers from the torch random modules (so will apply the same random data augmentation if it's
+    controlled by torch).
 
 .. Note::
 

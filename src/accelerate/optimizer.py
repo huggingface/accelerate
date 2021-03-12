@@ -63,6 +63,18 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def param_groups(self):
         return self.optimizer.param_groups
 
+    @param_groups.setter
+    def param_group(self, param_groups):
+        self.optimizer.param_groups = param_groups
+
+    @property
+    def defaults(self):
+        return self.optimizer.defaults
+
+    @defaults.setter
+    def param_group(self, defaults):
+        self.optimizer.defaults = defaults
+
     def add_param_group(self, param_group):
         self.optimizer.add_param_group(param_group)
 

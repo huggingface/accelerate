@@ -27,10 +27,10 @@ from accelerate.commands.config import LaunchConfig, default_config_file
 from accelerate.state import DistributedType
 
 
-class _AddOneArg():
+class _AddOneArg:
     def __init__(self, launcher):
         self.launcher = launcher
-    
+
     def __call__(self, index):
         self.launcher()
 

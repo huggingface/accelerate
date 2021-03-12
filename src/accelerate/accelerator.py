@@ -51,9 +51,9 @@ class Accelerator:
             - :obj:`"torch"`: the base torch random number generator
             - :obj:`"cuda"`: the CUDA random number generator (GPU only)
             - :obj:`"xla"`: the XLA random number generator (TPU only)
-            - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler
-              in your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
-            
+            - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler in
+              your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
+
             Will default to :obj:`["torch"]` for PyTorch versions <=1.5.1 and :obj:`["generator"]` for PyTorch versions
             >= 1.6.
 
