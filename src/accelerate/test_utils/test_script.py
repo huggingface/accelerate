@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from packaging import version
-
 import torch
 from torch.utils.data import DataLoader
 
@@ -24,6 +22,7 @@ from accelerate.data_loader import prepare_data_loader
 from accelerate.state import AcceleratorState, DistributedType
 from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
 from accelerate.utils import gather, set_seed, synchronize_rng_states
+from packaging import version
 
 
 def init_state_check():
@@ -201,6 +200,7 @@ def training_check():
     assert torch.allclose(old_model.a, model.a)
     assert torch.allclose(old_model.b, model.b)
 
+
 def main():
     accelerator = Accelerator()
     state = accelerator.state
@@ -219,6 +219,7 @@ def main():
     if state.local_process_index == 0:
         print("\n**Training integration test**")
     training_check()
+
 
 if __name__ == "__main__":
     main()

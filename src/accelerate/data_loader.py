@@ -339,8 +339,8 @@ def prepare_data_loader(
             - :obj:`"torch"`: the base torch random number generator
             - :obj:`"cuda"`: the CUDA random number generator (GPU only)
             - :obj:`"xla"`: the XLA random number generator (TPU only)
-            - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler
-              in your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
+            - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler in
+              your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
     Returns:
         :obj:`torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
