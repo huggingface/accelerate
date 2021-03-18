@@ -105,10 +105,7 @@ def send_to_device(tensor, device):
     elif isinstance(tensor, dict):
         return type(tensor)({k: send_to_device(v, device) for k, v in tensor.items()})
     elif not hasattr(tensor, "to"):
-        raise TypeError(
-            f"Can't send the values of type {type(tensor)} to device {device}, only of nested list/tuple/dicts "
-            "of tensors or objects having a `to` method."
-        )
+        return tensor
     return tensor.to(device)
 
 
