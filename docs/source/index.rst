@@ -145,4 +145,5 @@ Supported integrations
     :caption: API reference
 
     accelerator
+    kwargs
     internal

@@ -14,6 +14,7 @@
 # limitations under the License.
 import argparse
 
+import torch
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator, DistributedType
