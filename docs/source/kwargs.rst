@@ -27,4 +27,4 @@ DistributedDataParallelKwargs
 GradScalerKwargs
 -----------------------------------------------------------------------------------------------------------------------
 
-.. autoclass:: accelerate.GradScalerKwargss
+.. autoclass:: accelerate.GradScalerKwargs
