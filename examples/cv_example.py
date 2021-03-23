@@ -22,7 +22,6 @@ from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader, Dataset
 
 import PIL
-import torchvision
 from accelerate import Accelerator
 from timm import create_model
 from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor

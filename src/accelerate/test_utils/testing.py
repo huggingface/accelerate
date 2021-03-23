@@ -33,10 +33,19 @@ def are_the_same_tensors(tensor):
     return True
 
 
+def require_cuda(test_case):
+    """
+    Decorator marking a test that requires CUDA. These tests are skipped when there are no GPU available.
+    """
+    if not torch.cuda.is_available():
+        return unittest.skip("test requires a GPU")(test_case)
+    else:
+        return test_case
+
+
 def require_tpu(test_case):
     """
     Decorator marking a test that requires TPUs. These tests are skipped when there are no TPUs available.
-
     """
     if not is_tpu_available():
         return unittest.skip("test requires TPU")(test_case)

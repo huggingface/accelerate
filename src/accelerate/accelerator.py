@@ -19,6 +19,7 @@ import torch
 from packaging import version
 
 from .data_loader import prepare_data_loader
+from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType
 from .utils import RNGType, extract_model_from_parallel, gather, save, wait_for_everyone
@@ -56,6 +57,9 @@ class Accelerator:
 
             Will default to :obj:`["torch"]` for PyTorch versions <=1.5.1 and :obj:`["generator"]` for PyTorch versions
             >= 1.6.
+        kwargs_handlers (list of kwargs handlers, `optional`)
+            A list of :obj:`KwargHandler` to customize how the objects related to distributed training or mixed
+            precision are created. See :doc:`kwargs` for more information.
 
     Attributes
 
@@ -70,18 +74,37 @@ class Accelerator:
         fp16: bool = None,
         cpu: bool = False,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
+        kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         self.state = AcceleratorState(fp16=fp16, cpu=cpu, _from_accelerator=True)
 
         self.device_placement = device_placement
         self.split_batches = split_batches
 
+        # Kwargs handlers
+        self.ddp_handler = None
+        self.scaler_handler = None
+        if kwargs_handlers is not None:
+            for handler in kwargs_handlers:
+                assert isinstance(handler, KwargsHandler), f"Unsupported kwargs handler passed: {handler}."
+                if isinstance(handler, DistributedDataParallelKwargs):
+                    if self.ddp_handler is not None:
+                        raise ValueError("You can only pass one `DistributedDataParallelKwargs` in `kwargs_handler`.")
+                    else:
+                        self.ddp_handler = handler
+                elif isinstance(handler, GradScalerKwargs):
+                    if self.scaler_handler is not None:
+                        raise ValueError("You can only pass one `GradScalerKwargs` in `kwargs_handler`.")
+                    else:
+                        self.scaler_handler = handler
+
         # Mixed precision attributes
         self.scaler = None
         self.native_amp = False
         if self.state.use_fp16:
             self.native_amp = version.parse(torch.__version__) >= version.parse("1.6")
-            self.scaler = torch.cuda.amp.GradScaler()
+            kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
+            self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
         # Internal references to the training objects
         self._optimizers = []
@@ -187,16 +210,18 @@ class Accelerator:
                 if isinstance(obj, torch.optim.Optimizer):
                     obj._switch_parameters(mapping)
 
-        return result
+        return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model):
         if self.device_placement:
             model = model.to(self.device)
         if self.distributed_type == DistributedType.MULTI_GPU:
+            kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.local_process_index],
                 output_device=self.local_process_index,
+                **kwargs,
             )
         if self.native_amp:
             model.forward = torch.cuda.amp.autocast()(model.forward)
