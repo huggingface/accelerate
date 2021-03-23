@@ -93,7 +93,7 @@ class Accelerator:
                     else:
                         self.ddp_handler = handler
                 elif isinstance(handler, GradScalerKwargs):
-                    if self.scaler is not None:
+                    if self.scaler_handler is not None:
                         raise ValueError("You can only pass one `GradScalerKwargs` in `kwargs_handler`.")
                     else:
                         self.scaler_handler = handler
@@ -210,7 +210,7 @@ class Accelerator:
                 if isinstance(obj, torch.optim.Optimizer):
                     obj._switch_parameters(mapping)
 
-        return result
+        return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model):
         if self.device_placement:
