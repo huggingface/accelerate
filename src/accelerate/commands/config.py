@@ -18,8 +18,10 @@ import argparse
 import json
 import os
 from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
 
+import yaml
 from accelerate.state import DistributedType
 
 
@@ -27,7 +29,14 @@ hf_cache_home = os.path.expanduser(
     os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
 )
 cache_dir = os.path.join(hf_cache_home, "accelerate")
-default_config_file = os.path.join(cache_dir, "default_config.json")
+default_json_config_file = os.path.join(cache_dir, "default_config.json")
+default_yaml_config_file = os.path.join(cache_dir, "default_config.yaml")
+
+# For backward compatibility: the default config is the json one if it's the only existing file.
+if os.path.isfile(default_yaml_config_file) or not os.path.isfile(default_json_config_file):
+    default_config_file = default_yaml_config_file
+else:
+    default_config_file = default_json_config_file
 
 
 @dataclass
@@ -41,16 +50,38 @@ class LaunchConfig:
     main_process_port: Optional[int] = None
     main_training_function: str = "main"
 
+    def __post_init__(self):
+        if isinstance(self.distributed_type, str):
+            self.distributed_type = DistributedType(self.distributed_type)
+
+    def to_dict(self):
+        result = self.__dict__
+        # For serialization, it's best to convert Enums to strings (or their underlying value type).
+        for key, value in result.items():
+            if isinstance(value, Enum):
+                result[key] = value.value
+        return result
+
     @classmethod
     def from_json_file(cls, json_file=None):
-        json_file = default_config_file if json_file is None else json_file
+        json_file = default_json_config_file if json_file is None else json_file
         with open(json_file, "r", encoding="utf-8") as f:
             return cls(**json.load(f))
 
     def to_json_file(self, json_file):
         with open(json_file, "w", encoding="utf-8") as f:
-            content = json.dumps(self.__dict__, indent=2, sort_keys=True) + "\n"
+            content = json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
             f.write(content)
+
+    @classmethod
+    def from_yaml_file(cls, yaml_file=None):
+        yaml_file = default_yaml_config_file if yaml_file is None else yaml_file
+        with open(yaml_file, "r", encoding="utf-8") as f:
+            return cls(**yaml.safe_load(f))
+
+    def to_yaml_file(self, yaml_file):
+        with open(yaml_file, "w", encoding="utf-8") as f:
+            yaml.dump(self.to_dict(), f)
 
 
 def config_command_parser(subparsers=None):
@@ -169,9 +200,12 @@ def config_command(args):
     else:
         if not os.path.isdir(cache_dir):
             os.makedirs(cache_dir)
-        config_file = default_config_file
+        config_file = default_yaml_config_file
 
-    config.to_json_file(config_file)
+    if config_file.endswith(".json"):
+        config.to_json_file(config_file)
+    else:
+        config.to_yaml_file(config_file)
 
 
 def main():
