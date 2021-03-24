@@ -81,7 +81,7 @@ class LaunchConfig:
 
     def to_yaml_file(self, yaml_file):
         with open(yaml_file, "w", encoding="utf-8") as f:
-            yaml.dump(self.to_dict(), f)
+            yaml.safe_dump(self.to_dict(), f)
 
 
 def config_command_parser(subparsers=None):
