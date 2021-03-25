@@ -1,19 +1,16 @@
-name: Quality Check
+name: Run Tests
 
 on: [pull_request]
 
 jobs:
   quality:
     runs-on: ubuntu-latest
-    strategy:
-        matrix:
-          python-version: [3.6, 3.7, 3.8]
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.6
       uses: actions/setup-python@v2
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: 3.6
     - name: Install Python dependencies
       run: pip install -e .[test]
     - name: Run Quality check
