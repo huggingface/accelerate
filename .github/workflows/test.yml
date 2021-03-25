@@ -3,7 +3,7 @@ name: Run Tests
 on: [pull_request]
 
 jobs:
-  quality:
+  test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
