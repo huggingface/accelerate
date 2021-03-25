@@ -13,5 +13,5 @@ jobs:
         python-version: 3.6
     - name: Install Python dependencies
       run: pip install -e .[test]
-    - name: Run Quality check
+    - name: Run Tests
       run: make test
