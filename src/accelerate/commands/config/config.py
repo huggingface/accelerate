@@ -15,17 +15,14 @@
 # limitations under the License.
 
 import argparse
-import json
 import os
-from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
 
-from accelerate.state import DistributedType, ComputeEnvironment
+from accelerate.state import ComputeEnvironment
+
 from .cluster import get_cluster_input
-from .sagemaker import get_sagemaker_input
 from .config_args import cache_dir, default_yaml_config_file
 from .config_utils import _ask_field, _convert_compute_environment
+from .sagemaker import get_sagemaker_input
 
 
 def get_user_input():

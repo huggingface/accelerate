@@ -1,4 +1,4 @@
-from accelerate.state import DistributedType, ComputeEnvironment
+from accelerate.state import ComputeEnvironment, DistributedType, SageMakerDistributedType
 
 
 def _ask_field(input_text, convert_value=None, default=None, error_message=None):
@@ -22,6 +22,11 @@ def _convert_compute_environment(value):
 def _convert_distributed_mode(value):
     value = int(value)
     return DistributedType(["NO", "MULTI_GPU", "TPU"][value])
+
+
+def _convert_sagemaker_distributed_mode(value):
+    value = int(value)
+    return SageMakerDistributedType(["NO", "DATA_PARALLEL", "MODEL_PARALLEL"][value])
 
 
 def _convert_yes_no_to_bool(value):

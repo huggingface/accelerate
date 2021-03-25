@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import random
 from enum import Enum
 from typing import List, Optional, Union
@@ -24,6 +25,8 @@ from .state import AcceleratorState, DistributedType, is_tpu_available
 
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
+
+_has_boto3 = importlib.util.find_spec("boto3") is not None
 
 
 class RNGType(Enum):

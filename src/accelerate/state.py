@@ -53,6 +53,23 @@ class DistributedType(str, Enum):
     TPU = "TPU"
 
 
+class SageMakerDistributedType(str, Enum):
+    """
+    Represents a type of distributed environment.
+
+    Values:
+
+        - **NO** -- Not a distributed environment, just a single process.
+        - **DATA_PARALLEL** -- using sagemaker distributed data parallelism.
+        - **MODEL_PARALLEL** -- using sagemaker distributed model parallelism.
+    """
+
+    # Subclassing str as well as Enum allows the `SageMakerDistributedType` to be JSON-serializable out of the box.
+    NO = "NO"
+    DATA_PARALLEL = "DATA_PARALLEL"
+    MODEL_PARALLEL = "MODEL_PARALLEL"
+
+
 class ComputeEnvironment(str, Enum):
     """
     Represents a type of the compute environment.

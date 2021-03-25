@@ -14,15 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import json
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 
 import yaml
-from accelerate.state import DistributedType, ComputeEnvironment
+from accelerate.state import ComputeEnvironment, DistributedType, SageMakerDistributedType
+
 
 hf_cache_home = os.path.expanduser(
     os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
@@ -38,9 +38,28 @@ else:
     default_config_file = default_json_config_file
 
 
+def load_config_from_file(config_file):
+    config_file = config_file if config_file is not None else default_config_file
+    with open(config_file, "r", encoding="utf-8") as f:
+        if config_file.endswith(".json"):
+            if json.load(f)["compute_environment"] == ComputeEnvironment.CUSTOM_CLUSTER:
+                config_class = ClusterConfig
+            else:
+                config_class = SageMakerConfig
+            return config_class.from_json_file(json_file=config_file)
+        else:
+            if yaml.safe_load(f)["compute_environment"] == ComputeEnvironment.CUSTOM_CLUSTER:
+                config_class = ClusterConfig
+            else:
+                config_class = SageMakerConfig
+            return config_class.from_yaml_file(yaml_file=config_file)
+
+
 @dataclass
 class BaseConfig:
     compute_environment: ComputeEnvironment
+    distributed_type: Union[DistributedType, SageMakerDistributedType]
+    fp16: bool
 
     def to_dict(self):
         result = self.__dict__
@@ -74,20 +93,27 @@ class BaseConfig:
     def __post_init__(self):
         if isinstance(self.distributed_type, str):
             self.compute_environment = ComputeEnvironment(self.compute_environment)
+        if isinstance(self.distributed_type, str):
+            self.distributed_type = DistributedType(self.distributed_type)
 
 
 @dataclass
 class ClusterConfig(BaseConfig):
-    distributed_type: DistributedType
     num_processes: int
-    fp16: bool
     machine_rank: int = 0
     num_machines: int = 1
     main_process_ip: Optional[str] = None
     main_process_port: Optional[int] = None
     main_training_function: str = "main"
 
-    def __post_init__(self):
-        super().__post_init__()
-        if isinstance(self.distributed_type, str):
-            self.distributed_type = DistributedType(self.distributed_type)
+
+@dataclass
+class SageMakerConfig(BaseConfig):
+    ec2_instance_type: str
+    iam_role_name: str
+    profile: Optional[str] = None
+    region: str = "us-east-1"
+    num_machines: int = 1
+    base_job_name: str = f"accelerate-sagemaker-{num_machines}"
+    pytroch_version: str = "1.6"
+    transformers_version: str = "4.4"

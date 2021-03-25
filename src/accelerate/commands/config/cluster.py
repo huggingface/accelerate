@@ -14,14 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from accelerate.state import DistributedType, ComputeEnvironment
+from accelerate.state import ComputeEnvironment, DistributedType
+
 from .config_args import ClusterConfig
 from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
 
 
 def get_cluster_input():
     distributed_type = _ask_field(
-        f"Which type of machine are you using? ([0] No distributed training, [1] multi-GPU, [2] TPU): ",
+        "Which type of machine are you using? ([0] No distributed training, [1] multi-GPU, [2] TPU): ",
         _convert_distributed_mode,
         error_message="Please enter 0, 1 or 2.",
     )

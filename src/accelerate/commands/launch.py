@@ -23,9 +23,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-
-from accelerate.commands.config.config_args import BaseConfig, default_config_file
-from accelerate.state import DistributedType
+from accelerate.commands.config.config_args import default_config_file, load_config_from_file
+from accelerate.state import ComputeEnvironment, DistributedType
 
 
 class _AddOneArg:
@@ -172,6 +171,12 @@ def tpu_launcher(args):
         xmp.spawn(main_function, args=(), nprocs=args.num_processes)
 
 
+def sagemaker_launcher(sagemaker_config, args):
+    raise NotImplementedError(
+        "Support for starting SageMaker training job is not yet implemented. Only config setup is implemented"
+    )
+
+
 def launch_command(args):
     # Sanity checks
     if args.multi_gpu and args.tpu:
@@ -179,15 +184,15 @@ def launch_command(args):
 
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
-        defaults = BaseConfig.from_json_file(json_file=args.config_file)
+        defaults = load_config_from_file(args.config_file)
         if not args.multi_gpu and not args.tpu:
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
-        if args.num_processes is None:
+        if args.num_processes is None and defaults.compute_environment == ComputeEnvironment.CUSTOM_CLUSTER:
             args.num_processes = defaults.num_processes
         if not args.fp16:
             args.fp16 = defaults.fp16
-        if args.main_training_function is None:
+        if args.main_training_function is None and defaults.compute_environment == ComputeEnvironment.CUSTOM_CLUSTER:
             args.main_training_function = defaults.main_training_function
     else:
         if args.num_processes is None:
@@ -198,6 +203,8 @@ def launch_command(args):
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
         tpu_launcher(args)
+    elif defaults.compute_environment == ComputeEnvironment.AMAZON_SAGEMAKER:
+        sagemaker_launcher(defaults, args)
     else:
         simple_launcher(args)
 
