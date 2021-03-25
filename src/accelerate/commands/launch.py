@@ -23,7 +23,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from accelerate.commands.config import LaunchConfig, default_config_file
+
+from accelerate.commands.config.config_args import BaseConfig, default_config_file
 from accelerate.state import DistributedType
 
 
@@ -178,7 +179,7 @@ def launch_command(args):
 
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
-        defaults = LaunchConfig.from_json_file(json_file=args.config_file)
+        defaults = BaseConfig.from_json_file(json_file=args.config_file)
         if not args.multi_gpu and not args.tpu:
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU

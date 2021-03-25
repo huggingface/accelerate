@@ -53,6 +53,21 @@ class DistributedType(str, Enum):
     TPU = "TPU"
 
 
+class ComputeEnvironment(str, Enum):
+    """
+    Represents a type of the compute environment.
+
+    Values:
+
+        - **CUSTOM_CLUSTER** -- private/custom cluster hardware.
+        - **AMAZON_SAGEMAKER** -- Amazon SageMaker as compute environment.
+    """
+
+    # Subclassing str as well as Enum allows the `ComputeEnvironment` to be JSON-serializable out of the box.
+    CUSTOM_CLUSTER = "CUSTOM_CLUSTER"
+    AMAZON_SAGEMAKER = "AMAZON_SAGEMAKER"
+
+
 # Inspired by Alex Martelli's 'Borg'.
 class AcceleratorState:
     """
