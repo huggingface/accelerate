@@ -173,7 +173,7 @@ def tpu_launcher(args):
 
 def sagemaker_launcher(sagemaker_config, args):
     raise NotImplementedError(
-        "Support for starting SageMaker training job is not yet implemented. Only config setup is implemented"
+        "Support for starting SageMaker training is not yet implemented. But you can create configs for it."
     )
 
 
