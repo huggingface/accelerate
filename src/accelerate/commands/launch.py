@@ -69,11 +69,11 @@ def launch_command_parser(subparsers=None):
         "--machine_rank", type=int, default=0, help="The rank of the machine on which this script is launched."
     )
     parser.add_argument(
-        "--main_process_ip", type=Optional[str], default=None, help="The IP address of the machine of rank 0."
+        "--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0."
     )
     parser.add_argument(
         "--main_process_port",
-        type=Optional[int],
+        type=int,
         default=None,
         help="The port to use to communicate with the machine of rank 0.",
     )
