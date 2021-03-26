@@ -17,13 +17,13 @@ import json
 import os
 
 from accelerate.state import ComputeEnvironment, SageMakerDistributedType
-from accelerate.utils import _has_boto3
+from accelerate.utils import is_boto3_available
 
 from .config_args import SageMakerConfig
 from .config_utils import _ask_field, _convert_sagemaker_distributed_mode, _convert_yes_no_to_bool
 
 
-if _has_boto3:
+if is_boto3_available():
     import boto3  # noqa: F401
 
 
