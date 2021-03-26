@@ -28,6 +28,11 @@ extras["test"] = [
     "pytest",
     "pytest-xdist",
 ]
+
+extras["sagemaker"] = [
+    "sagemaker",  # boto3 is a required package in sagemaker
+]
+
 setup(
     name="accelerate",
     version="0.1.0",
