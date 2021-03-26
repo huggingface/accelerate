@@ -148,7 +148,7 @@ def _gpu_gather(tensor):
 
 def gather(tensor):
     """
-    Recusrively gather tensor in a nested list/tuple/dictionary of tensors from all devices.
+    Recursively gather tensor in a nested list/tuple/dictionary of tensors from all devices.
 
     Args:
         tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
@@ -163,6 +163,47 @@ def gather(tensor):
         return _gpu_gather(tensor)
     else:
         return tensor
+
+
+def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
+    """
+    Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so they
+    can safely be gathered.
+
+    Args:
+        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            The data to gather.
+        dim (:obj:`int`, `optional`, defaults to 0):
+            The dimension on which to pad.
+        pad_index (:obj:`int`, `optional`, defaults to 0):
+            The value with which to pad.
+        pad_first (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to pad at the beginning or the end.
+    """
+    if isinstance(tensor, (list, tuple)):
+        return type(tensor)(pad_across_processes(t, dim=dim, pad_index=pad_index) for t in tensor)
+    elif isinstance(tensor, dict):
+        return type(tensor)({k: pad_across_processes(v, dim=dim, pad_index=pad_index) for k, v in tensor.items()})
+    elif not isinstance(tensor, torch.Tensor):
+        raise TypeError(f"Can't pad the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors.")
+
+    # Gather all sizes
+    size = torch.tensor(tensor.shape, device=tensor.device)[None]
+    sizes = gather(size).cpu()
+    # Then pad to the maximum size
+    max_size = max(s[dim] for s in sizes)
+    old_size = tensor.shape
+    new_size = list(old_size)
+    new_size[dim] = max_size
+    new_tensor = tensor.new_zeros(tuple(new_size)) + pad_index
+    if pad_first:
+        indices = tuple(
+            slice(max_size - old_size[dim], max_size) if i == dim else slice(None) for i in range(len(size))
+        )
+    else:
+        indices = tuple(slice(0, old_size[dim]) if i == dim else slice(None) for i in range(len(size)))
+    new_tensor[indices] = tensor
+    return new_tensor
 
 
 def wait_for_everyone():

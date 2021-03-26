@@ -22,7 +22,7 @@ from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType
-from .utils import RNGType, extract_model_from_parallel, gather, save, wait_for_everyone
+from .utils import RNGType, extract_model_from_parallel, gather, pad_across_processes, save, wait_for_everyone
 
 
 class Accelerator:
@@ -288,6 +288,23 @@ class Accelerator:
             tensors.
         """
         return gather(tensor)
+
+    def pad_across_processes(self, tensor, dim=0, pad_index=0, pad_first=False):
+        """
+        Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so
+        they can safely be gathered.
+
+        Args:
+            tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+                The data to gather.
+            dim (:obj:`int`, `optional`, defaults to 0):
+                The dimension on which to pad.
+            pad_index (:obj:`int`, `optional`, defaults to 0):
+                The value with which to pad.
+            pad_first (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to pad at the beginning or the end.
+        """
+        return pad_across_processes(tensor, dim=dim, pad_index=pad_index, pad_first=pad_first)
 
     def unwrap_model(self, model):
         """

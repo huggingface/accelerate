@@ -130,6 +130,13 @@ do with the :meth:`~accelerate.Accelerator.gather` method.
     Any instruction using your training dataloader length (for instance if you need the number of total training steps
     to create a learning rate scheduler) should go after the call to :meth:`~accelerate.Accelerator.prepare`.
 
+.. Warning::
+
+    The :meth:`~accelerate.Accelerator.gather` method requires the tensors to be all the same size on each process. If
+    you have tensors of different sizes on each process (for instance when dynamically padding to the maximum length in
+    a batch), you should use the :meth:`~accelerate.Accelerator.pad_across_processes` method to pad you tensor to the
+    biggest size across processes.
+
 
 Launching your distributed script
 -----------------------------------------------------------------------------------------------------------------------

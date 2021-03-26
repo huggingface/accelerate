@@ -21,7 +21,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 from accelerate.commands.config import LaunchConfig, default_config_file
 from accelerate.state import DistributedType
@@ -68,9 +67,7 @@ def launch_command_parser(subparsers=None):
     parser.add_argument(
         "--machine_rank", type=int, default=0, help="The rank of the machine on which this script is launched."
     )
-    parser.add_argument(
-        "--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0."
-    )
+    parser.add_argument("--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0.")
     parser.add_argument(
         "--main_process_port",
         type=int,
