@@ -20,7 +20,7 @@ import os
 from accelerate.state import ComputeEnvironment
 
 from .cluster import get_cluster_input
-from .config_args import cache_dir, default_yaml_config_file, default_config_file, load_config_from_file
+from .config_args import cache_dir, default_config_file, default_yaml_config_file, load_config_from_file
 from .config_utils import _ask_field, _convert_compute_environment
 from .sagemaker import get_sagemaker_input
 
