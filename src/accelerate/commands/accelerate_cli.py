@@ -16,7 +16,7 @@
 
 from argparse import ArgumentParser
 
-from accelerate.commands.config.config import config_command_parser
+from accelerate.commands.config import config_command_parser
 from accelerate.commands.launch import launch_command_parser
 from accelerate.commands.test import test_command_parser
 

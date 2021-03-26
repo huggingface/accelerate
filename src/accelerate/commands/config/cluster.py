@@ -76,7 +76,7 @@ def get_cluster_input():
             fp16 = False
 
     return ClusterConfig(
-        compute_environment=ComputeEnvironment.CUSTOM_CLUSTER,
+        compute_environment=ComputeEnvironment.LOCAL_MACHINE,
         distributed_type=distributed_type,
         num_processes=num_processes,
         fp16=fp16,

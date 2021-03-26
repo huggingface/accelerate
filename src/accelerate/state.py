@@ -76,12 +76,12 @@ class ComputeEnvironment(str, Enum):
 
     Values:
 
-        - **CUSTOM_CLUSTER** -- private/custom cluster hardware.
+        - **LOCAL_MACHINE** -- private/custom cluster hardware.
         - **AMAZON_SAGEMAKER** -- Amazon SageMaker as compute environment.
     """
 
     # Subclassing str as well as Enum allows the `ComputeEnvironment` to be JSON-serializable out of the box.
-    CUSTOM_CLUSTER = "CUSTOM_CLUSTER"
+    LOCAL_MACHINE = "LOCAL_MACHINE"
     AMAZON_SAGEMAKER = "AMAZON_SAGEMAKER"
 
 

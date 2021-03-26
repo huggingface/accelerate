@@ -26,7 +26,9 @@ from .state import AcceleratorState, DistributedType, is_tpu_available
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
 
-_has_boto3 = importlib.util.find_spec("boto3") is not None
+
+def is_boto3_available():
+    return importlib.util.find_spec("boto3") is not None
 
 
 class RNGType(Enum):

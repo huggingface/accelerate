@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from accelerate.commands.config.config_args import default_config_file, load_config_from_file
+from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.state import ComputeEnvironment, DistributedType
 
 
@@ -188,11 +188,11 @@ def launch_command(args):
         if not args.multi_gpu and not args.tpu:
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
-        if args.num_processes is None and defaults.compute_environment == ComputeEnvironment.CUSTOM_CLUSTER:
+        if args.num_processes is None and defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             args.num_processes = defaults.num_processes
         if not args.fp16:
             args.fp16 = defaults.fp16
-        if args.main_training_function is None and defaults.compute_environment == ComputeEnvironment.CUSTOM_CLUSTER:
+        if args.main_training_function is None and defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             args.main_training_function = defaults.main_training_function
     else:
         if args.num_processes is None:

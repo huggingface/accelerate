@@ -42,13 +42,13 @@ def load_config_from_file(config_file):
     config_file = config_file if config_file is not None else default_config_file
     with open(config_file, "r", encoding="utf-8") as f:
         if config_file.endswith(".json"):
-            if json.load(f)["compute_environment"] == ComputeEnvironment.CUSTOM_CLUSTER:
+            if json.load(f)["compute_environment"] == ComputeEnvironment.LOCAL_MACHINE:
                 config_class = ClusterConfig
             else:
                 config_class = SageMakerConfig
             return config_class.from_json_file(json_file=config_file)
         else:
-            if yaml.safe_load(f)["compute_environment"] == ComputeEnvironment.CUSTOM_CLUSTER:
+            if yaml.safe_load(f)["compute_environment"] == ComputeEnvironment.LOCAL_MACHINE:
                 config_class = ClusterConfig
             else:
                 config_class = SageMakerConfig
@@ -91,7 +91,7 @@ class BaseConfig:
             yaml.safe_dump(self.to_dict(), f)
 
     def __post_init__(self):
-        if isinstance(self.distributed_type, str):
+        if isinstance(self.compute_environment, str):
             self.compute_environment = ComputeEnvironment(self.compute_environment)
         if isinstance(self.distributed_type, str):
             self.distributed_type = DistributedType(self.distributed_type)

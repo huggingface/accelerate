@@ -32,7 +32,7 @@ def _ask_field(input_text, convert_value=None, default=None, error_message=None)
 
 def _convert_compute_environment(value):
     value = int(value)
-    return ComputeEnvironment(["CUSTOM_CLUSTER", "AMAZON_SAGEMAKER"][value])
+    return ComputeEnvironment(["LOCAL_MACHINE", "AMAZON_SAGEMAKER"][value])
 
 
 def _convert_distributed_mode(value):
