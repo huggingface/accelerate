@@ -20,6 +20,7 @@ import unittest
 import torch
 
 import accelerate
+from accelerate import Accelerator
 from accelerate.test_utils import execute_subprocess_async, require_multi_gpu
 
 
@@ -39,3 +40,43 @@ class MultiGPUTester(unittest.TestCase):
         """.split()
         cmd = [sys.executable] + distributed_args
         execute_subprocess_async(cmd, env=os.environ.copy())
+
+    @require_multi_gpu
+    def test_pad_across_processes(self):
+        distributed_args = f"""
+            -m torch.distributed.launch
+            --nproc_per_node={torch.cuda.device_count()}
+            --use_env
+            {inspect.getfile(self.__class__)}
+        """.split()
+        cmd = [sys.executable] + distributed_args
+        execute_subprocess_async(cmd, env=os.environ.copy())
+
+
+if __name__ == "__main__":
+    accelerator = Accelerator()
+    shape = (accelerator.state.process_index + 2, 10)
+    tensor = torch.randint(0, 10, shape).to(accelerator.device)
+
+    error_msg = ""
+
+    tensor1 = accelerator.pad_across_processes(tensor)
+    if tensor1.shape[0] != accelerator.state.num_processes + 1:
+        error_msg += f"Found shape {tensor1.shape} but should have {accelerator.state.num_processes + 1} at dim 0."
+    if not torch.equal(tensor1[: accelerator.state.process_index + 2], tensor):
+        error_msg += "Tensors have different values."
+    if not torch.all(tensor1[accelerator.state.process_index + 2 :] == 0):
+        error_msg += "Padding was not done with the right value (0)."
+
+    tensor2 = accelerator.pad_across_processes(tensor, pad_first=True)
+    if tensor2.shape[0] != accelerator.state.num_processes + 1:
+        error_msg += f"Found shape {tensor2.shape} but should have {accelerator.state.num_processes + 1} at dim 0."
+    index = accelerator.state.num_processes - accelerator.state.process_index - 1
+    if not torch.equal(tensor2[index:], tensor):
+        error_msg += "Tensors have different values."
+    if not torch.all(tensor2[:index] == 0):
+        error_msg += "Padding was not done with the right value (0)."
+
+    # Raise error at the end to make sure we don't stop at the first failure.
+    if len(error_msg) > 0:
+        raise ValueError(error_msg)
