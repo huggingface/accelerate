@@ -359,7 +359,7 @@ The random number generator synchronization will by default synchronize:
 - the main random number generator in PyTorch <=1.5.1
 
 You can choose which random number generator(s) to synchronize with the :obj:`rng_types` argument of the main
-:class:`~accelerate.Accelerator`. In PyTorch >= 1.6, it is recommended to rely on local :obj:`generator`s to avoid
+:class:`~accelerate.Accelerator`. In PyTorch >= 1.6, it is recommended to rely on local :obj:`generator` to avoid
 setting the same seed in the main random number generator in all processes.
 
 .. Warning::

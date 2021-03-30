@@ -53,38 +53,38 @@ limitations under the License.
 Here is an example:
 
 ```diff
-import torch
-import torch.nn.functional as F
-from datasets import load_dataset
+  import torch
+  import torch.nn.functional as F
+  from datasets import load_dataset
 
 + from accelerate import Accelerator
 + accelerator = Accelerator()
 - device = 'cpu'
 + device = accelerator.device
 
-model = torch.nn.Transformer().to(device)
-optim = torch.optim.Adam(model.parameters())
+  model = torch.nn.Transformer().to(device)
+  optim = torch.optim.Adam(model.parameters())
 
-dataset = load_dataset('my_dataset')
-data = torch.utils.data.Dataloader(dataset)
+  dataset = load_dataset('my_dataset')
+  data = torch.utils.data.Dataloader(dataset)
 
 + model, optim, data = accelerator.prepare(model, optim, data)
 
-model.train()
-for epoch in range(10):
-    for source, targets in data:
-        source = source.to(device)
-        targets = targets.to(device)
+  model.train()
+  for epoch in range(10):
+      for source, targets in data:
+          source = source.to(device)
+          targets = targets.to(device)
 
-        optimizer.zero_grad()
+          optimizer.zero_grad()
 
-        output = model(source, targets)
-        loss = F.cross_entropy(output, targets)
+          output = model(source, targets)
+          loss = F.cross_entropy(output, targets)
 
 +         accelerator.backward(loss)
 -         loss.backward()
 
-        optimizer.step()
+          optimizer.step()
 ```
 
 As you can see in this example, by adding 5-lines to any standard PyTorch training script you can now run on any kind of single or distributed node setting (single CPU, single GPU, multi-GPUs and TPUs) as well as with or without mixed precision (fp16).
@@ -94,9 +94,9 @@ In particular, the same code can then be run without modification on your local 
 🤗 Accelerate even handles the device placement for you (which requires a few more changes to your code, but is safer in general), so you can even simplify your training loop further:
 
 ```diff
-import torch
-import torch.nn.functional as F
-from datasets import load_dataset
+  import torch
+  import torch.nn.functional as F
+  from datasets import load_dataset
 
 + from accelerate import Accelerator
 + accelerator = Accelerator()
@@ -104,28 +104,28 @@ from datasets import load_dataset
 
 + model = torch.nn.Transformer()
 - model = torch.nn.Transformer().to(device)
-optim = torch.optim.Adam(model.parameters())
+  optim = torch.optim.Adam(model.parameters())
 
-dataset = load_dataset('my_dataset')
-data = torch.utils.data.Dataloader(dataset)
+  dataset = load_dataset('my_dataset')
+  data = torch.utils.data.Dataloader(dataset)
 
 + model, optim, data = accelerator.prepare(model, optim, data)
 
-model.train()
-for epoch in range(10):
-    for source, targets in data:
+  model.train()
+  for epoch in range(10):
+      for source, targets in data:
 -         source = source.to(device)
 -         targets = targets.to(device)
 
-        optimizer.zero_grad()
+          optimizer.zero_grad()
 
-        output = model(source, targets)
-        loss = F.cross_entropy(output, targets)
+          output = model(source, targets)
+          loss = F.cross_entropy(output, targets)
 
 +         accelerator.backward(loss)
 -         loss.backward()
 
-        optimizer.step()
+          optimizer.step()
 ```
 
 ## Launching script

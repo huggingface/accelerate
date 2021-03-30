@@ -47,53 +47,58 @@ A traditional training loop in PyTorch looks like this:
 
 Changing it to work with accelerate is really easy and only adds a few lines of code:
 
-.. code-block:: python
+.. code-block:: diff
 
-    from accelerate import Accelerator
+    + from accelerate import Accelerator
 
-    accelerator = Accelerator()
-    # Use the device given by the `accelerator` object.
-    device = accelerator.device
-    my_model.to(device)
-    # Pass every important object (model, optimizer, dataloader) to `accelerator.prepare`
-    my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
-        my_model, my_optimizer, my_training_dataloader
-    )
+    + accelerator = Accelerator()
+      # Use the device given by the `accelerator` object.
+    + device = accelerator.device
+      my_model.to(device)
+      # Pass every important object (model, optimizer, dataloader) to `accelerator.prepare`
+    + my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
+    +     my_model, my_optimizer, my_training_dataloader
+    + )
 
-    for batch in my_training_dataloader:
-        my_optimizer.zero_grad()
-        inputs, targets = batch
-        inputs = inputs.to(device)
-        targets = targets.to(device)
-        outputs = my_model(inputs)
-        loss = my_loss_function(outputs, targets)
-        # Just a small change for the backward instruction
-        accelerate.backward(loss)
-        my_optimizer.step()
+      for batch in my_training_dataloader:
+          my_optimizer.zero_grad()
+          inputs, targets = batch
+          inputs = inputs.to(device)
+          targets = targets.to(device)
+          outputs = my_model(inputs)
+          loss = my_loss_function(outputs, targets)
+          # Just a small change for the backward instruction
+    -     loss.backward()
+    +     accelerate.backward(loss)
+          my_optimizer.step()
 
 and with this, your script can now run in a distributed environment (multi-GPU, TPU).
 
 You can even simplify your script a bit by letting 🤗 Accelerate handle the device placement for you (which is safer,
 especially for TPU training):
 
-.. code-block:: python
+.. code-block:: diff
 
-    from accelerate import Accelerator
+    + from accelerate import Accelerator
 
-    accelerator = Accelerator()
-    # Pass every important object (model, optimizer, dataloader) to `accelerator.prepare`
-    my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
-        my_model, my_optimizer, my_training_dataloader
-    )
+    + accelerator = Accelerator()
+    - my_model.to(device)
+      # Pass every important object (model, optimizer, dataloader) to `accelerator.prepare`
+    + my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
+    +     my_model, my_optimizer, my_training_dataloader
+    + )
 
-    for batch in my_training_dataloader:
-        my_optimizer.zero_grad()
-        inputs, targets = batch
-        outputs = my_model(inputs)
-        loss = my_loss_function(outputs, targets)
-        # Just a small change for the backward instruction
-        accelerate.backward(loss)
-        my_optimizer.step()
+      for batch in my_training_dataloader:
+          my_optimizer.zero_grad()
+          inputs, targets = batch
+    -     inputs = inputs.to(device)
+    -     targets = targets.to(device)
+          outputs = my_model(inputs)
+          loss = my_loss_function(outputs, targets)
+          # Just a small change for the backward instruction
+    -     loss.backward()
+    +     accelerate.backward(loss)
+          my_optimizer.step()
 
 
 Script launcher
