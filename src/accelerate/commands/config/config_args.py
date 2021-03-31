@@ -42,13 +42,19 @@ def load_config_from_file(config_file):
     config_file = config_file if config_file is not None else default_config_file
     with open(config_file, "r", encoding="utf-8") as f:
         if config_file.endswith(".json"):
-            if json.load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE):
+            if (
+                json.load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
+                is ComputeEnvironment.LOCAL_MACHINE
+            ):
                 config_class = ClusterConfig
             else:
                 config_class = SageMakerConfig
             return config_class.from_json_file(json_file=config_file)
         else:
-            if yaml.safe_load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE):
+            if (
+                yaml.safe_load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
+                is ComputeEnvironment.LOCAL_MACHINE
+            ):
                 config_class = ClusterConfig
             else:
                 config_class = SageMakerConfig
@@ -121,5 +127,5 @@ class SageMakerConfig(BaseConfig):
     region: str = "us-east-1"
     num_machines: int = 1
     base_job_name: str = f"accelerate-sagemaker-{num_machines}"
-    pytroch_version: str = "1.6"
+    pytorch_version: str = "1.6"
     transformers_version: str = "4.4"
