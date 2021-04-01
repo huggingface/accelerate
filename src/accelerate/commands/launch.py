@@ -179,6 +179,7 @@ def launch_command(args):
     if args.multi_gpu and args.tpu:
         raise ValueError("You can only pick one between `--multi_gpu` and `--tpu`.")
 
+    defaults = None
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
@@ -200,7 +201,7 @@ def launch_command(args):
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
         tpu_launcher(args)
-    elif defaults.compute_environment == ComputeEnvironment.AMAZON_SAGEMAKER:
+    elif defaults is not None and defaults.compute_environment == ComputeEnvironment.AMAZON_SAGEMAKER:
         sagemaker_launcher(defaults, args)
     else:
         simple_launcher(args)
