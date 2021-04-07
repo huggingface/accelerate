@@ -20,10 +20,13 @@ import inspect
 import os
 import subprocess
 import sys
+from ast import literal_eval
 from pathlib import Path
+from typing import Dict, List
 
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.state import ComputeEnvironment, DistributedType
+from accelerate.utils import is_sagemaker_available
 
 
 class _AddOneArg:
@@ -168,7 +171,48 @@ def tpu_launcher(args):
         xmp.spawn(main_function, args=(), nprocs=args.num_processes)
 
 
+def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
+    parser = argparse.ArgumentParser()
+    _, unknown = parser.parse_known_args(nargs)
+    for index, argument in enumerate(unknown):
+        if argument.startswith(("-", "--")):
+            action = None
+            if index + 1 < len(unknown):  # checks if next index would be in list
+                if unknown[index + 1].startswith(("-", "--")):  # checks if next element is an key
+                    action = "store_true"
+            else:  # action_true parameter is last element
+                action = "store_true"
+            parser.add_argument(argument, action=action)  # adds ne argument to parser
+
+    return {
+        key: (literal_eval(value) if value == "True" or value == "False" else value)
+        for key, value in parser.parse_args(nargs).__dict__.items()
+    }
+
+
 def sagemaker_launcher(sagemaker_config, args):
+    if not is_sagemaker_available():
+        raise ImportError(
+            "Please install sagemaker to be able to launch training on Amazon SageMaker with `pip install accelerate[sagemaker]`"
+        )
+    from sagemaker.huggingface import HuggingFace
+
+    # extract needed arguments
+    source_dir = os.path.dirname(args.training_script)
+    if not source_dir:  # checks if string is empty
+        source_dir = "."
+    entry_point = os.path.basename(args.training_script)
+    if not entry_point.endswith(".py"):
+        raise ValueError(f'Your training script should be a python script and not "{entry_point}"')
+    hyperparameters = _convert_nargs_to_dict(args.training_script_args)
+
+    # configure session
+    print(sagemaker_config)
+
+    # print("source_dir", source_dir)
+    # print("entry_point", entry_point)
+    print("hyperparameters", hyperparameters)
+
     raise NotImplementedError(
         "Support for starting SageMaker training is not yet implemented. But you can create configs for it."
     )
