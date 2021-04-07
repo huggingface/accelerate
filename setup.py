@@ -24,6 +24,7 @@ extras["docs"] = [
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",
     "sphinx-copybutton",
+    "sphinxext-opengraph==0.4.1",
 ]
 extras["test"] = [
     "pytest",
