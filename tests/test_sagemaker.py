@@ -38,15 +38,6 @@ class MockLaunchConfig(SageMakerConfig):
     ]
 
 
-# class SageMakerConfig(unittest.TestCase):
-#     def test_kwargs_handler(self):
-#         # If no defaults are changed, `to_kwargs` returns an empty dict.
-#         self.assertDictEqual(MockClass().to_kwargs(), {})
-#         self.assertDictEqual(MockClass(a=2).to_kwargs(), {"a": 2})
-#         self.assertDictEqual(MockClass(a=2, b=True).to_kwargs(), {"a": 2, "b": True})
-#         self.assertDictEqual(MockClass(a=2, c=2.25).to_kwargs(), {"a": 2, "c": 2.25})
-
-
 class SageMakerLaunch(unittest.TestCase):
     def test_args_convert(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
@@ -58,6 +49,3 @@ class SageMakerLaunch(unittest.TestCase):
         assert isinstance(converted_args["epochs"], int)
         assert isinstance(converted_args["learning_rate"], float)
         assert isinstance(converted_args["max_steps"], float)
-
-    def test_sagemaker_config(self):
-        sagemaker_launcher(MockLaunchConfig, MockLaunchConfig)
