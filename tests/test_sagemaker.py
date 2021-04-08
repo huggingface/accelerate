@@ -3,12 +3,25 @@ import os
 import sys
 import unittest
 from dataclasses import dataclass
+from accelerate.commands.config.config_args import SageMakerConfig
 
-from accelerate.commands.launch import _convert_nargs_to_dict
+from accelerate.commands.launch import _convert_nargs_to_dict, sagemaker_launcher
+from accelerate.state import ComputeEnvironment
 
 
 @dataclass
-class MockLaunchConfig:
+class MockLaunchConfig(SageMakerConfig):
+    compute_environment = ComputeEnvironment.AMAZON_SAGEMAKER
+    fp16 = True
+    ec2_instance_type = "ml.p3.2xlarge"
+    iam_role_name = "accelerate_sagemaker_execution_role"
+    profile = "hf-sm"
+    region = "us-east-1"
+    num_machines = 1
+    base_job_name = "accelerate-sagemaker-1"
+    pytorch_version = "1.6"
+    transformers_version = "4.4"
+    training_script = "train.py"
     training_script_args = [
         "--model_name_or_path",
         "bert",
@@ -45,3 +58,6 @@ class SageMakerLaunch(unittest.TestCase):
         assert isinstance(converted_args["epochs"], int)
         assert isinstance(converted_args["learning_rate"], float)
         assert isinstance(converted_args["max_steps"], float)
+
+    def test_sagemaker_config(self):
+        sagemaker_launcher(MockLaunchConfig, MockLaunchConfig)
