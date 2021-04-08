@@ -1,11 +1,8 @@
-import inspect
-import os
-import sys
 import unittest
 from dataclasses import dataclass
-from accelerate.commands.config.config_args import SageMakerConfig
 
-from accelerate.commands.launch import _convert_nargs_to_dict, sagemaker_launcher
+from accelerate.commands.config.config_args import SageMakerConfig
+from accelerate.commands.launch import _convert_nargs_to_dict
 from accelerate.state import ComputeEnvironment
 
 
