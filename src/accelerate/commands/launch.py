@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from accelerate.commands.config import default_config_file, load_config_from_file
+from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.state import ComputeEnvironment, DistributedType
 from accelerate.utils import is_sagemaker_available
 
@@ -82,6 +83,18 @@ def launch_command_parser(subparsers=None):
         type=str,
         default=None,
         help="The name of the main function to be executed in your script (only for TPU training).",
+    )
+    parser.add_argument(
+        "--aws_access_key_id",
+        type=str,
+        default=None,
+        help="The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job",
+    )
+    parser.add_argument(
+        "--aws_secret_access_key",
+        type=str,
+        default=None,
+        help="The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job",
     )
     parser.add_argument(
         "training_script",
@@ -208,12 +221,27 @@ def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
     }
 
 
-def sagemaker_launcher(sagemaker_config, args):
+def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     if not is_sagemaker_available():
         raise ImportError(
             "Please install sagemaker to be able to launch training on Amazon SageMaker with `pip install accelerate[sagemaker]`"
         )
     from sagemaker.huggingface import HuggingFace
+
+    # configure environment
+    print("Configuring Amazon SageMaker environment")
+    os.environ["AWS_DEFAULT_REGION"] = sagemaker_config.region
+
+    # configure credentials
+    if sagemaker_config.profile is not None:
+        os.environ["AWS_PROFILE"] = sagemaker_config.profile
+    elif args.aws_access_key_id is not None and args.aws_secret_access_key is not None:
+        os.environ["AWS_ACCESS_KEY_ID"] = args.aws_access_key_id
+        os.environ["AWS_SECRET_ACCESS_KEY"] = args.aws_secret_access_key
+    else:
+        raise EnvironmentError(
+            "You need to provide an aws_access_key_id and aws_secret_access_key when not using aws_profile"
+        )
 
     # extract needed arguments
     source_dir = os.path.dirname(args.training_script)
@@ -222,18 +250,33 @@ def sagemaker_launcher(sagemaker_config, args):
     entry_point = os.path.basename(args.training_script)
     if not entry_point.endswith(".py"):
         raise ValueError(f'Your training script should be a python script and not "{entry_point}"')
-    hyperparameters = _convert_nargs_to_dict(args.training_script_args)
+
+    print("converting hyperparamters")
+    converted_hyperparameters = _convert_nargs_to_dict(args.training_script_args)
+    hyperparameters = {"fp16": args.fp16, **converted_hyperparameters}
+
+    # configure distribution set up
+    distribution = None  # TODO: not yet implemented
 
     # configure session
-    print(sagemaker_config)
-
-    # print("source_dir", source_dir)
-    # print("entry_point", entry_point)
-    print("hyperparameters", hyperparameters)
-
-    raise NotImplementedError(
-        "Support for starting SageMaker training is not yet implemented. But you can create configs for it."
+    print("creating estimator...")
+    huggingface_estimator = HuggingFace(
+        entry_point=entry_point,
+        source_dir=source_dir,
+        role=sagemaker_config.iam_role_name,
+        transformers_version="4.4",
+        pytorch_version="1.6",
+        py_version="py36",
+        base_job_name=sagemaker_config.base_job_name,
+        instance_count=sagemaker_config.num_machines,
+        instance_type=sagemaker_config.ec2_instance_type,
+        debugger_hook_config=False,
+        distribution=distribution,
+        hyperparameters=hyperparameters,
     )
+
+    huggingface_estimator.fit()
+    print(f"You can find your model data at: {huggingface_estimator.model_data}")
 
 
 def launch_command(args):

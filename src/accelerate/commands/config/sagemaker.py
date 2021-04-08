@@ -97,7 +97,8 @@ def get_sagemaker_input():
         os.environ["AWS_PROFILE"] = aws_profile
     else:
         print(
-            "Accelerate will expose AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables on the machine"
+            "Note you will need to provide AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY when you launch you training script with,"
+            "`accelerate launch --aws_access_key_id XXX --aws_secret_access_key YYY`"
         )
         aws_access_key_id = _ask_field("AWS Access Key ID: ")
         os.environ["AWS_ACCESS_KEY_ID"] = aws_access_key_id
