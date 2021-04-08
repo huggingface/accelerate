@@ -188,6 +188,8 @@ import ast
 
 
 def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
+    if len(nargs) < 0:
+        return {}
     # helper function to infer type for argsparser
     def _infer_type(s):
         try:
@@ -251,7 +253,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     if not entry_point.endswith(".py"):
         raise ValueError(f'Your training script should be a python script and not "{entry_point}"')
 
-    print("converting hyperparamters")
+    print("Converting hyperparamters")
     converted_hyperparameters = _convert_nargs_to_dict(args.training_script_args)
     hyperparameters = {"fp16": args.fp16, **converted_hyperparameters}
 
@@ -259,7 +261,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     distribution = None  # TODO: not yet implemented
 
     # configure session
-    print("creating estimator...")
+    print("Creating estimator")
     huggingface_estimator = HuggingFace(
         entry_point=entry_point,
         source_dir=source_dir,
