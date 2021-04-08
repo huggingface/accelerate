@@ -127,6 +127,7 @@ class AcceleratorState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 self.device = torch.device("cuda", self.local_process_index)
+                torch.cuda.set_device(self.device)
                 self.use_fp16 = parse_flag_from_env("USE_FP16", False) if fp16 is None else fp16
             else:
                 self.distributed_type = DistributedType.NO
