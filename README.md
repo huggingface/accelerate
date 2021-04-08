@@ -56,8 +56,8 @@ Here is an example:
   import torch
   import torch.nn.functional as F
   from datasets import load_dataset
-
 + from accelerate import Accelerator
+
 + accelerator = Accelerator()
 - device = 'cpu'
 + device = accelerator.device
@@ -66,7 +66,7 @@ Here is an example:
   optim = torch.optim.Adam(model.parameters())
 
   dataset = load_dataset('my_dataset')
-  data = torch.utils.data.Dataloader(dataset)
+  data = torch.utils.data.DataLoader(dataset, shuffle=True)
 
 + model, optim, data = accelerator.prepare(model, optim, data)
 
@@ -78,7 +78,7 @@ Here is an example:
 
           optimizer.zero_grad()
 
-          output = model(source, targets)
+          output = model(source)
           loss = F.cross_entropy(output, targets)
 
 +         accelerator.backward(loss)
@@ -97,8 +97,8 @@ In particular, the same code can then be run without modification on your local 
   import torch
   import torch.nn.functional as F
   from datasets import load_dataset
-
 + from accelerate import Accelerator
+
 + accelerator = Accelerator()
 - device = 'cpu'
 
@@ -107,7 +107,7 @@ In particular, the same code can then be run without modification on your local 
   optim = torch.optim.Adam(model.parameters())
 
   dataset = load_dataset('my_dataset')
-  data = torch.utils.data.Dataloader(dataset)
+  data = torch.utils.data.DataLoader(dataset, shuffle=True)
 
 + model, optim, data = accelerator.prepare(model, optim, data)
 
@@ -119,7 +119,7 @@ In particular, the same code can then be run without modification on your local 
 
           optimizer.zero_grad()
 
-          output = model(source, targets)
+          output = model(source)
           loss = F.cross_entropy(output, targets)
 
 +         accelerator.backward(loss)
