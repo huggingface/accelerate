@@ -171,18 +171,36 @@ def tpu_launcher(args):
         xmp.spawn(main_function, args=(), nprocs=args.num_processes)
 
 
+import ast
+
+
 def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
+    # helper function to infer type for argsparser
+    def _infer_type(s):
+        try:
+            s = float(s)
+            if s // 1 == s:
+                return int(s)
+            return s
+        except ValueError:
+            return s
+
     parser = argparse.ArgumentParser()
     _, unknown = parser.parse_known_args(nargs)
     for index, argument in enumerate(unknown):
         if argument.startswith(("-", "--")):
             action = None
+            args_type = str
             if index + 1 < len(unknown):  # checks if next index would be in list
                 if unknown[index + 1].startswith(("-", "--")):  # checks if next element is an key
                     action = "store_true"
             else:  # action_true parameter is last element
                 action = "store_true"
-            parser.add_argument(argument, action=action)  # adds ne argument to parser
+            # adds argument to parser based on action_store true
+            if action is None:
+                parser.add_argument(argument, type=_infer_type)
+            else:
+                parser.add_argument(argument, action=action)
 
     return {
         key: (literal_eval(value) if value == "True" or value == "False" else value)
