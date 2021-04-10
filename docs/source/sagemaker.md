@@ -22,7 +22,7 @@ To learn how to use the new 🤗 DLCs with the Amazon SageMaker to run your 🤗
 
 ---
 
-## Getting Started: Train a 🤗 Transformers Model
+## Getting Started
 
 ### Setup & Installation
 
@@ -34,13 +34,13 @@ After you have your AWS Account you need to install the `sagemaker` sdk for 🤗
 pip install "accelerate[sagemaker]" --upgrade
 ```
 
-🤗 Accelerate currently uses the 🤗 DLCs, with `transformers`, `datasets` and `tokenizers` pre-installed. To be able to use 🤗 Accelerate within Amazon SageMaker you need to create a `requirements.txt` in the same directory where your training script is located and add it as dependency.
+🤗 Accelerate currently uses the 🤗 DLCs, with `transformers`, `datasets` and `tokenizers` pre-installed. 🤗 Accelerate is not in the DLC yet (swill soon be added!) so to use it within Amazon SageMaker you need to create a `requirements.txt` in the same directory where your training script is located and add it as dependency.
 
 ```python
 accelerate
 ```
 
-You can also add other dependencies to this `requirements.txt`. 
+You should also add any other dependencies you have to this `requirements.txt`. 
 
 
 ### Configure 🤗 Accelerate 
