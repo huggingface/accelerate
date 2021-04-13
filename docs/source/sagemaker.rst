@@ -13,41 +13,48 @@
 Amazon SageMaker
 =======================================================================================================================
 
-Hugging Face and Amazon introduced new `Hugging Face Deep Learning Containers (DLCs) <https://github.com/aws/deep-learning-containers/blob/master/available_images.md#huggingface-training-containers>`_ to make it easier than ever to train Hugging Face Transformer models in `Amazon SageMaker <https://aws.amazon.com/sagemaker/>`_.
+Hugging Face and Amazon introduced new `Hugging Face Deep Learning Containers (DLCs)
+<https://github.com/aws/deep-learning-containers/blob/master/available_images.md#huggingface-training-containers>`_ to
+make it easier than ever to train Hugging Face Transformer models in `Amazon SageMaker
+<https://aws.amazon.com/sagemaker/>`_.
 
 To learn how to use the new 🤗 DLCs with the Amazon SageMaker to run your 🤗 Accelerate scripts and raw training loops.0
 
 
 
 Getting Started
----------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Setup & Installation
-^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-Before you can run your 🤗 Accelerate scripts on Amazon SageMaker you need to sign up for an AWS account. If you do not have an AWS account yet learn more `here <https://docs.aws.amazon.com/sagemaker/latest/dg/gs-set-up.html>`_.
+Before you can run your 🤗 Accelerate scripts on Amazon SageMaker you need to sign up for an AWS account. If you do not
+have an AWS account yet learn more `here <https://docs.aws.amazon.com/sagemaker/latest/dg/gs-set-up.html>`_.
 
-After you have your AWS Account you need to install the ``sagemaker`` sdk for 🤗 Accelerate with. 
+After you have your AWS Account you need to install the ``sagemaker`` sdk for 🤗 Accelerate with.
 
 .. code-block:: 
 
     pip install "accelerate[sagemaker]" --upgrade
 
 
-🤗 Accelerate currently uses the 🤗 DLCs, with ``transformers``, ``datasets`` and ``tokenizers`` pre-installed. 🤗 Accelerate is not in the DLC yet (swill soon be added!) so to use it within Amazon SageMaker you need to create a ``requirements.txt`` in the same directory where your training script is located and add it as dependency.
+🤗 Accelerate currently uses the 🤗 DLCs, with ``transformers``, ``datasets`` and ``tokenizers`` pre-installed. 🤗
+Accelerate is not in the DLC yet (swill soon be added!) so to use it within Amazon SageMaker you need to create a
+``requirements.txt`` in the same directory where your training script is located and add it as dependency.
 
 .. code-block:: 
 
     accelerate
 
-You should also add any other dependencies you have to this ``requirements.txt``. 
+You should also add any other dependencies you have to this ``requirements.txt``.
 
 
-Configure 🤗 Accelerate 
-^^^^^^^^^^^^^^^^^^^^^^^
+Configure 🤗 Accelerate
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You can configure the launch configuration for Amazon SageMaker the same as you do for non SageMaker training jobs with the 🤗 Accelerate CLI. 
+You can configure the launch configuration for Amazon SageMaker the same as you do for non SageMaker training jobs with
+the 🤗 Accelerate CLI.
 
 .. code-block:: 
 
@@ -55,16 +62,18 @@ You can configure the launch configuration for Amazon SageMaker the same as you 
     # In which compute environment are you running? ([0] This machine, [1] AWS (Amazon SageMaker)): 1
 
 
-🤗 Accelerate will go through a questionnaire about your Amazon SageMaker setup and create a config file you can edit. 
+🤗 Accelerate will go through a questionnaire about your Amazon SageMaker setup and create a config file you can edit.
 
 .. note::
     🤗 Accelerate is not saving any of your credentials.
 
 
 Prepare a 🤗 Accelerate fine-tuning script
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The training script is very similar to a training script you might run outside of SageMaker, but to save your model after training you need to specify either ``/opt/ml/model`` or use ``os.environ["SM_MODEL_DIR"]`` as your save directory. After training, artifacts in this directory are uploaded to S3.
+The training script is very similar to a training script you might run outside of SageMaker, but to save your model
+after training you need to specify either ``/opt/ml/model`` or use ``os.environ["SM_MODEL_DIR"]`` as your save
+directory. After training, artifacts in this directory are uploaded to S3.
 
 
 .. code-block:: diff
@@ -74,11 +83,13 @@ The training script is very similar to a training script you might run outside o
 
 
 .. warning::
-    SageMaker doesn’t support argparse actions. If you want to use, for example, boolean hyperparameters, you need to specify type as bool in your script and provide an explicit True or False value for this hyperparameter. `[REF] <https://sagemaker.readthedocs.io/en/stable/frameworks/pytorch/using_pytorch.html#prepare-a-pytorch-training-script>`_
+    SageMaker doesn’t support argparse actions. If you want to use, for example, boolean hyperparameters, you need to
+    specify type as bool in your script and provide an explicit True or False value for this hyperparameter. `[REF]
+    <https://sagemaker.readthedocs.io/en/stable/frameworks/pytorch/using_pytorch.html#prepare-a-pytorch-training-script>`_
 
 
 Launch Training
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 You can launch your training with 🤗 Accelerate CLI with
 
@@ -87,7 +98,8 @@ You can launch your training with 🤗 Accelerate CLI with
     accelerate launch path_to_script.py --args_to_the_script
 
 
-This will launch your training script using your configuration. The only thing you have to do is provide all the arguments needed by your training script as named arguments.
+This will launch your training script using your configuration. The only thing you have to do is provide all the
+arguments needed by your training script as named arguments.
 
 **Examples**
 
@@ -127,29 +139,31 @@ Outputs:
 
 
 Advanced Features
------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Distributed Training: Data Parallelism
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 *currently in development, will be supported soon.*
 
 Distributed Training: Model Parallelism
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 *currently in development, will be supported soon.*
 
 Python packages and dependencies
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-🤗 Accelerate currently uses the 🤗 DLCs, with ``transformers``, ``datasets`` and ``tokenizers`` pre-installed. If you want to use different/other Python packages you can do this by adding them to the ``requirements.txt``. These packages will be installed before your training script is started.
+🤗 Accelerate currently uses the 🤗 DLCs, with ``transformers``, ``datasets`` and ``tokenizers`` pre-installed. If you
+want to use different/other Python packages you can do this by adding them to the ``requirements.txt``. These packages
+will be installed before your training script is started.
 
 Remote scripts: Use scripts located on Github
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 *undecided if feature is needed. Contact us if you would like this feature.*
 
 Use Spot Instances
-^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 *undecided if feature is needed. Contact us if you would like this feature.*
