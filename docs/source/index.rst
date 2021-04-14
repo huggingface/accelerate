@@ -144,6 +144,11 @@ Supported integrations
     quicktour
     installation
 
+.. toctree::
+    :maxdepth: 2
+    :caption: Guides
+
+    sagemaker
 
 .. toctree::
     :maxdepth: 2
