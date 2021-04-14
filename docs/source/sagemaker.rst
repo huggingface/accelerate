@@ -104,7 +104,7 @@ arguments needed by your training script as named arguments.
 **Examples**
 
 .. note::
-    If you run one of the example scripts, don't for get to add ``accelerator.save('/opt/ml/model')`` to it.
+    If you run one of the example scripts, don't forget to add ``accelerator.save('/opt/ml/model')`` to it.
 
 .. code-block:: 
 
