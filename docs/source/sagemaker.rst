@@ -78,7 +78,7 @@ directory. After training, artifacts in this directory are uploaded to S3.
 
 .. code-block:: diff
 
-    - torch.save()
+    - torch.save('/opt/ml/model`)
     + accelerator.save('/opt/ml/model')
 
 
