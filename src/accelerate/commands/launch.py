@@ -206,9 +206,14 @@ def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
             action = None
             if index + 1 < len(unknown):  # checks if next index would be in list
                 if unknown[index + 1].startswith(("-", "--")):  # checks if next element is an key
-                    action = "store_true"
-            else:  # action_true parameter is last element
-                action = "store_true"
+                    # raise an error if element is store_true or store_false
+                    raise ValueError(
+                        "SageMaker doesn’t support argparse actions for `store_true` or `store_false`. Please define explicit types"
+                    )
+            else:  # raise an error if last element is store_true or store_false
+                raise ValueError(
+                    "SageMaker doesn’t support argparse actions for `store_true` or `store_false`. Please define explicit types"
+                )
             # adds argument to parser based on action_store true
             if action is None:
                 parser.add_argument(argument, type=_infer_type)

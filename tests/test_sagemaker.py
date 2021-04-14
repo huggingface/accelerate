@@ -1,4 +1,6 @@
 import unittest
+import pytest
+
 from dataclasses import dataclass
 
 from accelerate.commands.config.config_args import SageMakerConfig
@@ -19,7 +21,19 @@ class MockLaunchConfig(SageMakerConfig):
     pytorch_version = "1.6"
     transformers_version = "4.4"
     training_script = "train.py"
-    training_script_args = [
+    success_training_script_args = [
+        "--model_name_or_path",
+        "bert",
+        "--do_train",
+        "False",
+        "--epochs",
+        "3",
+        "--learning_rate",
+        "5e-5",
+        "--max_steps",
+        "50.5",
+    ]
+    fail_training_script_args = [
         "--model_name_or_path",
         "bert",
         "--do_train",
@@ -38,11 +52,12 @@ class MockLaunchConfig(SageMakerConfig):
 class SageMakerLaunch(unittest.TestCase):
     def test_args_convert(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
-        converted_args = _convert_nargs_to_dict(MockLaunchConfig.training_script_args)
+        converted_args = _convert_nargs_to_dict(MockLaunchConfig.success_training_script_args)
         assert isinstance(converted_args["model_name_or_path"], str)
         assert isinstance(converted_args["do_train"], bool)
-        assert isinstance(converted_args["do_test"], bool)
-        assert isinstance(converted_args["do_predict"], bool)
         assert isinstance(converted_args["epochs"], int)
         assert isinstance(converted_args["learning_rate"], float)
         assert isinstance(converted_args["max_steps"], float)
+
+        with pytest.raises(ValueError):
+            _convert_nargs_to_dict(MockLaunchConfig.fail_training_script_args)
