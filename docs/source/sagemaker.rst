@@ -85,7 +85,7 @@ directory. After training, artifacts in this directory are uploaded to S3.
 .. warning::
     SageMaker doesn’t support argparse actions. If you want to use, for example, boolean hyperparameters, you need to
     specify type as bool in your script and provide an explicit True or False value for this hyperparameter. `[REF]
-    <https://sagemaker.readthedocs.io/en/stable/frameworks/pytorch/using_pytorch.html#prepare-a-pytorch-training-script>`_
+    <https://sagemaker.readthedocs.io/en/stable/frameworks/pytorch/using_pytorch.html#prepare-a-pytorch-training-script>`__.
 
 
 Launch Training
