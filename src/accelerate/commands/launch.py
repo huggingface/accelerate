@@ -257,8 +257,9 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         raise ValueError(f'Your training script should be a python script and not "{entry_point}"')
 
     print("Converting Arguments to Hyperparameters")
-    converted_hyperparameters = _convert_nargs_to_dict(args.training_script_args)
-    hyperparameters = {"fp16": args.fp16, **converted_hyperparameters}
+    hyperparameters = _convert_nargs_to_dict(args.training_script_args)
+
+    environment = {"USE_FP16": args.fp16}  # Environment variables to be set for use during training job
 
     # configure distribution set up
     distribution = None  # TODO: not yet implemented
@@ -278,6 +279,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         debugger_hook_config=False,
         distribution=distribution,
         hyperparameters=hyperparameters,
+        environment=environment,
     )
 
     huggingface_estimator.fit()
