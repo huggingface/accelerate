@@ -40,7 +40,7 @@ After you have your AWS Account you need to install the ``sagemaker`` sdk for �
 
 
 🤗 Accelerate currently uses the 🤗 DLCs, with ``transformers``, ``datasets`` and ``tokenizers`` pre-installed. 🤗
-Accelerate is not in the DLC yet (swill soon be added!) so to use it within Amazon SageMaker you need to create a
+Accelerate is not in the DLC yet (will soon be added!) so to use it within Amazon SageMaker you need to create a
 ``requirements.txt`` in the same directory where your training script is located and add it as dependency.
 
 .. code-block:: 
