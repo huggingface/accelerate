@@ -30,7 +30,7 @@ Setup & Installation
 
 
 Before you can run your 🤗 Accelerate scripts on Amazon SageMaker you need to sign up for an AWS account. If you do not
-have an AWS account yet learn more `here <https://docs.aws.amazon.com/sagemaker/latest/dg/gs-set-up.html>`_.
+have an AWS account yet learn more `here <https://docs.aws.amazon.com/sagemaker/latest/dg/gs-set-up.html>`__.
 
 After you have your AWS Account you need to install the ``sagemaker`` sdk for 🤗 Accelerate with.
 
