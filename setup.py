@@ -37,7 +37,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.2.0",
+    version="0.3.0.dev0",
     description="Accelerate",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
