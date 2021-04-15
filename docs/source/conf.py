@@ -25,7 +25,7 @@ copyright = "2020, The Hugging Face Team, Licenced under the Apache License, Ver
 author = "huggingface"
 
 # The short X.Y version
-version = "0.1.0"
+version = "0.2.0"
 
 # -- General configuration ---------------------------------------------------
 
