@@ -28,7 +28,7 @@ pip install datasets, transformers
 
 The same script can be run in any of the following configurations:
 - single CPU or single GPU
-- multi GPUS (using PyTorch distributed mode)
+- multi GPUs (using PyTorch distributed mode)
 - (multi) TPUs
 - fp16 (mixed-precision) or fp32 (normal precision)
 
@@ -57,8 +57,8 @@ To run it in each of these various modes, use the following commands:
         ```
     * from any server with Accelerate launcher
         ```bash
-        accelerate launch --fb16 ./nlp_example.py
-- multi GPUS (using PyTorch distributed mode)
+        accelerate launch --fp16 ./nlp_example.py
+- multi GPUs (using PyTorch distributed mode)
     * With Accelerate config and launcher
         ```bash
         accelerate config  # This will create a config file on your server
@@ -103,7 +103,7 @@ The [cv_example.py](./cv_example.py) script is a simple example to fine-tune a R
 
 The same script can be run in any of the following configurations:
 - single CPU or single GPU
-- multi GPUS (using PyTorch distributed mode)
+- multi GPUs (using PyTorch distributed mode)
 - (multi) TPUs
 - fp16 (mixed-precision) or fp32 (normal precision)
 
@@ -145,8 +145,8 @@ To run it in each of these various modes, use the following commands:
         ```
     * from any server with Accelerate launcher
         ```bash
-        accelerate launch --fb16 ./cv_example.py --data_dir path_to_data
-- multi GPUS (using PyTorch distributed mode)
+        accelerate launch --fp16 ./cv_example.py --data_dir path_to_data
+- multi GPUs (using PyTorch distributed mode)
     * With Accelerate config and launcher
         ```bash
         accelerate config  # This will create a config file on your server
