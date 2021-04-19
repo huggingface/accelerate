@@ -197,7 +197,7 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
         raise TypeError(f"Can't pad the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors.")
 
     if dim >= len(tensor.shape):
-        return new_tensor
+        return tensor
 
     # Gather all sizes
     size = torch.tensor(tensor.shape, device=tensor.device)[None]
@@ -205,7 +205,7 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     # Then pad to the maximum size
     max_size = max(s[dim] for s in sizes)
     if max_size == tensor.shape[dim]:
-        return new_tensor
+        return tensor
 
     old_size = tensor.shape
     new_size = list(old_size)
