@@ -44,7 +44,7 @@ def load_config_from_file(config_file):
         if config_file.endswith(".json"):
             if (
                 json.load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
-                is ComputeEnvironment.LOCAL_MACHINE
+                == ComputeEnvironment.LOCAL_MACHINE
             ):
                 config_class = ClusterConfig
             else:
@@ -53,7 +53,7 @@ def load_config_from_file(config_file):
         else:
             if (
                 yaml.safe_load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
-                is ComputeEnvironment.LOCAL_MACHINE
+                == ComputeEnvironment.LOCAL_MACHINE
             ):
                 config_class = ClusterConfig
             else:
