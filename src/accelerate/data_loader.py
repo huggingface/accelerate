@@ -271,7 +271,7 @@ class DataLoaderShard(DataLoader):
             - :obj:`"xla"`: the XLA random number generator (TPU only)
             - :obj:`"generator"`: an optional :obj:`torch.Generator`
         generator (:obj:`torch.Generator`, `optional`):
-            A random number generator to keep synchronized accross processes.
+            A random number generator to keep synchronized across processes.
         kwargs:
             All other keyword arguments to pass to the regular :obj:`DataLoader` initialization.
     """

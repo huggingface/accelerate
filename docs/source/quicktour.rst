@@ -199,18 +199,18 @@ Training on TPU
 -----------------------------------------------------------------------------------------------------------------------
 
 If you want to launch your script on TPUs, there are a few caveats you should be aware of. Behind the scenes, the TPUs
-will create a graph of all the operations happening im your training step (forward pass, backward pass and optimizer
+will create a graph of all the operations happening in your training step (forward pass, backward pass and optimizer
 step). This is why your first step of training will always be very long as building and compiling this graph for
 optimizations takes some time.
 
 The good news is that this compilation will be cached so the second step and all the following will be much faster. The
 bas news is that it only applies if all of your steps do exactly the same operations, which implies:
 
-- having all tensors of the same length in all your lenghts
-- having static code (i.e., not a foor loop of length that could change from step to step)
+- having all tensors of the same length in all your lengths
+- having static code (i.e., not a for loop of length that could change from step to step)
 
 Having any of the things above change between two steps will trigger a new compilation which will, once again, take a
-lof of time. In practice, that means you must take special care to have all your tensors in your inputs of the same
+lot of time. In practice, that means you must take special care to have all your tensors in your inputs of the same
 shape (so no dynamic padding for instance if you are in an NLP problem) and should not use layer with for loops that
 have different lengths depending on the inputs (such as an LSTM) or the training will be excruciatingly slow.
 

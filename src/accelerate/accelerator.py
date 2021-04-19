@@ -280,7 +280,7 @@ class Accelerator:
 
         Args:
             tensor (:obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`):
-                The tensors to gather accross all processes.
+                The tensors to gather across all processes.
 
         Returns:
             :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s). Note
