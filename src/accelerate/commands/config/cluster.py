@@ -58,22 +58,22 @@ def get_cluster_input():
     else:
         main_training_function = "main"
 
-        num_processes = _ask_field(
-            "How many processes in total will you use? [1]: ",
-            lambda x: int(x),
-            default=1,
-            error_message="Please enter an integer.",
-        )
+    num_processes = _ask_field(
+        "How many processes in total will you use? [1]: ",
+        lambda x: int(x),
+        default=1,
+        error_message="Please enter an integer.",
+    )
 
-        if distributed_type != DistributedType.TPU:
-            fp16 = _ask_field(
-                "Do you wish to use FP16 (mixed precision)? [yes/NO]: ",
-                _convert_yes_no_to_bool,
-                default=False,
-                error_message="Please enter yes or no.",
-            )
-        else:
-            fp16 = False
+    if distributed_type != DistributedType.TPU:
+        fp16 = _ask_field(
+            "Do you wish to use FP16 (mixed precision)? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+    else:
+        fp16 = False
 
     return ClusterConfig(
         compute_environment=ComputeEnvironment.LOCAL_MACHINE,
