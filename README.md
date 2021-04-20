@@ -81,8 +81,8 @@ Here is an example:
           output = model(source)
           loss = F.cross_entropy(output, targets)
 
-+         accelerator.backward(loss)
 -         loss.backward()
++         accelerator.backward(loss)
 
           optimizer.step()
 ```
@@ -99,11 +99,11 @@ In particular, the same code can then be run without modification on your local 
   from datasets import load_dataset
 + from accelerate import Accelerator
 
-+ accelerator = Accelerator()
 - device = 'cpu'
++ accelerator = Accelerator()
 
-+ model = torch.nn.Transformer()
 - model = torch.nn.Transformer().to(device)
++ model = torch.nn.Transformer()
   optim = torch.optim.Adam(model.parameters())
 
   dataset = load_dataset('my_dataset')
@@ -122,8 +122,8 @@ In particular, the same code can then be run without modification on your local 
           output = model(source)
           loss = F.cross_entropy(output, targets)
 
-+         accelerator.backward(loss)
 -         loss.backward()
++         accelerator.backward(loss)
 
           optimizer.step()
 ```
