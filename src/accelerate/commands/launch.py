@@ -308,12 +308,8 @@ def launch_command(args):
                 ):
                     setattr(args, name, attr)
 
-        if args.num_processes is None and defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
-            args.num_processes = defaults.num_processes
         if not args.fp16:
             args.fp16 = defaults.fp16
-        if args.main_training_function is None and defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
-            args.main_training_function = defaults.main_training_function
     else:
         if args.num_processes is None:
             args.num_processes = 1
