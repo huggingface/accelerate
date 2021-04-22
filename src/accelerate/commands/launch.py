@@ -302,7 +302,10 @@ def launch_command(args):
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
                 # Those args are handled separately
-                if name not in ["compute_environment", "fp16", "distributed_type"] and getattr(args, name, None) is None:
+                if (
+                    name not in ["compute_environment", "fp16", "distributed_type"]
+                    and getattr(args, name, None) is None
+                ):
                     setattr(args, name, attr)
 
         if args.num_processes is None and defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
