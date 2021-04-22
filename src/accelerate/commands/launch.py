@@ -66,10 +66,10 @@ def launch_command_parser(subparsers=None):
         "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
     )
     parser.add_argument(
-        "--num_machines", type=int, default=1, help="The total number of machines used in this training."
+        "--num_machines", type=int, default=None, help="The total number of machines used in this training."
     )
     parser.add_argument(
-        "--machine_rank", type=int, default=0, help="The rank of the machine on which this script is launched."
+        "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
     )
     parser.add_argument("--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0.")
     parser.add_argument(
@@ -298,6 +298,16 @@ def launch_command(args):
         if not args.multi_gpu and not args.tpu:
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
+        if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
+            # Update args with the defaults
+            for name, attr in defaults.__dict__.items():
+                # Those args are handled separately
+                if (
+                    name not in ["compute_environment", "fp16", "distributed_type"]
+                    and getattr(args, name, None) is None
+                ):
+                    setattr(args, name, attr)
+
         if args.num_processes is None and defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             args.num_processes = defaults.num_processes
         if not args.fp16:
