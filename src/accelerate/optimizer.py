@@ -14,6 +14,8 @@
 
 import torch
 
+from packaging import version
+
 from .state import AcceleratorState, DistributedType, is_tpu_available
 
 
@@ -86,8 +88,18 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def state_dict(self):
         return self.optimizer.state_dict()
 
-    def zero_grad(self):
-        self.optimizer.zero_grad()
+    def zero_grad(self, set_to_none=None):
+        if version.parse(torch.__version__) < version.parse("1.7.0"):
+            if set_to_none is not None:
+                raise ValueError(
+                    "`set_to_none` for Optimizer.zero_grad` was introduced in PyTorch 1.7.0 and can't be used for "
+                    f"earlier versions (found version {torch.__version__})."
+                )
+            self.optimizer.zero_grad()
+        else:
+            if set_to_none is not None:
+                set_to_none = False
+            self.optimizer.zero_grad(set_to_none=set_to_none)
 
     def step(self):
         if self.state.distributed_type == DistributedType.TPU:
