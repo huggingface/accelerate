@@ -195,6 +195,29 @@ If you stored the config file in a non-default location, you can indicate it to 
 You can also override any of the arguments determined by your config file, see TODO: insert ref here.
 
 
+Launching training from a notebook
+-----------------------------------------------------------------------------------------------------------------------
+
+In Accelerate 0.3.0, a new :class:`~accelerate.notebook_launcher` has been introduced to help you launch your training
+function from a notebook. Currently supports launching a training with TPUs on Colab, or training on one GPU, but
+support for training on several GPUs (if the machine on which you are running your notebook has them) is planned for a
+future release.
+
+Just define a function responsible for your whole training and/or evaluation in a cell of the notebook, then execute a
+cell with the following code:
+
+.. code-block::
+
+    from accelerate import notebook_launcher
+
+    notebook_launcher(training_function)
+
+.. warning::
+
+    If you are training on Colab with TPUs, your :obj:`Accelerator` object should only be defined inside the training
+    function. This is because the initialization should be done inside the launcher only.
+
+
 Training on TPU
 -----------------------------------------------------------------------------------------------------------------------
 

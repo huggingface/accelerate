@@ -24,7 +24,26 @@ from .utils import PrepareForLaunch
 
 def notebook_launcher(function, args=(), num_processes=None, start_method="fork", **kwargs):
     """
-    Launches a training
+    Launches a training function, using several processes if it's possible in the current environment (TPU with
+    multiple cores for instance).
+
+    Args:
+        function (:obj:`Callable`):
+            The training function to execute. If it accepts arguments, the first argument should be the index of the
+            process run.
+        args (:obj:`Tuple`):
+            Tuple of arguments to pass to the function (it will receive :obj:`(index, *args)`).
+        num_processes (:obj:`int`, `optional`):
+            The number of processes to use for training. Will default to 8 in Colab if a TPU is available, to the
+            number of GPUs available otherwise.
+        start_method (:obj:`str`, `optional`, defaults to :obj:`"fork"`):
+            The method to use to start the various processes
+        kwargs:
+            Additional keyword arguments passed along to the multiprocess :obj:`spawn` method.
+
+    .. warning::
+
+        Multiple GPUs is not yet supported.
     """
     launcher = PrepareForLaunch(function)
 
