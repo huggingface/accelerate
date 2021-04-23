@@ -14,6 +14,7 @@
 
 import os
 import sys
+import warnings
 
 import torch
 
@@ -21,7 +22,7 @@ from .state import AcceleratorState
 from .utils import PrepareForLaunch
 
 
-def notebook_launcher(function, args=(), num_processes=None, start_method=None, **kwargs):
+def notebook_launcher(function, args=(), num_processes=None, start_method="fork", **kwargs):
     """
     Launches a training
     """
@@ -45,8 +46,6 @@ def notebook_launcher(function, args=(), num_processes=None, start_method=None, 
                 )
             if num_processes is None:
                 num_processes = 8
-            if start_method is None:
-                start_method = "fork"
 
             xmp.spawn(launcher, args=args, nprocs=num_processes, start_method=start_method, **kwargs)
         else:
@@ -56,11 +55,7 @@ def notebook_launcher(function, args=(), num_processes=None, start_method=None, 
     else:
         if num_processes is None:
             num_processes = torch.cuda.device_count() if torch.cuda.is_available() else 1
-        if start_method is None:
-            start_method = "spawn"
 
         if num_processes > 1:
-            torch.multiprocessing.spwan(launcher, args=args, nprocs=num_processes, **kwargs)
-        else:
-            # No need for a distributed launch otherwise as it's either CPU or one GPU.
-            launcher(0, *args)
+            warnings.warn("`notebook_launcher` does not support multiple GPUs yet, launching the training on one GPU.")
+        launcher(0, *args)
