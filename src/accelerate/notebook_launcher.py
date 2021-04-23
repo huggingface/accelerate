@@ -46,7 +46,7 @@ def notebook_launcher(function, args=(), num_processes=None, **kwargs):
             if num_processes is None:
                 num_processes = 8
 
-            xmp.spawn(launcher, args=args, num_processes=num_processes, **kwargs)
+            xmp.spawn(launcher, args=args, nprocs=num_processes, **kwargs)
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
             launcher(0, *args)
@@ -55,7 +55,7 @@ def notebook_launcher(function, args=(), num_processes=None, **kwargs):
         if num_processes is None:
             num_processes = torch.cuda.device_count() if torch.cuda.is_available() else 1
         if num_processes > 1:
-            torch.multiprocessing.spwan(launcher, args=args, num_processes=num_processes, **kwargs)
+            torch.multiprocessing.spwan(launcher, args=args, nprocs=num_processes, **kwargs)
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
             launcher(0, *args)
