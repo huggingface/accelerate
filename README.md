@@ -29,8 +29,8 @@ limitations under the License.
     <a href="https://github.com/huggingface/accelerate/blob/master/LICENSE">
         <img alt="License" src="https://img.shields.io/github/license/huggingface/accelerate.svg?color=blue">
     </a>
-    <a href="https://huggingface.co/transformers/index.html">
-        <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/transformers/index.html.svg?down_color=red&down_message=offline&up_message=online">
+    <a href="https://huggingface.co/docs/accelerate/index.html">
+        <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/docs/accelerate/index.html.svg?down_color=red&down_message=offline&up_message=online">
     </a>
     <a href="https://github.com/huggingface/accelerate/releases">
         <img alt="GitHub release" src="https://img.shields.io/github/release/huggingface/accelerate.svg">
@@ -127,6 +127,8 @@ In particular, the same code can then be run without modification on your local 
 
           optimizer.step()
 ```
+
+Want to learn more? Check out the [documentation](https://huggingface.co/docs/accelerate) or have look at our [examples](https://github.com/huggingface/accelerate/tree/main/examples).
 
 ## Launching script
 
