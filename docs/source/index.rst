@@ -155,5 +155,6 @@ Supported integrations
     :caption: API reference
 
     accelerator
+    launcher
     kwargs
     internal

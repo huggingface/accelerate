@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import importlib
+import inspect
 import random
 from enum import Enum
 from typing import List, Optional, Union
@@ -247,3 +248,19 @@ def save(obj, f):
         xm.save(obj, f)
     elif AcceleratorState().local_process_index == 0:
         torch.save(obj, f)
+
+
+class PrepareForLaunch:
+    """
+    Prepare a function that launches a script.
+    """
+
+    def __init__(self, launcher):
+        self.launcher = launcher
+
+    def __call__(self, index):
+        launcher_sig = inspect.signature(self.launcher)
+        if len(launcher_sig.parameters) == 0:
+            self.launcher()
+        else:
+            self.launcher(index)

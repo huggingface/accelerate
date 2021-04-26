@@ -16,7 +16,6 @@
 
 import argparse
 import importlib
-import inspect
 import os
 import subprocess
 import sys
@@ -27,15 +26,7 @@ from typing import Dict, List
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.state import ComputeEnvironment, DistributedType
-from accelerate.utils import is_sagemaker_available
-
-
-class _AddOneArg:
-    def __init__(self, launcher):
-        self.launcher = launcher
-
-    def __call__(self, index):
-        self.launcher()
+from accelerate.utils import PrepareForLaunch, is_sagemaker_available
 
 
 def launch_command_parser(subparsers=None):
@@ -176,12 +167,7 @@ def tpu_launcher(args):
     # Patch sys.argv
     sys.argv = [args.training_script] + args.training_script_args
 
-    # If the function does not take one argument, launch will fail
-    launcher_sig = inspect.signature(main_function)
-    if len(launcher_sig.parameters) == 0:
-        xmp.spawn(_AddOneArg(main_function), args=(), nprocs=args.num_processes)
-    else:
-        xmp.spawn(main_function, args=(), nprocs=args.num_processes)
+    xmp.spawn(PrepareForLaunch(main_function), args=(), nprocs=args.num_processes)
 
 
 def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
