@@ -128,7 +128,7 @@ def simple_launcher(args):
 
 def multi_gpu_launcher(args):
     cmd = [sys.executable, "-m", "torch.distributed.launch"]
-    cmd.extend(["--nproc_per_node", str(args.num_processes), "--use_env"])
+    cmd.extend(["--use_env"])
     if args.num_machines > 1:
         cmd.extend(
             [
@@ -140,7 +140,7 @@ def multi_gpu_launcher(args):
                 str(args.machine_rank),
                 "--master_addr",
                 args.main_process_ip,
-                "--node_rank",
+                "--master_port",
                 str(args.main_process_port),
             ]
         )
