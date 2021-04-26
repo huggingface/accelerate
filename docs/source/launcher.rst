@@ -14,7 +14,7 @@
 Notebook Launcher
 =======================================================================================================================
 
-Launch your training function from a notebook. Currently supports launching a training with TPUs on Colab, or training
+Launch your training function inside a notebook. Currently supports launching a training with TPUs on [Google Colab](https://colab.research.google.com/), or training
 on one GPU, but support for training on several GPUs (if the machine on which you are running your notebook has them)
 is planned for a future release.
 
