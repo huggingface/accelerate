@@ -46,7 +46,7 @@ def get_cluster_input():
             main_process_ip = _ask_field(
                 "What is the IP address of the machine that will host the main process? ",
             )
-            main_process_ip = _ask_field(
+            main_process_port = _ask_field(
                 "What is the port you will use to communicate with the main process? ",
                 lambda x: int(x),
             )
