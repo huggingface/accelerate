@@ -34,12 +34,8 @@ def notebook_launcher(function, args=(), num_processes=None, start_method="fork"
         args (:obj:`Tuple`):
             Tuple of arguments to pass to the function (it will receive :obj:`(index, *args)`).
         num_processes (:obj:`int`, `optional`):
-            The number of processes to use for training. Will default to 8 in Colab if a TPU is available, to the
-            number of GPUs available otherwise.
-        start_method (:obj:`str`, `optional`, defaults to :obj:`"fork"`):
-            The method to use to start the various processes
-        kwargs:
-            Additional keyword arguments passed along to the multiprocess :obj:`spawn` method.
+            The number of processes to use for training. Will default to 8 in Colab/Kaggle if a TPU is available, to
+            the number of GPUs available otherwise.
 
     .. warning::
 
@@ -47,26 +43,29 @@ def notebook_launcher(function, args=(), num_processes=None, start_method="fork"
     """
     launcher = PrepareForLaunch(function)
 
-    # Are we in a google colab?
+    # Are we in a google colab or a Kaggle Kernel?
     if "IPython" in sys.modules:
-        in_colab = "google.colab" in str(sys.modules["IPython"].get_ipython())
+        in_colab_or_kaggle = "google.colab" in str(sys.modules["IPython"].get_ipython())
+    elif any(key.startswith("KAGGLE") for key in os.environ.keys()):
+        in_colab_or_kaggle = True
     else:
-        in_colab = False
+        in_colab_or_kaggle = False
 
-    if in_colab:
+    if in_colab_or_kaggle:
         if os.environ.get("TPU_NAME", None) is not None:
             # TPU launch
             import torch_xla.distributed.xla_multiprocessing as xmp
 
             if len(AcceleratorState._shared_state) > 0:
                 raise ValueError(
-                    "To train on TPU in colab, the `Accelerator` should only be initialized inside your training "
-                    "function. Restart your notebook and make sure no cells initializes an `Accelerator`."
+                    "To train on TPU in Colab or Kaggle Kernel, the `Accelerator` should only be initialized inside "
+                    "your training function. Restart your notebook and make sure no cells initializes an "
+                    "`Accelerator`."
                 )
             if num_processes is None:
                 num_processes = 8
 
-            xmp.spawn(launcher, args=args, nprocs=num_processes, start_method=start_method, **kwargs)
+            xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
             launcher(0, *args)

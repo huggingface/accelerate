@@ -14,13 +14,14 @@
 Notebook Launcher
 =======================================================================================================================
 
-Launch your training function inside a notebook. Currently supports launching a training with TPUs on [Google Colab](https://colab.research.google.com/), or training
-on one GPU, but support for training on several GPUs (if the machine on which you are running your notebook has them)
-is planned for a future release.
+Launch your training function inside a notebook. Currently supports launching a training with TPUs on [Google
+Colab](https://colab.research.google.com/) and [Kaggle kernels](https://www.kaggle.com/code), or training on one GPU,
+but support for training on several GPUs (if the machine on which you are running your notebook has them) is planned
+for a future release.
 
 .. warning::
 
-    If you are training on Colab with TPUs, your :obj:`Accelerator` object should only be defined inside the training
-    function. This is because the initialization should be done inside the launcher only.
+    If you are training on Colab or a Kaggle kernel with TPUs, your :obj:`Accelerator` object should only be defined
+    inside the training function. This is because the initialization should be done inside the launcher only.
 
 .. autofunction:: accelerate.notebook_launcher
