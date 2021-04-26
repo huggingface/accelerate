@@ -19,6 +19,9 @@ Colab](https://colab.research.google.com/) and [Kaggle kernels](https://www.kagg
 but support for training on several GPUs (if the machine on which you are running your notebook has them) is planned
 for a future release.
 
+An example can be found in `this notebook
+<https://github.com/huggingface/notebooks/blob/master/examples/accelerate/simple_nlp_example.ipynb>`__.
+
 .. warning::
 
     If you are training on Colab or a Kaggle kernel with TPUs, your :obj:`Accelerator` object should only be defined
