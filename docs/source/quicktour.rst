@@ -199,9 +199,8 @@ Launching training from a notebook
 -----------------------------------------------------------------------------------------------------------------------
 
 In Accelerate 0.3.0, a new :class:`~accelerate.notebook_launcher` has been introduced to help you launch your training
-function from a notebook. Currently supports launching a training with TPUs on Colab, or training on one GPU, but
-support for training on several GPUs (if the machine on which you are running your notebook has them) is planned for a
-future release.
+function from a notebook. This launcher supports launching a training with TPUs on Colab or Kaggle, as well as training
+on several GPUs (if the machine on which you are running your notebook has them).
 
 Just define a function responsible for your whole training and/or evaluation in a cell of the notebook, then execute a
 cell with the following code:
@@ -214,8 +213,8 @@ cell with the following code:
 
 .. warning::
 
-    If you are training on Colab with TPUs, your :obj:`Accelerator` object should only be defined inside the training
-    function. This is because the initialization should be done inside the launcher only.
+    Your :obj:`Accelerator` object should only be defined inside the training function. This is because the
+    initialization should be done inside the launcher only.
 
 
 Training on TPU

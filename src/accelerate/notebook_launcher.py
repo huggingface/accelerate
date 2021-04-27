@@ -17,12 +17,13 @@ import sys
 import warnings
 
 import torch
+from torch.multiprocessing import start_processes
 
 from .state import AcceleratorState
 from .utils import PrepareForLaunch
 
 
-def notebook_launcher(function, args=(), num_processes=None, start_method="fork", **kwargs):
+def notebook_launcher(function, args=(), num_processes=None, use_fp16=False):
     """
     Launches a training function, using several processes if it's possible in the current environment (TPU with
     multiple cores for instance).
@@ -32,17 +33,13 @@ def notebook_launcher(function, args=(), num_processes=None, start_method="fork"
             The training function to execute. If it accepts arguments, the first argument should be the index of the
             process run.
         args (:obj:`Tuple`):
-            Tuple of arguments to pass to the function (it will receive :obj:`(index, *args)`).
+            Tuple of arguments to pass to the function (it will receive :obj:`*args`).
         num_processes (:obj:`int`, `optional`):
             The number of processes to use for training. Will default to 8 in Colab/Kaggle if a TPU is available, to
             the number of GPUs available otherwise.
-
-    .. warning::
-
-        Multiple GPUs is not yet supported.
+        use_fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If :obj:`True`, will use mixed precision training on multi-GPU .
     """
-    launcher = PrepareForLaunch(function)
-
     # Are we in a google colab or a Kaggle Kernel?
     if "IPython" in sys.modules:
         in_colab_or_kaggle = "google.colab" in str(sys.modules["IPython"].get_ipython())
@@ -65,15 +62,60 @@ def notebook_launcher(function, args=(), num_processes=None, start_method="fork"
             if num_processes is None:
                 num_processes = 8
 
+            launcher = PrepareForLaunch(function, distributed_type="TPU")
+            print(f"Launching a training on {num_processes} TPU cores.")
             xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
-            launcher(0, *args)
+            if torch.cuda.is_available():
+                print(f"Launching training on one GPU.")
+            else:
+                print(f"Launching training on CPU.")
+            function(*args)
 
     else:
         if num_processes is None:
-            num_processes = torch.cuda.device_count() if torch.cuda.is_available() else 1
+            raise ValueError(
+                "You have to specify the number of GPUs you would like to use, add `num_process=...` to your call."
+            )
 
         if num_processes > 1:
-            warnings.warn("`notebook_launcher` does not support multiple GPUs yet, launching the training on one GPU.")
-        launcher(0, *args)
+            # Multi-GPU launch
+            if len(AcceleratorState._shared_state) > 0:
+                raise ValueError(
+                    "To launch a multi-GPU training from your notebook, the `Accelerator` should only be initialized "
+                    "inside your training function. Restart your notebook and make sure no cells initializes an "
+                    "`Accelerator`."
+                )
+
+            if torch.cuda.is_initialized():
+                raise ValueError(
+                    "To launch a multi-GPU training from your notebook, you need to avoid running any instruction "
+                    "using `torch.cuda` in any cell. Restart your notebook and make sure no cells use any CUDA "
+                    "function."
+                )
+
+            # torch.distributed will expect a few environment variable to be here. We set the ones common to each
+            # process here (the other ones will be set be the launcher).
+            os.environ["WORLD_SIZE"] = str(num_processes)
+            os.environ["MASTER_ADDR"] = "127.0.0.1"
+            os.environ["MASTER_PORT"] = "29500"
+            os.environ["USE_FP16"] = str(use_fp16)
+
+            launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
+            try:
+                print(f"Launching a training on {num_processes} GPUs.")
+                start_processes(launcher, nprocs=num_processes, start_method="fork")
+            finally:
+                # Clean up the environment variables set.
+                del os.environ["WORLD_SIZE"]
+                del os.environ["MASTER_ADDR"]
+                del os.environ["MASTER_PORT"]
+
+        else:
+            # No need for a distributed launch otherwise as it's either CPU or one GPU.
+            if torch.cuda.is_available():
+                print(f"Launching training on one GPU.")
+            else:
+                print(f"Launching training on CPU.")
+            function(*args)
