@@ -14,7 +14,6 @@
 
 import os
 import sys
-import warnings
 
 import torch
 from torch.multiprocessing import start_processes
@@ -68,9 +67,9 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False):
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
             if torch.cuda.is_available():
-                print(f"Launching training on one GPU.")
+                print("Launching training on one GPU.")
             else:
-                print(f"Launching training on CPU.")
+                print("Launching training on CPU.")
             function(*args)
 
     else:
@@ -115,7 +114,7 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False):
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
             if torch.cuda.is_available():
-                print(f"Launching training on one GPU.")
+                print("Launching training on one GPU.")
             else:
-                print(f"Launching training on CPU.")
+                print("Launching training on CPU.")
             function(*args)
