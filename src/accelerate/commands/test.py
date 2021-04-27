@@ -46,7 +46,7 @@ def test_command(args):
     script_name = os.path.sep.join(__file__.split(os.path.sep)[:-2] + ["test_utils", "test_script.py"])
 
     test_args = f"""
-        {script_name} --config_file={args.config_file}
+        --config_file={args.config_file} {script_name}
     """.split()
     cmd = ["accelerate-launch"] + test_args
     result = execute_subprocess_async(cmd, env=os.environ.copy())
