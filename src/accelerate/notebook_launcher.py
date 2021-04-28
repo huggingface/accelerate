@@ -100,7 +100,7 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, use
             # process here (the other ones will be set be the launcher).
             os.environ["WORLD_SIZE"] = str(num_processes)
             os.environ["MASTER_ADDR"] = "127.0.0.1"
-            os.environ["MASTER_PORT"] = use_port
+            os.environ["MASTER_PORT"] = str(use_port)
             os.environ["USE_FP16"] = str(use_fp16)
 
             launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
