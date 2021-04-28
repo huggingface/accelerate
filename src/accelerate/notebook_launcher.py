@@ -22,7 +22,7 @@ from .state import AcceleratorState
 from .utils import PrepareForLaunch
 
 
-def notebook_launcher(function, args=(), num_processes=None, use_fp16=False):
+def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, use_port="29500"):
     """
     Launches a training function, using several processes if it's possible in the current environment (TPU with
     multiple cores for instance).
@@ -37,7 +37,9 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False):
             The number of processes to use for training. Will default to 8 in Colab/Kaggle if a TPU is available, to
             the number of GPUs available otherwise.
         use_fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, will use mixed precision training on multi-GPU .
+            If :obj:`True`, will use mixed precision training on multi-GPU.
+        use_port (:obj:`str`, `optional`, defaults to :obj:`"29500"`):
+            The port to use to communicate between processes when launching a multi-GPU training.
     """
     # Are we in a google colab or a Kaggle Kernel?
     if "IPython" in sys.modules:
@@ -98,7 +100,7 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False):
             # process here (the other ones will be set be the launcher).
             os.environ["WORLD_SIZE"] = str(num_processes)
             os.environ["MASTER_ADDR"] = "127.0.0.1"
-            os.environ["MASTER_PORT"] = "29500"
+            os.environ["MASTER_PORT"] = use_port
             os.environ["USE_FP16"] = str(use_fp16)
 
             launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
