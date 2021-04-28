@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import importlib
-import inspect
+import os
 import random
 from enum import Enum
 from typing import List, Optional, Union
@@ -252,15 +252,23 @@ def save(obj, f):
 
 class PrepareForLaunch:
     """
-    Prepare a function that launches a script.
+    Prepare a function that will launched in a distributed setup.
+
+    Args:
+        launcher (:obj:`Callable`):
+            The function to launch.
+        distributed_type (:class:`~accelerate.state.DistributedType`):
+            The distributed type to prepare for.
     """
 
-    def __init__(self, launcher):
+    def __init__(self, launcher, distributed_type="NO"):
         self.launcher = launcher
+        self.distributed_type = DistributedType(distributed_type)
 
-    def __call__(self, index):
-        launcher_sig = inspect.signature(self.launcher)
-        if len(launcher_sig.parameters) == 0:
-            self.launcher()
-        else:
-            self.launcher(index)
+    def __call__(self, index, *args):
+        if self.distributed_type == DistributedType.MULTI_GPU:
+            # Prepare the environment for torch.distributed
+            os.environ["LOCAL_RANK"] = str(index)
+            os.environ["RANK"] = str(index)
+
+        self.launcher(*args)
