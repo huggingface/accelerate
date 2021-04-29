@@ -137,7 +137,8 @@ def multi_gpu_launcher(args):
         )
     else:
         cmd.extend(["--nproc_per_node", str(args.num_processes)])
-        cmd.extend(["--master_port", str(args.main_process_port)])
+        if args.main_process_port is not None:
+            cmd.extend(["--master_port", str(args.main_process_port)])
     cmd.append(args.training_script)
     cmd.extend(args.training_script_args)
 
