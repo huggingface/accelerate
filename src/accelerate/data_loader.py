@@ -418,7 +418,8 @@ def prepare_data_loader(
     }
 
     # Need to provide batch_size as batch_sampler is None for Iterable dataset
-    if new_batch_sampler is None: kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
+    if new_batch_sampler is None:
+        kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
 
     return DataLoaderShard(
         new_dataset,
