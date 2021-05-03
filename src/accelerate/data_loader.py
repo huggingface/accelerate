@@ -364,10 +364,8 @@ def prepare_data_loader(
         )
 
     new_dataset = dataloader.dataset
-    new_batch_sampler = dataloader.batch_sampler
-    if isinstance(new_dataset, IterableDataset):
-        # Iterable dataset doesn't like batch_sampler, data_loader creates a default one for it
-        new_batch_sampler = None
+    # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
+    new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
     generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
     if num_processes != 1:
