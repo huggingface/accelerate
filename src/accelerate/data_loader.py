@@ -365,6 +365,9 @@ def prepare_data_loader(
 
     new_dataset = dataloader.dataset
     new_batch_sampler = dataloader.batch_sampler
+    if isinstance(new_dataset, IterableDataset):
+        # Iterable dataset doesn't like batch_sampler, data_loader creates a default one for it
+        new_batch_sampler = None
     generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
     if num_processes != 1:
@@ -413,6 +416,10 @@ def prepare_data_loader(
         for k in _PYTORCH_DATALOADER_KWARGS
         if k not in ignore_kwargs
     }
+
+    # Need to provide batch_size as batch_sampler is None for Iterable dataset
+    if new_batch_sampler is None: kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
+
     return DataLoaderShard(
         new_dataset,
         device=device if put_on_device else None,
