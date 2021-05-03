@@ -151,6 +151,15 @@ For instance, here is how you would run the GLUE example on the MRPC task (from 
 accelerate launch examples/nlp_example.py
 ```
 
+## Launching multi-CPU run using MPI
+
+🤗 Here is another way to launch multi-CPU run using MPI. You can learn how to install Open MPI on [this page](https://www.open-mpi.org/faq/?category=building#easy-build). You can use Intel MPI or MVAPICH as well.
+Once you have MPI setup on your cluster, just run:
+
+```bash
+mpirun -np 2 python examples/nlp_example.py
+```
+
 ## Launching your training from a notebook
 
 🤗 Accelerate also provides a `notebook_launcher` function you can use in a notebook to launch a distributed training. This is especially useful for Colab or Kaggle notebooks with a TPU backend. Just define your training loop in a `training_function` then in your last cell, add:
@@ -188,6 +197,8 @@ pip install accelerate
 ## Supported integrations
 
 - CPU only
+- multi-CPU on one node (machine)
+- multi-CPU on several nodes (machines)
 - single GPU
 - multi-GPU on one node (machine)
 - multi-GPU on several nodes (machines)
