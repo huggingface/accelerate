@@ -22,16 +22,16 @@ from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no
 
 def get_cluster_input():
     distributed_type = _ask_field(
-        "Which type of machine are you using? ([0] No distributed training, [1] multi-GPU, [2] TPU): ",
+        "Which type of machine are you using? ([0] No distributed training, [1] multi-CPU, [2] multi-GPU, [3] TPU): ",
         _convert_distributed_mode,
-        error_message="Please enter 0, 1 or 2.",
+        error_message="Please enter 0, 1, 2 or 3.",
     )
 
     machine_rank = 0
     num_machines = 1
     main_process_ip = None
     main_process_port = None
-    if distributed_type == DistributedType.MULTI_GPU:
+    if distributed_type == DistributedType.MULTI_GPU or distributed_type == DistributedType.MULTI_CPU:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
             lambda x: int(x),

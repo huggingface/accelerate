@@ -223,6 +223,9 @@ class Accelerator:
                 output_device=self.local_process_index,
                 **kwargs,
             )
+        elif self.distributed_type == DistributedType.MULTI_CPU:
+            kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+            model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
             model.forward = torch.cuda.amp.autocast()(model.forward)
         return model
