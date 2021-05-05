@@ -17,6 +17,7 @@ import torch
 from packaging import version
 
 from .state import AcceleratorState, DistributedType, is_tpu_available
+from .utils import honor_type
 
 
 if is_tpu_available():
@@ -25,7 +26,7 @@ if is_tpu_available():
 
 def move_to_device(state, device):
     if isinstance(state, (list, tuple)):
-        return type(state)(move_to_device(t, device) for t in state)
+        return honor_type(state, (move_to_device(t, device) for t in state))
     elif isinstance(state, dict):
         return type(state)({k: move_to_device(v, device) for k, v in state.items()})
     elif isinstance(state, torch.Tensor):
