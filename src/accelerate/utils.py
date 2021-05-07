@@ -99,6 +99,17 @@ def synchronize_rng_states(rng_types: List[Union[str, RNGType]], generator: Opti
         synchronize_rng_state(RNGType(rng_type), generator=generator)
 
 
+def honor_type(obj, generator):
+    """
+    Cast a generator to the same type as obj (list, tuple or namedtuple)
+    """
+    # There is no direct check whether an object if of type namedtuple sadly, this is a workaround.
+    if isinstance(obj, tuple) and hasattr(obj, "_fields"):
+        # Can instantiate a namedtuple from a generator directly, contrary to a tuple/list.
+        return type(obj)(*list(generator))
+    return type(obj)(generator)
+
+
 def send_to_device(tensor, device):
     """
     Recursively sends the elements in a nested list/tuple/dictionary of tensors to a given device.
@@ -113,7 +124,7 @@ def send_to_device(tensor, device):
         The same data structure as :obj:`tensor` with all tensors sent to the proper device.
     """
     if isinstance(tensor, (list, tuple)):
-        return type(tensor)(send_to_device(t, device) for t in tensor)
+        return honor_type(tensor, (send_to_device(t, device) for t in tensor))
     elif isinstance(tensor, dict):
         return type(tensor)({k: send_to_device(v, device) for k, v in tensor.items()})
     elif not hasattr(tensor, "to"):
@@ -138,7 +149,7 @@ def extract_model_from_parallel(model):
 
 def _tpu_gather(tensor, name="tensor"):
     if isinstance(tensor, (list, tuple)):
-        return type(tensor)(_tpu_gather(t, name=f"{name}_{i}") for i, t in enumerate(tensor))
+        return honor_type(tensor, (_tpu_gather(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
     elif isinstance(tensor, dict):
         return type(tensor)({k: _tpu_gather(v, name=f"{name}_{k}") for k, v in tensor.items()})
     elif not isinstance(tensor, torch.Tensor):
@@ -148,7 +159,7 @@ def _tpu_gather(tensor, name="tensor"):
 
 def _gpu_gather(tensor):
     if isinstance(tensor, (list, tuple)):
-        return type(tensor)(_gpu_gather(t) for t in tensor)
+        return honor_type(tensor, (_gpu_gather(t) for t in tensor))
     elif isinstance(tensor, dict):
         return type(tensor)({k: _gpu_gather(v) for k, v in tensor.items()})
     elif not isinstance(tensor, torch.Tensor):
@@ -198,7 +209,7 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
             Whether to pad at the beginning or the end.
     """
     if isinstance(tensor, (list, tuple)):
-        return type(tensor)(pad_across_processes(t, dim=dim, pad_index=pad_index) for t in tensor)
+        return honor_type(tensor, (pad_across_processes(t, dim=dim, pad_index=pad_index) for t in tensor))
     elif isinstance(tensor, dict):
         return type(tensor)({k: pad_across_processes(v, dim=dim, pad_index=pad_index) for k, v in tensor.items()})
     elif not isinstance(tensor, torch.Tensor):
