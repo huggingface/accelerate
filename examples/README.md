@@ -110,7 +110,7 @@ The same script can be run in any of the following configurations:
 Prior to running it you should install timm and torchvision:
 
 ```bash
-pip install timm, torchvision
+pip install timm torchvision
 ```
 
 and you should download the data with the following commands:
