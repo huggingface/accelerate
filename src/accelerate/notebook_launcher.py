@@ -42,10 +42,10 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, use
             The port to use to communicate between processes when launching a multi-GPU training.
     """
     # Are we in a google colab or a Kaggle Kernel?
-    if "IPython" in sys.modules:
-        in_colab_or_kaggle = "google.colab" in str(sys.modules["IPython"].get_ipython())
-    elif any(key.startswith("KAGGLE") for key in os.environ.keys()):
+    if any(key.startswith("KAGGLE") for key in os.environ.keys()):
         in_colab_or_kaggle = True
+    elif "IPython" in sys.modules:
+        in_colab_or_kaggle = "google.colab" in str(sys.modules["IPython"].get_ipython())
     else:
         in_colab_or_kaggle = False
 
