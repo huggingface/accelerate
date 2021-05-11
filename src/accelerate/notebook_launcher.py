@@ -106,7 +106,7 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, use
             launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
             try:
                 print(f"Launching a training on {num_processes} GPUs.")
-                start_processes(launcher, nprocs=num_processes, start_method="fork")
+                start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
             finally:
                 # Clean up the environment variables set.
                 del os.environ["WORLD_SIZE"]
