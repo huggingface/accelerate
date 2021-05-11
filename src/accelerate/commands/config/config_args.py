@@ -39,7 +39,8 @@ else:
 
 
 def load_config_from_file(config_file):
-    config_file = config_file if config_file is not None else default_config_file
+    config_file_exists = config_file is not None and os.path.isfile(config_file)
+    config_file = config_file if config_file_exists else default_config_file
     with open(config_file, "r", encoding="utf-8") as f:
         if config_file.endswith(".json"):
             if (
