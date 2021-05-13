@@ -12,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# deepspeed run_glue_no_trainer.py --task_name "mrpc" --model_name_or_path "distilbert-base-uncased" --max_train_steps 20 --output_dir "dummy"
+
 """ Finetuning a 🤗 Transformers model for sequence classification on GLUE."""
 import argparse
 import logging
@@ -22,10 +25,11 @@ import random
 import datasets
 from datasets import load_dataset, load_metric
 from torch.utils.data.dataloader import DataLoader
+import torch
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
+from accelerate import Accelerator, DeepSpeedPlugin
 from transformers import (
     AdamW,
     AutoConfig,
@@ -38,7 +42,6 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +111,12 @@ def parse_args():
         help="Batch size (per device) for the evaluation dataloader.",
     )
     parser.add_argument(
+        "--local_rank",
+        type=int,
+        required=True,
+        help="local rank",
+    )
+    parser.add_argument(
         "--learning_rate",
         type=float,
         default=5e-5,
@@ -162,7 +171,8 @@ def main():
     args = parse_args()
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator()
+    deepspeed_plugin = DeepSpeedPlugin(zero_stage=2, gradient_accumulation_steps=args.gradient_accumulation_steps)
+    accelerator = Accelerator(fp16=True, deepspeed_plugin=deepspeed_plugin)
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -340,7 +350,8 @@ def main():
             "weight_decay": 0.0,
         },
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+    # optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate) # 🤗optim are not supported in DeepSpeed
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Prepare everything with our `accelerator`.
     model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
@@ -391,9 +402,10 @@ def main():
             loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
             accelerator.backward(loss)
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
                 optimizer.step()
-                lr_scheduler.step()
+                if not optimizer.is_overflow:
+                    lr_scheduler.step()
                 optimizer.zero_grad()
                 progress_bar.update(1)
                 completed_steps += 1
@@ -403,7 +415,8 @@ def main():
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
-            outputs = model(**batch)
+            with torch.no_grad():
+                outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
             metric.add_batch(
                 predictions=accelerator.gather(predictions),
@@ -414,9 +427,10 @@ def main():
         logger.info(f"epoch {epoch}: {eval_metric}")
 
     if args.output_dir is not None:
-        accelerator.wait_for_everyone()
-        unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+        # accelerator.wait_for_everyone()
+        # unwrapped_model = accelerator.unwrap_model(model)
+        # unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+        model.save_checkpoint(args.output_dir)
 
     if args.task_name == "mnli":
         # Final evaluation on mismatched validation set
@@ -428,7 +442,8 @@ def main():
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
-            outputs = model(**batch)
+            with torch.no_grad():
+                outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             metric.add_batch(
                 predictions=accelerator.gather(predictions),
@@ -441,3 +456,28 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# CODE WILL LOOK LIKE THIS:
+
+# from accelerator import Accelerator, DeepSpeedPlugin
+# accelerator = Accelerator(fp16=True, deepspeed_plugin=DeepSpeedPlugin(zero_stage=2))
+# model: nn.Module
+# optimizer: torch.optim.Optimizer
+# tr_data: DataLoader
+# eval_data: DataLoader
+# model, optimizer, tr_data, eval_data = accelerator.prepare(model, optimizer, tr_data, eval_data)
+
+# for e in range(epochs):
+#     for batch in tr_data:
+#         output = model(**batch)
+#         loss = output.loss
+#         loss = loss / gradient_accumulation_steps
+#         accelerator.backward(loss)
+#         if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+#             optimizer.step()
+#             optimizer.zero_grad()
+#             if not optimizer.is_overflow:
+#                 lr_scheduler.step()
+
+#     for batch in eval_data:
+#       normal accelerated distributed evaluation

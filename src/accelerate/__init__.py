@@ -5,6 +5,7 @@
 __version__ = "0.4.0.dev0"
 
 from .accelerator import Accelerator
+from .deepspeed_utils import DeepSpeedPlugin
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs
 from .notebook_launcher import notebook_launcher
 from .state import DistributedType

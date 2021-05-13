@@ -34,6 +34,12 @@ try:
 except ImportError:
     _tpu_available = False
 
+try:
+    import deepspeed
+
+    _deepspeed_available = True
+except:
+    _deepspeed_available = False
 
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
@@ -51,6 +57,9 @@ def is_ccl_available():
 def is_tpu_available():
     return _tpu_available
 
+
+def is_deepspeed_available():
+    return _deepspeed_available
 
 def parse_flag_from_env(key, default=False):
     value = os.environ.get(key, str(default))
