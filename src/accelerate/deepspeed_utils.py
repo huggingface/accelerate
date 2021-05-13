@@ -16,19 +16,13 @@ import torch
 import torch.nn as nn
 from dataclasses import dataclass, field
 
-try:
-    from apex import amp
-
-    _apex_available = True
-except ImportError:
-    _apex_available = False
-
+from .state import is_apex_available
 
 @dataclass
 class DeepSpeedPlugin:
 
     gradient_accumulation_steps: int = field(default=1, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"})
-    zero_stage: int = field(default=0, metadata={"help": "Available options are 0,1"})
+    zero_stage: int = field(default=0, metadata={"help": "Possible options are 0,1,2"})
     is_train_batch_min: str = field(default=True, metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"})
 
     fp16: bool = field(repr=False, default=False, metadata={"help": "You need not define this here"})
@@ -39,6 +33,7 @@ class DeepSpeedPlugin:
             "fp16": {"enabled": False if self.fp16 is None else self.fp16},
             "gradient_accumulation_steps": self.gradient_accumulation_steps,
             "zero_optimization": {"stage": self.zero_stage},
+            "steps_per_print": float("inf"), # this will stop deepspeed from logging @ stdout
         }
 
 
@@ -101,7 +96,7 @@ class DeepSpeedEngineWrapper(nn.Module):
             )
             self.optimizer.backward(loss)
         elif self.amp_enabled():
-            assert _apex_available, "You have enabled apex in deepspeed_plugin, but apex is unavailable in your machine"
+            assert is_apex_available, "You have enabled apex in deepspeed_plugin, but apex is unavailable in your machine"
             # AMP requires delaying unscale when inside gradient accumulation boundaries
             # https://nvidia.github.io/apex/advanced.html#gradient-accumulation-across-iterations
             delay_unscale = not self.is_gradient_accumulation_boundary()

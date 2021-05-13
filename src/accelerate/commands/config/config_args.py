@@ -112,12 +112,24 @@ class BaseConfig:
 
 @dataclass
 class ClusterConfig(BaseConfig):
-    num_processes: int
+    num_processes: int = None
     machine_rank: int = 0
     num_machines: int = 1
     main_process_ip: Optional[str] = None
     main_process_port: Optional[int] = None
     main_training_function: str = "main"
+
+    def __post_init__(self):
+        super().__post_init__()
+        assert self.num_processes is not None, "num_processes can't be None"
+
+
+@dataclass
+class DeepSpeedConfig(ClusterConfig):
+    zero_stage: int = 2
+    gradient_accumulation_steps: int = 1
+    is_train_batch_min: bool = True
+    # TODO: add other args also
 
 
 @dataclass

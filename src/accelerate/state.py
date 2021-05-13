@@ -15,6 +15,7 @@
 import os
 from distutils.util import strtobool
 from enum import Enum
+from dataclasses import replace
 
 import torch
 
@@ -41,6 +42,14 @@ try:
 except:
     _deepspeed_available = False
 
+try:
+    from apex import amp
+
+    _apex_available = True
+except ImportError:
+    _apex_available = False
+
+
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
     for e in env_keys:
@@ -52,6 +61,10 @@ def get_int_from_env(env_keys, default):
 
 def is_ccl_available():
     return _ccl_available
+
+
+def is_apex_available():
+    return _apex_available
 
 
 def is_tpu_available():
@@ -75,6 +88,7 @@ class DistributedType(str, Enum):
         - **NO** -- Not a distributed environment, just a single process.
         - **MULTI_CPU** -- Distributed on multiple CPU nodes.
         - **MULTI_GPU** -- Distributed on multiple GPUs.
+        - **DEEPSPEED** -- Using DeepSpeed.
         - **TPU** -- Distributed on TPUs.
     """
 
@@ -82,6 +96,7 @@ class DistributedType(str, Enum):
     NO = "NO"
     MULTI_CPU = "MULTI_CPU"
     MULTI_GPU = "MULTI_GPU"
+    DEEPSPEED = "DEEPSPEED"
     TPU = "TPU"
 
 
@@ -136,10 +151,11 @@ class AcceleratorState:
 
     _shared_state = {}
 
-    def __init__(self, fp16: bool = None, cpu: bool = False, _from_accelerator: bool = False):
+    def __init__(self, fp16: bool = None, cpu: bool = False, deepspeed_plugin=None, _from_accelerator: bool = False):
         self.__dict__ = self._shared_state
         if not getattr(self, "initialized", False):
             self.backend = None
+            self.deepspeed_plugin = None
             if not _from_accelerator:
                 raise ValueError(
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
@@ -152,6 +168,19 @@ class AcceleratorState:
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
                 self.use_fp16 = False
+            elif deepspeed_plugin is not None and not cpu:
+                assert is_deepspeed_available(), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
+                self.distributed_type = DistributedType.DEEPSPEED
+                if not torch.distributed.is_initialized():
+                    torch.distributed.init_process_group(backend="nccl")
+                    self.backend = "nccl"
+                self.num_processes = torch.distributed.get_world_size()
+                self.process_index = torch.distributed.get_rank()
+                self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
+                self.device = torch.device("cuda", self.local_process_index)
+                torch.cuda.set_device(self.device)
+                self.use_fp16 = False # deepspeed handles fp16 using ds_config
+                self.deepspeed_plugin = replace(deepspeed_plugin, fp16=fp16)
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
@@ -209,11 +238,14 @@ class AcceleratorState:
             self.initialized = True
 
     def __repr__(self):
-        return (
+        use_fp16 = self.deepspeed_plugin.fp16 if self.distributed_type == DistributedType.DEEPSPEED else self.use_fp16
+        repr = (
             f"Distributed environment: {self.distributed_type}{('  Backend: ' + self.backend) if self.backend else ''}\n"
             f"Num processes: {self.num_processes}\n"
             f"Process index: {self.process_index}\n"
             f"Local process index: {self.local_process_index}\n"
             f"Device: {self.device}\n"
-            f"Use FP16 precision: {self.use_fp16}\n"
+            f"Use FP16 precision: {use_fp16}\n"
         )
+        repr += (f"ds_config: {self.deepspeed_plugin.ds_config}\n", ) if self.distributed_type == DistributedType.DEEPSPEED else ()
+        return repr

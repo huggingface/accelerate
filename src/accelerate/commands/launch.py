@@ -151,6 +151,44 @@ def multi_gpu_launcher(args):
         raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
 
 
+def deepspeed_launcher(args):
+    # TODO: need to complete this
+
+    cmd = ["deepspeed"]
+    if args.num_machines > 1:
+        cmd.extend(
+            [
+                "--num_gpus",
+                str(args.num_processes // args.num_machines),
+                "--num_nodes",
+                str(args.num_machines),
+                "--node_rank",
+                str(args.machine_rank),
+                "--master_addr",
+                args.main_process_ip,
+                "--master_port",
+                str(args.main_process_port),
+            ]
+        )
+    else:
+        cmd.extend(["--num_gpus", str(args.num_processes)])
+
+    cmd.append(args.training_script)
+    cmd.extend(args.training_script_args)
+
+    current_env = os.environ.copy()
+    current_env["USE_FP16"] = str(args.fp16)
+    current_env["ZERO_STAGE"] = int(args.zero_stage)
+    current_env["GRADIENT_ACCUMULATION_STEPS"] = int(args.gradient_accumulation_steps)
+    current_env["IS_TRAIN_BATCH_MIN"] = bool(args.is_train_batch_min)
+    # TODO: fix them in main script
+
+    process = subprocess.Popen(cmd, env=current_env)
+    process.wait()
+    if process.returncode != 0:
+        raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+
+
 def tpu_launcher(args):
     import torch_xla.distributed.xla_multiprocessing as xmp
 
@@ -276,14 +314,15 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
 def launch_command(args):
     # Sanity checks
-    if args.multi_gpu and args.tpu:
+    if args.multi_gpu and args.tpu: # TODO: fix this for deepspeed
         raise ValueError("You can only pick one between `--multi_gpu` and `--tpu`.")
 
     defaults = None
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
-        if not args.multi_gpu and not args.tpu:
+        if not args.multi_gpu and not args.tpu and not args.deepspeed:
+            args.deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
@@ -303,7 +342,9 @@ def launch_command(args):
             args.num_processes = 1
 
     # Use the proper launcher
-    if args.multi_gpu and not args.cpu:
+    if args.deepspeed and not args.cpu:
+        deepspeed_launcher(args)
+    elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
         tpu_launcher(args)
