@@ -63,12 +63,12 @@ Here is an example:
 + device = accelerator.device
 
   model = torch.nn.Transformer().to(device)
-  optim = torch.optim.Adam(model.parameters())
+  optimizer = torch.optim.Adam(model.parameters())
 
   dataset = load_dataset('my_dataset')
   data = torch.utils.data.DataLoader(dataset, shuffle=True)
 
-+ model, optim, data = accelerator.prepare(model, optim, data)
++ model, optimizer, data = accelerator.prepare(model, optimizer, data)
 
   model.train()
   for epoch in range(10):
@@ -104,12 +104,12 @@ In particular, the same code can then be run without modification on your local 
 
 - model = torch.nn.Transformer().to(device)
 + model = torch.nn.Transformer()
-  optim = torch.optim.Adam(model.parameters())
+  optimizer = torch.optim.Adam(model.parameters())
 
   dataset = load_dataset('my_dataset')
   data = torch.utils.data.DataLoader(dataset, shuffle=True)
 
-+ model, optim, data = accelerator.prepare(model, optim, data)
++ model, optimizer, data = accelerator.prepare(model, optimizer, data)
 
   model.train()
   for epoch in range(10):
