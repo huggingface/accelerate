@@ -45,6 +45,12 @@ def launch_command_parser(subparsers=None):
         help="Whether or not this should launch a distributed GPU training.",
     )
     parser.add_argument(
+        "--deepspeed",
+        default=False,
+        action="store_true",
+        help="Whether to use deepspeed.",
+    )
+    parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
     parser.add_argument(
@@ -94,6 +100,12 @@ def launch_command_parser(subparsers=None):
             "The full path to the script to be launched in parallel, followed by all the arguments for the training "
             "script."
         ),
+    )
+    parser.add_argument(
+        "--deepspeed_zero_stage",
+        default=2,
+        type=int,
+        help="DeepSpeed's ZeRO optimization stage.",
     )
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
@@ -178,10 +190,7 @@ def deepspeed_launcher(args):
 
     current_env = os.environ.copy()
     current_env["USE_FP16"] = str(args.fp16)
-    current_env["ZERO_STAGE"] = int(args.zero_stage)
-    current_env["GRADIENT_ACCUMULATION_STEPS"] = int(args.gradient_accumulation_steps)
-    current_env["IS_TRAIN_BATCH_MIN"] = bool(args.is_train_batch_min)
-    # TODO: fix them in main script
+    current_env["DEEPSPEED_ZERO_STAGE"] = str(args.ds_config["zero_stage"])
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
@@ -314,8 +323,8 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
 def launch_command(args):
     # Sanity checks
-    if args.multi_gpu and args.tpu: # TODO: fix this for deepspeed
-        raise ValueError("You can only pick one between `--multi_gpu` and `--tpu`.")
+    if sum([args.multi_gpu, args.tpu, args.deepspeed]) > 1:
+        raise ValueError("You can only pick one between `--multi_gpu`, `deepspeed`, `--tpu`.")
 
     defaults = None
     # Get the default from the config file.
@@ -340,6 +349,11 @@ def launch_command(args):
     else:
         if args.num_processes is None:
             args.num_processes = 1
+        
+        if args.deepspeed:
+            args.ds_config = {
+                "zero_stage": args.deepspeed_zero_stage,
+            }
 
     # Use the proper launcher
     if args.deepspeed and not args.cpu:
