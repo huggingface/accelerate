@@ -112,10 +112,11 @@ def parse_args():
         default=8,
         help="Batch size (per device) for the evaluation dataloader.",
     )
+    # TODO: is there any way, we can remove it if we use deepspeed?
     parser.add_argument(
         "--local_rank",
         type=int,
-        required=True,
+        default=0,
         help="local rank",
     )
     parser.add_argument(
@@ -173,7 +174,7 @@ def main():
     args = parse_args()
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    deepspeed_plugin = DeepSpeedPlugin(zero_stage=0, gradient_accumulation_steps=args.gradient_accumulation_steps)
+    # deepspeed_plugin = DeepSpeedPlugin(zero_stage=0, gradient_accumulation_steps=args.gradient_accumulation_steps)
     accelerator = Accelerator(fp16=True, deepspeed_plugin=None)
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(

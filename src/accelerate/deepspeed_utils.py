@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from dataclasses import dataclass, field
+
 from deepspeed import DeepSpeedEngine
 
 from .optimizer import AcceleratedOptimizer
@@ -21,23 +23,34 @@ from .state import is_apex_available
 
 @dataclass
 class DeepSpeedPlugin:
-    # TODO: need to fix env variables
 
     gradient_accumulation_steps: int = field(
-        default=1, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
+        default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
     )
-    zero_stage: int = field(default=None, metadata={"help": "Possible options are 0,1,2; Default will be taken from environment variable"})
+    zero_stage: int = field(
+        default=None, metadata={"help": "Possible options are 0,1,2; Default will be taken from environment variable"}
+    )
     is_train_batch_min: str = field(
         default=True,
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
     )
 
-    fp16: bool = field(repr=False, default=False, metadata={"help": "You need not define this here"})
+    fp16: bool = field(repr=False, default=None, metadata={"help": "You need not define this here"})
 
     def __post_init__(self):
+
+        if self.gradient_accumulation_steps is None:
+            self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
+
+        if self.zero_stage is None:
+            self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 0))
+
+        if self.fp16 is None:
+            self.fp16 = bool(os.environ.get("USE_FP16", "False"))
+
         self.ds_config = {
             "train_batch_size": None,
-            "fp16": {"enabled": False if self.fp16 is None else self.fp16},
+            "fp16": {"enabled": self.fp16},
             "gradient_accumulation_steps": self.gradient_accumulation_steps,
             "zero_optimization": {"stage": self.zero_stage},
             "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout

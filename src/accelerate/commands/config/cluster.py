@@ -54,7 +54,7 @@ def get_cluster_input():
     ds_config = None
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
         use_deepspeed = _ask_field(
-            "Do you want to use DeepSpeed? [NO]",
+            "Do you want to use DeepSpeed (yes/no)? [NO]",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
@@ -65,9 +65,15 @@ def get_cluster_input():
         ds_config = {}
         if distributed_type == DistributedType.DEEPSPEED:
             ds_config["zero_stage"] = _ask_field(
-                "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2)? [2]: ",
+                "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2)? [0]: ",
                 lambda x: int(x),
-                default=2,
+                default=0,
+            )
+
+            ds_config["gradient_accumulation_steps"] = _ask_field(
+                "How many gradient accumulation steps you're passing in your script? [1]: ",
+                lambda x: int(x),
+                default=1,
             )
 
     if distributed_type == DistributedType.TPU:

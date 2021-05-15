@@ -45,7 +45,7 @@ def launch_command_parser(subparsers=None):
         help="Whether or not this should launch a distributed GPU training.",
     )
     parser.add_argument(
-        "--deepspeed",
+        "--use_deepspeed",
         default=False,
         action="store_true",
         help="Whether to use deepspeed.",
@@ -63,7 +63,7 @@ def launch_command_parser(subparsers=None):
         "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
     )
     parser.add_argument(
-        "--num_machines", type=int, default=None, help="The total number of machines used in this training."
+        "--num_machines", type=int, default=1, help="The total number of machines used in this training."
     )
     parser.add_argument(
         "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
@@ -102,11 +102,18 @@ def launch_command_parser(subparsers=None):
         ),
     )
     parser.add_argument(
-        "--deepspeed_zero_stage",
-        default=2,
+        "--zero_stage",
+        default=0,
         type=int,
-        help="DeepSpeed's ZeRO optimization stage.",
+        help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed).",
     )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        default=1,
+        type=int,
+        help="No of gradient_accumulation_steps used in your training script (useful only when `use_deepspeed` flag is passed).",
+    )
+
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
 
@@ -164,7 +171,6 @@ def multi_gpu_launcher(args):
 
 
 def deepspeed_launcher(args):
-    # TODO: need to complete this
 
     cmd = ["deepspeed"]
     if args.num_machines > 1:
@@ -190,7 +196,9 @@ def deepspeed_launcher(args):
 
     current_env = os.environ.copy()
     current_env["USE_FP16"] = str(args.fp16)
-    current_env["DEEPSPEED_ZERO_STAGE"] = str(args.ds_config["zero_stage"])
+    current_env["USE_DEEPSPEED"] = "true"
+    current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
+    current_env["GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
@@ -323,20 +331,23 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
 def launch_command(args):
     # Sanity checks
-    if sum([args.multi_gpu, args.tpu, args.deepspeed]) > 1:
-        raise ValueError("You can only pick one between `--multi_gpu`, `deepspeed`, `--tpu`.")
+    if sum([args.multi_gpu, args.tpu, args.use_deepspeed]) > 1:
+        raise ValueError("You can only pick one between `--multi_gpu`, `--use_deepspeed`, `--tpu`.")
 
     defaults = None
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
-        if not args.multi_gpu and not args.tpu and not args.deepspeed:
-            args.deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
+        if not args.multi_gpu and not args.tpu and not args.use_deepspeed:
+            args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
+                if name == "ds_config":
+                    continue
+
                 # Those args are handled separately
                 if (
                     name not in ["compute_environment", "fp16", "distributed_type"]
@@ -346,17 +357,15 @@ def launch_command(args):
 
         if not args.fp16:
             args.fp16 = defaults.fp16
+        if args.use_deepspeed:
+            args.zero_stage = defaults.ds_config["zero_stage"]
+            args.gradient_accumulation_steps = defaults.ds_config["gradient_accumulation_steps"]
     else:
         if args.num_processes is None:
             args.num_processes = 1
-        
-        if args.deepspeed:
-            args.ds_config = {
-                "zero_stage": args.deepspeed_zero_stage,
-            }
 
     # Use the proper launcher
-    if args.deepspeed and not args.cpu:
+    if args.use_deepspeed and not args.cpu:
         deepspeed_launcher(args)
     elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)

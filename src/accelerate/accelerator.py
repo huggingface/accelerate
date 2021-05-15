@@ -88,10 +88,12 @@ class Accelerator:
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
-        if deepspeed_plugin is not None:
+        if deepspeed_plugin is None:
+            deepspeed_plugin = DeepSpeedPlugin()  # init from env variables
+        else:
             assert isinstance(
                 deepspeed_plugin, DeepSpeedPlugin
-            ), "deepspeed_plugin must be instance of DeepSpeedPlugin"
+            ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
 
         self.state = AcceleratorState(fp16=fp16, cpu=cpu, deepspeed_plugin=deepspeed_plugin, _from_accelerator=True)
 
@@ -162,7 +164,11 @@ class Accelerator:
 
     @property
     def use_fp16(self):
-        return self.state.deepspeed_plugin.fp16 if self.distributed_type == DistributedType.DEEPSPEED else self.state.use_fp16
+        return (
+            self.state.deepspeed_plugin.fp16
+            if self.distributed_type == DistributedType.DEEPSPEED
+            else self.state.use_fp16
+        )
 
     def print(self, *args, **kwargs):
         """
@@ -257,13 +263,16 @@ class Accelerator:
         bz = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
         assert (
             len(bz) > 0
-        ), "You must specify training_dataloader in `accelerate.prepare()` when using DeepSpeed"
-        logger.info(
-            "Since you passed both train & eval dataloader, `is_train_batch_min` will decide the `train_batch_size`"
-        )
+        ), "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
+        if len(bz) > 1:
+            logger.info(
+                "Since you passed both train & eval dataloader, `is_train_batch_min` will decide the `train_batch_size`"
+            )
         batch_size_per_device = min(bz) if ds_plugin.is_train_batch_min else max(bz)
 
-        self.ds_config["train_batch_size"] = batch_size_per_device * ds_plugin.gradient_accumulation_steps * self.num_processes
+        self.ds_config["train_batch_size"] = (
+            batch_size_per_device * ds_plugin.gradient_accumulation_steps * self.num_processes
+        )
 
         result = [self._prepare_one(obj) if isinstance(obj, torch.utils.data.DataLoader) else obj for obj in args]
 
@@ -278,11 +287,7 @@ class Accelerator:
         # useful when only eval_dataloader is given into `accelerator.prepare()`
         if model is not None:
             engine = DeepSpeedEngineWrapper(
-                args=None,
-                model=model,
-                optimizer=optimizer,
-                config_params=self.ds_config,
-                dist_init_required=False
+                args=None, model=model, optimizer=optimizer, config_params=self.ds_config, dist_init_required=False
             )
             for i in range(len(result)):
                 if isinstance(result[i], torch.nn.Module):
@@ -292,7 +297,9 @@ class Accelerator:
             self.deepspeed_engine = engine  # pointing for deepspeed_engine.backward()
 
         if self.distributed_type == DistributedType.DEEPSPEED:
-            assert hasattr(self, "model"), "Accelerator instance must have model as its attribute"
+            assert hasattr(
+                self, "deepspeed_engine"
+            ), "You need to pass the model along the optimizer when using Deepspeed."
 
         return tuple(result)
 

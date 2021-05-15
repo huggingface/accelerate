@@ -156,7 +156,7 @@ class AcceleratorState:
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
                 self.use_fp16 = False
-            elif deepspeed_plugin is not None and not cpu:
+            elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (
                     is_deepspeed_available()
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
