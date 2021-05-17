@@ -253,24 +253,36 @@ class Accelerator:
         else:
             loss.backward()
 
+    def unscale_gradients(self, optimizer=None):
+        """
+        Unscale the gradients in mixed precision training with AMP. This is a noop in all other settings.
+
+        Args:
+            optimizer (:obj:`torch.optim.Optimizer` or :obj:`List[torch.optim.Optimizer]`, `optional`):
+                The optimizer(s) for which to unscale gradients. If not set, will unscale gradients on all optimizers
+                that were passed to :meth:`~accelerate.Accelerator.prepare`.
+        """
+        if self.state.use_fp16 and self.native_amp:
+            if optimizer is None:
+                # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
+                optimizer = self._optimizers
+            elif not isinstance(optimizer, (tuple, list)):
+                optimizer = [optimizer]
+            for optimizer in optimizer:
+                self.scaler.unscale_(optimizer)
+
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
         """
         Should be used in place of :func:`torch.nn.utils.clip_grad_norm_`.
         """
-        # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
-        if self.state.use_fp16 and self.native_amp:
-            for optimizer in self._optimizers:
-                self.scaler.unscale_(optimizer)
+        self.unscale_gradients()
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
     def clip_grad_value_(self, parameters, clip_value):
         """
         Should be used in place of :func:`torch.nn.utils.clip_grad_value_`.
         """
-        # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
-        if self.state.use_fp16 and self.native_amp:
-            for optimizer in self._optimizers:
-                self.scaler.unscale_(optimizer)
+        self.unscale_gradients()
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
     def gather(self, tensor):
