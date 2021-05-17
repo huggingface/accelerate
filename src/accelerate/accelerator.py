@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 from typing import List, Optional, Union
 
 import torch
@@ -337,6 +338,15 @@ class Accelerator:
                 Where to save the content of :obj:`obj`.
         """
         save(obj, f)
+
+    def free_memory(self):
+        """
+        Will release all references to the internal objects stored and call the garbage collector. You should call this
+        method between two trainings with different models/optimizers.
+        """
+        self._optimizers = []
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def _get_named_parameters(self, *args):
         named_parameters = {}
