@@ -77,16 +77,17 @@ class DeepSpeedEngineWrapper(DeepSpeedEngine):
             self._take_model_step(lr_kwargs)
 
     def backward(self, loss):
-        """ DeepSpeedEngine.backward() with no loss scaling & no profiling """
+        """ DeepSpeedEngine.backward() with with no loss scaling; no profiling but with `micro_steps` update """
+
         if self.zero_optimization():
             self.optimizer.is_gradient_accumulation_boundary = self.is_gradient_accumulation_boundary()
             self.optimizer.backward(loss)
         elif self.amp_enabled():
+            # AMP requires delaying unscale when inside gradient accumulation boundaries
+            # https://nvidia.github.io/apex/advanced.html#gradient-accumulation-across-iterations
             assert (
                 is_apex_available
             ), "You have enabled apex in deepspeed_plugin, but apex is unavailable in your machine"
-            # AMP requires delaying unscale when inside gradient accumulation boundaries
-            # https://nvidia.github.io/apex/advanced.html#gradient-accumulation-across-iterations
             delay_unscale = not self.is_gradient_accumulation_boundary()
             with amp.scale_loss(loss, self.optimizer, delay_unscale=delay_unscale) as scaled_loss:
                 scaled_loss.backward()
@@ -94,6 +95,9 @@ class DeepSpeedEngineWrapper(DeepSpeedEngine):
             self.optimizer.backward(loss)
         else:
             loss.backward()
+
+        if self.enable_backward_allreduce:
+            self.allreduce_gradients()
 
         # this will ensure deepspeed gradient_accumulation matches user's accumulation
         self.micro_steps += 1
