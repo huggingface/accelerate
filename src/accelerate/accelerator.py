@@ -431,6 +431,7 @@ class Accelerator:
         method between two trainings with different models/optimizers.
         """
         self._optimizers = []
+        self.deepspeed_engine = None
         gc.collect()
         torch.cuda.empty_cache()
 
