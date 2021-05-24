@@ -237,9 +237,6 @@ class AcceleratorState:
             f"Device: {self.device}\n"
             f"Use FP16 precision: {use_fp16}\n"
         )
-        repr += (
-            (f"ds_config: {self.deepspeed_plugin.ds_config}\n",)
-            if self.distributed_type == DistributedType.DEEPSPEED
-            else ()
-        )
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            repr += (f"ds_config: {self.deepspeed_plugin.ds_config}\n",)
         return repr

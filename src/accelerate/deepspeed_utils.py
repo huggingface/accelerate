@@ -21,6 +21,10 @@ from .optimizer import AcceleratedOptimizer
 from .state import is_apex_available
 
 
+if is_apex_available():
+    import amp
+
+
 @dataclass
 class DeepSpeedPlugin:
 
@@ -37,13 +41,10 @@ class DeepSpeedPlugin:
 
     auto_opt_mapping: bool = field(
         default=True,
-        metadata={"help": "whether to map torch.adam to deepspeed optimizer version of adam based on config"}
+        metadata={"help": "whether to map torch.adam to deepspeed optimizer version of adam based on config"},
     )
 
-    offload_optimizer_device: bool = field(
-        default=None,
-        metadata={"help": "Possible options are none|cpu|nvme"}
-    )
+    offload_optimizer_device: bool = field(default=None, metadata={"help": "Possible options are none|cpu|nvme"})
 
     fp16: bool = field(repr=False, default=None, metadata={"help": "You need not define this here"})
 
@@ -87,7 +88,7 @@ class DeepSpeedEngineWrapper(DeepSpeedEngine):
         self.micro_steps = -1
 
     def step(self, lr_kwargs=None):
-        """ DeepSpeedEngine.step() without `micro_steps` update & no profiling """
+        """DeepSpeedEngine.step() without `micro_steps` update & no profiling"""
         if self.is_gradient_accumulation_boundary():  # it shouldn't matter whether we keep this line or not
             if self.progressive_layer_drop:
                 self.progressive_layer_drop.update_state(self.global_steps)
@@ -95,7 +96,7 @@ class DeepSpeedEngineWrapper(DeepSpeedEngine):
             self._take_model_step(lr_kwargs)
 
     def backward(self, loss):
-        """ DeepSpeedEngine.backward() with with no loss scaling; no profiling but with `micro_steps` update """
+        """DeepSpeedEngine.backward() with with no loss scaling; no profiling but with `micro_steps` update"""
 
         if self.zero_optimization():
             self.optimizer.is_gradient_accumulation_boundary = self.is_gradient_accumulation_boundary()
@@ -103,9 +104,6 @@ class DeepSpeedEngineWrapper(DeepSpeedEngine):
         elif self.amp_enabled():
             # AMP requires delaying unscale when inside gradient accumulation boundaries
             # https://nvidia.github.io/apex/advanced.html#gradient-accumulation-across-iterations
-            assert (
-                is_apex_available
-            ), "You have enabled apex in deepspeed_plugin, but apex is unavailable in your machine"
             delay_unscale = not self.is_gradient_accumulation_boundary()
             with amp.scale_loss(loss, self.optimizer, delay_unscale=delay_unscale) as scaled_loss:
                 scaled_loss.backward()
@@ -136,15 +134,15 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
         self.model = model
 
     def zero_grad(self, set_to_none=None):
-        """ `model.step()` is doing that automatically. Therefore, it's implementation is not needed """
+        """`model.step()` is doing that automatically. Therefore, it's implementation is not needed"""
 
     def step(self):
-        """ This will handle optimizer.step() & optimizer.zero_grad() with gradient_accumulation """
+        """This will handle optimizer.step() & optimizer.zero_grad() with gradient_accumulation"""
         self.model.step()
 
     @property
     def is_overflow(self):
-        """ This must be called before lr_scheduler.step() when using deepspeed with fp16 """
+        """This must be called before lr_scheduler.step() when using deepspeed with fp16"""
         overflow = False
         if hasattr(self.optimizer, "overflow"):
             overflow = self.optimizer.overflow

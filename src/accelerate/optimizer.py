@@ -117,5 +117,5 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     @property
     def is_overflow(self):
-        """ This needs to be implemented at the end """
+        """This needs to be implemented at the end"""
         return False  # TODO: implement it
