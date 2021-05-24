@@ -35,6 +35,16 @@ class DeepSpeedPlugin:
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
     )
 
+    auto_opt_mapping: bool = field(
+        default=True,
+        metadata={"help": "whether to map torch.adam to deepspeed optimizer version of adam based on config"}
+    )
+
+    offload_optimizer_device: bool = field(
+        default=None,
+        metadata={"help": "Possible options are none|cpu|nvme"}
+    )
+
     fp16: bool = field(repr=False, default=None, metadata={"help": "You need not define this here"})
 
     def __post_init__(self):
@@ -48,11 +58,19 @@ class DeepSpeedPlugin:
         if self.fp16 is None:
             self.fp16 = bool(os.environ.get("USE_FP16", "False"))
 
+        if self.offload_optimizer_device is None:
+            self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
+
         self.ds_config = {
             "train_batch_size": None,
             "fp16": {"enabled": self.fp16},
             "gradient_accumulation_steps": self.gradient_accumulation_steps,
-            "zero_optimization": {"stage": self.zero_stage},
+            "zero_optimization": {
+                "stage": self.zero_stage,
+                "offload_optimizer": {
+                    "device": self.offload_optimizer_device,
+                },
+            },
             "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
         }
 

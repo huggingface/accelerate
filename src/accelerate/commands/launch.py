@@ -108,6 +108,12 @@ def launch_command_parser(subparsers=None):
         help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed).",
     )
     parser.add_argument(
+        "--offload_optimizer_device",
+        default=None,
+        type=str,
+        help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed).",
+    )
+    parser.add_argument(
         "--gradient_accumulation_steps",
         default=None,
         type=int,
@@ -199,6 +205,7 @@ def deepspeed_launcher(args):
     current_env["USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
     current_env["GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
+    current_env["DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device)
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()

@@ -70,6 +70,13 @@ def get_cluster_input():
                 default=0,
             )
 
+            if ds_config["zero_stage"] >= 2:
+                ds_config["offload_optimizer_device"] = _ask_field(
+                "Where to offload optimizer states (none|cpu|nvme)? [none]: ",
+                lambda x: str(x),
+                default="none",
+            )
+
             ds_config["gradient_accumulation_steps"] = _ask_field(
                 "How many gradient accumulation steps you're passing in your script? [1]: ",
                 lambda x: int(x),

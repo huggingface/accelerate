@@ -284,6 +284,22 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer, dict)):
                 optimizer = obj
 
+        if ds_plugin.auto_opt_mapping:
+            is_adam = isinstance(optimizer, torch.optim.Adam)
+            is_adamw = isinstance(optimizer, torch.optim.AdamW)
+            if (is_adam or is_adamw) and ds_plugin.offload_optimizer_device == "cpu":
+                defaults = optimizer.defaults
+                optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(
+                    model.parameters(),
+                    lr=defaults["lr"],
+                    bias_correction=True,
+                    betas=defaults["betas"],
+                    eps=defaults["eps"],
+                    weight_decay=defaults["weight_decay"],
+                    amsgrad=defaults["amsgrad"],
+                    adamw_mode=is_adamw,
+                )
+
         # useful when only eval_dataloader is given into `accelerator.prepare()`
         if model is not None:
             engine = DeepSpeedEngineWrapper(

@@ -174,7 +174,7 @@ def main():
     args = parse_args()
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    # deepspeed_plugin = DeepSpeedPlugin(zero_stage=0, gradient_accumulation_steps=args.gradient_accumulation_steps)
+    # deepspeed_plugin = DeepSpeedPlugin(zero_stage=2, offload_optimizer_device="cpu", gradient_accumulation_steps=args.gradient_accumulation_steps)
     accelerator = Accelerator(fp16=True, deepspeed_plugin=None)
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
