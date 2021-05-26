@@ -160,6 +160,26 @@ Once you have MPI setup on your cluster, just run:
 mpirun -np 2 python examples/nlp_example.py
 ```
 
+## Launching training using DeepSpeed
+
+🤗 Accelerate supports training on single/multiple GPUs using DeepSpeed. For using deepspeed, you don't really need to change anything in your code once you integrate accelerate in your code. You can set everything using just `accelerate config`.
+
+In case you would like to change your deepspeed related args from python script, we provide you the `DeepSpeedPlugin`.
+
+```python
+from accelerator import Accelerator, DeepSpeedPlugin
+
+# deepspeed needs to know your gradient accumulation steps before hand, so don't forget to pass it
+# Remember you need to do gradient accumulation by yourself, just like you would have done without deepspeed
+deepspeed_plugin = DeepSpeedPlugin(zero_stage=2, gradient_accumulation_steps=2)
+accelerator = Accelerator(fp16=True, deepspeed_plugin=deepspeed_plugin)
+```
+
+Note:
+
+1. DeepSpeed support is experimental for now. In case you get into some issue, feel free to raise an issue.
+2. When using DeepSpeed, you can save your training checkpoint using `model.save_checkpoint(...)`
+
 ## Launching your training from a notebook
 
 🤗 Accelerate also provides a `notebook_launcher` function you can use in a notebook to launch a distributed training. This is especially useful for Colab or Kaggle notebooks with a TPU backend. Just define your training loop in a `training_function` then in your last cell, add:
@@ -204,3 +224,4 @@ pip install accelerate
 - multi-GPU on several nodes (machines)
 - TPU
 - FP16 with native AMP (apex on the roadmap)
+- DeepSpeed support (experimental)
