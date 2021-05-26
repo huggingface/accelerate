@@ -32,7 +32,8 @@ class DeepSpeedPlugin:
         default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
     )
     zero_stage: int = field(
-        default=None, metadata={"help": "Possible options are 0,1,2; Default will be taken from environment variable"}
+        default=None,
+        metadata={"help": "Possible options are 0,1,2,3; Default will be taken from environment variable"},
     )
     is_train_batch_min: str = field(
         default=True,
@@ -54,7 +55,7 @@ class DeepSpeedPlugin:
             self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
 
         if self.zero_stage is None:
-            self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 0))
+            self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
 
         if self.fp16 is None:
             self.fp16 = bool(os.environ.get("USE_FP16", "False"))
@@ -62,7 +63,7 @@ class DeepSpeedPlugin:
         if self.offload_optimizer_device is None:
             self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
 
-        self.ds_config = {
+        self.deepspeed_config = {
             "train_batch_size": None,
             "fp16": {"enabled": self.fp16},
             "gradient_accumulation_steps": self.gradient_accumulation_steps,

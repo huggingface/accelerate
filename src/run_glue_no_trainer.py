@@ -14,6 +14,8 @@
 # limitations under the License.
 
 # accelerate config
+# export PATH=/usr/local/cuda-10.2/bin:$PATH
+# export LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:$LD_LIBRARY_PATH
 # accelerate launch run_glue_no_trainer.py --task_name "mrpc" --model_name_or_path "distilbert-base-uncased" --max_train_steps 20
 
 """ Finetuning a 🤗 Transformers model for sequence classification on GLUE."""

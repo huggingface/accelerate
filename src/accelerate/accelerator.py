@@ -127,6 +127,7 @@ class Accelerator:
 
         # Internal references to the training objects
         self._optimizers = []
+        self._models = []
 
         # RNG Types
         if rng_types is None:
@@ -181,6 +182,7 @@ class Accelerator:
         if isinstance(obj, torch.utils.data.DataLoader):
             return self.prepare_data_loader(obj)
         elif isinstance(obj, torch.nn.Module):
+            self._models.append(obj)
             return self.prepare_model(obj)
         elif isinstance(obj, torch.optim.Optimizer):
             optimizer = self.prepare_optimizer(obj)
@@ -257,21 +259,24 @@ class Accelerator:
 
     def _prepare_deepspeed(self, *args):
 
-        ds_plugin = self.state.deepspeed_plugin
-        self.ds_config = ds_plugin.ds_config
+        deepspeed_plugin = self.state.deepspeed_plugin
+        self.deepspeed_config = deepspeed_plugin.deepspeed_config
 
-        bz = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
-        assert (
-            len(bz) > 0
-        ), "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
-        if len(bz) > 1:
-            logger.info(
-                "Since you passed both train & eval dataloader, `is_train_batch_min` will decide the `train_batch_size`"
+        batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
+        if len(batch_sizes) == 0:
+            raise ValueError(
+                "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
             )
-        batch_size_per_device = min(bz) if ds_plugin.is_train_batch_min else max(bz)
 
-        self.ds_config["train_batch_size"] = (
-            batch_size_per_device * ds_plugin.gradient_accumulation_steps * self.num_processes
+        batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
+        if len(batch_sizes) > 1:
+            logger.info(
+                f"Since you passed both train and evaluation dataloader, `is_train_batch_min` (here \
+                {deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
+            )
+
+        self.deepspeed_config["train_batch_size"] = (
+            batch_size_per_device * deepspeed_plugin.gradient_accumulation_steps * self.num_processes
         )
 
         result = [self._prepare_one(obj) if isinstance(obj, torch.utils.data.DataLoader) else obj for obj in args]
@@ -284,10 +289,10 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer, dict)):
                 optimizer = obj
 
-        if ds_plugin.auto_opt_mapping:
+        if deepspeed_plugin.auto_opt_mapping:
             is_adam = isinstance(optimizer, torch.optim.Adam)
             is_adamw = isinstance(optimizer, torch.optim.AdamW)
-            if (is_adam or is_adamw) and ds_plugin.offload_optimizer_device == "cpu":
+            if (is_adam or is_adamw) and deepspeed_plugin.offload_optimizer_device == "cpu":
                 defaults = optimizer.defaults
                 optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(
                     model.parameters(),
@@ -303,7 +308,11 @@ class Accelerator:
         # useful when only eval_dataloader is given into `accelerator.prepare()`
         if model is not None:
             engine = DeepSpeedEngineWrapper(
-                args=None, model=model, optimizer=optimizer, config_params=self.ds_config, dist_init_required=False
+                args=None,
+                model=model,
+                optimizer=optimizer,
+                config_params=self.deepspeed_config,
+                dist_init_required=False,
             )
             for i in range(len(result)):
                 if isinstance(result[i], torch.nn.Module):
@@ -311,6 +320,11 @@ class Accelerator:
                 elif isinstance(result[i], torch.optim.Optimizer):
                     result[i] = DeepSpeedOptimizerWrapper(engine.optimizer, engine)
             self.deepspeed_engine = engine  # pointing for deepspeed_engine.backward()
+            self._models.append(engine)
+            self._optimizers.append(engine.optimizer)
+            assert (
+                len(self._models) == 1
+            ), "You can't use same `Accelerator()` instance with 2 models when using DeepSpeed"
 
         if self.distributed_type == DistributedType.DEEPSPEED:
             assert hasattr(
@@ -447,6 +461,7 @@ class Accelerator:
         method between two trainings with different models/optimizers.
         """
         self._optimizers = []
+        self._models = []
         self.deepspeed_engine = None
         gc.collect()
         torch.cuda.empty_cache()

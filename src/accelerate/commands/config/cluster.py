@@ -51,7 +51,7 @@ def get_cluster_input():
                 lambda x: int(x),
             )
 
-    ds_config = None
+    deepspeed_config = None
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
         use_deepspeed = _ask_field(
             "Do you want to use DeepSpeed (yes/no)? [NO]",
@@ -62,22 +62,22 @@ def get_cluster_input():
         if use_deepspeed:
             distributed_type = DistributedType.DEEPSPEED
 
-        ds_config = {}
+        deepspeed_config = {}
         if distributed_type == DistributedType.DEEPSPEED:
-            ds_config["zero_stage"] = _ask_field(
-                "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2)? [0]: ",
+            deepspeed_config["zero_stage"] = _ask_field(
+                "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2, 3)? [2]: ",
                 lambda x: int(x),
-                default=0,
+                default=2,
             )
 
-            if ds_config["zero_stage"] >= 2:
-                ds_config["offload_optimizer_device"] = _ask_field(
+            if deepspeed_config["zero_stage"] >= 2:
+                deepspeed_config["offload_optimizer_device"] = _ask_field(
                     "Where to offload optimizer states (none|cpu|nvme)? [none]: ",
                     lambda x: str(x),
                     default="none",
                 )
 
-            ds_config["gradient_accumulation_steps"] = _ask_field(
+            deepspeed_config["gradient_accumulation_steps"] = _ask_field(
                 "How many gradient accumulation steps you're passing in your script? [1]: ",
                 lambda x: int(x),
                 default=1,
@@ -118,5 +118,5 @@ def get_cluster_input():
         main_process_ip=main_process_ip,
         main_process_port=main_process_port,
         main_training_function=main_training_function,
-        ds_config=ds_config,
+        deepspeed_config=deepspeed_config,
     )

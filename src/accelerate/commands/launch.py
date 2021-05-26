@@ -352,10 +352,10 @@ def launch_command(args):
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
-                if name == "ds_config":
-                    for k in defaults.ds_config:
+                if isinstance(attr, dict):
+                    for k in defaults.deepspeed_config:
                         if getattr(args, k) is None:
-                            setattr(args, k, defaults.ds_config[k])
+                            setattr(args, k, defaults.deepspeed_config[k])
                     continue
 
                 # Those args are handled separately

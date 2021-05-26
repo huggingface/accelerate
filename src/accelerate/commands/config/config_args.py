@@ -120,7 +120,7 @@ class ClusterConfig(BaseConfig):
     main_training_function: str = "main"
 
     # args for deepspeed_plugin
-    ds_config: dict = None
+    deepspeed_config: dict = None
 
 
 @dataclass

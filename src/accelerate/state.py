@@ -169,7 +169,7 @@ class AcceleratorState:
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-                self.use_fp16 = False  # deepspeed handles fp16 using ds_config
+                self.use_fp16 = False  # deepspeed handles fp16 using deepspeed_config
                 self.deepspeed_plugin = replace(deepspeed_plugin, fp16=fp16)
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
@@ -238,5 +238,5 @@ class AcceleratorState:
             f"Use FP16 precision: {use_fp16}\n"
         )
         if self.distributed_type == DistributedType.DEEPSPEED:
-            repr += (f"ds_config: {self.deepspeed_plugin.ds_config}\n",)
+            repr += f"ds_config: {self.deepspeed_plugin.ds_config}\n"
         return repr
