@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-
 from .optimizer import AcceleratedOptimizer
 from .state import is_apex_available, is_deepspeed_available
 
