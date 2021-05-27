@@ -162,13 +162,13 @@ mpirun -np 2 python examples/nlp_example.py
 
 ## Launching training using DeepSpeed
 
-🤗 Accelerate supports training on single/multiple GPUs using DeepSpeed. For using deepspeed, you don't need to change anything. You can set everything using just `accelerate config`. However, if you desire to tweak your deepspeed related args from your python script, we provide you the `DeepSpeedPlugin`.
+🤗 Accelerate supports training on single/multiple GPUs using DeepSpeed. to use it, you don't need to change anything in your training code; you can set everything using just `accelerate config`. However, if you desire to tweak your DeepSpeed related args from your python script, we provide you the `DeepSpeedPlugin`.
 
 ```python
 from accelerator import Accelerator, DeepSpeedPlugin
 
 # deepspeed needs to know your gradient accumulation steps before hand, so don't forget to pass it
-# Remember you need to do gradient accumulation by yourself, just like you would have done without deepspeed
+# Remember you still need to do gradient accumulation by yourself, just like you would have done without deepspeed
 deepspeed_plugin = DeepSpeedPlugin(zero_stage=2, gradient_accumulation_steps=2)
 accelerator = Accelerator(fp16=True, deepspeed_plugin=deepspeed_plugin)
 
@@ -178,7 +178,7 @@ unwrapped_model = accelerator.unwrap_model(model)
 unwrapped_model.save_pretrained(save_dir, save_function=accelerator.save, state_dict=accelerator.get_state_dict(model))
 ```
 
-Note: DeepSpeed support is experimental for now. In case you get into some issue, please raise an issue.
+Note: DeepSpeed support is experimental for now. In case you get into some problem, please open an issue.
 
 ## Launching your training from a notebook
 
