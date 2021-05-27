@@ -15,14 +15,14 @@
 import importlib
 import os
 import random
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union
-from dataclasses import dataclass, field
 
 import numpy as np
 import torch
 
-from .state import AcceleratorState, DistributedType, is_tpu_available, is_deepspeed_available
+from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
 
 
 if is_tpu_available():
@@ -149,7 +149,7 @@ def extract_model_from_parallel(model):
     """
     options = (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)
     if is_deepspeed_available():
-        options += (DeepSpeedEngine, )
+        options += (DeepSpeedEngine,)
 
     while isinstance(model, options):
         model = model.module

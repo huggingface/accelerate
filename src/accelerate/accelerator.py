@@ -24,7 +24,15 @@ from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
-from .utils import RNGType, extract_model_from_parallel, gather, pad_across_processes, save, wait_for_everyone, DeepSpeedPlugin
+from .utils import (
+    DeepSpeedPlugin,
+    RNGType,
+    extract_model_from_parallel,
+    gather,
+    pad_across_processes,
+    save,
+    wait_for_everyone,
+)
 
 
 if is_deepspeed_available():
