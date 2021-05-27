@@ -21,7 +21,7 @@ from typing import List, Optional, Union
 import numpy as np
 import torch
 
-from .state import AcceleratorState, DistributedType, is_tpu_available
+from .state import AcceleratorState, DistributedType, is_tpu_available, is_deepspeed_available
 
 
 if is_tpu_available():
@@ -34,6 +34,10 @@ def is_boto3_available():
 
 def is_sagemaker_available():
     return importlib.util.find_spec("sagemaker") is not None
+
+
+if is_deepspeed_available():
+    from deepspeed import DeepSpeedEngine
 
 
 class RNGType(Enum):
@@ -142,7 +146,11 @@ def extract_model_from_parallel(model):
     Returns:
         :obj:`torch.nn.Module`: The extracted model.
     """
-    while isinstance(model, (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)):
+    options = (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)
+    if is_deepspeed_available():
+        options += (DeepSpeedEngine, )
+
+    while isinstance(model, options):
         model = model.module
     return model
 
@@ -251,6 +259,7 @@ def wait_for_everyone():
     if (
         AcceleratorState().distributed_type == DistributedType.MULTI_GPU
         or AcceleratorState().distributed_type == DistributedType.MULTI_CPU
+        or AcceleratorState().distributed_type == DistributedType.DEEPSPEED
     ):
         torch.distributed.barrier()
     elif AcceleratorState().distributed_type == DistributedType.TPU:

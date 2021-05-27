@@ -1,4 +1,4 @@
-l  # coding=utf-8
+# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,7 @@ l  # coding=utf-8
 # accelerate config
 # export PATH=/usr/local/cuda-10.2/bin:$PATH
 # export LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:$LD_LIBRARY_PATH
-# accelerate launch run_glue_no_trainer.py --task_name "mrpc" --model_name_or_path "distilbert-base-uncased" --max_train_steps 20
+# accelerate launch run_glue_no_trainer.py --task_name "mrpc" --model_name_or_path "distilbert-base-uncased" --max_train_steps 5  --output_dir "dummy"
 
 """ Finetuning a 🤗 Transformers model for sequence classification on GLUE."""
 import argparse
@@ -432,10 +432,13 @@ def main():
         logger.info(f"epoch {epoch}: {eval_metric}")
 
     if args.output_dir is not None:
+        print("#################################################################")
+        print("Printing")
         accelerator.wait_for_everyone()
-        # unwrapped_model = accelerator.get_state_dict(model)
-        # unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-        model.save_checkpoint(args.output_dir)
+        unwrapped_model = accelerator.unwrap_model(model)
+        unwrapped_model.save_pretrained(args.output_dir, state_dict=accelerator.get_state_dict(model), save_function=accelerator.save)
+        # accelerator.save_zero_to_fp32_script(args.output_dir)
+        print("#################################################################")
 
     if args.task_name == "mnli":
         # Final evaluation on mismatched validation set

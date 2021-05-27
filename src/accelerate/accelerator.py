@@ -494,3 +494,19 @@ class Accelerator:
                         optimizer_device = param_group["params"][0].device
                         break
         return (model_device, optimizer_device)
+
+    def get_state_dict(self, model: DeepSpeedEngineWrapper):
+        if isinstance(model, DeepSpeedEngineWrapper) and self.distributed_type == DistributedType.DEEPSPEED:
+            if self.state.deepspeed_plugin.zero_stage == 3:
+                state_dict = model._zero3_consolidated_fp16_state_dict()
+            else:
+                state_dict = model.module.state_dict()
+        else:
+            model = self.unwrap_model(model)
+            state_dict = model.state_dict()
+        return state_dict
+
+    # def save_zero_to_fp32_script(self, save_directory: str):
+    #     """This method will save the conversion script for ZeRO FP16 to FP32 conversion (only when you are using DeepSpeed)."""
+    #     if self.distributed_type == DistributedType.DEEPSPEED:
+    #         self.deepspeed_engine._copy_recovery_script(save_directory)
