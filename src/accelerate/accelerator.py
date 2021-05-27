@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import os
 from typing import List, Optional, Union
 
 import torch
@@ -22,8 +23,26 @@ from packaging import version
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
-from .state import AcceleratorState, DistributedType
-from .utils import RNGType, extract_model_from_parallel, gather, pad_across_processes, save, wait_for_everyone
+from .state import AcceleratorState, DistributedType, is_deepspeed_available
+from .utils import (
+    DeepSpeedPlugin,
+    RNGType,
+    extract_model_from_parallel,
+    gather,
+    pad_across_processes,
+    save,
+    wait_for_everyone,
+)
+
+
+if is_deepspeed_available():
+    import deepspeed
+    from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
+
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class Accelerator:
@@ -46,6 +65,9 @@ class Accelerator:
         cpu (:obj:`bool`, `optional`):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to :obj:`True` and
             force the execution on one process only.
+        deepspeed_plugin (:obj:`DeepSpeedPlugin`, `optional`):
+            Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
+            directly using `accelerate config`
         rng_types (list of :obj:`str` or :class:`~accelerate.utils.RNGType`):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -74,10 +96,18 @@ class Accelerator:
         split_batches: bool = False,
         fp16: bool = None,
         cpu: bool = False,
+        deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
-        self.state = AcceleratorState(fp16=fp16, cpu=cpu, _from_accelerator=True)
+        if deepspeed_plugin is None:  # init from env variables
+            deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None
+        else:
+            assert isinstance(
+                deepspeed_plugin, DeepSpeedPlugin
+            ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
+
+        self.state = AcceleratorState(fp16=fp16, cpu=cpu, deepspeed_plugin=deepspeed_plugin, _from_accelerator=True)
 
         self.device_placement = device_placement
         self.split_batches = split_batches
@@ -109,6 +139,7 @@ class Accelerator:
 
         # Internal references to the training objects
         self._optimizers = []
+        self._models = []
 
         # RNG Types
         if rng_types is None:
@@ -146,7 +177,11 @@ class Accelerator:
 
     @property
     def use_fp16(self):
-        return self.state.use_fp16
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            use_fp16 = self.state.deepspeed_plugin.deepspeed_config["fp16"]["enabled"]
+        else:
+            use_fp16 = self.state.use_fp16
+        return use_fp16
 
     def print(self, *args, **kwargs):
         """
@@ -159,6 +194,7 @@ class Accelerator:
         if isinstance(obj, torch.utils.data.DataLoader):
             return self.prepare_data_loader(obj)
         elif isinstance(obj, torch.nn.Module):
+            self._models.append(obj)
             return self.prepare_model(obj)
         elif isinstance(obj, torch.optim.Optimizer):
             optimizer = self.prepare_optimizer(obj)
@@ -177,7 +213,6 @@ class Accelerator:
             - :obj:`torch.utils.data.DataLoader`: PyTorch Dataloader
             - :obj:`torch.nn.Module`: PyTorch Module
             - :obj:`torch.optim.Optimizer`: PyTorch Optimizer
-
         """
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
@@ -199,7 +234,10 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
-        result = tuple(self._prepare_one(obj) for obj in args)
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            result = self._prepare_deepspeed(*args)
+        else:
+            result = tuple(self._prepare_one(obj) for obj in args)
 
         if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
@@ -231,6 +269,82 @@ class Accelerator:
             model.forward = torch.cuda.amp.autocast()(model.forward)
         return model
 
+    def _prepare_deepspeed(self, *args):
+
+        deepspeed_plugin = self.state.deepspeed_plugin
+        self.deepspeed_config = deepspeed_plugin.deepspeed_config
+
+        batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
+        if len(batch_sizes) == 0:
+            raise ValueError(
+                "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
+            )
+
+        batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
+        if len(batch_sizes) > 1:
+            logger.info(
+                f"Since you passed both train and evaluation dataloader, `is_train_batch_min` (here \
+                {deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
+            )
+
+        self.deepspeed_config["train_batch_size"] = (
+            batch_size_per_device * deepspeed_plugin.gradient_accumulation_steps * self.num_processes
+        )
+
+        result = [self._prepare_one(obj) if isinstance(obj, torch.utils.data.DataLoader) else obj for obj in args]
+
+        model = None
+        optimizer = None
+        for obj in result:
+            if isinstance(obj, torch.nn.Module):
+                model = obj
+            elif isinstance(obj, (torch.optim.Optimizer, dict)):
+                optimizer = obj
+
+        if deepspeed_plugin.auto_opt_mapping:
+            is_adam = isinstance(optimizer, torch.optim.Adam)
+            is_adamw = isinstance(optimizer, torch.optim.AdamW)
+            if (is_adam or is_adamw) and deepspeed_plugin.offload_optimizer_device == "cpu":
+                defaults = optimizer.defaults
+                optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(
+                    model.parameters(),
+                    lr=defaults["lr"],
+                    bias_correction=True,
+                    betas=defaults["betas"],
+                    eps=defaults["eps"],
+                    weight_decay=defaults["weight_decay"],
+                    amsgrad=defaults["amsgrad"],
+                    adamw_mode=is_adamw,
+                )
+
+        # useful when only eval_dataloader is given into `accelerator.prepare()`
+        if model is not None:
+            engine = DeepSpeedEngineWrapper(
+                args=None,
+                model=model,
+                optimizer=optimizer,
+                config_params=self.deepspeed_config,
+                dist_init_required=False,
+            )
+            for i in range(len(result)):
+                if isinstance(result[i], torch.nn.Module):
+                    result[i] = engine
+                elif isinstance(result[i], torch.optim.Optimizer):
+                    result[i] = DeepSpeedOptimizerWrapper(engine.optimizer, engine)
+            self.deepspeed_engine = engine  # pointing for deepspeed_engine.backward()
+            self._models.append(engine)
+            self._optimizers.append(engine.optimizer)
+            assert (
+                len(self._models) == 1
+            ), "You can't use same `Accelerator()` instance with 2 models when using DeepSpeed"
+
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            assert hasattr(
+                self, "deepspeed_engine"
+            ), "You need to pass the model along the optimizer when using Deepspeed."
+
+        return tuple(result)
+
     def prepare_data_loader(self, data_loader):
         return prepare_data_loader(
             data_loader,
@@ -249,7 +363,9 @@ class Accelerator:
         """
         Use :obj:`accelerator.backward(loss)` in lieu of :obj:`loss.backward()`.
         """
-        if self.scaler is not None:
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            self.deepspeed_engine.backward(loss)
+        elif self.scaler is not None:
             self.scaler.scale(loss).backward()
         else:
             loss.backward()
@@ -357,6 +473,8 @@ class Accelerator:
         method between two trainings with different models/optimizers.
         """
         self._optimizers = []
+        self._models = []
+        self.deepspeed_engine = None
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -384,3 +502,21 @@ class Accelerator:
                         optimizer_device = param_group["params"][0].device
                         break
         return (model_device, optimizer_device)
+
+    def get_state_dict(self, model):
+        is_zero_3 = False
+        if is_deepspeed_available():
+            if isinstance(model, DeepSpeedEngineWrapper) and self.distributed_type == DistributedType.DEEPSPEED:
+                is_zero_3 = self.state.deepspeed_plugin.zero_stage == 3
+
+        if is_zero_3:
+            state_dict = model._zero3_consolidated_fp16_state_dict()
+        else:
+            model = self.unwrap_model(model)
+            state_dict = model.state_dict()
+
+        for k in state_dict:
+            if state_dict[k].dtype == torch.float16:
+                state_dict[k] = state_dict[k].float()
+
+        return state_dict

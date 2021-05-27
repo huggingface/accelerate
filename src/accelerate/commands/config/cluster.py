@@ -16,6 +16,7 @@
 
 from accelerate.state import ComputeEnvironment, DistributedType
 
+from ...utils import is_deepspeed_available
 from .config_args import ClusterConfig
 from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
 
@@ -31,7 +32,7 @@ def get_cluster_input():
     num_machines = 1
     main_process_ip = None
     main_process_port = None
-    if distributed_type == DistributedType.MULTI_GPU or distributed_type == DistributedType.MULTI_CPU:
+    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
             lambda x: int(x),
@@ -50,6 +51,42 @@ def get_cluster_input():
                 "What is the port you will use to communicate with the main process? ",
                 lambda x: int(x),
             )
+
+    deepspeed_config = None
+    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
+        use_deepspeed = _ask_field(
+            "Do you want to use DeepSpeed? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+        if use_deepspeed:
+            distributed_type = DistributedType.DEEPSPEED
+            assert (
+                is_deepspeed_available()
+            ), "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
+
+        deepspeed_config = {}
+        if distributed_type == DistributedType.DEEPSPEED:
+            deepspeed_config["zero_stage"] = _ask_field(
+                "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2, 3)? [2]: ",
+                lambda x: int(x),
+                default=2,
+            )
+
+            if deepspeed_config["zero_stage"] >= 2:
+                deepspeed_config["offload_optimizer_device"] = _ask_field(
+                    "Where to offload optimizer states? [NONE/cpu/nvme]: ",
+                    lambda x: str(x),
+                    default="none",
+                )
+
+            deepspeed_config["gradient_accumulation_steps"] = _ask_field(
+                "How many gradient accumulation steps you're passing in your script? [1]: ",
+                lambda x: int(x),
+                default=1,
+            )
+
     if distributed_type == DistributedType.TPU:
         main_training_function = _ask_field(
             "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
@@ -85,4 +122,5 @@ def get_cluster_input():
         main_process_ip=main_process_ip,
         main_process_port=main_process_port,
         main_training_function=main_training_function,
+        deepspeed_config=deepspeed_config,
     )

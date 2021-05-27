@@ -119,6 +119,9 @@ class ClusterConfig(BaseConfig):
     main_process_port: Optional[int] = None
     main_training_function: str = "main"
 
+    # args for deepspeed_plugin
+    deepspeed_config: dict = None
+
 
 @dataclass
 class SageMakerConfig(BaseConfig):

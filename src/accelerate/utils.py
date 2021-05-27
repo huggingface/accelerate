@@ -15,13 +15,14 @@
 import importlib
 import os
 import random
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union
 
 import numpy as np
 import torch
 
-from .state import AcceleratorState, DistributedType, is_tpu_available
+from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
 
 
 if is_tpu_available():
@@ -34,6 +35,10 @@ def is_boto3_available():
 
 def is_sagemaker_available():
     return importlib.util.find_spec("sagemaker") is not None
+
+
+if is_deepspeed_available():
+    from deepspeed import DeepSpeedEngine
 
 
 class RNGType(Enum):
@@ -142,7 +147,11 @@ def extract_model_from_parallel(model):
     Returns:
         :obj:`torch.nn.Module`: The extracted model.
     """
-    while isinstance(model, (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)):
+    options = (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)
+    if is_deepspeed_available():
+        options += (DeepSpeedEngine,)
+
+    while isinstance(model, options):
         model = model.module
     return model
 
@@ -251,6 +260,7 @@ def wait_for_everyone():
     if (
         AcceleratorState().distributed_type == DistributedType.MULTI_GPU
         or AcceleratorState().distributed_type == DistributedType.MULTI_CPU
+        or AcceleratorState().distributed_type == DistributedType.DEEPSPEED
     ):
         torch.distributed.barrier()
     elif AcceleratorState().distributed_type == DistributedType.TPU:
@@ -293,3 +303,49 @@ class PrepareForLaunch:
             os.environ["RANK"] = str(index)
 
         self.launcher(*args)
+
+
+@dataclass
+class DeepSpeedPlugin:
+
+    gradient_accumulation_steps: int = field(
+        default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
+    )
+    zero_stage: int = field(
+        default=None,
+        metadata={"help": "Possible options are 0,1,2,3; Default will be taken from environment variable"},
+    )
+    is_train_batch_min: str = field(
+        default=True,
+        metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
+    )
+
+    auto_opt_mapping: bool = field(
+        default=True,
+        metadata={"help": "whether to map torch.adam to deepspeed optimizer version of adam based on config"},
+    )
+
+    offload_optimizer_device: bool = field(default=None, metadata={"help": "Possible options are none|cpu|nvme"})
+
+    def __post_init__(self):
+
+        if self.gradient_accumulation_steps is None:
+            self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
+
+        if self.zero_stage is None:
+            self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
+
+        if self.offload_optimizer_device is None:
+            self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
+
+        self.deepspeed_config = {
+            "train_batch_size": None,
+            "gradient_accumulation_steps": self.gradient_accumulation_steps,
+            "zero_optimization": {
+                "stage": self.zero_stage,
+                "offload_optimizer": {
+                    "device": self.offload_optimizer_device,
+                },
+            },
+            "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
+        }

@@ -8,4 +8,4 @@ from .accelerator import Accelerator
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs
 from .notebook_launcher import notebook_launcher
 from .state import DistributedType
-from .utils import synchronize_rng_states
+from .utils import DeepSpeedPlugin, synchronize_rng_states

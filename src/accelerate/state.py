@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import os
 from distutils.util import strtobool
 from enum import Enum
@@ -48,8 +49,16 @@ def is_ccl_available():
     return _ccl_available
 
 
+def is_apex_available():
+    return importlib.util.find_spec("apex") is not None
+
+
 def is_tpu_available():
     return _tpu_available
+
+
+def is_deepspeed_available():
+    return importlib.util.find_spec("deepspeed") is not None
 
 
 def parse_flag_from_env(key, default=False):
@@ -66,6 +75,7 @@ class DistributedType(str, Enum):
         - **NO** -- Not a distributed environment, just a single process.
         - **MULTI_CPU** -- Distributed on multiple CPU nodes.
         - **MULTI_GPU** -- Distributed on multiple GPUs.
+        - **DEEPSPEED** -- Using DeepSpeed.
         - **TPU** -- Distributed on TPUs.
     """
 
@@ -73,6 +83,7 @@ class DistributedType(str, Enum):
     NO = "NO"
     MULTI_CPU = "MULTI_CPU"
     MULTI_GPU = "MULTI_GPU"
+    DEEPSPEED = "DEEPSPEED"
     TPU = "TPU"
 
 
@@ -127,10 +138,11 @@ class AcceleratorState:
 
     _shared_state = {}
 
-    def __init__(self, fp16: bool = None, cpu: bool = False, _from_accelerator: bool = False):
+    def __init__(self, fp16: bool = None, cpu: bool = False, deepspeed_plugin=None, _from_accelerator: bool = False):
         self.__dict__ = self._shared_state
         if not getattr(self, "initialized", False):
             self.backend = None
+            self.deepspeed_plugin = None
             if not _from_accelerator:
                 raise ValueError(
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
@@ -143,6 +155,23 @@ class AcceleratorState:
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
                 self.use_fp16 = False
+            elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
+                assert (
+                    is_deepspeed_available()
+                ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
+                self.distributed_type = DistributedType.DEEPSPEED
+                if not torch.distributed.is_initialized():
+                    torch.distributed.init_process_group(backend="nccl")
+                    self.backend = "nccl"
+                self.num_processes = torch.distributed.get_world_size()
+                self.process_index = torch.distributed.get_rank()
+                self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
+                self.device = torch.device("cuda", self.local_process_index)
+                torch.cuda.set_device(self.device)
+                self.use_fp16 = False  # deepspeed handles fp16 using deepspeed_config
+                fp16 = parse_flag_from_env("USE_FP16", False) if fp16 is None else fp16
+                deepspeed_plugin.deepspeed_config.update({"fp16": {"enabled": fp16}})
+                self.deepspeed_plugin = deepspeed_plugin
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
@@ -200,11 +229,15 @@ class AcceleratorState:
             self.initialized = True
 
     def __repr__(self):
-        return (
+        use_fp16 = self.deepspeed_plugin.fp16 if self.distributed_type == DistributedType.DEEPSPEED else self.use_fp16
+        repr = (
             f"Distributed environment: {self.distributed_type}{('  Backend: ' + self.backend) if self.backend else ''}\n"
             f"Num processes: {self.num_processes}\n"
             f"Process index: {self.process_index}\n"
             f"Local process index: {self.local_process_index}\n"
             f"Device: {self.device}\n"
-            f"Use FP16 precision: {self.use_fp16}\n"
+            f"Use FP16 precision: {use_fp16}\n"
         )
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            repr += f"ds_config: {self.deepspeed_plugin.ds_config}\n"
+        return repr

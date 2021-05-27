@@ -45,6 +45,12 @@ def launch_command_parser(subparsers=None):
         help="Whether or not this should launch a distributed GPU training.",
     )
     parser.add_argument(
+        "--use_deepspeed",
+        default=False,
+        action="store_true",
+        help="Whether to use deepspeed.",
+    )
+    parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
     parser.add_argument(
@@ -95,6 +101,25 @@ def launch_command_parser(subparsers=None):
             "script."
         ),
     )
+    parser.add_argument(
+        "--zero_stage",
+        default=None,
+        type=int,
+        help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed).",
+    )
+    parser.add_argument(
+        "--offload_optimizer_device",
+        default=None,
+        type=str,
+        help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed).",
+    )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        default=None,
+        type=int,
+        help="No of gradient_accumulation_steps used in your training script (useful only when `use_deepspeed` flag is passed).",
+    )
+
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
 
@@ -144,6 +169,43 @@ def multi_gpu_launcher(args):
 
     current_env = os.environ.copy()
     current_env["USE_FP16"] = str(args.fp16)
+
+    process = subprocess.Popen(cmd, env=current_env)
+    process.wait()
+    if process.returncode != 0:
+        raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+
+
+def deepspeed_launcher(args):
+
+    cmd = ["deepspeed"]
+    if args.num_machines > 1:
+        cmd.extend(
+            [
+                "--num_gpus",
+                str(args.num_processes // args.num_machines),
+                "--num_nodes",
+                str(args.num_machines),
+                "--node_rank",
+                str(args.machine_rank),
+                "--master_addr",
+                args.main_process_ip,
+                "--master_port",
+                str(args.main_process_port),
+            ]
+        )
+    else:
+        cmd.extend(["--num_gpus", str(args.num_processes)])
+
+    cmd.append(args.training_script)
+    cmd.extend(args.training_script_args)
+
+    current_env = os.environ.copy()
+    current_env["USE_FP16"] = str(args.fp16)
+    current_env["USE_DEEPSPEED"] = "true"
+    current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
+    current_env["GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
+    current_env["DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device)
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
@@ -276,19 +338,26 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
 def launch_command(args):
     # Sanity checks
-    if args.multi_gpu and args.tpu:
-        raise ValueError("You can only pick one between `--multi_gpu` and `--tpu`.")
+    if sum([args.multi_gpu, args.tpu, args.use_deepspeed]) > 1:
+        raise ValueError("You can only pick one between `--multi_gpu`, `--use_deepspeed`, `--tpu`.")
 
     defaults = None
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
-        if not args.multi_gpu and not args.tpu:
+        if not args.multi_gpu and not args.tpu and not args.use_deepspeed:
+            args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
+                if isinstance(attr, dict):
+                    for k in defaults.deepspeed_config:
+                        if getattr(args, k) is None:
+                            setattr(args, k, defaults.deepspeed_config[k])
+                    continue
+
                 # Those args are handled separately
                 if (
                     name not in ["compute_environment", "fp16", "distributed_type"]
@@ -303,7 +372,9 @@ def launch_command(args):
             args.num_processes = 1
 
     # Use the proper launcher
-    if args.multi_gpu and not args.cpu:
+    if args.use_deepspeed and not args.cpu:
+        deepspeed_launcher(args)
+    elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
         tpu_launcher(args)

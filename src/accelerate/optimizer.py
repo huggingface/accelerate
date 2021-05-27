@@ -114,3 +114,8 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def _switch_parameters(self, parameters_map):
         for param_group in self.optimizer.param_groups:
             param_group["params"] = [parameters_map.get(p, p) for p in param_group["params"]]
+
+    @property
+    def is_overflow(self):
+        """This needs to be implemented at the end"""
+        return False  # TODO: implement it
