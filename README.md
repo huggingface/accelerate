@@ -171,12 +171,14 @@ from accelerator import Accelerator, DeepSpeedPlugin
 # Remember you need to do gradient accumulation by yourself, just like you would have done without deepspeed
 deepspeed_plugin = DeepSpeedPlugin(zero_stage=2, gradient_accumulation_steps=2)
 accelerator = Accelerator(fp16=True, deepspeed_plugin=deepspeed_plugin)
+
+# How to save your 🤗 Transformer?
+accelerator.wait_for_everyone()
+unwrapped_model = accelerator.unwrap_model(model)
+unwrapped_model.save_pretrained(save_dir, save_function=accelerator.save, state_dict=accelerator.get_state_dict(model))
 ```
 
-Note:
-
-1. DeepSpeed support is experimental for now. In case you get into some issue, please raise an issue.
-2. When using DeepSpeed, you can save your training checkpoint using `model.save_checkpoint(...)`
+Note: DeepSpeed support is experimental for now. In case you get into some issue, please raise an issue.
 
 ## Launching your training from a notebook
 

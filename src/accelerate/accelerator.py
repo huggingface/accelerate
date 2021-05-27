@@ -506,9 +506,9 @@ class Accelerator:
         else:
             model = self.unwrap_model(model)
             state_dict = model.state_dict()
-        return state_dict
 
-    # def save_zero_to_fp32_script(self, save_directory: str):
-    #     """This method will save the conversion script for ZeRO FP16 to FP32 conversion (only when you are using DeepSpeed)."""
-    #     if self.distributed_type == DistributedType.DEEPSPEED:
-    #         self.deepspeed_engine._copy_recovery_script(save_directory)
+        for k in state_dict:
+            if state_dict[k].dtype == torch.float16:
+                state_dict[k] = state_dict[k].float()
+
+        return state_dict
