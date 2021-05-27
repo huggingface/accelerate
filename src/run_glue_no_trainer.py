@@ -1,4 +1,4 @@
-# coding=utf-8
+l  # coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -432,8 +432,8 @@ def main():
         logger.info(f"epoch {epoch}: {eval_metric}")
 
     if args.output_dir is not None:
-        # accelerator.wait_for_everyone()
-        # unwrapped_model = accelerator.unwrap_model(model)
+        accelerator.wait_for_everyone()
+        # unwrapped_model = accelerator.get_state_dict(model)
         # unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
         model.save_checkpoint(args.output_dir)
 

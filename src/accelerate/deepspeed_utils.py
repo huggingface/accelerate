@@ -15,11 +15,12 @@
 import os
 from dataclasses import dataclass, field
 
-from deepspeed import DeepSpeedEngine
-
 from .optimizer import AcceleratedOptimizer
-from .state import is_apex_available
+from .state import is_apex_available, is_deepspeed_available
 
+
+if is_deepspeed_available():
+    from deepspeed import DeepSpeedEngine
 
 if is_apex_available():
     import amp
@@ -47,8 +48,6 @@ class DeepSpeedPlugin:
 
     offload_optimizer_device: bool = field(default=None, metadata={"help": "Possible options are none|cpu|nvme"})
 
-    fp16: bool = field(repr=False, default=None, metadata={"help": "You need not define this here"})
-
     def __post_init__(self):
 
         if self.gradient_accumulation_steps is None:
@@ -57,15 +56,11 @@ class DeepSpeedPlugin:
         if self.zero_stage is None:
             self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
 
-        if self.fp16 is None:
-            self.fp16 = bool(os.environ.get("USE_FP16", "False"))
-
         if self.offload_optimizer_device is None:
             self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
 
         self.deepspeed_config = {
             "train_batch_size": None,
-            "fp16": {"enabled": self.fp16},
             "gradient_accumulation_steps": self.gradient_accumulation_steps,
             "zero_optimization": {
                 "stage": self.zero_stage,
@@ -135,7 +130,7 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
         self.model = model
 
     def zero_grad(self, set_to_none=None):
-        """`model.step()` is doing that automatically. Therefore, it's implementation is not needed"""
+        pass  # `model.step()` is doing that automatically. Therefore, it's implementation is not needed
 
     def step(self):
         """This will handle optimizer.step() & optimizer.zero_grad() with gradient_accumulation"""

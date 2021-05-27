@@ -54,7 +54,7 @@ def get_cluster_input():
     deepspeed_config = None
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
         use_deepspeed = _ask_field(
-            "Do you want to use DeepSpeed (yes/no)? [NO]",
+            "Do you want to use DeepSpeed? [yes/NO]: ",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
@@ -72,7 +72,7 @@ def get_cluster_input():
 
             if deepspeed_config["zero_stage"] >= 2:
                 deepspeed_config["offload_optimizer_device"] = _ask_field(
-                    "Where to offload optimizer states (none|cpu|nvme)? [none]: ",
+                    "Where to offload optimizer states? [NONE/cpu/nvme]: ",
                     lambda x: str(x),
                     default="none",
                 )

@@ -14,7 +14,6 @@
 
 import importlib
 import os
-from dataclasses import replace
 from distutils.util import strtobool
 from enum import Enum
 
@@ -170,7 +169,9 @@ class AcceleratorState:
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
                 self.use_fp16 = False  # deepspeed handles fp16 using deepspeed_config
-                self.deepspeed_plugin = replace(deepspeed_plugin, fp16=fp16)
+                fp16 = parse_flag_from_env("USE_FP16", False) if fp16 is None else fp16
+                deepspeed_plugin.deepspeed_config.update({"fp16": {"enabled": fp16}})
+                self.deepspeed_plugin = deepspeed_plugin
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():

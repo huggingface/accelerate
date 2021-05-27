@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import os
 from typing import List, Optional, Union
 
 import torch
@@ -20,7 +21,6 @@ import torch
 from packaging import version
 
 from .data_loader import prepare_data_loader
-from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper, DeepSpeedPlugin
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
@@ -29,6 +29,7 @@ from .utils import RNGType, extract_model_from_parallel, gather, pad_across_proc
 
 if is_deepspeed_available():
     import deepspeed
+    from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper, DeepSpeedPlugin
 
 import logging
 
@@ -56,6 +57,9 @@ class Accelerator:
         cpu (:obj:`bool`, `optional`):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to :obj:`True` and
             force the execution on one process only.
+        deepspeed_plugin (:obj:`DeepSpeedPlugin`, `optional`):
+            Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
+            directly using `accelerate config`
         rng_types (list of :obj:`str` or :class:`~accelerate.utils.RNGType`):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -88,8 +92,8 @@ class Accelerator:
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
-        if deepspeed_plugin is None:
-            deepspeed_plugin = DeepSpeedPlugin()  # init from env variables
+        if deepspeed_plugin is None:  # init from env variables
+            deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None
         else:
             assert isinstance(
                 deepspeed_plugin, DeepSpeedPlugin
@@ -165,11 +169,11 @@ class Accelerator:
 
     @property
     def use_fp16(self):
-        return (
-            self.state.deepspeed_plugin.fp16
-            if self.distributed_type == DistributedType.DEEPSPEED
-            else self.state.use_fp16
-        )
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            use_fp16 = self.state.deepspeed_plugin.deepspeed_config["fp16"]["enabled"]
+        else:
+            use_fp16 = self.state.use_fp16
+        return use_fp16
 
     def print(self, *args, **kwargs):
         """
