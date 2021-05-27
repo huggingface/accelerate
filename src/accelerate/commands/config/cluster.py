@@ -18,7 +18,7 @@ from accelerate.state import ComputeEnvironment, DistributedType
 
 from .config_args import ClusterConfig
 from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
-
+from ...utils import is_deepspeed_available
 
 def get_cluster_input():
     distributed_type = _ask_field(
@@ -61,6 +61,7 @@ def get_cluster_input():
         )
         if use_deepspeed:
             distributed_type = DistributedType.DEEPSPEED
+            assert is_deepspeed_available(), "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
 
         deepspeed_config = {}
         if distributed_type == DistributedType.DEEPSPEED:

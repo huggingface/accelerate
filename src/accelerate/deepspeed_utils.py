@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-from dataclasses import dataclass, field
 
 from .optimizer import AcceleratedOptimizer
 from .state import is_apex_available, is_deepspeed_available
@@ -24,52 +23,6 @@ if is_deepspeed_available():
 
 if is_apex_available():
     import amp
-
-
-@dataclass
-class DeepSpeedPlugin:
-
-    gradient_accumulation_steps: int = field(
-        default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
-    )
-    zero_stage: int = field(
-        default=None,
-        metadata={"help": "Possible options are 0,1,2,3; Default will be taken from environment variable"},
-    )
-    is_train_batch_min: str = field(
-        default=True,
-        metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
-    )
-
-    auto_opt_mapping: bool = field(
-        default=True,
-        metadata={"help": "whether to map torch.adam to deepspeed optimizer version of adam based on config"},
-    )
-
-    offload_optimizer_device: bool = field(default=None, metadata={"help": "Possible options are none|cpu|nvme"})
-
-    def __post_init__(self):
-
-        if self.gradient_accumulation_steps is None:
-            self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
-
-        if self.zero_stage is None:
-            self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
-
-        if self.offload_optimizer_device is None:
-            self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
-
-        self.deepspeed_config = {
-            "train_batch_size": None,
-            "gradient_accumulation_steps": self.gradient_accumulation_steps,
-            "zero_optimization": {
-                "stage": self.zero_stage,
-                "offload_optimizer": {
-                    "device": self.offload_optimizer_device,
-                },
-            },
-            "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
-        }
 
 
 class DeepSpeedEngineWrapper(DeepSpeedEngine):

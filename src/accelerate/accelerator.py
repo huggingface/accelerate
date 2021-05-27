@@ -24,12 +24,12 @@ from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
-from .utils import RNGType, extract_model_from_parallel, gather, pad_across_processes, save, wait_for_everyone
+from .utils import RNGType, extract_model_from_parallel, gather, pad_across_processes, save, wait_for_everyone, DeepSpeedPlugin
 
 
 if is_deepspeed_available():
     import deepspeed
-    from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper, DeepSpeedPlugin
+    from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
 
 import logging
 
@@ -495,12 +495,14 @@ class Accelerator:
                         break
         return (model_device, optimizer_device)
 
-    def get_state_dict(self, model: DeepSpeedEngineWrapper):
-        if isinstance(model, DeepSpeedEngineWrapper) and self.distributed_type == DistributedType.DEEPSPEED:
-            if self.state.deepspeed_plugin.zero_stage == 3:
-                state_dict = model._zero3_consolidated_fp16_state_dict()
-            else:
-                state_dict = model.module.state_dict()
+    def get_state_dict(self, model):
+        is_zero_3 = False
+        if is_deepspeed_available():
+            if isinstance(model, DeepSpeedEngineWrapper) and self.distributed_type == DistributedType.DEEPSPEED:
+                is_zero_3 = self.state.deepspeed_plugin.zero_stage == 3
+
+        if is_zero_3:
+            state_dict = model._zero3_consolidated_fp16_state_dict()
         else:
             model = self.unwrap_model(model)
             state_dict = model.state_dict()
