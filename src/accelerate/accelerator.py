@@ -14,6 +14,7 @@
 
 import gc
 import os
+from contextlib import contextmanager
 from typing import List, Optional, Union
 
 import torch
@@ -182,6 +183,41 @@ class Accelerator:
         else:
             use_fp16 = self.state.use_fp16
         return use_fp16
+
+    @contextmanager
+    def local_main_process_first(self):
+        """
+        Lets the local main process go inside a with block.
+
+        The other processes will enter the with block after the main process exits.
+
+        Examples: >>> accelerator = Accelerator() >>> cache_fname = Path("cache.txt") >>> with
+        accelerator.local_main_process_first(): >>> if cache_fname.exists(): >>> data = cache_fname,read_text() # Load
+        from cache >>> else: >>> data = "data" # Time consuming operation >>> cache_fname.write_text(data)
+        """
+        yield from self._goes_first(self.is_local_main_process)
+
+    @contextmanager
+    def main_process_first(self):
+        """
+        Lets the main process go first inside a with block.
+
+        The other processes will enter the with block after the main process exits.
+
+        Examples: >>> accelerator = Accelerator() >>> cache_fname = Path("cache.txt") >>> with
+        accelerator.main_process_first(): >>> if cache_fname.exists(): >>> data = cache_fname,read_text() # Load from
+        cache >>> else: >>> data = "data" # Time consuming operation >>> cache_fname.write_text(data)
+        """
+        yield from self._goes_first(self.is_main_process)
+
+    def _goes_first(self, is_master):
+        if not is_master:
+            self.wait_for_everyone()
+
+        yield
+
+        if is_master:
+            self.wait_for_everyone()
 
     def print(self, *args, **kwargs):
         """
