@@ -190,10 +190,6 @@ class Accelerator:
         Lets the local main process go inside a with block.
 
         The other processes will enter the with block after the main process exits.
-
-        Examples: >>> accelerator = Accelerator() >>> cache_fname = Path("cache.txt") >>> with
-        accelerator.local_main_process_first(): >>> if cache_fname.exists(): >>> data = cache_fname,read_text() # Load
-        from cache >>> else: >>> data = "data" # Time consuming operation >>> cache_fname.write_text(data)
         """
         yield from self._goes_first(self.is_local_main_process)
 
@@ -203,10 +199,6 @@ class Accelerator:
         Lets the main process go first inside a with block.
 
         The other processes will enter the with block after the main process exits.
-
-        Examples: >>> accelerator = Accelerator() >>> cache_fname = Path("cache.txt") >>> with
-        accelerator.main_process_first(): >>> if cache_fname.exists(): >>> data = cache_fname,read_text() # Load from
-        cache >>> else: >>> data = "data" # Time consuming operation >>> cache_fname.write_text(data)
         """
         yield from self._goes_first(self.is_main_process)
 
