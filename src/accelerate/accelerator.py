@@ -202,13 +202,13 @@ class Accelerator:
         """
         yield from self._goes_first(self.is_main_process)
 
-    def _goes_first(self, is_master):
-        if not is_master:
+    def _goes_first(self, is_main):
+        if not is_main:
             self.wait_for_everyone()
 
         yield
 
-        if is_master:
+        if is_main:
             self.wait_for_everyone()
 
     def print(self, *args, **kwargs):
