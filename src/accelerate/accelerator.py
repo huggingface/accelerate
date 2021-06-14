@@ -387,16 +387,16 @@ class Accelerator:
     def prepare_optimizer(self, optimizer):
         return AcceleratedOptimizer(optimizer, device_placement=self.device_placement, scaler=self.scaler)
 
-    def backward(self, loss):
+    def backward(self, loss, **kwargs):
         """
         Use :obj:`accelerator.backward(loss)` in lieu of :obj:`loss.backward()`.
         """
         if self.distributed_type == DistributedType.DEEPSPEED:
-            self.deepspeed_engine.backward(loss)
+            self.deepspeed_engine.backward(loss, **kwargs)
         elif self.scaler is not None:
-            self.scaler.scale(loss).backward()
+            self.scaler.scale(loss).backward(**kwargs)
         else:
-            loss.backward()
+            loss.backward(**kwargs)
 
     def unscale_gradients(self, optimizer=None):
         """
