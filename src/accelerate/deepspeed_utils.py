@@ -20,7 +20,7 @@ if is_deepspeed_available():
     from deepspeed import DeepSpeedEngine
 
 if is_apex_available():
-    import amp
+    from apex import amp
 
 
 class DeepSpeedEngineWrapper(DeepSpeedEngine):
