@@ -102,14 +102,14 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 set_to_none = False
             self.optimizer.zero_grad(set_to_none=set_to_none)
 
-    def step(self):
+    def step(self, closure=None):
         if self.state.distributed_type == DistributedType.TPU:
-            xm.optimizer_step(self.optimizer)
+            xm.optimizer_step(self.optimizer, dict(closure=closure))
         elif self.scaler is not None:
-            self.scaler.step(self.optimizer)
+            self.scaler.step(self.optimizer, closure)
             self.scaler.update()
         else:
-            self.optimizer.step()
+            self.optimizer.step(closure)
 
     def _switch_parameters(self, parameters_map):
         for param_group in self.optimizer.param_groups:
