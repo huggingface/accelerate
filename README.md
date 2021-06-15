@@ -44,6 +44,10 @@ limitations under the License.
 <p>Run your *raw* PyTorch training script on any kind of device
 </h3>
 
+<h3 align="center">
+    <a href="https://hf.co/course"><img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/course_banner.png"></a>
+</h3>
+
 ## Easy to integrate
 
 🤗 Accelerate was created for PyTorch users who like to write the training loop of PyTorch models but are reluctant to write and maintain the boilerplate code needed to use multi-GPUs/TPU/fp16.
