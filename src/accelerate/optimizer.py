@@ -104,7 +104,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def step(self, closure=None):
         if self.state.distributed_type == DistributedType.TPU:
-            xm.optimizer_step(self.optimizer, dict(closure=closure))
+            xm.optimizer_step(self.optimizer, optimizer_args={"closure": closure})
         elif self.scaler is not None:
             self.scaler.step(self.optimizer, closure)
             self.scaler.update()
