@@ -137,8 +137,15 @@ def training_function(config, args):
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % gradient_accumulation_steps == 0:
+            if step % gradient_accumulation_steps != 0:
+                # Prevent backward from doing gradient all_reduce in every step
+                if accelerator.distributed_type == DistributedType.MULTI_GPU:
+                    with model.no_sync():
+                        accelerator.backward(loss)
+                else:
+                    accelerator.backward(loss)
+            else:
+                accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
