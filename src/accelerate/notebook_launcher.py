@@ -16,7 +16,8 @@ import os
 import sys
 
 import torch
-from torch.multiprocessing import start_processes
+
+from packaging import version
 
 from .state import AcceleratorState
 from .utils import PrepareForLaunch
@@ -82,6 +83,14 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, use
 
         if num_processes > 1:
             # Multi-GPU launch
+            if version.parse(torch.__version__) < version.parse("1.5.0"):
+                raise ImportError(
+                    "Using `notebook_launcher` for distributed training on GPUs require torch >= 1.5.0, got "
+                    f"{torch.__version__}."
+                )
+
+            from torch.multiprocessing import start_processes
+
             if len(AcceleratorState._shared_state) > 0:
                 raise ValueError(
                     "To launch a multi-GPU training from your notebook, the `Accelerator` should only be initialized "
