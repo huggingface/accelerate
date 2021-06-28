@@ -413,8 +413,10 @@ class Accelerator:
                 optimizer = self._optimizers
             elif not isinstance(optimizer, (tuple, list)):
                 optimizer = [optimizer]
-            for optimizer in optimizer:
-                self.scaler.unscale_(optimizer)
+            for opt in optimizer:
+                while isinstance(opt, AcceleratedOptimizer):
+                    opt = opt.optimizer
+                self.scaler.unscale_(opt)
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
         """
