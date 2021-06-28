@@ -381,7 +381,7 @@ class Accelerator:
             process_index=self.process_index,
             split_batches=self.split_batches,
             put_on_device=self.device_placement,
-            rng_types=self.rng_types,
+            rng_types=self.rng_types.copy(),
         )
 
     def prepare_optimizer(self, optimizer):
