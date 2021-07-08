@@ -104,6 +104,8 @@ class BatchSamplerShard(BatchSampler):
         self.drop_last = batch_sampler.drop_last
 
     def __len__(self):
+        if self.split_batches:
+            return len(self.batch_sampler)
         if len(self.batch_sampler) % self.num_processes == 0:
             return len(self.batch_sampler) // self.num_processes
         length = len(self.batch_sampler) // self.num_processes
