@@ -52,6 +52,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.optimizer = optimizer
         self.scaler = scaler
         self.state = AcceleratorState()
+        self.device_placement = device_placement
 
         # Handle device placement
         if device_placement:
