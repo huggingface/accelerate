@@ -99,7 +99,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 )
             self.optimizer.zero_grad()
         else:
-            if set_to_none is not None:
+            if set_to_none is None:
                 set_to_none = False
             self.optimizer.zero_grad(set_to_none=set_to_none)
 
