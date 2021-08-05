@@ -552,3 +552,17 @@ class Accelerator:
                 state_dict[k] = state_dict[k].float()
 
         return state_dict
+
+    @contextmanager
+    def autocast(self):
+        """
+        Will apply automatic mixed precision inside the block inside thics context manager, if it is enabled. Nothing
+        different will happen otherwise.
+        """
+        if self.native_amp:
+            autocast_context = torch.cuda.amp.autocast()
+            autocast_context.__enter__()
+            yield
+            autocast_context.__exit__()
+        else:
+            yield
