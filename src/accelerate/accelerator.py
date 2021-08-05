@@ -556,7 +556,7 @@ class Accelerator:
     @contextmanager
     def autocast(self):
         """
-        Will apply automatic mixed precision inside the block inside thics context manager, if it is enabled. Nothing
+        Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
         different will happen otherwise.
         """
         if self.native_amp:
