@@ -28,6 +28,7 @@ from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .utils import (
     DeepSpeedPlugin,
     RNGType,
+    convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
     pad_across_processes,
@@ -295,6 +296,7 @@ class Accelerator:
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
             model.forward = torch.cuda.amp.autocast()(model.forward)
+            model.forward = convert_outputs_to_fp32(model.forward)
         return model
 
     def _prepare_deepspeed(self, *args):
@@ -550,3 +552,17 @@ class Accelerator:
                 state_dict[k] = state_dict[k].float()
 
         return state_dict
+
+    @contextmanager
+    def autocast(self):
+        """
+        Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
+        different will happen otherwise.
+        """
+        if self.native_amp:
+            autocast_context = torch.cuda.amp.autocast()
+            autocast_context.__enter__()
+            yield
+            autocast_context.__exit__()
+        else:
+            yield

@@ -345,6 +345,19 @@ If you are using gradient clipping in your script, you should replace the calls 
 :obj:`torch.nn.utils.clip_grad_norm_` or :obj:`torch.nn.utils.clip_grad_value_` with :obj:`accelerator.clip_grad_norm_`
 and :obj:`accelerator.clip_grad_value_` respectively.
 
+Mixed Precision training
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you are running your training in Mixed Precision with Accelerate, you will get the best result with your loss being
+computed inside your model (like in Transformer models for instance). Every computation outside of the model will be
+executed in full precision (which is generally what you want for loss computation, expecially if it involves a
+softmax). However you might want to put your loss computation inside the `accelerator.autocast` context manager:
+
+.. codeblock::
+
+    with accelerator.autocast():
+        loss = complex_loss_function(outputs, target):
+
 
 Internal mechanism
 -----------------------------------------------------------------------------------------------------------------------
