@@ -137,6 +137,46 @@ def send_to_device(tensor, device):
     return tensor.to(device)
 
 
+def convert_to_fp32(tensor):
+    """
+    Recursively converts the lements nested list/tuple/dictionary of tensors in FP16 precision to FP32.
+
+    Args:
+        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            The data to convert from FP16 to FP32.
+
+    Returns:
+        The same data structure as :obj:`tensor` with all tensors that were in FP16 precision converted to FP32.
+    """
+    if isinstance(tensor, (list, tuple)):
+        return honor_type(tensor, (convert_to_fp32(t) for t in tensor))
+    elif isinstance(tensor, dict):
+        return type(tensor)({k: convert_to_fp32(v) for k, v in tensor.items()})
+    elif not hasattr(tensor, "dtype") or tensor.dtype != torch.float16:
+        return tensor
+    return tensor.float()
+
+
+def convert_outputs_to_fp32(model_forward):
+    """
+    Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
+    precision will be convert back to FP32.
+
+    Args:
+        model_forward (:obj:`Callable`):
+            The function which outputs we want to treat.
+
+    Returns:
+        The same function as :obj:`model_forward` but with converted outputs.
+    """
+
+    def convert_outputs(*args, **kwargs):
+        outputs = model_forward(*args, **kwargs)
+        return convert_to_fp32(outputs)
+
+    return convert_outputs
+
+
 def extract_model_from_parallel(model):
     """
     Extract a model from its distributed containers.
