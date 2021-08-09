@@ -251,6 +251,13 @@ To introduce special behavior in your script for TPUs you can check the :obj:`di
 The `NLP example <https://github.com/huggingface/accelerate/blob/main/examples/nlp_example.py>`__ shows an example in
 situation with dynamic padding.
 
+One last thing to pay close attnetion to: if your model has tied weights (such as language models which tie the weights
+of the embedding matrix with the weights of the decoder), moving this model to the TPU (either yourself or after you
+passed your model to :meth:`~accelerate.Accelerator.prepare`) will break the tying. You will need to retie the weights
+after. You can find an example of this in the `run_clm_no_trainer
+<https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_clm.py>`__ script in
+the Transformers repository.
+
 
 Other caveats
 -----------------------------------------------------------------------------------------------------------------------
@@ -344,6 +351,7 @@ Gradient clipping
 If you are using gradient clipping in your script, you should replace the calls to
 :obj:`torch.nn.utils.clip_grad_norm_` or :obj:`torch.nn.utils.clip_grad_value_` with :obj:`accelerator.clip_grad_norm_`
 and :obj:`accelerator.clip_grad_value_` respectively.
+
 
 Mixed Precision training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
