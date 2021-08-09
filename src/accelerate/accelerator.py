@@ -566,3 +566,14 @@ class Accelerator:
             autocast_context.__exit__()
         else:
             yield
+
+    @property
+    def optimizer_step_was_skipped(self):
+        """
+        Whether or not the optimizer update was skipped (because of gradient overflow in mixed precision), in which
+        case the learning rate should not be changed.
+        """
+        for optimizer in self._optimizers:
+            if optimizer.is_overflow:
+                return True
+        return False

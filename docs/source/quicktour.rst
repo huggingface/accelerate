@@ -366,6 +366,20 @@ softmax). However you might want to put your loss computation inside the `accele
     with accelerator.autocast():
         loss = complex_loss_function(outputs, target):
 
+Another caveat with Mixed Precision training is that the gradient will skip a few updates at the beginning and
+sometimes during training: because of the dynamic loss scaling strategy, there are points during training where the
+gradients have overflown, and the loss scaling factor is reduced to avoid this happening again at the next step.
+
+This means that you may update your learning rate scheduler when there was no update, which is fine in general, but may
+have an impact when you have very little training data, or if the first learning rate values of your scheduler are very
+important. In this case, you can skip the learning rate scheduler updates when the optimizer step was not done like
+this:
+
+.. codeblock::
+
+    if not accelerator.optimizer_step_was_skipped:
+        lr_scheduler.step()
+
 
 Internal mechanism
 -----------------------------------------------------------------------------------------------------------------------
