@@ -89,7 +89,7 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
 
     @property
     def is_overflow(self):
-        """This must be called before lr_scheduler.step() when using deepspeed with fp16"""
+        """Whether or not the optimizer step was done, or skipped because of gradient overflow."""
         overflow = False
         if hasattr(self.optimizer, "overflow"):
             overflow = self.optimizer.overflow
