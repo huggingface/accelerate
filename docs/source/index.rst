@@ -136,7 +136,7 @@ Supported integrations
 - multi-GPU on several nodes (machines)
 - TPU
 - FP16 with native AMP (apex on the roadmap)
-- DeepSpeed (experimental)
+- DeepSpeed (experimental support)
 
 .. toctree::
     :maxdepth: 2

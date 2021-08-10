@@ -381,6 +381,22 @@ this:
         lr_scheduler.step()
 
 
+DeepSpeed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+DeepSpeed support is experimental, so the underlying API will evolve in the near future and may have some slight
+breaking changes. In particular, 🤗 Accelerate does not support DeepSpeed config you have written yourself yet, this
+will be added in a next version.
+
+One main caveat for the DeepSpeed integration is that the DeepSpeed launcher always passes a ``local_rank`` variable to
+the training script, so your training script should accept it (whether you launch training with the DeepSpeed launcher
+or ``accelerate launch``).
+
+.. Warning::
+
+    The :func:`~accelerate.notebook_launcher` does not support the DeepSpeed integration yet.
+
+
 Internal mechanism
 -----------------------------------------------------------------------------------------------------------------------
 
