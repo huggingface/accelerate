@@ -37,4 +37,5 @@ function deploy_doc(){
 deploy_doc "main" main
 deploy_doc "0fbbbc5" v0.1.0
 deploy_doc "499a5e5" v0.2.0
-deploy_doc "dd9f7aa" # v0.3.0 Latest stable release
+deploy_doc "dd9f7aa" v0.3.0
+deploy_doc "5d99345" # v0.4.0 Latest stable release
