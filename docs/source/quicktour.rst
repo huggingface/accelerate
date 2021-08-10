@@ -390,7 +390,7 @@ will be added in a next version.
 
 One main caveat for the DeepSpeed integration is that the DeepSpeed launcher always passes a ``local_rank`` variable to
 the training script, so your training script should accept it (whether you launch training with the DeepSpeed launcher
-or ``accelerate launch`` Accelerate.
+or ``accelerate launch``).
 
 .. Warning::
 
