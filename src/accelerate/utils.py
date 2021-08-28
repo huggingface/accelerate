@@ -151,7 +151,7 @@ def convert_to_fp32(tensor):
     if isinstance(tensor, (list, tuple)):
         return honor_type(tensor, (convert_to_fp32(t) for t in tensor))
     elif isinstance(tensor, dict):
-        return type(tensor)({k: convert_to_fp32(v) for k, v in tensor.items()})
+        return type(tensor)(**{k: convert_to_fp32(v) for k, v in tensor.items()})
     elif not hasattr(tensor, "dtype") or tensor.dtype != torch.float16:
         return tensor
     return tensor.float()
