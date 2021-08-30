@@ -152,7 +152,7 @@ just run
 
     accelerate config
 
-on your machine and reply to the questions asked. This will save a `default_config.json` file in your cache folder for
+on your machine and reply to the questions asked. This will save a `default_config.yaml` file in your cache folder for
 🤗 Accelerate. That cache folder is (with decreasing order of priority):
 
     - The content of your environment variable ``HF_HOME`` suffixed with `accelerate`.
@@ -176,7 +176,7 @@ Note that if you specified a location for the config file in the previous step, 
 
 .. code-block:: bash
 
-    accelerate test --config_file path_to_config.json
+    accelerate test --config_file path_to_config.yaml
 
 
 Now that this is done, you can run your script with the following command:
@@ -190,7 +190,7 @@ If you stored the config file in a non-default location, you can indicate it to 
 
 .. code-block:: bash
 
-    accelerate launch --config_file path_to_config.json path_to_script.py --args_for_the_script
+    accelerate launch --config_file path_to_config.yaml path_to_script.py --args_for_the_script
 
 You can also override any of the arguments determined by your config file, see TODO: insert ref here.
 

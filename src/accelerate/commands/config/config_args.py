@@ -28,7 +28,7 @@ hf_cache_home = os.path.expanduser(
     os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
 )
 cache_dir = os.path.join(hf_cache_home, "accelerate")
-default_json_config_file = os.path.join(cache_dir, "default_config.json")
+default_json_config_file = os.path.join(cache_dir, "default_config.yaml")
 default_yaml_config_file = os.path.join(cache_dir, "default_config.yaml")
 
 # For backward compatibility: the default config is the json one if it's the only existing file.

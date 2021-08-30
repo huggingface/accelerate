@@ -48,7 +48,7 @@ def config_command_parser(subparsers=None):
         "--config_file",
         default=None,
         help=(
-            "The path to use to store the config file. Will default to a file named default_config.json in the cache "
+            "The path to use to store the config file. Will default to a file named default_config.yaml in the cache "
             "location, which is the content of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have "
             "such an environment variable, your cache directory ('~/.cache' or the content of `XDG_CACHE_HOME`) suffixed "
             "with 'huggingface'."
