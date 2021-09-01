@@ -392,4 +392,5 @@ class DeepSpeedPlugin:
                 },
             },
             "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
+            "zero_allow_untested_optimizer": True,
         }
