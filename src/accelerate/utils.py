@@ -48,6 +48,12 @@ class RNGType(Enum):
     GENERATOR = "generator"
 
 
+@dataclass
+class TensorInformation:
+    shape: torch.Size
+    dtype: torch.dtype
+
+
 def set_seed(seed: int):
     """
     Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch``.
@@ -135,6 +141,43 @@ def send_to_device(tensor, device):
     elif not hasattr(tensor, "to"):
         return tensor
     return tensor.to(device)
+
+
+def get_data_structure(data):
+    """
+    Recursively gathers the information needed to rebuild a nested list/tuple/dictionary of tensors.
+
+    Args:
+        data (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            The data to send to analyze.
+
+    Returns:
+        The same data structure as :obj:`data` with :class:`~accelerate.utils.TensorInformation` instead of tensors.
+    """
+    if isinstance(data, (tuple, list)):
+        return honor_type(data, (get_data_structure(o) for o in data))
+    elif isinstance(data, dict):
+        return type(data)(**{k: get_data_structure(v) for k, v in data.items()})
+    elif isinstance(data, torch.Tensor):
+        return TensorInformation(shape=data.shape, dtype=data.dtype)
+    return data
+
+
+def initialize_tensors(data_structure):
+    """
+    Recursively initializes tensors from a nested list/tuple/dictionary of
+    :class:`~accelerate.utils.TensorInformation`.
+
+    Returns:
+        The same data structure as :obj:`data` with tensors instead of :class:`~accelerate.utils.TensorInformation`.
+    """
+    if isinstance(data_structure, (tuple, list)):
+        return honor_type(data_structure, (initialize_tensors(o) for o in data_structure))
+    elif isinstance(data_structure, dict):
+        return type(data_structure)(**{k: initialize_tensors(v) for k, v in data_structure.items()})
+    elif isinstance(data_structure, TensorInformation):
+        return torch.empty(*data_structure.shape, dtype=data_structure.dtype)
+    return data_structure
 
 
 def convert_to_fp32(tensor):
@@ -244,6 +287,50 @@ def gather(tensor):
         return _cpu_gather(tensor)
     else:
         return tensor
+
+
+def _gpu_broadcast(tensor, src=0):
+    if isinstance(tensor, (list, tuple)):
+        return honor_type(tensor, (_gpu_broadcast(t, src=src) for t in tensor))
+    elif isinstance(tensor, dict):
+        return type(tensor)({k: _gpu_broadcast(v, src=src) for k, v in tensor.items()})
+    elif not isinstance(tensor, torch.Tensor):
+        raise TypeError(f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors.")
+    torch.distributed.broadcast(tensor, src=src)
+    return tensor
+
+
+def broadcast(tensor, from_process: int = 0):
+    """
+    Recursively broadcast tensor in a nested list/tuple/dictionary of tensors to all devices.
+
+    Args:
+        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            The data to gather.
+        from_process (:obj:`int`, `optional`, defaults to 0):
+            The process from which to send the data
+
+    Returns:
+        The same data structure as :obj:`tensor` with all tensors broadcasted to the proper device.
+    """
+    if AcceleratorState().distributed_type == DistributedType.TPU:
+        raise NotImplementedError
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+        return _gpu_broadcast(tensor, src=from_process)
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
+        return _gpu_broadcast(tensor, src=from_process)
+    else:
+        return tensor
+
+
+def slice_tensors(data, data_slice):
+    if isinstance(data, (tuple, list)):
+        return honor_type(data, (slice_tensors(o, data_slice) for o in data))
+    elif isinstance(data, dict):
+        return type(data)(**{k: slice_tensors(v, data_slice) for k, v in data.items()})
+    elif isinstance(data, torch.Tensor):
+        return data[data_slice]
+    return data
 
 
 def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):

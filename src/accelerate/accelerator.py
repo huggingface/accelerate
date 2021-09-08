@@ -82,6 +82,9 @@ class Accelerator:
 
             Will default to :obj:`["torch"]` for PyTorch versions <=1.5.1 and :obj:`["generator"]` for PyTorch versions
             >= 1.6.
+        main_dataloader (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If set to :obj:`True`, the datalaoder prepared by the Accelerator is only iterated through on the main
+            process and then the batches are split and broadcast to each process.
         kwargs_handlers (list of kwargs handlers, `optional`)
             A list of :obj:`KwargHandler` to customize how the objects related to distributed training or mixed
             precision are created. See :doc:`kwargs` for more information.
@@ -100,6 +103,7 @@ class Accelerator:
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
+        main_dataloader: bool = False,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         if deepspeed_plugin is None:  # init from env variables
@@ -113,6 +117,7 @@ class Accelerator:
 
         self.device_placement = device_placement
         self.split_batches = split_batches
+        self.main_dataloader = main_dataloader
 
         # Kwargs handlers
         self.ddp_handler = None
@@ -384,6 +389,7 @@ class Accelerator:
             split_batches=self.split_batches,
             put_on_device=self.device_placement,
             rng_types=self.rng_types.copy(),
+            main_dataloader=self.main_dataloader,
         )
 
     def prepare_optimizer(self, optimizer):

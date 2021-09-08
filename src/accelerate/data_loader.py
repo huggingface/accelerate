@@ -20,7 +20,16 @@ from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 from packaging import version
 
 from .state import AcceleratorState, DistributedType, is_tpu_available
-from .utils import RNGType, send_to_device, synchronize_rng_states
+from .utils import (
+    RNGType,
+    broadcast,
+    get_data_structure,
+    initialize_tensors,
+    send_to_device,
+    slice_tensors,
+    synchronize_rng_states,
+    wait_for_everyone,
+)
 
 
 if is_tpu_available():
@@ -294,6 +303,44 @@ class DataLoaderShard(DataLoader):
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 
+class DataLoaderDispatcher(DataLoader):
+    """
+    Subclass of a PyTorch :obj:`DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
+    process their part of the batch.
+    """
+
+    def __iter__(self):
+        state = AcceleratorState()
+        if state.process_index == 0:
+            main_iterator = super().__iter__()
+        stop_iteration = False
+        while not stop_iteration:
+
+            if state.process_index == 0:
+                try:
+                    batch = next(main_iterator)
+                    batch_info = [get_data_structure(batch), False]
+                except StopIteration:
+                    batch_info = [None, True]
+            else:
+                batch_info = [None, stop_iteration]
+
+            torch.distributed.broadcast_object_list(batch_info)
+            stop_iteration = batch_info[1]
+            if stop_iteration:
+                continue
+
+            if state.process_index != 0:
+                batch = initialize_tensors(batch_info[0])
+            batch = send_to_device(batch, state.device)
+            batch = broadcast(batch, from_process=0)
+
+            local_batch_size = self.my_batch_size // state.num_processes
+            data_slice = slice(state.process_index * local_batch_size, (state.process_index + 1) * local_batch_size)
+
+            yield slice_tensors(batch, data_slice)
+
+
 def prepare_data_loader(
     dataloader: DataLoader,
     device: Optional[torch.device] = None,
@@ -302,6 +349,7 @@ def prepare_data_loader(
     split_batches: bool = False,
     put_on_device: bool = False,
     rng_types: Optional[List[Union[str, RNGType]]] = None,
+    main_dataloader: bool = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch :obj:`DataLoader` to generate batches for one of the processes only.
@@ -370,7 +418,7 @@ def prepare_data_loader(
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
     generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
-    if num_processes != 1:
+    if num_processes != 1 and not main_dataloader:
         if isinstance(new_dataset, IterableDataset):
             if getattr(dataloader.dataset, "generator", None) is not None:
                 generator = dataloader.dataset.generator
@@ -420,6 +468,11 @@ def prepare_data_loader(
     # Need to provide batch_size as batch_sampler is None for Iterable dataset
     if new_batch_sampler is None:
         kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
+
+    if main_dataloader:
+        data_loader = DataLoaderDispatcher(new_dataset, batch_sampler=new_batch_sampler, **kwargs)
+        data_loader.my_batch_size = dataloader.batch_size
+        return data_loader
 
     return DataLoaderShard(
         new_dataset,
