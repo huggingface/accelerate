@@ -357,9 +357,12 @@ class DataLoaderDispatcher(DataLoader):
                 else:
                     continue
 
-            if state.process_index != 0:
-                batch = initialize_tensors(batch_info[0])
-            batch = send_to_device(batch, state.device)
+            if state.distributed_type != DistributedType.TPU:
+                if state.process_index != 0:
+                    batch = initialize_tensors(batch_info[0])
+                batch = send_to_device(batch, state.device)
+            else:
+                batch = None
             batch = broadcast(batch, from_process=0)
 
             batch_size = find_batch_size(batch) // state.num_processes

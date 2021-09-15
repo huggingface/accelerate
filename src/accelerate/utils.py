@@ -374,7 +374,7 @@ def broadcast(tensor, from_process: int = 0):
         The same data structure as :obj:`tensor` with all tensors broadcasted to the proper device.
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
-        raise _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
+        return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
     elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
         return _gpu_broadcast(tensor, src=from_process)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
