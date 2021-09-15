@@ -357,7 +357,7 @@ def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
         return honor_type(tensor, (_tpu_broadcast(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
     elif isinstance(tensor, dict):
         return type(tensor)({k: _tpu_broadcast(v, name=f"{name}_{k}") for k, v in tensor.items()})
-    return xm.mesh_reduce(name, t, lambda x: x[src])
+    return xm.mesh_reduce(name, tensor, lambda x: x[src])
 
 
 def broadcast(tensor, from_process: int = 0):
