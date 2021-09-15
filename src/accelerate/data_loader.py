@@ -334,6 +334,7 @@ class DataLoaderDispatcher(DataLoader):
                         for _ in range(state.num_processes):
                             batches.append(next(main_iterator))
                         batch = concatenate(batches, dim=0)
+                        print(f"Process 0 batch gathered: {batch}")
                         batch_info = [get_data_structure(batch), False]
                 except StopIteration:
                     batch_info = [None, True]
@@ -342,6 +343,7 @@ class DataLoaderDispatcher(DataLoader):
 
             broadcast_object_list(batch_info)
             stop_iteration = batch_info[1]
+            print(f"Process {state.process_index} after broadcast_object_list, stop: {stop_iteration}")
             if stop_iteration:
                 # If drop_last is False and split_batches is False, we may have a remainder to take care of.
                 if not self.split_batches and not self.drop_last:
@@ -351,23 +353,21 @@ class DataLoaderDispatcher(DataLoader):
                     else:
                         batch_info = [None, True]
                     broadcast_object_list(batch_info)
-                    stop_iteration = batch_info[1]
-                    if stop_iteration:
+                    if batch_info[1]:
                         continue
                 else:
                     continue
 
-            if state.distributed_type != DistributedType.TPU:
-                if state.process_index != 0:
-                    batch = initialize_tensors(batch_info[0])
-                batch = send_to_device(batch, state.device)
-            else:
-                batch = None
+            if state.process_index != 0:
+                  batch = initialize_tensors(batch_info[0])
+            batch = send_to_device(batch, state.device)
             batch = broadcast(batch, from_process=0)
-
+            
             batch_size = find_batch_size(batch) // state.num_processes
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
 
+            if state.distributed_type == DistributedType.TPU:
+                xm.mark_step()
             yield slice_tensors(batch, data_slice)
 
 
