@@ -310,6 +310,19 @@ class DataLoaderDispatcher(DataLoader):
     """
     Subclass of a PyTorch :obj:`DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
     process their part of the batch.
+
+    Args:
+        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether the resulting :obj:`DataLoader` should split the batches of the original data loader across devices
+            or yield full batches (in which case it will yield batches starting at the :obj:`process_index`-th and
+            advancing of :obj:`num_processes` batches at each iteration).
+
+            Another way to see this is that the observed batch size will be the same as the initial :obj:`dataloader`
+            if this option is set to :obj:`True`, the batch size of the initial :obj:`dataloader` multiplied by
+            :obj:`num_processes` otherwise.
+
+            Setting this option to :obj:`True` requires that the batch size of the :obj:`dataloader` is a round
+            multiple of :obj:`batch_size`.
     """
 
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
@@ -319,28 +332,33 @@ class DataLoaderDispatcher(DataLoader):
     def __iter__(self):
         state = AcceleratorState()
         if state.process_index == 0:
+            # We only iterate through the DataLoader on process 0.
             main_iterator = super().__iter__()
         stop_iteration = False
         while not stop_iteration:
-
+            # On process 0, we gather the batch to dispatch.
             if state.process_index == 0:
                 try:
                     if self.split_batches:
+                        # One batch of the main iterator is dispatched and split.
                         batch = next(main_iterator)
-                        batch_info = [get_data_structure(batch), False]
                     else:
+                        # num_processes batches of the main iterator are concatenated then dispatched and split.
                         # We add the batches one by one so we have the remainder available when drop_last=False.
                         batches = []
                         for _ in range(state.num_processes):
                             batches.append(next(main_iterator))
                         batch = concatenate(batches, dim=0)
-                        print(f"Process 0 batch gathered: {batch}")
-                        batch_info = [get_data_structure(batch), False]
+                    # In both cases, we need to get the structure of the batch that we will broadcast on other
+                    # processes to initialize the tensors with the right shape.
+                    # data_structure, stop_iteration
+                    batch_info = [get_data_structure(batch), False]
                 except StopIteration:
                     batch_info = [None, True]
             else:
                 batch_info = [None, stop_iteration]
 
+            # This is inplace, so after this instruction, every process has the same `batch_info` as process 0.
             broadcast_object_list(batch_info)
             stop_iteration = batch_info[1]
             if stop_iteration:
@@ -358,8 +376,10 @@ class DataLoaderDispatcher(DataLoader):
                     continue
 
             if state.process_index != 0:
-                  batch = initialize_tensors(batch_info[0])
+                # Initialize tensors on other processes than process 0.
+                batch = initialize_tensors(batch_info[0])
             batch = send_to_device(batch, state.device)
+            # Broadcast the batch before splitting it.
             batch = broadcast(batch, from_process=0)
             
             batch_size = find_batch_size(batch) // state.num_processes
