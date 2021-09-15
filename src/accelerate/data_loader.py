@@ -343,7 +343,6 @@ class DataLoaderDispatcher(DataLoader):
 
             broadcast_object_list(batch_info)
             stop_iteration = batch_info[1]
-            print(f"Process {state.process_index} after broadcast_object_list, stop: {stop_iteration}")
             if stop_iteration:
                 # If drop_last is False and split_batches is False, we may have a remainder to take care of.
                 if not self.split_batches and not self.drop_last:
