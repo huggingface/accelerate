@@ -317,7 +317,7 @@ def _gpu_gather(tensor):
         torch.distributed.all_gather(output_tensors, tensor)
         return torch.cat(output_tensors, dim=0)
 
-    return recursively_apply(tensor, _gpu_gather_one, error_on_other_type=True)
+    return recursively_apply(_gpu_gather_one, tensor, error_on_other_type=True)
 
 
 _cpu_gather = _gpu_gather

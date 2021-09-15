@@ -108,6 +108,67 @@ def dl_preparation_check():
         print("Shuffled dataloader passing.")
 
 
+def central_dl_preparation_check():
+    state = AcceleratorState()
+    length = 32 * state.num_processes
+
+    dl = DataLoader(range(length), batch_size=8)
+    dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index, put_on_device=True, central_dataloader=True)
+    result = []
+    for batch in dl:
+        result.append(gather(batch))
+    result = torch.cat(result)
+    assert torch.equal(result.cpu(), torch.arange(0, length).long())
+
+    dl = DataLoader(range(length), batch_size=8)
+    dl = prepare_data_loader(
+        dl,
+        state.device,
+        state.num_processes,
+        state.process_index,
+        put_on_device=True,
+        split_batches=True,
+        central_dataloader=True,
+    )
+    result = []
+    for batch in dl:
+        result.append(gather(batch))
+    result = torch.cat(result)
+    assert torch.equal(result.cpu(), torch.arange(0, length).long())
+
+    if state.process_index == 0:
+        print("Non-shuffled central dataloader passing.")
+
+    dl = DataLoader(range(length), batch_size=8, shuffle=True)
+    dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index, put_on_device=True, central_dataloader=True)
+    result = []
+    for batch in dl:
+        result.append(gather(batch))
+    result = torch.cat(result).tolist()
+    result.sort()
+    assert result == list(range(length))
+
+    dl = DataLoader(range(length), batch_size=8, shuffle=True)
+    dl = prepare_data_loader(
+        dl,
+        state.device,
+        state.num_processes,
+        state.process_index,
+        put_on_device=True,
+        split_batches=True,
+        central_dataloader=True
+    )
+    result = []
+    for batch in dl:
+        result.append(gather(batch))
+    result = torch.cat(result).tolist()
+    result.sort()
+    assert result == list(range(length))
+
+    if state.local_process_index == 0:
+        print("Shuffled central dataloader passing.")
+
+
 def mock_training(length, batch_size, generator):
     set_seed(42)
     generator.manual_seed(42)
@@ -215,6 +276,7 @@ def main():
     if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
+    central_dl_preparation_check()
 
     if state.local_process_index == 0:
         print("\n**Training integration test**")
