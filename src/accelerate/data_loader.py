@@ -381,7 +381,7 @@ class DataLoaderDispatcher(DataLoader):
             batch = send_to_device(batch, state.device)
             # Broadcast the batch before splitting it.
             batch = broadcast(batch, from_process=0)
-            
+
             batch_size = find_batch_size(batch) // state.num_processes
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
 
@@ -452,6 +452,8 @@ def prepare_data_loader(
 
         This does not support :obj:`BatchSampler` with varying batch size yet.
     """
+    if central_dataloader and not put_on_device:
+        raise ValueError("Using `central_dataloader=True` requires `put_on_device=True`.")
     # Grab defaults from AcceleratorState
     state = AcceleratorState()
     if num_processes is None:

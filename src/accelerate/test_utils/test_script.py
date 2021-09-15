@@ -113,7 +113,9 @@ def central_dl_preparation_check():
     length = 32 * state.num_processes
 
     dl = DataLoader(range(length), batch_size=8)
-    dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index, put_on_device=True, central_dataloader=True)
+    dl = prepare_data_loader(
+        dl, state.device, state.num_processes, state.process_index, put_on_device=True, central_dataloader=True
+    )
     result = []
     for batch in dl:
         result.append(gather(batch))
@@ -140,7 +142,9 @@ def central_dl_preparation_check():
         print("Non-shuffled central dataloader passing.")
 
     dl = DataLoader(range(length), batch_size=8, shuffle=True)
-    dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index, put_on_device=True, central_dataloader=True)
+    dl = prepare_data_loader(
+        dl, state.device, state.num_processes, state.process_index, put_on_device=True, central_dataloader=True
+    )
     result = []
     for batch in dl:
         result.append(gather(batch))
@@ -156,7 +160,7 @@ def central_dl_preparation_check():
         state.process_index,
         put_on_device=True,
         split_batches=True,
-        central_dataloader=True
+        central_dataloader=True,
     )
     result = []
     for batch in dl:
