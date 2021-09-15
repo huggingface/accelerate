@@ -23,6 +23,7 @@ from .state import AcceleratorState, DistributedType, is_tpu_available
 from .utils import (
     RNGType,
     broadcast,
+    broadcast_object_list,
     concatenate,
     find_batch_size,
     get_data_structure,
@@ -339,7 +340,7 @@ class DataLoaderDispatcher(DataLoader):
             else:
                 batch_info = [None, stop_iteration]
 
-            torch.distributed.broadcast_object_list(batch_info)
+            broadcast_object_list(batch_info)
             stop_iteration = batch_info[1]
             if stop_iteration:
                 # If drop_last is False and split_batches is False, we may have a remainder to take care of.
@@ -349,7 +350,7 @@ class DataLoaderDispatcher(DataLoader):
                         batch_info = [get_data_structure(batch), False]
                     else:
                         batch_info = [None, True]
-                    torch.distributed.broadcast_object_list(batch_info)
+                    broadcast_object_list(batch_info)
                     stop_iteration = batch_info[1]
                     if stop_iteration:
                         continue

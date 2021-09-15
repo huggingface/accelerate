@@ -297,7 +297,7 @@ def extract_model_from_parallel(model):
     return model
 
 
-def _tpu_gather(tensor, name="tensor"):
+def _tpu_gather(tensor, name="gather tensor"):
     if isinstance(tensor, (list, tuple)):
         return honor_type(tensor, (_tpu_gather(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
     elif isinstance(tensor, dict):
@@ -352,6 +352,14 @@ def _gpu_broadcast(data, src=0):
     return recursively_apply(_gpu_broadcast_one, data, error_on_other_type=True, src=src)
 
 
+def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
+    if isinstance(tensor, (list, tuple)):
+        return honor_type(tensor, (_tpu_broadcast(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
+    elif isinstance(tensor, dict):
+        return type(tensor)({k: _tpu_broadcast(v, name=f"{name}_{k}") for k, v in tensor.items()})
+    return xm.mesh_reduce(name, t, lambda x: x[src])
+
+
 def broadcast(tensor, from_process: int = 0):
     """
     Recursively broadcast tensor in a nested list/tuple/dictionary of tensors to all devices.
@@ -366,13 +374,36 @@ def broadcast(tensor, from_process: int = 0):
         The same data structure as :obj:`tensor` with all tensors broadcasted to the proper device.
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
-        raise NotImplementedError
+        raise _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
     elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
         return _gpu_broadcast(tensor, src=from_process)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
         return _gpu_broadcast(tensor, src=from_process)
     else:
         return tensor
+
+
+def broadcast_object_list(object_list, from_process: int = 0):
+    """
+    Broadcast a list of picklable objects form one process to the others.
+
+    Args:
+        object_list (list of picklable objects):
+            The list of objects to broadcast. This list will be modified inplace.
+        from_process (:obj:`int`, `optional`, defaults to 0):
+            The process from which to send the data.
+
+    Returns:
+        The same list containing the objects from process 0.
+    """
+    if AcceleratorState().distributed_type == DistributedType.TPU:
+        for i, obj in enumerate(object_list):
+            object_list[i] = xm.mesh_reduce("accelerate.utils.broadcast_object_list", obj, lambda x: x[from_process])
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+        torch.distributed.broadcast_object_list(object_list, src=from_process)
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
+        torch.distributed.broadcast_object_list(object_list, src=from_process)
+    return object_list
 
 
 def slice_tensors(data, tensor_slice):
