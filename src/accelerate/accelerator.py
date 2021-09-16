@@ -83,7 +83,7 @@ class Accelerator:
             Will default to :obj:`["torch"]` for PyTorch versions <=1.5.1 and :obj:`["generator"]` for PyTorch versions
             >= 1.6.
         central_dataloader (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If set to :obj:`True`, the datalaoder prepared by the Accelerator is only iterated through on the main
+            If set to :obj:`True`, the dataloader prepared by the Accelerator is only iterated through on the main
             process and then the batches are split and broadcast to each process.
         kwargs_handlers (list of kwargs handlers, `optional`)
             A list of :obj:`KwargHandler` to customize how the objects related to distributed training or mixed
