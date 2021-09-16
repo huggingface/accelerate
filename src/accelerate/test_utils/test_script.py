@@ -36,14 +36,14 @@ def init_state_check():
 def rng_sync_check():
     state = AcceleratorState()
     synchronize_rng_states(["torch"])
-    assert are_the_same_tensors(torch.get_rng_state())
+    assert are_the_same_tensors(torch.get_rng_state()), "RNG states improperly synchronized on CPU."
     if state.distributed_type == DistributedType.MULTI_GPU:
         synchronize_rng_states(["cuda"])
-        assert are_the_same_tensors(torch.cuda.get_rng_state())
+        assert are_the_same_tensors(torch.cuda.get_rng_state()), "RNG states improperly synchronized on GPU."
     if version.parse(torch.__version__) >= version.parse("1.6.0"):
         generator = torch.Generator()
         synchronize_rng_states(["generator"], generator=generator)
-        assert are_the_same_tensors(generator.get_state())
+        assert are_the_same_tensors(generator.get_state()), "RNG states improperly synchronized in generator."
 
     if state.local_process_index == 0:
         print("All rng are properly synched.")
@@ -59,7 +59,7 @@ def dl_preparation_check():
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result)
-    assert torch.equal(result.cpu(), torch.arange(0, length).long())
+    assert torch.equal(result.cpu(), torch.arange(0, length).long()), "Wrong non-shuffled dataloader result."
 
     dl = DataLoader(range(length), batch_size=8)
     dl = prepare_data_loader(
@@ -74,7 +74,7 @@ def dl_preparation_check():
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result)
-    assert torch.equal(result.cpu(), torch.arange(0, length).long())
+    assert torch.equal(result.cpu(), torch.arange(0, length).long()), "Wrong non-shuffled dataloader result."
 
     if state.process_index == 0:
         print("Non-shuffled dataloader passing.")
@@ -86,7 +86,7 @@ def dl_preparation_check():
         result.append(gather(batch))
     result = torch.cat(result).tolist()
     result.sort()
-    assert result == list(range(length))
+    assert result == list(range(length)), "Wrong shuffled dataloader result."
 
     dl = DataLoader(range(length), batch_size=8, shuffle=True)
     dl = prepare_data_loader(
@@ -102,7 +102,7 @@ def dl_preparation_check():
         result.append(gather(batch))
     result = torch.cat(result).tolist()
     result.sort()
-    assert result == list(range(length))
+    assert result == list(range(length)), "Wrong shuffled dataloader result."
 
     if state.local_process_index == 0:
         print("Shuffled dataloader passing.")
@@ -114,13 +114,13 @@ def central_dl_preparation_check():
 
     dl = DataLoader(range(length), batch_size=8)
     dl = prepare_data_loader(
-        dl, state.device, state.num_processes, state.process_index, put_on_device=True, central_dataloader=True
+        dl, state.device, state.num_processes, state.process_index, put_on_device=True, dispatch_batches=True
     )
     result = []
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result)
-    assert torch.equal(result.cpu(), torch.arange(0, length).long())
+    assert torch.equal(result.cpu(), torch.arange(0, length).long()), "Wrong non-shuffled dataloader result."
 
     dl = DataLoader(range(length), batch_size=8)
     dl = prepare_data_loader(
@@ -130,27 +130,27 @@ def central_dl_preparation_check():
         state.process_index,
         put_on_device=True,
         split_batches=True,
-        central_dataloader=True,
+        dispatch_batches=True,
     )
     result = []
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result)
-    assert torch.equal(result.cpu(), torch.arange(0, length).long())
+    assert torch.equal(result.cpu(), torch.arange(0, length).long()), "Wrong non-shuffled dataloader result."
 
     if state.process_index == 0:
         print("Non-shuffled central dataloader passing.")
 
     dl = DataLoader(range(length), batch_size=8, shuffle=True)
     dl = prepare_data_loader(
-        dl, state.device, state.num_processes, state.process_index, put_on_device=True, central_dataloader=True
+        dl, state.device, state.num_processes, state.process_index, put_on_device=True, dispatch_batches=True
     )
     result = []
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result).tolist()
     result.sort()
-    assert result == list(range(length))
+    assert result == list(range(length)), "Wrong shuffled dataloader result."
 
     dl = DataLoader(range(length), batch_size=8, shuffle=True)
     dl = prepare_data_loader(
@@ -160,14 +160,14 @@ def central_dl_preparation_check():
         state.process_index,
         put_on_device=True,
         split_batches=True,
-        central_dataloader=True,
+        dispatch_batches=True,
     )
     result = []
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result).tolist()
     result.sort()
-    assert result == list(range(length))
+    assert result == list(range(length)), "Wrong shuffled dataloader result."
 
     if state.local_process_index == 0:
         print("Shuffled central dataloader passing.")
@@ -197,8 +197,8 @@ def training_check():
     length = batch_size * 4 * state.num_processes
 
     train_set, old_model = mock_training(length, batch_size * state.num_processes, generator)
-    assert are_the_same_tensors(old_model.a)
-    assert are_the_same_tensors(old_model.b)
+    assert are_the_same_tensors(old_model.a), "Did not obtain the same model on both processes."
+    assert are_the_same_tensors(old_model.b), "Did not obtain the same model on both processes."
 
     accelerator = Accelerator()
     train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
@@ -217,8 +217,8 @@ def training_check():
             optimizer.step()
 
     model = accelerator.unwrap_model(model).cpu()
-    assert torch.allclose(old_model.a, model.a)
-    assert torch.allclose(old_model.b, model.b)
+    assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
+    assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
     accelerator.print("Training yielded the same results on one CPU or distributed setup with no batch split.")
 
@@ -239,8 +239,8 @@ def training_check():
             optimizer.step()
 
     model = accelerator.unwrap_model(model).cpu()
-    assert torch.allclose(old_model.a, model.a)
-    assert torch.allclose(old_model.b, model.b)
+    assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
+    assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
     accelerator.print("Training yielded the same results on one CPU or distributes setup with batch split.")
 
@@ -262,8 +262,8 @@ def training_check():
             optimizer.step()
 
     model = accelerator.unwrap_model(model).cpu()
-    assert torch.allclose(old_model.a, model.a)
-    assert torch.allclose(old_model.b, model.b)
+    assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
+    assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
 
 def main():

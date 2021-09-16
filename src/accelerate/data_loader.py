@@ -31,7 +31,6 @@ from .utils import (
     send_to_device,
     slice_tensors,
     synchronize_rng_states,
-    wait_for_everyone,
 )
 
 
@@ -398,7 +397,7 @@ def prepare_data_loader(
     split_batches: bool = False,
     put_on_device: bool = False,
     rng_types: Optional[List[Union[str, RNGType]]] = None,
-    central_dataloader: bool = False,
+    dispatch_batches: bool = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch :obj:`DataLoader` to generate batches for one of the processes only.
@@ -441,7 +440,7 @@ def prepare_data_loader(
             - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler in
               your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
-        central_dataloader (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        dispatch_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If set to :obj:`True`, the datalaoder prepared is only iterated through on the main process and then the
             batches are split and broadcast to each process.
 
@@ -452,8 +451,8 @@ def prepare_data_loader(
 
         This does not support :obj:`BatchSampler` with varying batch size yet.
     """
-    if central_dataloader and not put_on_device:
-        raise ValueError("Using `central_dataloader=True` requires `put_on_device=True`.")
+    if dispatch_batches and not put_on_device:
+        raise ValueError("Using `dispatch_batches=True` requires `put_on_device=True`.")
     # Grab defaults from AcceleratorState
     state = AcceleratorState()
     if num_processes is None:
@@ -473,7 +472,7 @@ def prepare_data_loader(
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
     generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
-    if num_processes != 1 and not central_dataloader:
+    if num_processes != 1 and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
             if getattr(dataloader.dataset, "generator", None) is not None:
                 generator = dataloader.dataset.generator
@@ -524,12 +523,10 @@ def prepare_data_loader(
     if new_batch_sampler is None:
         kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
 
-    if central_dataloader:
-        data_loader = DataLoaderDispatcher(
+    if dispatch_batches:
+        return DataLoaderDispatcher(
             new_dataset, split_batches=split_batches, batch_sampler=new_batch_sampler, **kwargs
         )
-        data_loader.my_batch_size = dataloader.batch_size
-        return data_loader
 
     return DataLoaderShard(
         new_dataset,
