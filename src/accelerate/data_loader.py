@@ -20,7 +20,18 @@ from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 from packaging import version
 
 from .state import AcceleratorState, DistributedType, is_tpu_available
-from .utils import RNGType, send_to_device, synchronize_rng_states
+from .utils import (
+    RNGType,
+    broadcast,
+    broadcast_object_list,
+    concatenate,
+    find_batch_size,
+    get_data_structure,
+    initialize_tensors,
+    send_to_device,
+    slice_tensors,
+    synchronize_rng_states,
+)
 
 
 if is_tpu_available():
@@ -294,6 +305,90 @@ class DataLoaderShard(DataLoader):
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 
+class DataLoaderDispatcher(DataLoader):
+    """
+    Subclass of a PyTorch :obj:`DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
+    process their part of the batch.
+
+    Args:
+        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether the resulting :obj:`DataLoader` should split the batches of the original data loader across devices
+            or yield full batches (in which case it will yield batches starting at the :obj:`process_index`-th and
+            advancing of :obj:`num_processes` batches at each iteration).
+
+            Another way to see this is that the observed batch size will be the same as the initial :obj:`dataloader`
+            if this option is set to :obj:`True`, the batch size of the initial :obj:`dataloader` multiplied by
+            :obj:`num_processes` otherwise.
+
+            Setting this option to :obj:`True` requires that the batch size of the :obj:`dataloader` is a round
+            multiple of :obj:`batch_size`.
+    """
+
+    def __init__(self, dataset, split_batches: bool = False, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.split_batches = split_batches
+
+    def __iter__(self):
+        state = AcceleratorState()
+        if state.process_index == 0:
+            # We only iterate through the DataLoader on process 0.
+            main_iterator = super().__iter__()
+        stop_iteration = False
+        while not stop_iteration:
+            # On process 0, we gather the batch to dispatch.
+            if state.process_index == 0:
+                try:
+                    if self.split_batches:
+                        # One batch of the main iterator is dispatched and split.
+                        batch = next(main_iterator)
+                    else:
+                        # num_processes batches of the main iterator are concatenated then dispatched and split.
+                        # We add the batches one by one so we have the remainder available when drop_last=False.
+                        batches = []
+                        for _ in range(state.num_processes):
+                            batches.append(next(main_iterator))
+                        batch = concatenate(batches, dim=0)
+                    # In both cases, we need to get the structure of the batch that we will broadcast on other
+                    # processes to initialize the tensors with the right shape.
+                    # data_structure, stop_iteration
+                    batch_info = [get_data_structure(batch), False]
+                except StopIteration:
+                    batch_info = [None, True]
+            else:
+                batch_info = [None, stop_iteration]
+
+            # This is inplace, so after this instruction, every process has the same `batch_info` as process 0.
+            broadcast_object_list(batch_info)
+            stop_iteration = batch_info[1]
+            if stop_iteration:
+                # If drop_last is False and split_batches is False, we may have a remainder to take care of.
+                if not self.split_batches and not self.drop_last:
+                    if state.process_index == 0 and len(batches) > 0:
+                        batch = concatenate(batches, dim=0)
+                        batch_info = [get_data_structure(batch), False]
+                    else:
+                        batch_info = [None, True]
+                    broadcast_object_list(batch_info)
+                    if batch_info[1]:
+                        continue
+                else:
+                    continue
+
+            if state.process_index != 0:
+                # Initialize tensors on other processes than process 0.
+                batch = initialize_tensors(batch_info[0])
+            batch = send_to_device(batch, state.device)
+            # Broadcast the batch before splitting it.
+            batch = broadcast(batch, from_process=0)
+
+            batch_size = find_batch_size(batch) // state.num_processes
+            data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
+
+            if state.distributed_type == DistributedType.TPU:
+                xm.mark_step()
+            yield slice_tensors(batch, data_slice)
+
+
 def prepare_data_loader(
     dataloader: DataLoader,
     device: Optional[torch.device] = None,
@@ -302,6 +397,7 @@ def prepare_data_loader(
     split_batches: bool = False,
     put_on_device: bool = False,
     rng_types: Optional[List[Union[str, RNGType]]] = None,
+    dispatch_batches: bool = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch :obj:`DataLoader` to generate batches for one of the processes only.
@@ -344,6 +440,10 @@ def prepare_data_loader(
             - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler in
               your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
+        dispatch_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If set to :obj:`True`, the datalaoder prepared is only iterated through on the main process and then the
+            batches are split and broadcast to each process.
+
     Returns:
         :obj:`torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
 
@@ -351,6 +451,8 @@ def prepare_data_loader(
 
         This does not support :obj:`BatchSampler` with varying batch size yet.
     """
+    if dispatch_batches and not put_on_device:
+        raise ValueError("Using `dispatch_batches=True` requires `put_on_device=True`.")
     # Grab defaults from AcceleratorState
     state = AcceleratorState()
     if num_processes is None:
@@ -370,7 +472,7 @@ def prepare_data_loader(
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
     generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
-    if num_processes != 1:
+    if num_processes != 1 and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
             if getattr(dataloader.dataset, "generator", None) is not None:
                 generator = dataloader.dataset.generator
@@ -420,6 +522,11 @@ def prepare_data_loader(
     # Need to provide batch_size as batch_sampler is None for Iterable dataset
     if new_batch_sampler is None:
         kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
+
+    if dispatch_batches:
+        return DataLoaderDispatcher(
+            new_dataset, split_batches=split_batches, batch_sampler=new_batch_sampler, **kwargs
+        )
 
     return DataLoaderShard(
         new_dataset,

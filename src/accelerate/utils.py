@@ -48,6 +48,12 @@ class RNGType(Enum):
     GENERATOR = "generator"
 
 
+@dataclass
+class TensorInformation:
+    shape: torch.Size
+    dtype: torch.dtype
+
+
 def set_seed(seed: int):
     """
     Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch``.
@@ -115,6 +121,66 @@ def honor_type(obj, generator):
     return type(obj)(generator)
 
 
+def is_torch_tensor(tensor):
+    return isinstance(tensor, torch.Tensor)
+
+
+def is_tensor_information(tensor_info):
+    return isinstance(tensor_info, TensorInformation)
+
+
+def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_other_type=False, **kwargs):
+    """
+    Recursively apply a function on a data structure that is a nested list/tuple/dictionary of a given base type.
+
+    Args:
+        func (:obj:`callable`):
+            The function to recursively apply.
+        data (nested list/tuple/dictionary of :obj:`main_type`):
+            The data on which to apply :obj:`func`
+        *args:
+            Positional arguments that will be passed to :obj:`func` when applied on the unpacked data.
+        main_type (:obj:`type`, `optional`, defaults to :obj:`torch.Tensor`):
+            The base type of the objects to which apply :obj:`func`.
+        error_on_other_type (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to return an error or not if after unpacking :obj:`data`, we get on an object that is not of type
+            :obj:`main_type`. If :obj:`False`, the function will leave objects of types different than :obj:`main_type`
+            unchanged.
+        **kwargs:
+            Keyword arguments that will be passed to :obj:`func` when applied on the unpacked data.
+
+    Returns:
+        The same data structure as :obj:`data` with :obj:`func` applied to every object of type :obj:`main_type`.
+    """
+    if isinstance(data, (tuple, list)):
+        return honor_type(
+            data,
+            (
+                recursively_apply(
+                    func, o, *args, test_type=test_type, error_on_other_type=error_on_other_type, **kwargs
+                )
+                for o in data
+            ),
+        )
+    elif isinstance(data, dict):
+        return type(data)(
+            **{
+                k: recursively_apply(
+                    func, v, *args, test_type=test_type, error_on_other_type=error_on_other_type, **kwargs
+                )
+                for k, v in data.items()
+            }
+        )
+    elif test_type(data):
+        return func(data, *args, **kwargs)
+    elif error_on_other_type:
+        raise TypeError(
+            f"Can't apply {func.__name__} on object of type {type(data)}, only of nested list/tuple/dicts of objects "
+            f"that satisfy {test_type.__name__}."
+        )
+    return data
+
+
 def send_to_device(tensor, device):
     """
     Recursively sends the elements in a nested list/tuple/dictionary of tensors to a given device.
@@ -128,18 +194,52 @@ def send_to_device(tensor, device):
     Returns:
         The same data structure as :obj:`tensor` with all tensors sent to the proper device.
     """
-    if isinstance(tensor, (list, tuple)):
-        return honor_type(tensor, (send_to_device(t, device) for t in tensor))
-    elif isinstance(tensor, dict):
-        return type(tensor)({k: send_to_device(v, device) for k, v in tensor.items()})
-    elif not hasattr(tensor, "to"):
-        return tensor
-    return tensor.to(device)
+
+    def _send_to_device(t, device):
+        return t.to(device)
+
+    def _has_to_method(t):
+        return hasattr(t, "to")
+
+    return recursively_apply(_send_to_device, tensor, device, test_type=_has_to_method, error_on_other_type=True)
+
+
+def get_data_structure(data):
+    """
+    Recursively gathers the information needed to rebuild a nested list/tuple/dictionary of tensors.
+
+    Args:
+        data (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            The data to send to analyze.
+
+    Returns:
+        The same data structure as :obj:`data` with :class:`~accelerate.utils.TensorInformation` instead of tensors.
+    """
+
+    def _get_data_structure(tensor):
+        return TensorInformation(shape=tensor.shape, dtype=tensor.dtype)
+
+    return recursively_apply(_get_data_structure, data)
+
+
+def initialize_tensors(data_structure):
+    """
+    Recursively initializes tensors from a nested list/tuple/dictionary of
+    :class:`~accelerate.utils.TensorInformation`.
+
+    Returns:
+        The same data structure as :obj:`data` with tensors instead of :class:`~accelerate.utils.TensorInformation`.
+    """
+
+    def _initialize_tensor(tensor_info):
+        return torch.empty(*tensor_info.shape, dtype=tensor_info.dtype)
+
+    return recursively_apply(_initialize_tensor, data_structure, test_type=is_tensor_information)
 
 
 def convert_to_fp32(tensor):
     """
-    Recursively converts the lements nested list/tuple/dictionary of tensors in FP16 precision to FP32.
+    Recursively converts the elements nested list/tuple/dictionary of tensors in FP16 precision to FP32.
 
     Args:
         tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
@@ -148,13 +248,14 @@ def convert_to_fp32(tensor):
     Returns:
         The same data structure as :obj:`tensor` with all tensors that were in FP16 precision converted to FP32.
     """
-    if isinstance(tensor, (list, tuple)):
-        return honor_type(tensor, (convert_to_fp32(t) for t in tensor))
-    elif isinstance(tensor, dict):
-        return type(tensor)(**{k: convert_to_fp32(v) for k, v in tensor.items()})
-    elif not hasattr(tensor, "dtype") or tensor.dtype != torch.float16:
-        return tensor
-    return tensor.float()
+
+    def _convert_to_fp32(tensor):
+        return tensor.float()
+
+    def _is_fp16_tensor(tensor):
+        return hasattr(tensor, "dtype") and tensor.dtype == torch.float16
+
+    return recursively_apply(_is_fp16_tensor, tensor, test_type=_is_fp16_tensor)
 
 
 def convert_outputs_to_fp32(model_forward):
@@ -196,7 +297,7 @@ def extract_model_from_parallel(model):
     return model
 
 
-def _tpu_gather(tensor, name="tensor"):
+def _tpu_gather(tensor, name="gather tensor"):
     if isinstance(tensor, (list, tuple)):
         return honor_type(tensor, (_tpu_gather(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
     elif isinstance(tensor, dict):
@@ -209,17 +310,14 @@ def _tpu_gather(tensor, name="tensor"):
 
 
 def _gpu_gather(tensor):
-    if isinstance(tensor, (list, tuple)):
-        return honor_type(tensor, (_gpu_gather(t) for t in tensor))
-    elif isinstance(tensor, dict):
-        return type(tensor)({k: _gpu_gather(v) for k, v in tensor.items()})
-    elif not isinstance(tensor, torch.Tensor):
-        raise TypeError(f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors.")
-    if tensor.ndim == 0:
-        tensor = tensor.clone()[None]
-    output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
-    torch.distributed.all_gather(output_tensors, tensor)
-    return torch.cat(output_tensors, dim=0)
+    def _gpu_gather_one(tensor):
+        if tensor.ndim == 0:
+            tensor = tensor.clone()[None]
+        output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(output_tensors, tensor)
+        return torch.cat(output_tensors, dim=0)
+
+    return recursively_apply(_gpu_gather_one, tensor, error_on_other_type=True)
 
 
 _cpu_gather = _gpu_gather
@@ -246,6 +344,130 @@ def gather(tensor):
         return tensor
 
 
+def _gpu_broadcast(data, src=0):
+    def _gpu_broadcast_one(tensor, src=0):
+        torch.distributed.broadcast(tensor, src=src)
+        return tensor
+
+    return recursively_apply(_gpu_broadcast_one, data, error_on_other_type=True, src=src)
+
+
+def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
+    if isinstance(tensor, (list, tuple)):
+        return honor_type(tensor, (_tpu_broadcast(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
+    elif isinstance(tensor, dict):
+        return type(tensor)({k: _tpu_broadcast(v, name=f"{name}_{k}") for k, v in tensor.items()})
+    return xm.mesh_reduce(name, tensor, lambda x: x[src])
+
+
+def broadcast(tensor, from_process: int = 0):
+    """
+    Recursively broadcast tensor in a nested list/tuple/dictionary of tensors to all devices.
+
+    Args:
+        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            The data to gather.
+        from_process (:obj:`int`, `optional`, defaults to 0):
+            The process from which to send the data
+
+    Returns:
+        The same data structure as :obj:`tensor` with all tensors broadcasted to the proper device.
+    """
+    if AcceleratorState().distributed_type == DistributedType.TPU:
+        return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+        return _gpu_broadcast(tensor, src=from_process)
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
+        return _gpu_broadcast(tensor, src=from_process)
+    else:
+        return tensor
+
+
+def broadcast_object_list(object_list, from_process: int = 0):
+    """
+    Broadcast a list of picklable objects form one process to the others.
+
+    Args:
+        object_list (list of picklable objects):
+            The list of objects to broadcast. This list will be modified inplace.
+        from_process (:obj:`int`, `optional`, defaults to 0):
+            The process from which to send the data.
+
+    Returns:
+        The same list containing the objects from process 0.
+    """
+    if AcceleratorState().distributed_type == DistributedType.TPU:
+        for i, obj in enumerate(object_list):
+            object_list[i] = xm.mesh_reduce("accelerate.utils.broadcast_object_list", obj, lambda x: x[from_process])
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+        torch.distributed.broadcast_object_list(object_list, src=from_process)
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
+        torch.distributed.broadcast_object_list(object_list, src=from_process)
+    return object_list
+
+
+def slice_tensors(data, tensor_slice):
+    """
+    Recursively takes a slice in a nested list/tuple/dictionary of tensors.
+
+    Args:
+        data (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            The data to slice.
+        tensor_slice (:obj:`slice`):
+            The slice to take.
+
+    Returns:
+        The same data structure as :obj:`data` with all the tensors slices.
+    """
+
+    def _slice_tensor(tensor, tensor_slice):
+        return tensor[tensor_slice]
+
+    return recursively_apply(_slice_tensor, data, tensor_slice)
+
+
+def find_batch_size(data):
+    """
+    Recursively finds the batch size in a nested list/tuple/dictionary of lists of tensors.
+
+    Args:
+        data (nested list/tuple/dictionary of :obj:`torch.Tensor`): The data from which to find the batch size.
+
+    Returns:
+        :obj:`int`: The batch size.
+    """
+    if isinstance(data, (tuple, list)):
+        return find_batch_size(data[0])
+    elif isinstance(data, dict):
+        for k in data.keys():
+            return find_batch_size(data[k])
+    elif not isinstance(data, torch.Tensor):
+        raise TypeError(f"Can only find the batch size of tensors but got {type(data)}.")
+    return data.shape[0]
+
+
+def concatenate(data, dim=0):
+    """
+    Recursively concatenate the tensors in a nested list/tuple/dictionary of lists of tensors with the same shape.
+
+    Args:
+        data (nested list/tuple/dictionary of lists of tensors :obj:`torch.Tensor`):
+            The data to concatenate.
+        dim (:obj:`int`, `optional`, defaults to 0):
+            The dimension on which to concatenate.
+
+    Returns:
+        The same data structure as :obj:`data` with all the tensors concatenated.
+    """
+    if isinstance(data[0], (tuple, list)):
+        return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
+    elif isinstance(data[0], dict):
+        return type(data[0])(**{k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
+    elif not isinstance(data[0], torch.Tensor):
+        raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
+    return torch.cat(data, dim=dim)
+
+
 def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     """
     Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so they
@@ -261,36 +483,35 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
         pad_first (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to pad at the beginning or the end.
     """
-    if isinstance(tensor, (list, tuple)):
-        return honor_type(tensor, (pad_across_processes(t, dim=dim, pad_index=pad_index) for t in tensor))
-    elif isinstance(tensor, dict):
-        return type(tensor)({k: pad_across_processes(v, dim=dim, pad_index=pad_index) for k, v in tensor.items()})
-    elif not isinstance(tensor, torch.Tensor):
-        raise TypeError(f"Can't pad the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors.")
 
-    if dim >= len(tensor.shape):
-        return tensor
+    def _pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
+        if dim >= len(tensor.shape):
+            return tensor
 
-    # Gather all sizes
-    size = torch.tensor(tensor.shape, device=tensor.device)[None]
-    sizes = gather(size).cpu()
-    # Then pad to the maximum size
-    max_size = max(s[dim] for s in sizes)
-    if max_size == tensor.shape[dim]:
-        return tensor
+        # Gather all sizes
+        size = torch.tensor(tensor.shape, device=tensor.device)[None]
+        sizes = gather(size).cpu()
+        # Then pad to the maximum size
+        max_size = max(s[dim] for s in sizes)
+        if max_size == tensor.shape[dim]:
+            return tensor
 
-    old_size = tensor.shape
-    new_size = list(old_size)
-    new_size[dim] = max_size
-    new_tensor = tensor.new_zeros(tuple(new_size)) + pad_index
-    if pad_first:
-        indices = tuple(
-            slice(max_size - old_size[dim], max_size) if i == dim else slice(None) for i in range(len(new_size))
-        )
-    else:
-        indices = tuple(slice(0, old_size[dim]) if i == dim else slice(None) for i in range(len(new_size)))
-    new_tensor[indices] = tensor
-    return new_tensor
+        old_size = tensor.shape
+        new_size = list(old_size)
+        new_size[dim] = max_size
+        new_tensor = tensor.new_zeros(tuple(new_size)) + pad_index
+        if pad_first:
+            indices = tuple(
+                slice(max_size - old_size[dim], max_size) if i == dim else slice(None) for i in range(len(new_size))
+            )
+        else:
+            indices = tuple(slice(0, old_size[dim]) if i == dim else slice(None) for i in range(len(new_size)))
+        new_tensor[indices] = tensor
+        return new_tensor
+
+    return recursively_apply(
+        _pad_across_processes, tensor, error_on_other_type=True, dim=dim, pad_index=pad_index, pad_first=pad_first
+    )
 
 
 def wait_for_everyone():
