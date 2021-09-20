@@ -454,7 +454,7 @@ def prepare_data_loader(
         This does not support :obj:`BatchSampler` with varying batch size yet.
     """
     if dispatch_batches is None:
-        dispatch_batches = False if not put_on_device else isinstance(new_dataset, IterableDataset)
+        dispatch_batches = False if not put_on_device else isinstance(dataloader.dataset, IterableDataset)
 
     if dispatch_batches and not put_on_device:
         raise ValueError("Using `dispatch_batches=True` requires `put_on_device=True`.")
