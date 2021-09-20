@@ -398,7 +398,7 @@ def prepare_data_loader(
     split_batches: bool = False,
     put_on_device: bool = False,
     rng_types: Optional[List[Union[str, RNGType]]] = None,
-    dispatch_batches: bool = False,
+    dispatch_batches: Optional[bool] = None,
 ) -> DataLoader:
     """
     Wraps a PyTorch :obj:`DataLoader` to generate batches for one of the processes only.
@@ -441,9 +441,10 @@ def prepare_data_loader(
             - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler in
               your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
-        dispatch_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        dispatch_batches (:obj:`bool`, `optional`):
             If set to :obj:`True`, the datalaoder prepared is only iterated through on the main process and then the
-            batches are split and broadcast to each process.
+            batches are split and broadcast to each process. Will default to :obj:`True` when the underlying dataset is
+            an :obj:`IterableDataset`, :obj:`False` otherwise.
 
     Returns:
         :obj:`torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -452,6 +453,9 @@ def prepare_data_loader(
 
         This does not support :obj:`BatchSampler` with varying batch size yet.
     """
+    if dispatch_batches is None:
+        dispatch_batches = False if not put_on_device else isinstance(dataloader.dataset, IterableDataset)
+
     if dispatch_batches and not put_on_device:
         raise ValueError("Using `dispatch_batches=True` requires `put_on_device=True`.")
     # Grab defaults from AcceleratorState
