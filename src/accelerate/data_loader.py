@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from typing import List, Optional, Union
 
 import torch
@@ -228,7 +229,7 @@ class IterableDatasetShard(IterableDataset):
         split_batches: bool = False,
     ):
         if split_batches and batch_size % num_processes != 0:
-            raise ValueError(
+            warnings.warn(
                 f"To use `IterableDatasetShard` in `split_batches` mode, the batch size ({batch_size}) "
                 f"needs to be a round multiple of the number of processes ({num_processes})."
             )
