@@ -463,9 +463,9 @@ def prepare_data_loader(
 
     # Sanity check
     if split_batches and dataloader.batch_size % num_processes != 0:
-        raise ValueError(
-            f"Using `split_batches=True` requires that the batch size ({dataloader.batch_size}) "
-            f"to be a round multiple of the number of processes ({num_processes})."
+        warnings.warn(
+            f"To use `IterableDatasetShard` in `split_batches` mode, the batch size ({batch_size}) "
+            f"needs to be a round multiple of the number of processes ({num_processes})."
         )
 
     new_dataset = dataloader.dataset
