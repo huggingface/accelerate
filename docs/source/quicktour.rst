@@ -361,7 +361,7 @@ computed inside your model (like in Transformer models for instance). Every comp
 executed in full precision (which is generally what you want for loss computation, expecially if it involves a
 softmax). However you might want to put your loss computation inside the `accelerator.autocast` context manager:
 
-.. codeblock::
+.. code-block::
 
     with accelerator.autocast():
         loss = complex_loss_function(outputs, target):
@@ -375,7 +375,7 @@ have an impact when you have very little training data, or if the first learning
 important. In this case, you can skip the learning rate scheduler updates when the optimizer step was not done like
 this:
 
-.. codeblock::
+.. code-block::
 
     if not accelerator.optimizer_step_was_skipped:
         lr_scheduler.step()
