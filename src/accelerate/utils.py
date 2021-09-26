@@ -255,7 +255,7 @@ def convert_to_fp32(tensor):
     def _is_fp16_tensor(tensor):
         return hasattr(tensor, "dtype") and tensor.dtype == torch.float16
 
-    return recursively_apply(_is_fp16_tensor, tensor, test_type=_is_fp16_tensor)
+    return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_tensor)
 
 
 def convert_outputs_to_fp32(model_forward):
