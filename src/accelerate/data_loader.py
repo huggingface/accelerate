@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from typing import List, Optional, Union
 
 import torch
@@ -387,6 +388,14 @@ class DataLoaderDispatcher(DataLoader):
             if state.distributed_type == DistributedType.TPU:
                 xm.mark_step()
             yield slice_tensors(batch, data_slice)
+
+    def __len__(self):
+        state = AcceleratorState()
+        whole_length = super().__len__()
+        if self.drop_last:
+            return whole_length // state.num_processes
+        else:
+            return math.ceil(whole_length / state.num_processes)
 
 
 def prepare_data_loader(
