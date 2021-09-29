@@ -201,7 +201,7 @@ def send_to_device(tensor, device):
     def _has_to_method(t):
         return hasattr(t, "to")
 
-    return recursively_apply(_send_to_device, tensor, device, test_type=_has_to_method, error_on_other_type=True)
+    return recursively_apply(_send_to_device, tensor, device, test_type=_has_to_method)
 
 
 def get_data_structure(data):
