@@ -15,6 +15,7 @@
 import importlib
 import os
 import random
+from collections import UserDict
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union
@@ -162,6 +163,15 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
                 for o in data
             ),
         )
+    elif isinstance(data, UserDict):
+        return type(data)(
+            {
+                k: recursively_apply(
+                    func, v, *args, test_type=test_type, error_on_other_type=error_on_other_type, **kwargs
+                )
+                for k, v in data.items()
+            }
+        )
     elif isinstance(data, dict):
         return type(data)(
             **{
@@ -300,7 +310,7 @@ def extract_model_from_parallel(model):
 def _tpu_gather(tensor, name="gather tensor"):
     if isinstance(tensor, (list, tuple)):
         return honor_type(tensor, (_tpu_gather(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
-    elif isinstance(tensor, dict):
+    elif isinstance(tensor, (dict, UserDict)):
         return type(tensor)({k: _tpu_gather(v, name=f"{name}_{k}") for k, v in tensor.items()})
     elif not isinstance(tensor, torch.Tensor):
         raise TypeError(f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors.")
@@ -355,7 +365,7 @@ def _gpu_broadcast(data, src=0):
 def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
     if isinstance(tensor, (list, tuple)):
         return honor_type(tensor, (_tpu_broadcast(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
-    elif isinstance(tensor, dict):
+    elif isinstance(tensor, (dict, UserDict)):
         return type(tensor)({k: _tpu_broadcast(v, name=f"{name}_{k}") for k, v in tensor.items()})
     return xm.mesh_reduce(name, tensor, lambda x: x[src])
 
@@ -438,7 +448,7 @@ def find_batch_size(data):
     """
     if isinstance(data, (tuple, list)):
         return find_batch_size(data[0])
-    elif isinstance(data, dict):
+    elif isinstance(data, (dict, UserDict)):
         for k in data.keys():
             return find_batch_size(data[k])
     elif not isinstance(data, torch.Tensor):
@@ -461,6 +471,8 @@ def concatenate(data, dim=0):
     """
     if isinstance(data[0], (tuple, list)):
         return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
+    elif isinstance(data[0], UserDict):
+        return type(data[0])({k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
     elif isinstance(data[0], dict):
         return type(data[0])(**{k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
     elif not isinstance(data[0], torch.Tensor):
