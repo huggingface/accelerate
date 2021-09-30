@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from collections import namedtuple
+from collections import UserDict, namedtuple
 
 import torch
 
@@ -54,3 +54,11 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(torch.equal(result3.b[0].cpu(), tensor))
         self.assertTrue(torch.equal(result3.b[1].cpu(), tensor))
         self.assertEqual(result3.c, 1)
+
+        result4 = send_to_device(UserDict({"a": tensor, "b": [tensor, tensor], "c": 1}), device)
+        self.assertIsInstance(result4, UserDict)
+        self.assertTrue(torch.equal(result4["a"].cpu(), tensor))
+        self.assertIsInstance(result4["b"], list)
+        self.assertTrue(torch.equal(result4["b"][0].cpu(), tensor))
+        self.assertTrue(torch.equal(result4["b"][1].cpu(), tensor))
+        self.assertEqual(result4["c"], 1)
