@@ -162,8 +162,8 @@ def training_function(config, args):
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
-    parser.add_argument("--fp16", type=bool, default=False, help="If passed, will use FP16 training.")
-    parser.add_argument("--cpu", type=bool, default=False, help="If passed, will train on the CPU.")
+    parser.add_argument("--fp16", action="store_true", help="If passed, will use FP16 training.")
+    parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
     training_function(config, args)
