@@ -155,6 +155,8 @@ For instance, here is how you would run the GLUE example on the MRPC task (from 
 accelerate launch examples/nlp_example.py
 ```
 
+This CLI tool is **optional**, and you can still use `python my_script.py` or `python -m torch.distributed.launch my_script.py` at your convenance.
+
 ## Launching multi-CPU run using MPI
 
 🤗 Here is another way to launch multi-CPU run using MPI. You can learn how to install Open MPI on [this page](https://www.open-mpi.org/faq/?category=building#easy-build). You can use Intel MPI or MVAPICH as well.
