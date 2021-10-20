@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
+
 import torch
 
 from packaging import version
@@ -100,9 +102,15 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 )
             self.optimizer.zero_grad()
         else:
-            if set_to_none is None:
-                set_to_none = False
-            self.optimizer.zero_grad(set_to_none=set_to_none)
+            accept_arg = "set_to_none" in inspect.signature(self.optimizer.zero_grad).parameters
+            if accept_arg:
+                if set_to_none is None:
+                    set_to_none = False
+                self.optimizer.zero_grad(set_to_none=set_to_none)
+            else:
+                if set_to_none is not None:
+                    raise ValueError("`set_to_none` for Optimizer.zero_grad` is not supported by this optimizer.")
+                self.optimizer.zero_grad()
 
     def step(self, closure=None):
         if self.state.distributed_type == DistributedType.TPU:
