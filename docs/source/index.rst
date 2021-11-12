@@ -69,7 +69,7 @@ Changing it to work with accelerate is really easy and only adds a few lines of 
           loss = my_loss_function(outputs, targets)
           # Just a small change for the backward instruction
     -     loss.backward()
-    +     accelerate.backward(loss)
+    +     accelerator.backward(loss)
           my_optimizer.step()
 
 and with this, your script can now run in a distributed environment (multi-GPU, TPU).
@@ -97,7 +97,7 @@ especially for TPU training):
           loss = my_loss_function(outputs, targets)
           # Just a small change for the backward instruction
     -     loss.backward()
-    +     accelerate.backward(loss)
+    +     accelerator.backward(loss)
           my_optimizer.step()
 
 
