@@ -204,7 +204,7 @@ You should use 🤗 Accelerate when you want to easily run your training scripts
 
 ## Why shouldn't I use 🤗 Accelerate?
 
-You shouldn't use 🤗 Accelerate if you don't want to write a training loop yourself. There are plenty of high-level libraries above PyTorch that will offer you that, 🤗 Accelerate is not one of them.
+You shouldn't use 🤗 Accelerate if you don't want to write a training loop yourself. If you like the simplicity of 🤗 Accelerate but would prefer a higher-level abstraction around your training loop, you may like to check out [pytorch-accelerated](https://github.com/Chris-hughes10/pytorch-accelerated), a lightweight training library which is built on top of 🤗 Accelerate; providing a good introduction to some of the features of 🤗 Accelerate, without you having to write the entire loop yourself!
 
 ## Installation
 
