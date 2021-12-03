@@ -204,8 +204,14 @@ You should use 🤗 Accelerate when you want to easily run your training scripts
 
 ## Why shouldn't I use 🤗 Accelerate?
 
-You shouldn't use 🤗 Accelerate if you don't want to write a training loop yourself. If you like the simplicity of 🤗 Accelerate but would prefer a higher-level abstraction around your training loop, you may like to check out [pytorch-accelerated](https://github.com/Chris-hughes10/pytorch-accelerated), a lightweight training library which is built on top of 🤗 Accelerate; providing a good introduction to some of the features of 🤗 Accelerate, without you having to write the entire loop yourself!
+You shouldn't use 🤗 Accelerate if you don't want to write a training loop yourself. There are plenty of high-level libraries above PyTorch that will offer you that, 🤗 Accelerate is not one of them. 
 
+## Frameworks using 🤗 Accelerate
+
+If you like the simplicity of 🤗 Accelerate but would prefer a higher-level abstraction around your training loop, some frameworks that are built on top of 🤗 Accelerate are listed below:
+
+* [pytorch-accelerated](https://github.com/Chris-hughes10/pytorch-accelerated) is a lightweight training library, with a streamlined feature set centred around a general-purpose [Trainer](https://pytorch-accelerated.readthedocs.io/en/latest/trainer.html), that places a huge emphasis on simplicity and transparency; enabling users to understand exactly what is going on under the hood, but without having to write and maintain the boilerplate themselves!
+* [Kornia](https://kornia.readthedocs.io/en/latest/get-started/introduction.html) is a differentiable library that allows classical computer vision to be integrated into deep learning models. Kornia provides a [Trainer](https://kornia.readthedocs.io/en/latest/x.html#kornia.x.Trainer) with the specific purpose to train and fine-tune the supported deep learning algorithms within the library.
 ## Installation
 
 This repository is tested on Python 3.6+ and PyTorch 1.4.0+
@@ -219,6 +225,8 @@ Then, you will need to install PyTorch: refer to the [official installation page
 ```bash
 pip install accelerate
 ```
+
+
 
 ## Supported integrations
 
