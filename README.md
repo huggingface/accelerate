@@ -227,8 +227,6 @@ Then, you will need to install PyTorch: refer to the [official installation page
 pip install accelerate
 ```
 
-
-
 ## Supported integrations
 
 - CPU only
