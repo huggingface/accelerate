@@ -150,7 +150,8 @@ class Accelerator:
         self._models = []
 
         # RNG Types
-        if rng_types is None:
+        self.rng_types = rng_types
+        if self.rng_types is None:
             self.rng_types = ["torch"] if version.parse(torch.__version__) <= version.parse("1.5.1") else ["generator"]
 
     @property
