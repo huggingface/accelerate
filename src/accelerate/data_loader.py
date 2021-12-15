@@ -335,6 +335,7 @@ class DataLoaderDispatcher(DataLoader):
             # We only iterate through the DataLoader on process 0.
             main_iterator = super().__iter__()
         stop_iteration = False
+        first_batch = None
         while not stop_iteration:
             # On process 0, we gather the batch to dispatch.
             if state.process_index == 0:
@@ -382,7 +383,18 @@ class DataLoaderDispatcher(DataLoader):
             # Broadcast the batch before splitting it.
             batch = broadcast(batch, from_process=0)
 
-            batch_size = find_batch_size(batch) // state.num_processes
+            if not self.drop_last and first_batch is None:
+                # We keep at least num processes elements of the first batch to be able to complete the last batch
+                first_batch = slice_tensors(batch, slice(0, state.num_processes))
+
+            observed_batch_size = find_batch_size(batch)
+            batch_size = observed_batch_size // state.num_processes
+
+            if not self.drop_last and stop_iteration and observed_batch_size % state.num_processes != 0:
+                # If the last batch is not complete, let's add the first batch to it.
+                batch = concatenate([batch, first_batch], dim=0)
+                batch_size += 1
+
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
 
             if state.distributed_type == DistributedType.TPU:
@@ -534,6 +546,7 @@ def prepare_data_loader(
 
     # Need to provide batch_size as batch_sampler is None for Iterable dataset
     if new_batch_sampler is None:
+        kwargs["drop_last"] = dataloader.drop_last
         kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
 
     if dispatch_batches:
