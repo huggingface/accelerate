@@ -22,7 +22,7 @@ import torch
 from packaging import version
 
 from .data_loader import prepare_data_loader
-from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, KwargsHandler
+from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .utils import (
@@ -114,15 +114,10 @@ class Accelerator:
                 deepspeed_plugin, DeepSpeedPlugin
             ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
 
-        self.state = AcceleratorState(fp16=fp16, cpu=cpu, deepspeed_plugin=deepspeed_plugin, _from_accelerator=True)
-
-        self.device_placement = device_placement
-        self.split_batches = split_batches
-        self.dispatch_batches = dispatch_batches
-
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
+        self.init_handler = None
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
                 assert isinstance(handler, KwargsHandler), f"Unsupported kwargs handler passed: {handler}."
@@ -136,6 +131,20 @@ class Accelerator:
                         raise ValueError("You can only pass one `GradScalerKwargs` in `kwargs_handler`.")
                     else:
                         self.scaler_handler = handler
+                elif isinstance(handler, InitProcessGroupKwargs):
+                    if self.init_handler is not None:
+                        raise ValueError("You can only pass one `InitProcessGroupKwargs` in `kwargs_handler`.")
+                    else:
+                        self.init_handler = handler
+
+        kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
+        self.state = AcceleratorState(
+            fp16=fp16, cpu=cpu, deepspeed_plugin=deepspeed_plugin, _from_accelerator=True, **kwargs
+        )
+
+        self.device_placement = device_placement
+        self.split_batches = split_batches
+        self.dispatch_batches = dispatch_batches
 
         # Mixed precision attributes
         self.scaler = None
