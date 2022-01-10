@@ -53,18 +53,26 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def __init__(self, optimizer, device_placement=True, scaler=None):
         self.optimizer = optimizer
         self.scaler = scaler
-        self.state = AcceleratorState()
+        self.accelerator_state = AcceleratorState()
         self.device_placement = device_placement
         self._is_overflow = False
 
         # Handle device placement
         if device_placement:
             state_dict = self.optimizer.state_dict()
-            if self.state.distributed_type == DistributedType.TPU:
-                xm.send_cpu_data_to_device(state_dict, self.state.device)
+            if self.accelerator_state.distributed_type == DistributedType.TPU:
+                xm.send_cpu_data_to_device(state_dict, self.accelerator_state.device)
             else:
-                state_dict = move_to_device(state_dict, self.state.device)
+                state_dict = move_to_device(state_dict, self.accelerator_state.device)
             self.optimizer.load_state_dict(state_dict)
+
+    @property
+    def state(self):
+        return self.optimizer.state
+
+    @state.setter
+    def state(self, state):
+        self.optimizer.state = state
 
     @property
     def param_groups(self):
@@ -86,8 +94,8 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.optimizer.add_param_group(param_group)
 
     def load_state_dict(self, state_dict):
-        if self.state.distributed_type == DistributedType.TPU and self.device_placement:
-            xm.send_cpu_data_to_device(state_dict, self.state.device)
+        if self.accelerator_state.distributed_type == DistributedType.TPU and self.device_placement:
+            xm.send_cpu_data_to_device(state_dict, self.accelerator_state.device)
         self.optimizer.load_state_dict(state_dict)
 
     def state_dict(self):
@@ -113,7 +121,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 self.optimizer.zero_grad()
 
     def step(self, closure=None):
-        if self.state.distributed_type == DistributedType.TPU:
+        if self.accelerator_state.distributed_type == DistributedType.TPU:
             optimizer_args = {"closure": closure} if closure is not None else {}
             xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)
         elif self.scaler is not None:
