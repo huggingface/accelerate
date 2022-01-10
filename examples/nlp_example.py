@@ -125,7 +125,7 @@ def training_function(config, args):
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer=optimizer,
         num_warmup_steps=100,
-        num_training_steps=len(train_dataloader) * num_epochs,
+        num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
     )
 
     # Now we train the model
