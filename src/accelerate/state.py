@@ -138,7 +138,9 @@ class AcceleratorState:
 
     _shared_state = {}
 
-    def __init__(self, fp16: bool = None, cpu: bool = False, deepspeed_plugin=None, _from_accelerator: bool = False):
+    def __init__(
+        self, fp16: bool = None, cpu: bool = False, deepspeed_plugin=None, _from_accelerator: bool = False, **kwargs
+    ):
         self.__dict__ = self._shared_state
         if not getattr(self, "initialized", False):
             self.backend = None
@@ -161,7 +163,7 @@ class AcceleratorState:
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend="nccl")
+                    torch.distributed.init_process_group(backend="nccl", **kwargs)
                     self.backend = "nccl"
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
@@ -175,7 +177,7 @@ class AcceleratorState:
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend="nccl")
+                    torch.distributed.init_process_group(backend="nccl", **kwargs)
                     self.backend = "nccl"
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
@@ -213,7 +215,7 @@ class AcceleratorState:
                             "please try exporting rank 0's hostname as MASTER_ADDR"
                         )
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend, rank=rank, world_size=size)
+                    torch.distributed.init_process_group(backend, rank=rank, world_size=size, **kwargs)
                     self.backend = backend
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()

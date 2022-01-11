@@ -14,6 +14,8 @@
 
 import copy
 from dataclasses import dataclass
+from datetime import timedelta
+from typing import Optional
 
 
 class KwargsHandler:
@@ -71,3 +73,16 @@ class GradScalerKwargs(KwargsHandler):
     backoff_factor: float = 0.5
     growth_interval: int = 2000
     enabled: bool = True
+
+
+@dataclass
+class InitProcessGroupKwargs(KwargsHandler):
+    """
+    Use this object in your :class:`~accelerate.Accelerator` to customize the initialization of the distributed
+    processes. Please refer to the documentation of this `method
+    <https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group>`__ for more information on
+    each argument.
+    """
+
+    init_method: Optional[str] = None
+    timeout: timedelta = timedelta(seconds=1800)
