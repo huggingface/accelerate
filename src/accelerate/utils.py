@@ -18,7 +18,7 @@ import random
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 import numpy as np
 import torch
@@ -345,6 +345,40 @@ def gather(tensor):
         return tensor
 
 
+
+def _gpu_gather_object(object: Any):
+    def _gpu_gather_object_one(object: Any):
+        output_objects = [None for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather_object(output_objects, object)
+        return [i for j in output_objects for i in j]
+
+    return recursively_apply(_gpu_gather_one, tensor, error_on_other_type=True)
+
+
+_cpu_gather_object = _gpu_gather_object
+
+
+def gather_object(object: Any):
+    """
+    Recursively gather object in a nested list/tuple/dictionary of objects from all devices.
+
+    Args:
+        object (nested list/tuple/dictionary of :obj:`Any`):
+            The data to gather.
+
+    Returns:
+        The same data structure as :obj:`Any` with all objects sent to the proper device.
+    """
+    if AcceleratorState().distributed_type == DistributedType.TPU:
+        raise NotImplementedError('gather objects in TPU is not supported')
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+        return _gpu_gather_object(object)
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
+        return _cpu_gather_object(object)
+    else:
+        return object
+
+    
 def _gpu_broadcast(data, src=0):
     def _gpu_broadcast_one(tensor, src=0):
         torch.distributed.broadcast(tensor, src=src)
