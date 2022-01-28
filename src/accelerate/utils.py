@@ -115,12 +115,11 @@ def honor_type(obj, generator):
     """
     Cast a generator to the same type as obj (list, tuple or namedtuple)
     """
-    # There is no direct check whether an object if of type namedtuple sadly, this is a workaround.
-    if isinstance(obj, tuple) and hasattr(obj, "_fields"):
-        # Can instantiate a namedtuple from a generator directly, contrary to a tuple/list.
+    try:
+        return type(obj)(generator)
+    except TypeError:
+        # Some objects may not be able to instantiate from a generator directly
         return type(obj)(*list(generator))
-    return type(obj)(generator)
-
 
 def is_torch_tensor(tensor):
     return isinstance(tensor, torch.Tensor)
