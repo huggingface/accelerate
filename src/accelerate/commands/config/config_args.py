@@ -98,6 +98,12 @@ class BaseConfig:
             config_dict = yaml.safe_load(f)
         if "compute_environment" not in config_dict:
             config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE
+        if "mixed_precision" not in config_dict:
+            if "fp16" in config_dict and config_dict["fp16"]:
+                config_dict["mixed_precision"] = "fp16"
+            else:
+                config_dict["mixed_precision"] = "no"
+
         return cls(**config_dict)
 
     def to_yaml_file(self, yaml_file):
