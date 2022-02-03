@@ -219,6 +219,13 @@ class Accelerator:
         return self.local_process_index == 0
 
     @property
+    def use_fp16(self):
+        if self.mixed_precision != "no":
+            return True
+        else:
+            return False
+
+    @property
     def mixed_precision(self):
         if self.distributed_type == DistributedType.DEEPSPEED:
             if self.state.deepspeed_plugin.deepspeed_config["fp16"]["enabled"]:
