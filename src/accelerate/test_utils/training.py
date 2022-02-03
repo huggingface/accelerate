@@ -38,4 +38,5 @@ class RegressionModel(torch.nn.Module):
         self.b = torch.nn.Parameter(torch.tensor(b).float())
 
     def forward(self, x=None):
+        print(f"Model dtype: {self.a.dtype}, {self.b.dtype}. Input dtype: {x.dtype}")
         return x * self.a + self.b
