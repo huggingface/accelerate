@@ -418,13 +418,16 @@ def launch_command(args):
 
                 # Those args are handled separately
                 if (
-                    name not in ["compute_environment", "mixed_precision", "distributed_type"]
+                    name not in ["compute_environment", "fp16", "mixed_precision", "distributed_type"]
                     and getattr(args, name, None) is None
                 ):
                     setattr(args, name, attr)
 
         if not args.mixed_precision:
-            args.mixed_precision = defaults.mixed_precision
+            if args.fp16:
+                args.mixed_precision = "fp16"
+            else:
+                args.mixed_precision = defaults.mixed_precision
     else:
         if args.num_processes is None:
             args.num_processes = 1
