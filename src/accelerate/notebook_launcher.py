@@ -14,6 +14,7 @@
 
 import os
 import sys
+import warnings
 
 import torch
 
@@ -23,7 +24,7 @@ from .state import AcceleratorState
 from .utils import PrepareForLaunch
 
 
-def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, use_port="29500"):
+def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mixed_precision="no", use_port="29500"):
     """
     Launches a training function, using several processes if it's possible in the current environment (TPU with
     multiple cores for instance).
@@ -39,6 +40,8 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, use
             the number of GPUs available otherwise.
         use_fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, will use mixed precision training on multi-GPU.
+        mixed_precision (:obj:`str`, `optional`, defaults to :obj:`no`):
+            If :obj:`fp16` or :obj:`bf16`, will use mixed precision training on multi-GPU.
         use_port (:obj:`str`, `optional`, defaults to :obj:`"29500"`):
             The port to use to communicate between processes when launching a multi-GPU training.
     """
@@ -110,7 +113,19 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, use
             os.environ["WORLD_SIZE"] = str(num_processes)
             os.environ["MASTER_ADDR"] = "127.0.0.1"
             os.environ["MASTER_PORT"] = str(use_port)
-            os.environ["USE_FP16"] = str(use_fp16)
+
+            mixed_precision = mixed_precision.lower()
+            assert mixed_precision in [
+                "no",
+                "fp16",
+                "bf16",
+            ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+
+            if use_fp16:
+                warnings.warn('use_fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
+                mixed_precision = "fp16"
+
+            os.environ["MIXED_PRECISION"] = str(mixed_precision)
 
             launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
             try:

@@ -22,6 +22,7 @@ import sys
 from ast import literal_eval
 from pathlib import Path
 from typing import Dict, List
+import warnings
 
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
@@ -54,8 +55,19 @@ def launch_command_parser(subparsers=None):
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
     parser.add_argument(
+        "--mixed_precision",
+        default="no",
+        type=str,
+        choices=["no", "fp16", "bf16"],
+        help="Whether or not to use mixed precision training. "
+        "Choose between FP16 and BF16 (bfloat16) training. "
+        "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
+    )
+
+    parser.add_argument(
         "--fp16", default=False, action="store_true", help="Whether or not to use mixed precision training."
     )
+
     parser.add_argument(
         "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
     )
@@ -134,7 +146,19 @@ def simple_launcher(args):
 
     current_env = os.environ.copy()
     current_env["USE_CPU"] = str(args.cpu)
-    current_env["USE_FP16"] = str(args.fp16)
+
+    mixed_precision = args.mixed_precision.lower()
+    assert mixed_precision in [
+        "no",
+        "fp16",
+        "bf16",
+    ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+
+    if args.fp16:
+        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
+        mixed_precision = "fp16"
+
+    current_env["MIXED_PRECISION"] = str(mixed_precision)
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
@@ -168,7 +192,18 @@ def multi_gpu_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
-    current_env["USE_FP16"] = str(args.fp16)
+    mixed_precision = args.mixed_precision.lower()
+    assert mixed_precision in [
+        "no",
+        "fp16",
+        "bf16",
+    ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+
+    if args.fp16:
+        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
+        mixed_precision = "fp16"
+
+    current_env["MIXED_PRECISION"] = str(mixed_precision)
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
@@ -201,7 +236,18 @@ def deepspeed_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
-    current_env["USE_FP16"] = str(args.fp16)
+    mixed_precision = args.mixed_precision.lower()
+    assert mixed_precision in [
+        "no",
+        "fp16",
+        "bf16",
+    ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+
+    if args.fp16:
+        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
+        mixed_precision = "fp16"
+
+    current_env["MIXED_PRECISION"] = str(mixed_precision)
     current_env["USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
     current_env["GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
@@ -309,8 +355,20 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     print("Converting Arguments to Hyperparameters")
     hyperparameters = _convert_nargs_to_dict(args.training_script_args)
 
-    environment = {"USE_FP16": args.fp16}  # Environment variables to be set for use during training job
+    mixed_precision = args.mixed_precision.lower()
+    assert mixed_precision in [
+        "no",
+        "fp16",
+        "bf16",
+    ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
 
+    if args.fp16:
+        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
+        mixed_precision = "fp16"
+
+    environment = {
+        "MIXED_PRECISION": str(mixed_precision)
+    }  # Environment variables to be set for use during training job
     # configure distribution set up
     distribution = None  # TODO: not yet implemented
 
@@ -360,13 +418,13 @@ def launch_command(args):
 
                 # Those args are handled separately
                 if (
-                    name not in ["compute_environment", "fp16", "distributed_type"]
+                    name not in ["compute_environment", "mixed_precision", "distributed_type"]
                     and getattr(args, name, None) is None
                 ):
                     setattr(args, name, attr)
 
-        if not args.fp16:
-            args.fp16 = defaults.fp16
+        if not args.mixed_precision:
+            args.mixed_precision = defaults.mixed_precision
     else:
         if args.num_processes is None:
             args.num_processes = 1

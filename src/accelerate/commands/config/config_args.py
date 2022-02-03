@@ -66,7 +66,7 @@ def load_config_from_file(config_file):
 class BaseConfig:
     compute_environment: ComputeEnvironment
     distributed_type: Union[DistributedType, SageMakerDistributedType]
-    fp16: bool
+    mixed_precision: str
 
     def to_dict(self):
         result = self.__dict__

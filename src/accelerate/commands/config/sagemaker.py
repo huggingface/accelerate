@@ -139,11 +139,11 @@ def get_sagemaker_input():
             lambda x: int(x),
             default=2,
         )
-    fp16 = _ask_field(
-        "Do you wish to use FP16 (mixed precision)? [yes/NO]: ",
-        _convert_yes_no_to_bool,
-        default=False,
-        error_message="Please enter yes or no.",
+
+    mixed_precision = _ask_field(
+        "Do you wish to use FP16 or BF16 (mixed precision)? [No/FP16/BF16]: ",
+        lambda x: str(x),
+        default="No",
     )
 
     return SageMakerConfig(
@@ -153,6 +153,6 @@ def get_sagemaker_input():
         profile=aws_profile,
         region=aws_region,
         iam_role_name=iam_role_name,
-        fp16=fp16,
+        mixed_precision=mixed_precision,
         num_machines=num_machines,
     )
