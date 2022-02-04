@@ -302,10 +302,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.MULTI_GPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[self.local_process_index],
-                output_device=self.local_process_index,
-                **kwargs,
+                model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
             )
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
@@ -354,7 +351,7 @@ class Accelerator:
                 defaults = optimizer.defaults
                 params = []
                 for group in optimizer.param_groups:
-                    params.extend(group['params'])
+                    params.extend(group["params"])
 
                 optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(
                     params,
