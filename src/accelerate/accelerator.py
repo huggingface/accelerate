@@ -220,10 +220,7 @@ class Accelerator:
 
     @property
     def use_fp16(self):
-        if self.mixed_precision != "no":
-            return True
-        else:
-            return False
+        return self.mixed_precision != "no":
 
     @property
     def mixed_precision(self):
