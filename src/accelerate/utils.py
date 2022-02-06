@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union
 
+from packaging import version
+
 import numpy as np
 import torch
 
@@ -254,7 +256,10 @@ def convert_to_fp32(tensor):
         return tensor.float()
 
     def _is_fp16_bf16_tensor(tensor):
-        return hasattr(tensor, "dtype") and (tensor.dtype == torch.float16 or tensor.dtype == torch.bfloat16)
+        return hasattr(tensor, "dtype") and (
+            tensor.dtype == torch.float16
+            or (version.parse(torch.__version__) >= version.parse("1.10") and tensor.dtype == torch.bfloat16)
+        )
 
     return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
 

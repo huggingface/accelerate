@@ -108,17 +108,14 @@ def get_cluster_input():
             lambda x: str(x).lower(),
             default="no",
         )
-        fp16 = False
     else:
-        mixed_precision = "No"
-        fp16 = False
+        mixed_precision = "no"
 
     return ClusterConfig(
         compute_environment=ComputeEnvironment.LOCAL_MACHINE,
         distributed_type=distributed_type,
         num_processes=num_processes,
         mixed_precision=mixed_precision,
-        fp16=fp16,
         machine_rank=machine_rank,
         num_machines=num_machines,
         main_process_ip=main_process_ip,

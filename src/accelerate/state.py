@@ -146,7 +146,7 @@ class AcceleratorState:
 
     def __init__(
         self,
-        mixed_precision: str = "no",
+        mixed_precision: str = None,
         cpu: bool = False,
         deepspeed_plugin=None,
         _from_accelerator: bool = False,
@@ -156,7 +156,7 @@ class AcceleratorState:
         if not getattr(self, "initialized", False):
             self.backend = None
             self.deepspeed_plugin = None
-            mixed_precision = mixed_precision.lower()
+            mixed_precision = mixed_precision.lower() if mixed_precision else None
             if not _from_accelerator:
                 raise ValueError(
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
@@ -184,7 +184,7 @@ class AcceleratorState:
                 torch.cuda.set_device(self.device)
                 self.mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
                 mixed_precision = (
-                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision == "no" else mixed_precision
+                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
                 )
                 if mixed_precision == "fp16":
                     deepspeed_plugin.deepspeed_config.update({"fp16": {"enabled": True}})
@@ -202,7 +202,7 @@ class AcceleratorState:
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
                 self.mixed_precision = (
-                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision == "no" else mixed_precision
+                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
                 )
 
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
@@ -248,7 +248,7 @@ class AcceleratorState:
                 self.process_index = self.local_process_index = 0
                 self.device = torch.device("cuda" if torch.cuda.is_available() and not cpu else "cpu")
                 self.mixed_precision = (
-                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision == "no" else mixed_precision
+                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
                 )
             self.initialized = True
 

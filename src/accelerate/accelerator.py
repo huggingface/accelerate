@@ -106,22 +106,27 @@ class Accelerator:
         device_placement: bool = True,
         split_batches: bool = False,
         fp16: bool = None,
-        mixed_precision: str = "no",
+        mixed_precision: str = None,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         dispatch_batches: Optional[bool] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
-        mixed_precision = mixed_precision.lower()
-        assert mixed_precision in [
-            "no",
-            "fp16",
-            "bf16",
-        ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+
+        if mixed_precision:
+            mixed_precision = mixed_precision.lower()
+            if mixed_precision not in [
+                "no",
+                "fp16",
+                "bf16",
+            ]:
+                raise ValueError(
+                    f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+                )
 
         if fp16:
-            warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
+            warnings.warn('fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
             mixed_precision = "fp16"
 
         if deepspeed_plugin is None:  # init from env variables
@@ -220,7 +225,7 @@ class Accelerator:
 
     @property
     def use_fp16(self):
-        return self.mixed_precision != "no":
+        return self.mixed_precision != "no"
 
     @property
     def mixed_precision(self):
@@ -345,7 +350,7 @@ class Accelerator:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
-            if self.mixed_precision == "fp16":
+            if self.mixed_precision == "fp16" and version.parse(torch.__version__) >= version.parse("1.10"):
                 model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
             elif self.mixed_precision == "bf16":
                 model.forward = torch.cuda.amp.autocast(dtype=torch.bfloat16)(model.forward)
@@ -616,7 +621,7 @@ class Accelerator:
         different will happen otherwise.
         """
         if self.native_amp:
-            if self.mixed_precision == "fp16":
+            if self.mixed_precision == "fp16" and version.parse(torch.__version__) >= version.parse("1.10"):
                 autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
             elif self.mixed_precision == "bf16":
                 autocast_context = torch.cuda.amp.autocast(dtype=torch.bfloat16)

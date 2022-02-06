@@ -148,11 +148,12 @@ def simple_launcher(args):
     current_env["USE_CPU"] = str(args.cpu)
 
     mixed_precision = args.mixed_precision.lower()
-    assert mixed_precision in [
+    if mixed_precision not in [
         "no",
         "fp16",
         "bf16",
-    ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+    ]:
+        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
@@ -193,11 +194,13 @@ def multi_gpu_launcher(args):
 
     current_env = os.environ.copy()
     mixed_precision = args.mixed_precision.lower()
-    assert mixed_precision in [
+
+    if mixed_precision not in [
         "no",
         "fp16",
         "bf16",
-    ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+    ]:
+        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
@@ -237,11 +240,13 @@ def deepspeed_launcher(args):
 
     current_env = os.environ.copy()
     mixed_precision = args.mixed_precision.lower()
-    assert mixed_precision in [
+
+    if mixed_precision not in [
         "no",
         "fp16",
         "bf16",
-    ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+    ]:
+        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
@@ -356,11 +361,13 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     hyperparameters = _convert_nargs_to_dict(args.training_script_args)
 
     mixed_precision = args.mixed_precision.lower()
-    assert mixed_precision in [
+
+    if mixed_precision not in [
         "no",
         "fp16",
         "bf16",
-    ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+    ]:
+        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)

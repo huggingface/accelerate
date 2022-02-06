@@ -115,11 +115,14 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
             os.environ["MASTER_PORT"] = str(use_port)
 
             mixed_precision = mixed_precision.lower()
-            assert mixed_precision in [
+            if mixed_precision not in [
                 "no",
                 "fp16",
                 "bf16",
-            ], f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+            ]:
+                raise ValueError(
+                    f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+                )
 
             if use_fp16:
                 warnings.warn('use_fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
