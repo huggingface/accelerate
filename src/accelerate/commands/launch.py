@@ -366,9 +366,8 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
         mixed_precision = "fp16"
 
-    environment = {
-        "MIXED_PRECISION": str(mixed_precision)
-    }  # Environment variables to be set for use during training job
+    # Environment variables to be set for use during training job
+    environment = {"MIXED_PRECISION": str(mixed_precision)}
     # configure distribution set up
     distribution = None  # TODO: not yet implemented
 
