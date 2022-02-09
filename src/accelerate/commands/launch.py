@@ -353,11 +353,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
     mixed_precision = args.mixed_precision.lower()
 
-    if mixed_precision not in [
-        "no",
-        "fp16",
-        "bf16",
-    ]:
+    if mixed_precision not in ["no", "fp16", "bf16"]:
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
 
     if args.fp16:
