@@ -67,7 +67,6 @@ def launch_command_parser(subparsers=None):
     parser.add_argument(
         "--fp16", default=False, action="store_true", help="Whether or not to use mixed precision training."
     )
-
     parser.add_argument(
         "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
     )
