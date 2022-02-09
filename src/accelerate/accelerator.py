@@ -114,7 +114,7 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
 
-        if mixed_precision:
+        if mixed_precision is not None:
             mixed_precision = mixed_precision.lower()
             if mixed_precision not in [
                 "no",
