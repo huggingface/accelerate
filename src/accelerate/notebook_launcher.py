@@ -115,11 +115,7 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
             os.environ["MASTER_PORT"] = str(use_port)
 
             mixed_precision = mixed_precision.lower()
-            if mixed_precision not in [
-                "no",
-                "fp16",
-                "bf16",
-            ]:
+            if mixed_precision not in ["no", "fp16", "bf16"]:
                 raise ValueError(
                     f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
                 )
