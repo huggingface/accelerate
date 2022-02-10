@@ -61,14 +61,11 @@ class Accelerator:
             :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it must
             be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size used will
             be the one set in your script multiplied by the number of processes.
-        fp16 (:obj:`bool`, `optional`):
-            Whether or not to use mixed precision training. Will default to the value in the environment variable
-            :obj:`USE_FP16`, which will use the default value in the accelerate config of the current system or the
-            flag passed with the :obj:`accelerate.launch` command.
         mixed_precision (:obj:`str`, `optional`):
-            Whether or not to use mixed precision training (fp16 or bfloat16). Will default to the value in the
-            environment variable :obj:`MIXED_PRECISION`, which will use the default value in the accelerate config
-            of the current system or the flag passed with the :obj:`accelerate.launch` command.
+            Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'.
+             Will default to the value in the environment variable :obj:`MIXED_PRECISION`, which will use the default
+             value in the accelerate config of the current system or the flag passed with the :obj:`accelerate.launch`
+             command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
         cpu (:obj:`bool`, `optional`):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to :obj:`True` and
             force the execution on one process only.
@@ -128,6 +125,11 @@ class Accelerator:
         if fp16:
             warnings.warn('fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
             mixed_precision = "fp16"
+
+        if mixed_precision == "fp16" and not version.parse(torch.__version__) >= version.parse("1.6"):
+            raise ValueError("fp16 mixed precision requires PyTorch >= 1.6")
+        if mixed_precision == "bf16" and not version.parse(torch.__version__) >= version.parse("1.10"):
+            raise ValueError("bf16 mixed precision requires PyTorch >= 1.10")
 
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None

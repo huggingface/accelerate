@@ -38,8 +38,6 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
         num_processes (:obj:`int`, `optional`):
             The number of processes to use for training. Will default to 8 in Colab/Kaggle if a TPU is available, to
             the number of GPUs available otherwise.
-        use_fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If :obj:`True`, will use mixed precision training on multi-GPU.
         mixed_precision (:obj:`str`, `optional`, defaults to :obj:`no`):
             If :obj:`fp16` or :obj:`bf16`, will use mixed precision training on multi-GPU.
         use_port (:obj:`str`, `optional`, defaults to :obj:`"29500"`):
