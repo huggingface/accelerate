@@ -122,11 +122,6 @@ class Accelerator:
             warnings.warn('fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
             mixed_precision = "fp16"
 
-        if mixed_precision == "fp16" and version.parse(torch.__version__) < version.parse("1.6"):
-            raise ValueError("fp16 mixed precision requires PyTorch >= 1.6")
-        if mixed_precision == "bf16" and version.parse(torch.__version__) < version.parse("1.10"):
-            raise ValueError("bf16 mixed precision requires PyTorch >= 1.10")
-
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None
         else:
@@ -175,10 +170,16 @@ class Accelerator:
         self.native_amp = False
         if self.state.mixed_precision == "fp16":
             self.native_amp = version.parse(torch.__version__) >= version.parse("1.6")
+            if version.parse(torch.__version__) < version.parse("1.6"):
+                raise ValueError("fp16 mixed precision requires PyTorch >= 1.6")
+
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = torch.cuda.amp.GradScaler(**kwargs)
         elif self.state.mixed_precision == "bf16":
             self.native_amp = version.parse(torch.__version__) >= version.parse("1.10")
+            if mixed_precision == "bf16" and version.parse(torch.__version__) < version.parse("1.10"):
+                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10")
+
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
