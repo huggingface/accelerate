@@ -14,11 +14,11 @@
 
 import gc
 import os
+import warnings
 from contextlib import contextmanager
 from typing import List, Optional, Union
 
 import torch
-import warnings
 
 from packaging import version
 
@@ -62,10 +62,10 @@ class Accelerator:
             be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size used will
             be the one set in your script multiplied by the number of processes.
         mixed_precision (:obj:`str`, `optional`):
-            Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'.
-             Will default to the value in the environment variable :obj:`MIXED_PRECISION`, which will use the default
-             value in the accelerate config of the current system or the flag passed with the :obj:`accelerate.launch`
-             command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+            Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'. Will
+            default to the value in the environment variable :obj:`MIXED_PRECISION`, which will use the default value
+            in the accelerate config of the current system or the flag passed with the :obj:`accelerate.launch`
+            command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
         cpu (:obj:`bool`, `optional`):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to :obj:`True` and
             force the execution on one process only.

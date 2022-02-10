@@ -20,10 +20,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union
 
-from packaging import version
-
 import numpy as np
 import torch
+
+from packaging import version
 
 from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
 

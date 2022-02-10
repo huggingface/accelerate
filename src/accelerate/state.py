@@ -138,8 +138,8 @@ class AcceleratorState:
         - **num_processes** (:obj:`int`) -- The number of processes currently launched in parallel.
         - **process_index** (:obj:`int`) -- The index of the current process.
         - **local_process_index** (:obj:`int`) -- The index of the current process on the current server.
-        - **mixed_precision** (:obj:`str`) -- Whether or not the current script will use mixed precision. If
-          you are using mixed precision, define if you want to use FP16 or BF16 (bfloat16) as the floating point.
+        - **mixed_precision** (:obj:`str`) -- Whether or not the current script will use mixed precision. If you are
+          using mixed precision, define if you want to use FP16 or BF16 (bfloat16) as the floating point.
     """
 
     _shared_state = {}

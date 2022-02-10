@@ -19,10 +19,10 @@ import importlib
 import os
 import subprocess
 import sys
+import warnings
 from ast import literal_eval
 from pathlib import Path
 from typing import Dict, List
-import warnings
 
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
