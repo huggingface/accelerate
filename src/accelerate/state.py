@@ -66,6 +66,11 @@ def parse_flag_from_env(key, default=False):
     return strtobool(value) == 1  # As its name indicates `strtobool` actually returns an int...
 
 
+def parse_choice_from_env(key, default="no"):
+    value = os.environ.get(key, str(default))
+    return value
+
+
 class DistributedType(str, Enum):
     """
     Represents a type of distributed environment.
@@ -133,18 +138,25 @@ class AcceleratorState:
         - **num_processes** (:obj:`int`) -- The number of processes currently launched in parallel.
         - **process_index** (:obj:`int`) -- The index of the current process.
         - **local_process_index** (:obj:`int`) -- The index of the current process on the current server.
-        - **use_fp16** (:obj:`bool`) -- Whether or not the current script will use mixed precision.
+        - **mixed_precision** (:obj:`str`) -- Whether or not the current script will use mixed precision. If you are
+          using mixed precision, define if you want to use FP16 or BF16 (bfloat16) as the floating point.
     """
 
     _shared_state = {}
 
     def __init__(
-        self, fp16: bool = None, cpu: bool = False, deepspeed_plugin=None, _from_accelerator: bool = False, **kwargs
+        self,
+        mixed_precision: str = None,
+        cpu: bool = False,
+        deepspeed_plugin=None,
+        _from_accelerator: bool = False,
+        **kwargs,
     ):
         self.__dict__ = self._shared_state
         if not getattr(self, "initialized", False):
             self.backend = None
             self.deepspeed_plugin = None
+            mixed_precision = mixed_precision.lower() if mixed_precision else None
             if not _from_accelerator:
                 raise ValueError(
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
@@ -156,7 +168,7 @@ class AcceleratorState:
                 self.process_index = xm.get_ordinal()
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
-                self.use_fp16 = False
+                self.mixed_precision = "no"
             elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (
                     is_deepspeed_available()
@@ -170,9 +182,14 @@ class AcceleratorState:
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-                self.use_fp16 = False  # deepspeed handles fp16 using deepspeed_config
-                fp16 = parse_flag_from_env("USE_FP16", False) if fp16 is None else fp16
-                deepspeed_plugin.deepspeed_config.update({"fp16": {"enabled": fp16}})
+                self.mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
+                mixed_precision = (
+                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+                )
+                if mixed_precision == "fp16":
+                    deepspeed_plugin.deepspeed_config.update({"fp16": {"enabled": True}})
+                elif mixed_precision == "bf16":
+                    deepspeed_plugin.deepspeed_config.update({"bfloat16": {"enabled": True}})
                 self.deepspeed_plugin = deepspeed_plugin
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
@@ -184,7 +201,10 @@ class AcceleratorState:
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-                self.use_fp16 = parse_flag_from_env("USE_FP16", False) if fp16 is None else fp16
+                self.mixed_precision = (
+                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+                )
+
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
@@ -221,24 +241,32 @@ class AcceleratorState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
                 self.device = torch.device("cpu")
-                self.use_fp16 = False
+                self.mixed_precision = "no"
             else:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
                 self.device = torch.device("cuda" if torch.cuda.is_available() and not cpu else "cpu")
-                self.use_fp16 = parse_flag_from_env("USE_FP16", False) if fp16 is None else fp16
+                self.mixed_precision = (
+                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+                )
             self.initialized = True
 
     def __repr__(self):
-        use_fp16 = self.deepspeed_plugin.fp16 if self.distributed_type == DistributedType.DEEPSPEED else self.use_fp16
+        mixed_precision = self.mixed_precision
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            if self.deepspeed_plugin.fp16:
+                mixed_precision = "fp16"
+            if self.deepspeed_plugin.bflaot16:
+                mixed_precision = "bf16"
+
         repr = (
             f"Distributed environment: {self.distributed_type}{('  Backend: ' + self.backend) if self.backend else ''}\n"
             f"Num processes: {self.num_processes}\n"
             f"Process index: {self.process_index}\n"
             f"Local process index: {self.local_process_index}\n"
             f"Device: {self.device}\n"
-            f"Use FP16 precision: {use_fp16}\n"
+            f"Mixed precision type: {mixed_precision}\n"
         )
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.ds_config}\n"
