@@ -126,9 +126,9 @@ class Accelerator:
             warnings.warn('fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
             mixed_precision = "fp16"
 
-        if mixed_precision == "fp16" and not version.parse(torch.__version__) >= version.parse("1.6"):
+        if mixed_precision == "fp16" and version.parse(torch.__version__) < version.parse("1.6"):
             raise ValueError("fp16 mixed precision requires PyTorch >= 1.6")
-        if mixed_precision == "bf16" and not version.parse(torch.__version__) >= version.parse("1.10"):
+        if mixed_precision == "bf16" and version.parse(torch.__version__) < version.parse("1.10"):
             raise ValueError("bf16 mixed precision requires PyTorch >= 1.10")
 
         if deepspeed_plugin is None:  # init from env variables
