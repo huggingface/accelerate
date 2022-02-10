@@ -20,7 +20,7 @@ from accelerate.state import ComputeEnvironment, SageMakerDistributedType
 from accelerate.utils import is_boto3_available
 
 from .config_args import SageMakerConfig
-from .config_utils import _ask_field, _convert_sagemaker_distributed_mode, _convert_yes_no_to_bool
+from .config_utils import _ask_field, _convert_sagemaker_distributed_mode
 
 
 if is_boto3_available():
