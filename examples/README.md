@@ -99,7 +99,7 @@ To run it in each of these various modes, use the following commands:
 
 ## Simple vision example
 
-The [cv_example.py](./cv_example.py) script is a simple example to fine-tune a ResNet-50 on a classification task ([Ofxord-IIT Pet Dataset](https://www.robots.ox.ac.uk/~vgg/data/pets/)).
+The [cv_example.py](./pet_datase_example.py) script is a simple example to fine-tune a ResNet-50 on a classification task ([Ofxord-IIT Pet Dataset](https://www.robots.ox.ac.uk/~vgg/data/pets/)).
 
 The same script can be run in any of the following configurations:
 - single CPU or single GPU
