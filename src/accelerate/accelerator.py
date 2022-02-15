@@ -14,6 +14,7 @@
 
 import gc
 import os
+import warnings
 from contextlib import contextmanager
 from typing import List, Optional, Union
 
@@ -60,10 +61,11 @@ class Accelerator:
             :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it must
             be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size used will
             be the one set in your script multiplied by the number of processes.
-        fp16 (:obj:`bool`, `optional`):
-            Whether or not to use mixed precision training. Will default to the value in the environment variable
-            :obj:`USE_FP16`, which will use the default value in the accelerate config of the current system or the
-            flag passed with the :obj:`accelerate.launch` command.
+        mixed_precision (:obj:`str`, `optional`):
+            Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'. Will
+            default to the value in the environment variable :obj:`MIXED_PRECISION`, which will use the default value
+            in the accelerate config of the current system or the flag passed with the :obj:`accelerate.launch`
+            command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
         cpu (:obj:`bool`, `optional`):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to :obj:`True` and
             force the execution on one process only.
@@ -101,12 +103,25 @@ class Accelerator:
         device_placement: bool = True,
         split_batches: bool = False,
         fp16: bool = None,
+        mixed_precision: str = None,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         dispatch_batches: Optional[bool] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
+
+        if mixed_precision is not None:
+            mixed_precision = mixed_precision.lower()
+            if mixed_precision not in ["no", "fp16", "bf16"]:
+                raise ValueError(
+                    f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+                )
+
+        if fp16:
+            warnings.warn('fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
+            mixed_precision = "fp16"
+
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None
         else:
@@ -139,7 +154,11 @@ class Accelerator:
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
-            fp16=fp16, cpu=cpu, deepspeed_plugin=deepspeed_plugin, _from_accelerator=True, **kwargs
+            mixed_precision=mixed_precision,
+            cpu=cpu,
+            deepspeed_plugin=deepspeed_plugin,
+            _from_accelerator=True,
+            **kwargs,
         )
 
         self.device_placement = device_placement
@@ -149,8 +168,18 @@ class Accelerator:
         # Mixed precision attributes
         self.scaler = None
         self.native_amp = False
-        if self.state.use_fp16:
+        if self.state.mixed_precision == "fp16":
             self.native_amp = version.parse(torch.__version__) >= version.parse("1.6")
+            if version.parse(torch.__version__) < version.parse("1.6"):
+                raise ValueError("fp16 mixed precision requires PyTorch >= 1.6")
+
+            kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
+            self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+        elif self.state.mixed_precision == "bf16":
+            self.native_amp = version.parse(torch.__version__) >= version.parse("1.10")
+            if mixed_precision == "bf16" and version.parse(torch.__version__) < version.parse("1.10"):
+                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10")
+
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
@@ -195,11 +224,20 @@ class Accelerator:
 
     @property
     def use_fp16(self):
+        return self.mixed_precision != "no"
+
+    @property
+    def mixed_precision(self):
         if self.distributed_type == DistributedType.DEEPSPEED:
-            use_fp16 = self.state.deepspeed_plugin.deepspeed_config["fp16"]["enabled"]
+            if self.state.deepspeed_plugin.deepspeed_config["fp16"]["enabled"]:
+                mixed_precision = "fp16"
+            elif self.state.deepspeed_plugin.deepspeed_config["bf16"]["enabled"]:
+                mixed_precision = "bf16"
+            else:
+                mixed_precision = "no"
         else:
-            use_fp16 = self.state.use_fp16
-        return use_fp16
+            mixed_precision = self.state.mixed_precision
+        return mixed_precision
 
     @contextmanager
     def local_main_process_first(self):
@@ -302,16 +340,18 @@ class Accelerator:
         if self.distributed_type == DistributedType.MULTI_GPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[self.local_process_index],
-                output_device=self.local_process_index,
-                **kwargs,
+                model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
             )
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
-            model.forward = torch.cuda.amp.autocast()(model.forward)
+            if self.mixed_precision == "fp16" and version.parse(torch.__version__) >= version.parse("1.10"):
+                model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
+            elif self.mixed_precision == "bf16":
+                model.forward = torch.cuda.amp.autocast(dtype=torch.bfloat16)(model.forward)
+            else:
+                model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
         return model
 
@@ -352,8 +392,12 @@ class Accelerator:
             is_adamw = isinstance(optimizer, torch.optim.AdamW)
             if (is_adam or is_adamw) and deepspeed_plugin.offload_optimizer_device == "cpu":
                 defaults = optimizer.defaults
+                params = []
+                for group in optimizer.param_groups:
+                    params.extend(group["params"])
+
                 optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(
-                    model.parameters(),
+                    params,
                     lr=defaults["lr"],
                     bias_correction=True,
                     betas=defaults["betas"],
@@ -577,7 +621,13 @@ class Accelerator:
         different will happen otherwise.
         """
         if self.native_amp:
-            autocast_context = torch.cuda.amp.autocast()
+            if self.mixed_precision == "fp16" and version.parse(torch.__version__) >= version.parse("1.10"):
+                autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
+            elif self.mixed_precision == "bf16":
+                autocast_context = torch.cuda.amp.autocast(dtype=torch.bfloat16)
+            else:
+                autocast_context = torch.cuda.amp.autocast()
+
             autocast_context.__enter__()
             yield
             autocast_context.__exit__()
