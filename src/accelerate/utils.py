@@ -372,7 +372,7 @@ def gather_object(object: Any):
             The data to gather.
 
     Returns:
-        The same data structure as :obj:`Any` with all objects sent to the proper device.
+        The same data structure as :obj:`object` with all the objects sent to every device.
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         raise NotImplementedError('gather objects in TPU is not supported')
