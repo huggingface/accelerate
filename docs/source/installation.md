@@ -73,7 +73,7 @@ If you want to constantly use the bleeding edge `master` version of the source c
 
 ``` bash
 git clone https://github.com/huggingface/accelerate.git
-cd transformers
+cd accelerate
 pip install -e .
 ```
 

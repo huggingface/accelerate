@@ -103,20 +103,19 @@ def get_cluster_input():
     )
 
     if distributed_type != DistributedType.TPU:
-        fp16 = _ask_field(
-            "Do you wish to use FP16 (mixed precision)? [yes/NO]: ",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
+        mixed_precision = _ask_field(
+            "Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: ",
+            lambda x: str(x).lower(),
+            default="no",
         )
     else:
-        fp16 = False
+        mixed_precision = "no"
 
     return ClusterConfig(
         compute_environment=ComputeEnvironment.LOCAL_MACHINE,
         distributed_type=distributed_type,
         num_processes=num_processes,
-        fp16=fp16,
+        mixed_precision=mixed_precision,
         machine_rank=machine_rank,
         num_machines=num_machines,
         main_process_ip=main_process_ip,

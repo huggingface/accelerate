@@ -16,7 +16,7 @@ from setuptools import setup
 from setuptools import find_packages
 
 extras = {}
-extras["quality"] = ["black == 21.4b0", "isort >= 5.5.4", "flake8 >= 3.8.3"]
+extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3"]
 extras["docs"] = [
     "docutils==0.16.0",
     "recommonmark",

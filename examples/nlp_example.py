@@ -51,7 +51,7 @@ EVAL_BATCH_SIZE = 32
 
 def training_function(config, args):
     # Initialize accelerator
-    accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu)
+    accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu, mixed_precision=args.mixed_precision)
 
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
@@ -163,6 +163,15 @@ def training_function(config, args):
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
     parser.add_argument("--fp16", action="store_true", help="If passed, will use FP16 training.")
+    parser.add_argument(
+        "--mixed_precision",
+        type=str,
+        default="no",
+        choices=["no", "fp16", "bf16"],
+        help="Whether to use mixed precision. Choose"
+        "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
+        "and an Nvidia Ampere GPU.",
+    )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
