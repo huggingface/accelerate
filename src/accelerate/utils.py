@@ -368,7 +368,7 @@ def gather_object(object: Any):
     Recursively gather object in a nested list/tuple/dictionary of objects from all devices.
 
     Args:
-        object (nested list/tuple/dictionary of :obj:`Any`):
+        object (nested list/tuple/dictionary of any object):
             The data to gather.
 
     Returns:
