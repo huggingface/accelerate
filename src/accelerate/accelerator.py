@@ -15,9 +15,11 @@
 import gc
 import os
 import warnings
+import random
 from contextlib import contextmanager
 from typing import List, Optional, Union
 
+import numpy as np
 import torch
 
 from packaging import version
@@ -25,7 +27,7 @@ from packaging import version
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
-from .state import AcceleratorState, DistributedType, is_deepspeed_available
+from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
 from .utils import (
     DeepSpeedPlugin,
     RNGType,
@@ -40,7 +42,11 @@ from .utils import (
 
 if is_deepspeed_available():
     import deepspeed
+
     from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
+
+if is_tpu_available():
+    import torch_xla.core.xla_model as xm
 
 import logging
 
@@ -559,6 +565,60 @@ class Accelerator:
                 Where to save the content of :obj:`obj`.
         """
         save(obj, f)
+
+    def save_state(self, output_dir: str):
+        """
+        Saves the current states of the model, optimizer, scalar, and RNG generators to `folder_name`.
+
+        Args:
+            output_dir (:obj:`str` or :obj:`os.PathLike`):
+                The name of the folder to save all relevant weights and states.
+        """
+        # Check if folder exists
+        output_dir = os.path.expanduser(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        logger.info(f"Saving current state to {output_dir}")
+
+        # Model states
+        for i, model in enumerate(self._models):
+            state = self.get_state_dict(model)
+            weights_name = "pytorch_model"
+            if i == 0:
+                weights_name += f"_{i}"
+            weights_name += ".bin"
+            output_model_file = os.path.join(output_dir, weights_name)
+            torch.save(state, output_model_file)
+            logger.info(f"Model weights saved in {output_model_file}")
+        # Optimizer states
+        for i, opt in enumerate(self._optimizers):
+            state = opt.state_dict()
+            optimizer_name = "optimizer"
+            if i == 0:
+                optimizer_name += f"_{i}"
+            optimizer_name += ".pt"
+            output_optimizer_file = os.path.join(output_dir, optimizer_name)
+            torch.save(state, output_optimizer_file)
+            logger.info(f"Optimizer state saved in {output_optimizer_file}")
+        # GradScalar state
+        if self.scalar is not None:
+            state = self.scalar.state_dict()
+            scalar_name = "scalar.bin"
+            output_scalar_file = os.path.join(output_dir, scalar_name)
+            torch.save(state, output_scalar_file)
+            logger.info(f"GradScalar state saved in {output_scalar_file}")
+        # Random states
+        states = {}
+        states_name = "random_states.pkl"
+        states["random_state"] = random.getstate()
+        states["numpy_random_seed"] = np.random.get_state()
+        states["torch_manual_seed"] = torch.get_rng_state()
+        states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
+        # ^^ safe to call this function even if cuda is not available
+        if is_tpu_available():
+            states["xm_seed"] = torch.tensor(xm.get_rng_state())
+        output_states_file = os.path.join(output_dir, states_name)
+        torch.save(states, output_states_file)
+        logger.info(f"Random states saved in {output_states_file}")
 
     def free_memory(self):
         """
