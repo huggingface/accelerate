@@ -620,6 +620,56 @@ class Accelerator:
         torch.save(states, output_states_file)
         logger.info(f"Random states saved in {output_states_file}")
 
+    def load_state(self, input_dir: str):
+        """
+        Loads the current states of the model, optimizer, scalar, and RNG generators from `folder_name`.
+
+        Args:
+            input_dir (:obj:`str` or :obj:`os.PathLike`):
+                The name of the folder all relevant weights and states were saved in.
+        """
+        # Check if folder exists
+        input_dir = os.path.expanduser(input_dir)
+        if not os.path.isdir(input_dir):
+            raise ValueError(f"Tried to find {input_dir} but folder does not exist")
+        logger.info(f"Loading states from {input_dir}")
+
+        # Model states
+        for i, model in enumerate(self._models):
+            weights_name = "pytorch_model"
+            if i == 0:
+                weights_name += f"_{i}"
+            weights_name += ".bin"
+            input_model_file = os.path.join(input_dir, weights_name)
+            self._models[i].load_state_dict(torch.load(input_model_file))
+        logger.info("All model weights loaded successfully")
+        # Optimizer states
+        for i, opt in enumerate(self._optimizers):
+            # state = opt.state_dict()
+            optimizer_name = "optimizer"
+            if i == 0:
+                optimizer_name += f"_{i}"
+            optimizer_name += ".pt"
+            input_optimizer_file = os.path.join(input_dir, optimizer_name)
+            self._optimizers.load_state_dict(torch.load(input_optimizer_file))
+        logger.info("All optimizer states loaded successfully")
+        # GradScalar state
+        if self.scalar is not None:
+            scalar_name = "scalar.bin"
+            input_scalar_file = os.path.join(input_dir, scalar_name)
+            self.scalar.load_state_dict(torch.load(input_scalar_file))
+            logger.info("GradScalar state loaded successfully")
+        # Random states
+        states = torch.load(os.path.join(input_dir, "random_states.pkl"))
+        random.setstate(states["random_state"])
+        np.random.set_state(states["numpy_random_seed"])
+        torch.set_rng_state(states["torch_manual_seed"])
+        torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
+        # ^^ safe to call this function even if cuda is not available
+        if is_tpu_available():
+            xm.set_rng_state(states["xm_seed"])
+        logger.info("All random states loaded successfully")
+
     def free_memory(self):
         """
         Will release all references to the internal objects stored and call the garbage collector. You should call this
