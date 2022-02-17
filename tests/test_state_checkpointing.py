@@ -78,12 +78,15 @@ def test_can_resume_training(args):
                 accelerator.backward(loss)
                 optimizer.step()
                 optimizer.zero_grad()
-        (a1, b1) = model.a.item(), model.b.item()
+
+        model_unwrapped = accelerator.unwrap_model(model)
+        (a1, b1) = model_unwrapped.a.item(), model_unwrapped.b.item()
         opt_state1 = optimizer.state_dict()
 
         # Train partially
         accelerator.load_state(initial)
-        (a2, b2) = model.a.item(), model.b.item()
+        model_unwrapped = accelerator.unwrap_model(model)
+        (a2, b2) = model_unwrapped.a.item(), model_unwrapped.b.item()
         opt_state2 = optimizer.state_dict()
         assert a == a2
         assert b == b2
@@ -115,7 +118,8 @@ def test_can_resume_training(args):
                 accelerator.backward(loss)
                 optimizer.step()
                 optimizer.zero_grad()
-        (a3, b3) = model.a.item(), model.b.item()
+        model_unwrapped = accelerator.unwrap_model(model)
+        (a3, b3) = model_unwrapped.a.item(), model_unwrapped.b.item()
         opt_state3 = optimizer.state_dict()
         assert a1 == a3
         assert b1 == b3
