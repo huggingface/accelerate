@@ -127,7 +127,7 @@ Follow these steps to start contributing:
    below an explanation regarding the environment variable):
 
    ```bash
-   $ HUGGINGFACE_CO_STAGING=1 pytest tests/<TEST_TO_RUN>.py
+   $ pytest tests/<TEST_TO_RUN>.py
    ```
 
    You can also run the full suite with the following command.
@@ -136,7 +136,7 @@ Follow these steps to start contributing:
    $ make test
    ```
 
-   `hugginface_hub` relies on `black` and `isort` to format its source code
+   `accelerate` relies on `black` and `isort` to format its source code
    consistently. After you make changes, apply automatic style corrections and code verifications
    that can't be automated in one go with:
 
