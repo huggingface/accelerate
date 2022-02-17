@@ -15,10 +15,7 @@
 import gc
 import os
 import random
-<<<<<<< HEAD
 import warnings
-=======
->>>>>>> 820d74f086b7ebbdeb991f19227929f72b99aab3
 from contextlib import contextmanager
 from typing import List, Optional, Union
 
@@ -603,15 +600,9 @@ class Accelerator:
             torch.save(state, output_optimizer_file)
             logger.info(f"Optimizer state saved in {output_optimizer_file}")
         # GradScalar state
-<<<<<<< HEAD
         if self.scaler is not None:
             state = self.scaler.state_dict()
             scalar_name = "scaler.bin"
-=======
-        if self.scalar is not None:
-            state = self.scalar.state_dict()
-            scalar_name = "scalar.bin"
->>>>>>> 820d74f086b7ebbdeb991f19227929f72b99aab3
             output_scalar_file = os.path.join(output_dir, scalar_name)
             torch.save(state, output_scalar_file)
             logger.info(f"GradScalar state saved in {output_scalar_file}")
