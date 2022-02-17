@@ -353,7 +353,7 @@ def gather(tensor):
 
 def _gpu_gather_object(object: Any):
     def _gpu_gather_object_one(object: Any):
-        output_objects = [None for _ in range(torch.distributed.get_world_size())]
+        output_objects = [None for _ in range(state.num_processes)]
         torch.distributed.all_gather_object(output_objects, object)
         return output_objects
 
