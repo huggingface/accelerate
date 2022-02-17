@@ -602,7 +602,6 @@ class Accelerator:
         logger.info("All model weights loaded successfully")
         # Optimizer states
         for i, opt in enumerate(self._optimizers):
-            # state = opt.state_dict()
             optimizer_name = "optimizer"
             if i == 0:
                 optimizer_name += f"_{i}"
