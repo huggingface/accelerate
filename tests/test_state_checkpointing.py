@@ -66,7 +66,8 @@ def test_can_resume_training(args):
         # Save initial
         initial = os.path.join(tmpdir, "initial")
         accelerator.save_state(initial)
-        (a, b) = model.a.item(), model.b.item()
+        model_unwrapped = accelerator.unwrap_model(model)
+        (a, b) = model_unwrapped.a.item(), model_unwrapped.b.item()
         opt_state = optimizer.state_dict()
         for epoch in range(3):
             # Train quickly
