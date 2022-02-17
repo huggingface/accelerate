@@ -355,7 +355,7 @@ def _gpu_gather_object(object: Any):
     def _gpu_gather_object_one(object: Any):
         output_objects = [None for _ in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather_object(output_objects, object)
-        return [i for j in output_objects for i in j]
+        return output_objects
 
     return recursively_apply(_gpu_gather_one, tensor)
 
