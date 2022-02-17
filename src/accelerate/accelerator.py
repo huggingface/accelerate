@@ -14,8 +14,8 @@
 
 import gc
 import os
-import warnings
 import random
+import warnings
 from contextlib import contextmanager
 from typing import List, Optional, Union
 
@@ -600,9 +600,9 @@ class Accelerator:
             torch.save(state, output_optimizer_file)
             logger.info(f"Optimizer state saved in {output_optimizer_file}")
         # GradScalar state
-        if self.scalar is not None:
-            state = self.scalar.state_dict()
-            scalar_name = "scalar.bin"
+        if self.scaler is not None:
+            state = self.scaler.state_dict()
+            scalar_name = "scaler.bin"
             output_scalar_file = os.path.join(output_dir, scalar_name)
             torch.save(state, output_scalar_file)
             logger.info(f"GradScalar state saved in {output_scalar_file}")
@@ -650,13 +650,13 @@ class Accelerator:
                 optimizer_name += f"_{i}"
             optimizer_name += ".pt"
             input_optimizer_file = os.path.join(input_dir, optimizer_name)
-            self._optimizers.load_state_dict(torch.load(input_optimizer_file))
+            self._optimizers[i].load_state_dict(torch.load(input_optimizer_file))
         logger.info("All optimizer states loaded successfully")
         # GradScalar state
-        if self.scalar is not None:
-            scalar_name = "scalar.bin"
-            input_scalar_file = os.path.join(input_dir, scalar_name)
-            self.scalar.load_state_dict(torch.load(input_scalar_file))
+        if self.scaler is not None:
+            scaler_name = "scaler.bin"
+            input_scaler_file = os.path.join(input_dir, scaler_name)
+            self.scaler.load_state_dict(torch.load(input_scaler_file))
             logger.info("GradScalar state loaded successfully")
         # Random states
         states = torch.load(os.path.join(input_dir, "random_states.pkl"))
