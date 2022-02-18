@@ -583,7 +583,7 @@ class Accelerator:
         for i, model in enumerate(self._models):
             state = self.get_state_dict(model)
             weights_name = "pytorch_model"
-            if i == 0:
+            if i != 0:
                 weights_name += f"_{i}"
             weights_name += ".bin"
             output_model_file = os.path.join(output_dir, weights_name)
@@ -593,20 +593,20 @@ class Accelerator:
         for i, opt in enumerate(self._optimizers):
             state = opt.state_dict()
             optimizer_name = "optimizer"
-            if i == 0:
+            if i != 0:
                 optimizer_name += f"_{i}"
             optimizer_name += ".pt"
             output_optimizer_file = os.path.join(output_dir, optimizer_name)
-            torch.save(state, output_optimizer_file)
+            accelerator.save(state, output_optimizer_file)
             logger.info(f"Optimizer state saved in {output_optimizer_file}")
         # GradScalar state
         if self.scaler is not None:
             state = self.scaler.state_dict()
-            scalar_name = "scaler.bin"
-            output_scalar_file = os.path.join(output_dir, scalar_name)
-            torch.save(state, output_scalar_file)
-            logger.info(f"GradScalar state saved in {output_scalar_file}")
-        # Random states
+            scaler_name = "scaler.pt"
+            output_scaler_file = os.path.join(output_dir, scaler_name)
+            torch.save(state, output_scaler_file)
+            logger.info(f"Gradient scaler state saved in {output_scaler_file}")
+        # Random number generator states
         states = {}
         states_name = "random_states.pkl"
         states["random_state"] = random.getstate()
@@ -637,7 +637,7 @@ class Accelerator:
         # Model states
         for i, model in enumerate(self._models):
             weights_name = "pytorch_model"
-            if i == 0:
+            if i != 0:
                 weights_name += f"_{i}"
             weights_name += ".bin"
             input_model_file = os.path.join(input_dir, weights_name)
@@ -646,7 +646,7 @@ class Accelerator:
         # Optimizer states
         for i, opt in enumerate(self._optimizers):
             optimizer_name = "optimizer"
-            if i == 0:
+            if i != 0:
                 optimizer_name += f"_{i}"
             optimizer_name += ".pt"
             input_optimizer_file = os.path.join(input_dir, optimizer_name)
