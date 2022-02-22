@@ -356,7 +356,7 @@ def _gpu_gather_object(object: Any):
         torch.distributed.all_gather_object(output_objects, object)
         return output_objects
 
-    return recursively_apply(_gpu_gather_one, tensor)
+    return recursively_apply(_gpu_gather_object_one, object)
 
 
 _cpu_gather_object = _gpu_gather_object
