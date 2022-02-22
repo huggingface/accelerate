@@ -29,6 +29,10 @@ from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, In
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
 from .utils import (
+    MODEL_NAME,
+    OPTIMIZER_NAME,
+    RNG_STATE_NAME,
+    SCALAR_NAME,
     DeepSpeedPlugin,
     RNGType,
     convert_outputs_to_fp32,
@@ -582,28 +586,21 @@ class Accelerator:
         # Model states
         for i, model in enumerate(self._models):
             state = self.get_state_dict(model)
-            weights_name = "pytorch_model"
-            if i != 0:
-                weights_name += f"_{i}"
-            weights_name += ".bin"
+            weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
             output_model_file = os.path.join(output_dir, weights_name)
-            torch.save(state, output_model_file)
+            self.save(state, output_model_file)
             logger.info(f"Model weights saved in {output_model_file}")
         # Optimizer states
         for i, opt in enumerate(self._optimizers):
             state = opt.state_dict()
-            optimizer_name = "optimizer"
-            if i != 0:
-                optimizer_name += f"_{i}"
-            optimizer_name += ".pt"
+            optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
             output_optimizer_file = os.path.join(output_dir, optimizer_name)
-            accelerator.save(state, output_optimizer_file)
+            torch.save(state, output_optimizer_file)
             logger.info(f"Optimizer state saved in {output_optimizer_file}")
         # GradScalar state
         if self.scaler is not None:
             state = self.scaler.state_dict()
-            scaler_name = "scaler.pt"
-            output_scaler_file = os.path.join(output_dir, scaler_name)
+            output_scaler_file = os.path.join(output_dir, SCALAR_NAME)
             torch.save(state, output_scaler_file)
             logger.info(f"Gradient scaler state saved in {output_scaler_file}")
         # Random number generator states
