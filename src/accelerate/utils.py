@@ -350,7 +350,6 @@ def gather(tensor):
         return tensor
 
 
-
 def _gpu_gather_object(object: Any):
     def _gpu_gather_object_one(object: Any):
         output_objects = [None for _ in range(state.num_processes)]
@@ -375,7 +374,7 @@ def gather_object(object: Any):
         The same data structure as :obj:`object` with all the objects sent to every device.
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
-        raise NotImplementedError('gather objects in TPU is not supported')
+        raise NotImplementedError("gather objects in TPU is not supported")
     elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
         return _gpu_gather_object(object)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
@@ -383,7 +382,7 @@ def gather_object(object: Any):
     else:
         return object
 
-    
+
 def _gpu_broadcast(data, src=0):
     def _gpu_broadcast_one(tensor, src=0):
         torch.distributed.broadcast(tensor, src=src)
