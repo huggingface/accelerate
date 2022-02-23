@@ -93,6 +93,17 @@ def launch_command_parser(subparsers=None):
         help="The name of the main function to be executed in your script (only for TPU training).",
     )
     parser.add_argument(
+        "-m",
+        "--module",
+        action="store_true",
+        help="Change each process to interpret the launch script as a Python module, executing with the same behavior as 'python -m'.",
+    )
+    parser.add_argument(
+        "--no_python",
+        action="store_true",
+        help="Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.",
+    )
+    parser.add_argument(
         "--aws_access_key_id",
         type=str,
         default=None,
@@ -140,7 +151,14 @@ def launch_command_parser(subparsers=None):
 
 
 def simple_launcher(args):
-    cmd = [sys.executable, args.training_script]
+    cmd = []
+    if args.no_python and args.module:
+        raise ValueError("--module and --no_python cannot be used together")
+    if not args.no_python:
+        cmd.append(sys.executable)
+        if args.module:
+            cmd.append("-m")
+    cmd.append(args.training_script)
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
@@ -163,8 +181,7 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
-    cmd = [sys.executable, "-m", "torch.distributed.launch"]
-    cmd.extend(["--use_env"])
+    cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
     if args.num_machines > 1:
         cmd.extend(
             [
@@ -184,6 +201,13 @@ def multi_gpu_launcher(args):
         cmd.extend(["--nproc_per_node", str(args.num_processes)])
         if args.main_process_port is not None:
             cmd.extend(["--master_port", str(args.main_process_port)])
+
+    if args.module and args.no_python:
+        raise ValueError("--module and --no_python cannot be used together")
+    if args.module:
+        cmd.append("--module")
+    if args.no_python:
+        cmd.append("--no_python")
     cmd.append(args.training_script)
     cmd.extend(args.training_script_args)
 
@@ -206,7 +230,6 @@ def multi_gpu_launcher(args):
 
 
 def deepspeed_launcher(args):
-
     cmd = ["deepspeed"]
     if args.num_machines > 1:
         cmd.extend(
@@ -226,6 +249,12 @@ def deepspeed_launcher(args):
     else:
         cmd.extend(["--num_gpus", str(args.num_processes)])
 
+    if args.module and args.no_python:
+        raise ValueError("--module and --no_python cannot be used together")
+    if args.module:
+        cmd.append("--module")
+    if args.no_python:
+        cmd.append("--no_python")
     cmd.append(args.training_script)
     cmd.extend(args.training_script_args)
 
@@ -254,21 +283,28 @@ def deepspeed_launcher(args):
 def tpu_launcher(args):
     import torch_xla.distributed.xla_multiprocessing as xmp
 
-    # Import training_script as a module.
-    script_path = Path(args.training_script)
-    sys.path.append(str(script_path.parent.resolve()))
-    mod_name = script_path.stem
+    if args.no_python:
+        raise ValueError("--no_python cannot be used with TPU launcher")
+
+    if args.module:
+        mod_name = args.training_script
+    else:
+        # Import training_script as a module
+        script_path = Path(args.training_script)
+        sys.path.append(str(script_path.parent.resolve()))
+        mod_name = script_path.stem
+
     mod = importlib.import_module(mod_name)
     if not hasattr(mod, args.main_training_function):
         raise ValueError(
             f"Your training script should have a function named {args.main_training_function}, or you should pass a "
             "different value to `--main_training_function`."
         )
-    main_function = getattr(mod, args.main_training_function)
 
     # Patch sys.argv
-    sys.argv = [args.training_script] + args.training_script_args
+    sys.argv = [mod.__file__] + args.training_script_args
 
+    main_function = getattr(mod, args.main_training_function)
     xmp.spawn(PrepareForLaunch(main_function), args=(), nprocs=args.num_processes)
 
 
@@ -319,6 +355,9 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         raise ImportError(
             "Please install sagemaker to be able to launch training on Amazon SageMaker with `pip install accelerate[sagemaker]`"
         )
+    if args.module or args.no_python:
+        raise ValueError("SageMaker requires a python training script file and cannot be used with --module or --no_python")
+
     from sagemaker.huggingface import HuggingFace
 
     # configure environment
