@@ -615,7 +615,7 @@ class PrepareForLaunch:
                 world_size=world_size,
             )
             # Prepare the environment for torch.distributed
-            os.environ["LOCAL_RANK"] = str(index)
+            os.environ["CPU_LOCAL_RANK"] = str(index)
         elif self.distributed_type == DistributedType.MULTI_GPU or self.distributed_type == DistributedType.MULTI_CPU:
             # Prepare the environment for torch.distributed
             os.environ["LOCAL_RANK"] = str(index)
