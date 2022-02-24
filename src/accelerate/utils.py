@@ -16,6 +16,7 @@ import importlib
 import os
 import random
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, List, Optional, Union
@@ -594,14 +595,28 @@ class PrepareForLaunch:
             The function to launch.
         distributed_type (:class:`~accelerate.state.DistributedType`):
             The distributed type to prepare for.
+        debug (:obj:`bool`, *optional*, defaults to :obj:`False`):
+            Whether or not this is a debug launch.
     """
 
-    def __init__(self, launcher, distributed_type="NO"):
+    def __init__(self, launcher, distributed_type="NO", debug=False):
         self.launcher = launcher
         self.distributed_type = DistributedType(distributed_type)
+        self.debug = debug
 
     def __call__(self, index, *args):
-        if self.distributed_type == DistributedType.MULTI_GPU or self.distributed_type == DistributedType.MULTI_CPU:
+        if self.debug:
+            world_size = int(os.environ.get("WORLD_SIZE"))
+            rdv_file = os.environ.get("ACCELERATE_DEBUG_RDV_FILE")
+            torch.distributed.init_process_group(
+                "gloo",
+                rank=index,
+                store=torch.distributed.FileStore(rdv_file, world_size),
+                world_size=world_size,
+            )
+            # Prepare the environment for torch.distributed
+            os.environ["LOCAL_RANK"] = str(index)
+        elif self.distributed_type == DistributedType.MULTI_GPU or self.distributed_type == DistributedType.MULTI_CPU:
             # Prepare the environment for torch.distributed
             os.environ["LOCAL_RANK"] = str(index)
             os.environ["RANK"] = str(index)
@@ -654,3 +669,19 @@ class DeepSpeedPlugin:
             "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
             "zero_allow_untested_optimizer": True,
         }
+
+
+@contextmanager
+def patch_environment(**kwargs):
+    """
+    A context manager that will add each keyword argument passed to ``os.environ`` and remove them when exiting.
+
+    Will convert the values in :obj:`kwargs` to strings and upper-case all the keys.
+    """
+    for key, value in kwargs.items():
+        os.environ[key.upper()] = str(value)
+
+    yield
+
+    for key in kwargs:
+        del os.environ[key.upper()]
