@@ -204,9 +204,9 @@ def multi_gpu_launcher(args):
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
-    if args.module:
+    elif args.module:
         cmd.append("--module")
-    if args.no_python:
+    elif args.no_python:
         cmd.append("--no_python")
     cmd.append(args.training_script)
     cmd.extend(args.training_script_args)
