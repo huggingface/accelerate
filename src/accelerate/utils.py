@@ -124,6 +124,7 @@ def honor_type(obj, generator):
         # Some objects may not be able to instantiate from a generator directly
         return type(obj)(*list(generator))
 
+
 def is_torch_tensor(tensor):
     return isinstance(tensor, torch.Tensor)
 
