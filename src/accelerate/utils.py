@@ -16,9 +16,10 @@ import importlib
 import os
 import random
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 import numpy as np
 import torch
@@ -349,6 +350,39 @@ def gather(tensor):
         return tensor
 
 
+def _gpu_gather_object(object: Any):
+    def _gpu_gather_object_one(object: Any):
+        output_objects = [None for _ in range(AcceleratorState().num_processes)]
+        torch.distributed.all_gather_object(output_objects, object)
+        return output_objects
+
+    return recursively_apply(_gpu_gather_object_one, object)
+
+
+_cpu_gather_object = _gpu_gather_object
+
+
+def gather_object(object: Any):
+    """
+    Recursively gather object in a nested list/tuple/dictionary of objects from all devices.
+
+    Args:
+        object (nested list/tuple/dictionary of picklable object):
+            The data to gather.
+
+    Returns:
+        The same data structure as :obj:`object` with all the objects sent to every device.
+    """
+    if AcceleratorState().distributed_type == DistributedType.TPU:
+        raise NotImplementedError("gather objects in TPU is not supported")
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+        return _gpu_gather_object(object)
+    elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
+        return _cpu_gather_object(object)
+    else:
+        return object
+
+
 def _gpu_broadcast(data, src=0):
     def _gpu_broadcast_one(tensor, src=0):
         torch.distributed.broadcast(tensor, src=src)
@@ -560,14 +594,28 @@ class PrepareForLaunch:
             The function to launch.
         distributed_type (:class:`~accelerate.state.DistributedType`):
             The distributed type to prepare for.
+        debug (:obj:`bool`, *optional*, defaults to :obj:`False`):
+            Whether or not this is a debug launch.
     """
 
-    def __init__(self, launcher, distributed_type="NO"):
+    def __init__(self, launcher, distributed_type="NO", debug=False):
         self.launcher = launcher
         self.distributed_type = DistributedType(distributed_type)
+        self.debug = debug
 
     def __call__(self, index, *args):
-        if self.distributed_type == DistributedType.MULTI_GPU or self.distributed_type == DistributedType.MULTI_CPU:
+        if self.debug:
+            world_size = int(os.environ.get("WORLD_SIZE"))
+            rdv_file = os.environ.get("ACCELERATE_DEBUG_RDV_FILE")
+            torch.distributed.init_process_group(
+                "gloo",
+                rank=index,
+                store=torch.distributed.FileStore(rdv_file, world_size),
+                world_size=world_size,
+            )
+            # Prepare the environment for torch.distributed
+            os.environ["CPU_LOCAL_RANK"] = str(index)
+        elif self.distributed_type == DistributedType.MULTI_GPU or self.distributed_type == DistributedType.MULTI_CPU:
             # Prepare the environment for torch.distributed
             os.environ["LOCAL_RANK"] = str(index)
             os.environ["RANK"] = str(index)
@@ -620,3 +668,19 @@ class DeepSpeedPlugin:
             "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
             "zero_allow_untested_optimizer": True,
         }
+
+
+@contextmanager
+def patch_environment(**kwargs):
+    """
+    A context manager that will add each keyword argument passed to ``os.environ`` and remove them when exiting.
+
+    Will convert the values in :obj:`kwargs` to strings and upper-case all the keys.
+    """
+    for key, value in kwargs.items():
+        os.environ[key.upper()] = str(value)
+
+    yield
+
+    for key in kwargs:
+        del os.environ[key.upper()]
