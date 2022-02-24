@@ -356,7 +356,9 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
             "Please install sagemaker to be able to launch training on Amazon SageMaker with `pip install accelerate[sagemaker]`"
         )
     if args.module or args.no_python:
-        raise ValueError("SageMaker requires a python training script file and cannot be used with --module or --no_python")
+        raise ValueError(
+            "SageMaker requires a python training script file and cannot be used with --module or --no_python"
+        )
 
     from sagemaker.huggingface import HuggingFace
 
