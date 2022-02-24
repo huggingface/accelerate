@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 from collections import UserDict, namedtuple
 
 import torch
 
-from accelerate.utils import send_to_device
+from accelerate.utils import patch_environment, send_to_device
 
 
 TestNamedTuple = namedtuple("TestNamedTuple", "a b c")
@@ -62,3 +63,11 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(torch.equal(result4["b"][0].cpu(), tensor))
         self.assertTrue(torch.equal(result4["b"][1].cpu(), tensor))
         self.assertEqual(result4["c"], 1)
+
+    def test_patch_environment(self):
+        with patch_environment(aa=1, BB=2):
+            self.assertEqual(os.environ.get("AA"), "1")
+            self.assertEqual(os.environ.get("BB"), "2")
+
+        self.assertNotIn("AA", os.environ)
+        self.assertNotIn("BB", os.environ)

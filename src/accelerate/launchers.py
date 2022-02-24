@@ -14,6 +14,7 @@
 
 import os
 import sys
+import tempfile
 import warnings
 
 import torch
@@ -21,7 +22,7 @@ import torch
 from packaging import version
 
 from .state import AcceleratorState
-from .utils import PrepareForLaunch
+from .utils import PrepareForLaunch, patch_environment
 
 
 def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mixed_precision="no", use_port="29500"):
@@ -106,12 +107,6 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                     "function."
                 )
 
-            # torch.distributed will expect a few environment variable to be here. We set the ones common to each
-            # process here (the other ones will be set be the launcher).
-            os.environ["WORLD_SIZE"] = str(num_processes)
-            os.environ["MASTER_ADDR"] = "127.0.0.1"
-            os.environ["MASTER_PORT"] = str(use_port)
-
             mixed_precision = mixed_precision.lower()
             if mixed_precision not in ["no", "fp16", "bf16"]:
                 raise ValueError(
@@ -122,17 +117,15 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                 warnings.warn('use_fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
                 mixed_precision = "fp16"
 
-            os.environ["MIXED_PRECISION"] = str(mixed_precision)
+            # torch.distributed will expect a few environment variable to be here. We set the ones common to each
+            # process here (the other ones will be set be the launcher).
+            with patch_environment(
+                world_size=num_processes, master_addr="127.0.01", master_port=use_port, mixed_precision=mixed_precision
+            ):
+                launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
 
-            launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
-            try:
                 print(f"Launching training on {num_processes} GPUs.")
                 start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
-            finally:
-                # Clean up the environment variables set.
-                del os.environ["WORLD_SIZE"]
-                del os.environ["MASTER_ADDR"]
-                del os.environ["MASTER_PORT"]
 
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
@@ -141,3 +134,43 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
             else:
                 print("Launching training on CPU.")
             function(*args)
+
+
+def debug_launcher(function, args=(), num_processes=2):
+    """
+    Launches a training function using several processes on CPU for debugging purposes.
+
+    .. warning::
+
+        This function is provided for internal testing and debugging, but it's not intended for real trainings. It will
+        only use the CPU.
+
+
+    Args:
+        function (:obj:`Callable`):
+            The training function to execute.
+        args (:obj:`Tuple`):
+            Tuple of arguments to pass to the function (it will receive :obj:`*args`).
+        num_processes (:obj:`int`, *optional*, defaults to 2):
+            The number of processes to use for training.
+    """
+    if version.parse(torch.__version__) < version.parse("1.5.0"):
+        raise ImportError(
+            "Using `debug_launcher` for distributed training on GPUs require torch >= 1.5.0, got "
+            f"{torch.__version__}."
+        )
+
+    from torch.multiprocessing import start_processes
+
+    with tempfile.NamedTemporaryFile() as tmp_file:
+        # torch.distributed will expect a few environment variable to be here. We set the ones common to each
+        # process here (the other ones will be set be the launcher).
+        with patch_environment(
+            world_size=num_processes,
+            master_addr="127.0.01",
+            master_port="29500",
+            mixed_precision="no",
+            accelerate_debug_rdv_file=tmp_file.name,
+        ):
+            launcher = PrepareForLaunch(function, debug=True)
+            start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
