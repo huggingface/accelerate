@@ -16,6 +16,7 @@ import argparse
 import os
 import random
 import tempfile
+import unittest
 
 import torch
 from torch import nn
@@ -39,6 +40,23 @@ def dummy_dataloaders(a=2, b=3, batch_size=16, n_train_batches: int = 10, n_vali
     return (train_dataloader, valid_dataloader)
 
 
+def train(num_epochs, model, dataloader, optimizer, accelerator):
+    "Trains for `num_epochs`"
+    rands = []
+    for epoch in range(num_epochs):
+        # Train quickly
+        model.train()
+        for step, batch in enumerate(dataloader):
+            x, y = batch
+            outputs = model(x)
+            loss = torch.nn.functional.mse_loss(outputs, y)
+            accelerator.backward(loss)
+            optimizer.step()
+            optimizer.zero_grad()
+        rands.append(random.random())  # Introduce some randomness
+    return rands
+
+
 class DummyModel(nn.Module):
     "Simple model to do y=mx+b"
 
@@ -51,90 +69,63 @@ class DummyModel(nn.Module):
         return x * self.a + self.b
 
 
-def test_can_resume_training(args):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        set_seed(42)
-        model = DummyModel()
-        optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
-        train_dataloader, valid_dataloader = dummy_dataloaders()
-        # Train baseline
-        accelerator = Accelerator(
-            fp16=args.fp16, cpu=args.cpu, mixed_precision=args.mixed_precision, device_placement=True
-        )
-        model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
-            model, optimizer, train_dataloader, valid_dataloader
-        )
-        # Save initial
-        initial = os.path.join(tmpdir, "initial")
-        accelerator.save_state(initial)
-        model_unwrapped = accelerator.unwrap_model(model)
-        (a, b) = model_unwrapped.a.item(), model_unwrapped.b.item()
-        opt_state = optimizer.state_dict()
-        for epoch in range(3):
-            # Train quickly
-            model.train()
-            for step, batch in enumerate(train_dataloader):
-                x, y = batch
-                outputs = model(x)
-                loss = torch.nn.functional.mse_loss(outputs, y)
-                accelerator.backward(loss)
-                optimizer.step()
-                optimizer.zero_grad()
-            random.random()  # For each random num
-        model_unwrapped = accelerator.unwrap_model(model)
-        (a1, b1) = model_unwrapped.a.item(), model_unwrapped.b.item()
-        opt_state1 = optimizer.state_dict()
+class CheckpointTest(unittest.TestCase):
+    def test_can_resume_training(self, args):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            # Train baseline
+            accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, device_placement=True)
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
+            # Save initial
+            initial = os.path.join(tmpdir, "initial")
+            accelerator.save_state(initial)
+            model_unwrapped = accelerator.unwrap_model(model)
+            (a, b) = model_unwrapped.a.item(), model_unwrapped.b.item()
+            opt_state = optimizer.state_dict()
 
-        # Train partially
-        accelerator.load_state(initial)
-        model_unwrapped = accelerator.unwrap_model(model)
-        (a2, b2) = model_unwrapped.a.item(), model_unwrapped.b.item()
-        opt_state2 = optimizer.state_dict()
-        assert a == a2
-        assert b == b2
-        assert opt_state == opt_state2
-        # Reset seeed
-        set_seed(42)
-        # Rebuild the dataloaders again here
-        # Ensure all numbers align
+            gt_rands = train(3, model, train_dataloader, optimizer, accelerator)
 
-        for epoch in range(2):
-            # Train quickly
-            model.train()
-            for step, batch in enumerate(train_dataloader):
-                x, y = batch
-                outputs = model(x)
-                loss = torch.nn.functional.mse_loss(outputs, y)
-                accelerator.backward(loss)
-                optimizer.step()
-                optimizer.zero_grad()
-        # Save everything
-        checkpoint = os.path.join(tmpdir, "checkpoint")
-        accelerator.save_state(checkpoint)
+            model_unwrapped = accelerator.unwrap_model(model)
+            (a1, b1) = model_unwrapped.a.item(), model_unwrapped.b.item()
+            opt_state1 = optimizer.state_dict()
 
-        # Load everything back in and make sure all states work
-        accelerator.load_state(checkpoint)
-        for epoch in range(1):
-            # Train quickly
-            model.train()
-            for step, batch in enumerate(train_dataloader):
-                x, y = batch
-                outputs = model(x)
-                loss = torch.nn.functional.mse_loss(outputs, y)
-                accelerator.backward(loss)
-                optimizer.step()
-                optimizer.zero_grad()
-        model_unwrapped = accelerator.unwrap_model(model)
-        (a3, b3) = model_unwrapped.a.item(), model_unwrapped.b.item()
-        opt_state3 = optimizer.state_dict()
-        assert a1 == a3
-        assert b1 == b3
-        assert opt_state1 == opt_state3
+            # Train partially
+            accelerator.load_state(initial)
+            model_unwrapped = accelerator.unwrap_model(model)
+            (a2, b2) = model_unwrapped.a.item(), model_unwrapped.b.item()
+            opt_state2 = optimizer.state_dict()
+            self.assertEqual(a, a2)
+            self.assertEqual(b, b2)
+            self.assertEqual(opt_state, opt_state2)
+            set_seed(42)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            # Ensure all numbers align
+
+            test_rands = train(2, model, train_dataloader, optimizer, accelerator)
+            # Save everything
+            checkpoint = os.path.join(tmpdir, "checkpoint")
+            accelerator.save_state(checkpoint)
+
+            # Load everything back in and make sure all states work
+            accelerator.load_state(checkpoint)
+            test_rands += train(1, model, train_dataloader, optimizer, accelerator)
+
+            model_unwrapped = accelerator.unwrap_model(model)
+            (a3, b3) = model_unwrapped.a.item(), model_unwrapped.b.item()
+            opt_state3 = optimizer.state_dict()
+            self.assertEqual(a1, a3)
+            self.assertEqual(b1, b3)
+            self.assertEqual(opt_state1, opt_state3)
+            self.assertEqual(gt_rands, test_rands)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
-    parser.add_argument("--fp16", action="store_true", help="If passed, will use FP16 training.")
     parser.add_argument(
         "--mixed_precision",
         type=str,
@@ -146,7 +137,7 @@ def main():
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
-    test_can_resume_training(args)
+    CheckpointTest().test_can_resume_training(args)
 
 
 if __name__ == "__main__":
