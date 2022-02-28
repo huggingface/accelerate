@@ -24,15 +24,12 @@ import torch
 
 from packaging import version
 
+from .checkpointing import save_accelerator_state
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
 from .utils import (
-    MODEL_NAME,
-    OPTIMIZER_NAME,
-    RNG_STATE_NAME,
-    SCALAR_NAME,
     DeepSpeedPlugin,
     RNGType,
     convert_outputs_to_fp32,
@@ -582,40 +579,9 @@ class Accelerator:
         output_dir = os.path.expanduser(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
-
-        # Model states
-        for i, model in enumerate(self._models):
-            state = self.get_state_dict(model)
-            weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
-            output_model_file = os.path.join(output_dir, weights_name)
-            self.save(state, output_model_file)
-            logger.info(f"Model weights saved in {output_model_file}")
-        # Optimizer states
-        for i, opt in enumerate(self._optimizers):
-            state = opt.state_dict()
-            optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
-            output_optimizer_file = os.path.join(output_dir, optimizer_name)
-            torch.save(state, output_optimizer_file)
-            logger.info(f"Optimizer state saved in {output_optimizer_file}")
-        # GradScalar state
-        if self.scaler is not None:
-            state = self.scaler.state_dict()
-            output_scaler_file = os.path.join(output_dir, SCALAR_NAME)
-            torch.save(state, output_scaler_file)
-            logger.info(f"Gradient scaler state saved in {output_scaler_file}")
-        # Random number generator states
-        states = {}
-        states_name = "random_states.pkl"
-        states["random_state"] = random.getstate()
-        states["numpy_random_seed"] = np.random.get_state()
-        states["torch_manual_seed"] = torch.get_rng_state()
-        states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
-        # ^^ safe to call this function even if cuda is not available
-        if is_tpu_available():
-            states["xm_seed"] = torch.tensor(xm.get_rng_state())
-        output_states_file = os.path.join(output_dir, states_name)
-        torch.save(states, output_states_file)
-        logger.info(f"Random states saved in {output_states_file}")
+        weights = [self.get_state_dict(m) for m in self._models]
+        process_index = self.state.process_index
+        return save_accelerator_state(weights, self._optimizers, process_index, self.scalar, output_dir)
 
     def load_state(self, input_dir: str):
         """
@@ -656,11 +622,11 @@ class Accelerator:
             self.scaler.load_state_dict(torch.load(input_scaler_file))
             logger.info("GradScalar state loaded successfully")
         # Random states
-        states = torch.load(os.path.join(input_dir, "random_states.pkl"))
+        states = torch.load(os.path.join(input_dir, f"random_states_{self.state.process_index}.pkl"))
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])
-        torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
+        torch.cuda.set_rng_state(states["torch_cuda_manual_seed"])
         # ^^ safe to call this function even if cuda is not available
         if is_tpu_available():
             xm.set_rng_state(states["xm_seed"])

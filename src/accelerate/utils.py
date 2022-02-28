@@ -45,7 +45,7 @@ if is_deepspeed_available():
 
 SCALAR_NAME = "scalar.pt"
 MODEL_NAME = "pytorch_model.bin"
-RNG_STATE_NAME = "rng_state.pth"
+RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer.pt"
 
 

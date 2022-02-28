@@ -79,7 +79,7 @@ def test_can_resume_training(args):
                 accelerator.backward(loss)
                 optimizer.step()
                 optimizer.zero_grad()
-
+            random.random()  # For each random num
         model_unwrapped = accelerator.unwrap_model(model)
         (a1, b1) = model_unwrapped.a.item(), model_unwrapped.b.item()
         opt_state1 = optimizer.state_dict()
@@ -92,6 +92,10 @@ def test_can_resume_training(args):
         assert a == a2
         assert b == b2
         assert opt_state == opt_state2
+        # Reset seeed
+        set_seed(42)
+        # Rebuild the dataloaders again here
+        # Ensure all numbers align
 
         for epoch in range(2):
             # Train quickly
