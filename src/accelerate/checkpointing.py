@@ -14,12 +14,14 @@
 
 import os
 import random
+from typing import List
 
 import numpy as np
 import torch
+from torch.cuda.amp import GradScaler
 
 from .state import is_tpu_available
-from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALAR_NAME, save
+from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, save
 
 
 if is_tpu_available():
@@ -31,15 +33,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def save_accelerator_state(model_states, optimizers, process_index, scalar=None, output_dir="."):
+def save_accelerator_state(
+    output_dir: str, model_states: List[dict], optimizers: list, process_index: int, scaler: GradScaler = None
+):
     """
-    Saves the current states of the `models`, `optimizers`, scalar, and RNG generators to `output_dir`.
+    Saves the current states of the `models`, `optimizers`, scaler, and RNG generators to `output_dir`.
 
     Args:
-        model_states (:obj:`list`):
-            A list of model state dicts received from `Accelerator().get_state_dict`
         output_dir (:obj:`str` or :obj:`os.PathLike`):
             The name of the folder to save all relevant weights and states.
+        model_states (:obj:`list`):
+            A list of model states
+        optimizers (:obj:`list`):
+            A list of optimizer instances
+        process_index (:obj:`int`):
+            The current process index in the Accelerator state
+        scaler (:obj:`GradScaler`), Optional:
+            An optional `GradScaler` instance to save
     """
     # Model states
     for i, state in enumerate(model_states):
@@ -54,10 +64,10 @@ def save_accelerator_state(model_states, optimizers, process_index, scalar=None,
         output_optimizer_file = os.path.join(output_dir, optimizer_name)
         torch.save(state, output_optimizer_file)
         logger.info(f"Optimizer state saved in {output_optimizer_file}")
-    # GradScalar state
+    # GradScaler state
     if scaler is not None:
         state = scaler.state_dict()
-        output_scaler_file = os.path.join(output_dir, SCALAR_NAME)
+        output_scaler_file = os.path.join(output_dir, SCALER_NAME)
         torch.save(state, output_scaler_file)
         logger.info(f"Gradient scaler state saved in {output_scaler_file}")
     # Random number generator states
@@ -76,4 +86,49 @@ def save_accelerator_state(model_states, optimizers, process_index, scalar=None,
     return output_dir
 
 
-# def load_accelerator_state(models, optimizers, scalar, input_dir)
+def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=None):
+    """
+    Loads states of the `models`, `optimizers`, scaler, and RNG generators from `input_dir`.
+
+    Args:
+        input_dir (:obj:`str` or :obj:`os.PathLike`):
+            The name of the folder to load all relevant weights and states.
+        model_stmodelsates (:obj:`list`):
+            A list of model instances
+        optimizers (:obj:`list`):
+            A list of optimizer instances
+        process_index (:obj:`int`):
+            The current process index in the Accelerator state
+        scaler (:obj:`GradScaler`), Optional:
+            An optional `GradScaler` instance to load
+    """
+    # Model states
+    for i, model in enumerate(models):
+        weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
+        input_model_file = os.path.join(input_dir, weights_name)
+        models[i].load_state_dict(torch.load(input_model_file))
+    logger.info("All model weights loaded successfully")
+
+    # Optimizer states
+    for i, opt in enumerate(optimizers):
+        optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
+        input_optimizer_file = os.path.join(input_dir, optimizer_name)
+        optimizers[i].load_state_dict(torch.load(input_optimizer_file))
+    logger.info("All optimizer states loaded successfully")
+
+    # GradScaler state
+    if scaler is not None:
+        input_scaler_file = os.path.join(input_dir, SCALER_NAME)
+        scaler.load_state_dict(torch.load(input_scaler_file))
+        logger.info("GradScaler state loaded successfully")
+
+    # Random states
+    states = torch.load(os.path.join(input_dir, f"{RNG_STATE_NAME}_{process_index}.pkl"))
+    random.setstate(states["random_state"])
+    np.random.set_state(states["numpy_random_seed"])
+    torch.set_rng_state(states["torch_manual_seed"])
+    torch.cuda.set_rng_state(states["torch_cuda_manual_seed"])
+    # ^^ safe to call this function even if cuda is not available
+    if is_tpu_available():
+        xm.set_rng_state(states["xm_seed"])
+    logger.info("All random states loaded successfully")

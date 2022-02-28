@@ -14,21 +14,19 @@
 
 import gc
 import os
-import random
 import warnings
 from contextlib import contextmanager
 from typing import List, Optional, Union
 
-import numpy as np
 import torch
 
 from packaging import version
 
-from .checkpointing import save_accelerator_state
+from .checkpointing import load_accelerator_state, save_accelerator_state
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
-from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
+from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .utils import (
     DeepSpeedPlugin,
     RNGType,
@@ -45,9 +43,6 @@ if is_deepspeed_available():
     import deepspeed
 
     from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
-
-if is_tpu_available():
-    import torch_xla.core.xla_model as xm
 
 import logging
 
@@ -569,7 +564,7 @@ class Accelerator:
 
     def save_state(self, output_dir: str):
         """
-        Saves the current states of the model, optimizer, scalar, and RNG generators to `folder_name`.
+        Saves the current states of the model, optimizer, scaler, and RNG generators to `folder_name`.
 
         Args:
             output_dir (:obj:`str` or :obj:`os.PathLike`):
@@ -580,12 +575,11 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
         weights = [self.get_state_dict(m) for m in self._models]
-        process_index = self.state.process_index
-        return save_accelerator_state(weights, self._optimizers, process_index, self.scalar, output_dir)
+        return save_accelerator_state(output_dir, weights, self._optimizers, self.state.process_index, self.scaler)
 
     def load_state(self, input_dir: str):
         """
-        Loads the current states of the model, optimizer, scalar, and RNG generators from `folder_name`.
+        Loads the current states of the model, optimizer, scaler, and RNG generators from `folder_name`.
 
         Args:
             input_dir (:obj:`str` or :obj:`os.PathLike`):
@@ -596,41 +590,7 @@ class Accelerator:
         if not os.path.isdir(input_dir):
             raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         logger.info(f"Loading states from {input_dir}")
-
-        # Model states
-        for i, model in enumerate(self._models):
-            weights_name = "pytorch_model"
-            if i != 0:
-                weights_name += f"_{i}"
-            weights_name += ".bin"
-            input_model_file = os.path.join(input_dir, weights_name)
-            self._models[i].load_state_dict(torch.load(input_model_file))
-        logger.info("All model weights loaded successfully")
-        # Optimizer states
-        for i, opt in enumerate(self._optimizers):
-            optimizer_name = "optimizer"
-            if i != 0:
-                optimizer_name += f"_{i}"
-            optimizer_name += ".pt"
-            input_optimizer_file = os.path.join(input_dir, optimizer_name)
-            self._optimizers[i].load_state_dict(torch.load(input_optimizer_file))
-        logger.info("All optimizer states loaded successfully")
-        # GradScalar state
-        if self.scaler is not None:
-            scaler_name = "scaler.bin"
-            input_scaler_file = os.path.join(input_dir, scaler_name)
-            self.scaler.load_state_dict(torch.load(input_scaler_file))
-            logger.info("GradScalar state loaded successfully")
-        # Random states
-        states = torch.load(os.path.join(input_dir, f"random_states_{self.state.process_index}.pkl"))
-        random.setstate(states["random_state"])
-        np.random.set_state(states["numpy_random_seed"])
-        torch.set_rng_state(states["torch_manual_seed"])
-        torch.cuda.set_rng_state(states["torch_cuda_manual_seed"])
-        # ^^ safe to call this function even if cuda is not available
-        if is_tpu_available():
-            xm.set_rng_state(states["xm_seed"])
-        logger.info("All random states loaded successfully")
+        load_accelerator_state(input_dir, self._models, self._optimizers, self.state.process_index, self.scaler)
 
     def free_memory(self):
         """
