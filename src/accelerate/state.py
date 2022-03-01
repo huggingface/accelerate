@@ -153,6 +153,8 @@ class AcceleratorState:
         **kwargs,
     ):
         self.__dict__ = self._shared_state
+        if parse_flag_from_env("USE_CPU"):
+            cpu = True
         if not getattr(self, "initialized", False):
             self.backend = None
             self.deepspeed_plugin = None
@@ -217,14 +219,7 @@ class AcceleratorState:
                 rank = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
                 size = get_int_from_env(["WORLD_SIZE", "PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE"], 1)
                 local_rank = get_int_from_env(
-                    [
-                        "LOCAL_RANK",
-                        "CPU_LOCAL_RANK",
-                        "MPI_LOCALRANKID",
-                        "OMPI_COMM_WORLD_LOCAL_RANK",
-                        "MV2_COMM_WORLD_LOCAL_RANK",
-                    ],
-                    0,
+                    ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"], 0
                 )
                 local_size = get_int_from_env(
                     ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
