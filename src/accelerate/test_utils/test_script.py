@@ -59,6 +59,8 @@ def dl_preparation_check():
     for batch in dl:
         result.append(gather(batch))
     result = torch.cat(result)
+
+    print(state.process_index, result, type(dl))
     assert torch.equal(result.cpu(), torch.arange(0, length).long()), "Wrong non-shuffled dataloader result."
 
     dl = DataLoader(range(length), batch_size=8)
@@ -326,6 +328,10 @@ def main():
         print("\n**DataLoader integration test**")
     dl_preparation_check()
     central_dl_preparation_check()
+
+    # Trainings are not exactly the same in DeepSpeed and CPU mode
+    if state.distributed_type == DistributedType.DEEPSPEED:
+        return
 
     if state.local_process_index == 0:
         print("\n**Training integration test**")
