@@ -62,7 +62,7 @@ def save_accelerator_state(
         state = opt.state_dict()
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         output_optimizer_file = os.path.join(output_dir, optimizer_name)
-        torch.save(state, output_optimizer_file)
+        save(state, output_optimizer_file)
         logger.info(f"Optimizer state saved in {output_optimizer_file}")
     # GradScaler state
     if scaler is not None:
