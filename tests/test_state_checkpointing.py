@@ -88,7 +88,7 @@ class CheckpointTest(unittest.TestCase):
             (a, b) = model_unwrapped.a.item(), model_unwrapped.b.item()
             opt_state = optimizer.state_dict()
 
-            gt_rands = train(3, model, train_dataloader, optimizer, accelerator)
+            ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
 
             model_unwrapped = accelerator.unwrap_model(model)
             (a1, b1) = model_unwrapped.a.item(), model_unwrapped.b.item()
@@ -121,7 +121,7 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(a1, a3)
             self.assertEqual(b1, b3)
             self.assertEqual(opt_state1, opt_state3)
-            self.assertEqual(gt_rands, test_rands)
+            self.assertEqual(ground_truth_rands, test_rands)
 
 
 def main():
