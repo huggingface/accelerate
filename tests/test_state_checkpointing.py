@@ -69,7 +69,7 @@ class DummyModel(nn.Module):
 
 
 class CheckpointTest(unittest.TestCase):
-    def test_can_resume_training(self, args):
+    def test_can_resume_training(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
             model = DummyModel()
