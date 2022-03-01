@@ -67,6 +67,7 @@ class BaseConfig:
     compute_environment: ComputeEnvironment
     distributed_type: Union[DistributedType, SageMakerDistributedType]
     mixed_precision: str
+    use_cpu: bool
 
     def to_dict(self):
         result = self.__dict__
@@ -87,6 +88,8 @@ class BaseConfig:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else "no"
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
+        if "use_cpu" not in config_dict:
+            config_dict["use_cpu"] = False
         return cls(**config_dict)
 
     def to_json_file(self, json_file):
@@ -106,6 +109,8 @@ class BaseConfig:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else "no"
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
+        if "use_cpu" not in config_dict:
+            config_dict["use_cpu"] = False
 
         return cls(**config_dict)
 

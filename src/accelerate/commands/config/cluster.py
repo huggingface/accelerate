@@ -52,6 +52,17 @@ def get_cluster_input():
                 lambda x: int(x),
             )
 
+    if distributed_type == DistributedType.NO:
+        use_cpu = _ask_field(
+            "Do you want to run your training on CPU only (even if a GPU is available)? [no]:",
+            lambda x: bool(x),
+            default=False,
+        )
+    elif distributed_type == DistributedType.MULTI_CPU:
+        use_cpu = True
+    else:
+        use_cpu = False
+
     deepspeed_config = None
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
         use_deepspeed = _ask_field(
@@ -122,4 +133,5 @@ def get_cluster_input():
         main_process_port=main_process_port,
         main_training_function=main_training_function,
         deepspeed_config=deepspeed_config,
+        use_cpu=use_cpu,
     )
