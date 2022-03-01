@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import os
 import random
 import tempfile
@@ -77,7 +76,7 @@ class CheckpointTest(unittest.TestCase):
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, device_placement=True)
+            accelerator = Accelerator()
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
@@ -122,23 +121,3 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(b1, b3)
             self.assertEqual(opt_state1, opt_state3)
             self.assertEqual(ground_truth_rands, test_rands)
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Simple example of training script.")
-    parser.add_argument(
-        "--mixed_precision",
-        type=str,
-        default="no",
-        choices=["no", "fp16", "bf16"],
-        help="Whether to use mixed precision. Choose"
-        "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
-        "and an Nvidia Ampere GPU.",
-    )
-    parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
-    args = parser.parse_args()
-    CheckpointTest().test_can_resume_training(args)
-
-
-if __name__ == "__main__":
-    main()
