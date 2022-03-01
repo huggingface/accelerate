@@ -91,7 +91,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     state = AcceleratorState()
     if state.distributed_type == DistributedType.TPU:
         rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
-    elif state.distributed_type == DistributedType.MULTI_GPU:
+    elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
         rng_state = rng_state.to(state.device)
         torch.distributed.broadcast(rng_state, 0)
         rng_state = rng_state.cpu()
@@ -343,7 +343,7 @@ def gather(tensor):
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         return _tpu_gather(tensor, name="accelerate.utils.gather")
-    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+    elif AcceleratorState().distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
         return _gpu_gather(tensor)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
         return _cpu_gather(tensor)
@@ -376,7 +376,7 @@ def gather_object(object: Any):
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         raise NotImplementedError("gather objects in TPU is not supported")
-    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+    elif AcceleratorState().distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
         return _gpu_gather_object(object)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
         return _cpu_gather_object(object)
@@ -415,7 +415,7 @@ def broadcast(tensor, from_process: int = 0):
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
-    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+    elif AcceleratorState().distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
         return _gpu_broadcast(tensor, src=from_process)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
         return _gpu_broadcast(tensor, src=from_process)
@@ -439,7 +439,7 @@ def broadcast_object_list(object_list, from_process: int = 0):
     if AcceleratorState().distributed_type == DistributedType.TPU:
         for i, obj in enumerate(object_list):
             object_list[i] = xm.mesh_reduce("accelerate.utils.broadcast_object_list", obj, lambda x: x[from_process])
-    elif AcceleratorState().distributed_type == DistributedType.MULTI_GPU:
+    elif AcceleratorState().distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
         torch.distributed.broadcast_object_list(object_list, src=from_process)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
         torch.distributed.broadcast_object_list(object_list, src=from_process)

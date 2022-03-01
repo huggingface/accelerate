@@ -256,11 +256,6 @@ class AcceleratorState:
 
     def __repr__(self):
         mixed_precision = self.mixed_precision
-        if self.distributed_type == DistributedType.DEEPSPEED:
-            if self.deepspeed_plugin.fp16:
-                mixed_precision = "fp16"
-            if self.deepspeed_plugin.bflaot16:
-                mixed_precision = "bf16"
 
         repr = (
             f"Distributed environment: {self.distributed_type}{('  Backend: ' + self.backend) if self.backend else ''}\n"
@@ -271,5 +266,5 @@ class AcceleratorState:
             f"Mixed precision type: {mixed_precision}\n"
         )
         if self.distributed_type == DistributedType.DEEPSPEED:
-            repr += f"ds_config: {self.deepspeed_plugin.ds_config}\n"
+            repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
         return repr
