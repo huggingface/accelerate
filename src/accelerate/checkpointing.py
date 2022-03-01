@@ -77,6 +77,7 @@ def save_accelerator_state(
     states["numpy_random_seed"] = np.random.get_state()
     states["torch_manual_seed"] = torch.get_rng_state()
     if torch.cuda.is_available():
+        logger.info("Saving cuda state")
         states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state()
     if is_tpu_available():
         states["xm_seed"] = torch.tensor(xm.get_rng_state())
@@ -128,6 +129,7 @@ def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=
     np.random.set_state(states["numpy_random_seed"])
     torch.set_rng_state(states["torch_manual_seed"])
     if torch.cuda.is_available():
+        logger.info("Loading cuda state")
         torch.cuda.set_rng_state(states["torch_cuda_manual_seed"])
     if is_tpu_available():
         xm.set_rng_state(states["xm_seed"])

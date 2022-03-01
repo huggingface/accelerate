@@ -18,6 +18,7 @@ import random
 import tempfile
 import unittest
 
+import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -93,6 +94,7 @@ class CheckpointTest(unittest.TestCase):
 
             # Train partially
             ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
+            rand_a = [random.getstate(), np.random.get_state(), torch.get_rng_state(), torch.cuda.get_rng_state()]
             model_unwrapped = accelerator.unwrap_model(model)
             (a1, b1) = model_unwrapped.a.item(), model_unwrapped.b.item()
             opt_state1 = optimizer.state_dict()
@@ -108,7 +110,10 @@ class CheckpointTest(unittest.TestCase):
 
             set_seed(42)
             train_dataloader, valid_dataloader = dummy_dataloaders()
-            train_dataloader, valid_dataloader = accelerator.prepare(train_dataloader, valid_dataloader)
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader, optimizer = accelerator.prepare(
+                train_dataloader, valid_dataloader, optimizer
+            )
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
             checkpoint = os.path.join(tmpdir, "checkpoint")
@@ -116,6 +121,7 @@ class CheckpointTest(unittest.TestCase):
             # Load everything back in and make sure all states work
             accelerator.load_state(checkpoint)
             test_rands += train(1, model, train_dataloader, optimizer, accelerator)
+            rand_b = [random.getstate(), np.random.get_state(), torch.get_rng_state(), torch.cuda.get_rng_state()]
             model_unwrapped = accelerator.unwrap_model(model)
             (a3, b3) = model_unwrapped.a.item(), model_unwrapped.b.item()
             opt_state3 = optimizer.state_dict()
@@ -123,6 +129,14 @@ class CheckpointTest(unittest.TestCase):
             logger.info(f"Model (b) states: \n\t{b}\n\t{b1}\n\t{b2}\n\t{b3}")
             logger.info(f"Optimizer states: \n\t{opt_state}\n\t{opt_state1}\n\t{opt_state2}\n\t{opt_state3}")
             logger.info(f"Rands states: \n\t{ground_truth_rands}\n\t{test_rands}")
+            for i, (a, b) in enumerate(zip(rand_a, rand_b)):
+                for c, d in zip(a, b):
+                    if isinstance(c, (list, np.ndarray)):
+                        self.assertTrue(all([e == f for e, f in zip(c, d)]))
+                        logger.info(f"Passed: {i}")
+                    else:
+                        self.assertEqual(c, d)
+                        logger.info(f"Passed: {i}")
             self.assertEqual(a1, a3)
             self.assertEqual(b1, b3)
             self.assertEqual(opt_state1, opt_state3)
