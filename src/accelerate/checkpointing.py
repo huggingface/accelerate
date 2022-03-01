@@ -93,13 +93,13 @@ def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=
     Args:
         input_dir (:obj:`str` or :obj:`os.PathLike`):
             The name of the folder to load all relevant weights and states.
-        model_stmodelsates (:obj:`list`):
+        model_stmodelsates (:obj:`List[torch.nn.Module]`):
             A list of model instances
-        optimizers (:obj:`list`):
+        optimizers (:obj:`List[torch.optim.Optimizer]`):
             A list of optimizer instances
         process_index (:obj:`int`):
             The current process index in the Accelerator state
-        scaler (:obj:`GradScaler`), Optional:
+        scaler (:obj:`torch.cuda.amp.GradScaler`, `optional`):
             An optional `GradScaler` instance to load
     """
     # Model states
