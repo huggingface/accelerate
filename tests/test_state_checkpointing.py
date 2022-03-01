@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 import random
 import tempfile
@@ -23,6 +24,9 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
 from accelerate.utils import set_seed
+
+
+logger = logging.getLogger(__name__)
 
 
 def dummy_dataloaders(a=2, b=3, batch_size=16, n_train_batches: int = 10, n_valid_batches: int = 2):
@@ -87,13 +91,13 @@ class CheckpointTest(unittest.TestCase):
             (a, b) = model_unwrapped.a.item(), model_unwrapped.b.item()
             opt_state = optimizer.state_dict()
 
+            # Train partially
             ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
-
             model_unwrapped = accelerator.unwrap_model(model)
             (a1, b1) = model_unwrapped.a.item(), model_unwrapped.b.item()
             opt_state1 = optimizer.state_dict()
 
-            # Train partially
+            # Test `load_state`
             accelerator.load_state(initial)
             model_unwrapped = accelerator.unwrap_model(model)
             (a2, b2) = model_unwrapped.a.item(), model_unwrapped.b.item()
@@ -101,22 +105,24 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(a, a2)
             self.assertEqual(b, b2)
             self.assertEqual(opt_state, opt_state2)
+
             set_seed(42)
             train_dataloader, valid_dataloader = dummy_dataloaders()
-            # Ensure all numbers align
-
+            train_dataloader, valid_dataloader = accelerator.prepare(train_dataloader, valid_dataloader)
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
             checkpoint = os.path.join(tmpdir, "checkpoint")
             accelerator.save_state(checkpoint)
-
             # Load everything back in and make sure all states work
             accelerator.load_state(checkpoint)
             test_rands += train(1, model, train_dataloader, optimizer, accelerator)
-
             model_unwrapped = accelerator.unwrap_model(model)
             (a3, b3) = model_unwrapped.a.item(), model_unwrapped.b.item()
             opt_state3 = optimizer.state_dict()
+            logger.info(f"Model (a) states: \n\t{a}\n\t{a1}\n\t{a2}\n\t{a3}")
+            logger.info(f"Model (b) states: \n\t{b}\n\t{b1}\n\t{b2}\n\t{b3}")
+            logger.info(f"Optimizer states: \n\t{opt_state}\n\t{opt_state1}\n\t{opt_state2}\n\t{opt_state3}")
+            logger.info(f"Rands states: \n\t{ground_truth_rands}\n\t{test_rands}")
             self.assertEqual(a1, a3)
             self.assertEqual(b1, b3)
             self.assertEqual(opt_state1, opt_state3)
