@@ -95,7 +95,7 @@ class CheckpointTest(unittest.TestCase):
             # Train partially
             ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
             rand_a = [random.getstate(), np.random.get_state(), torch.get_rng_state()]
-            if torch.cuda.is_available:
+            if torch.cuda.is_available():
                 rand_a += [torch.cuda.get_rng_state()]
             model_unwrapped = accelerator.unwrap_model(model)
             (a1, b1) = model_unwrapped.a.item(), model_unwrapped.b.item()
@@ -124,7 +124,7 @@ class CheckpointTest(unittest.TestCase):
             accelerator.load_state(checkpoint)
             test_rands += train(1, model, train_dataloader, optimizer, accelerator)
             rand_b = [random.getstate(), np.random.get_state(), torch.get_rng_state()]
-            if torch.cuda.is_available:
+            if torch.cuda.is_available():
                 rand_b += [torch.cuda.get_rng_state()]
             model_unwrapped = accelerator.unwrap_model(model)
             (a3, b3) = model_unwrapped.a.item(), model_unwrapped.b.item()
