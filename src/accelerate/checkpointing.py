@@ -1,4 +1,4 @@
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,19 +37,19 @@ def save_accelerator_state(
     output_dir: str, model_states: List[dict], optimizers: list, process_index: int, scaler: GradScaler = None
 ):
     """
-    Saves the current states of the `models`, `optimizers`, scaler, and RNG generators to `output_dir`.
+    Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
 
     Args:
         output_dir (:obj:`str` or :obj:`os.PathLike`):
             The name of the folder to save all relevant weights and states.
-        model_states (:obj:`list`):
+        model_states (:obj:`List[torch.nn.Module]`):
             A list of model states
-        optimizers (:obj:`list`):
+        optimizers (:obj:`List[torch.optim.Optimizer]`):
             A list of optimizer instances
         process_index (:obj:`int`):
             The current process index in the Accelerator state
-        scaler (:obj:`GradScaler`), Optional:
-            An optional `GradScaler` instance to save
+        scaler (:obj:`torch.cuda.amp.GradScaler`, `optional`):
+            An optional gradient scaler instance to save
     """
     # Model states
     for i, state in enumerate(model_states):
@@ -88,7 +88,7 @@ def save_accelerator_state(
 
 def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=None):
     """
-    Loads states of the `models`, `optimizers`, scaler, and RNG generators from `input_dir`.
+    Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
 
     Args:
         input_dir (:obj:`str` or :obj:`os.PathLike`):

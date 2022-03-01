@@ -564,7 +564,7 @@ class Accelerator:
 
     def save_state(self, output_dir: str):
         """
-        Saves the current states of the model, optimizer, scaler, and RNG generators to `folder_name`.
+        Saves the current states of the model, optimizer, scaler, and RNG generators.
 
         Args:
             output_dir (:obj:`str` or :obj:`os.PathLike`):
@@ -579,7 +579,7 @@ class Accelerator:
 
     def load_state(self, input_dir: str):
         """
-        Loads the current states of the model, optimizer, scaler, and RNG generators from `folder_name`.
+        Loads the current states of the model, optimizer, scaler, and RNG generators.
 
         Args:
             input_dir (:obj:`str` or :obj:`os.PathLike`):
