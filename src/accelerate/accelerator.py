@@ -35,6 +35,7 @@ from .utils import (
     gather,
     pad_across_processes,
     save,
+    set_seed,
     wait_for_everyone,
 )
 
@@ -193,6 +194,18 @@ class Accelerator:
         self.rng_types = rng_types
         if self.rng_types is None:
             self.rng_types = ["torch"] if version.parse(torch.__version__) <= version.parse("1.5.1") else ["generator"]
+
+    def set_seed(self, seed: int, device_specific: bool = False):
+        """
+        Sets the random seed to `seed` in ``random``, ``numpy``, ``torch``. Potentially differing it by `self.process_index` if `device_specific`
+
+        Args:
+            seed (:obj:`int`): The seed to set.
+            device_specific (:obj:`bool`): Whether to differ the seed on each device slightly with `self.process_index`
+        """
+        if device_specific:
+            seed += self.process_index
+        set_seed(seed)
 
     @property
     def distributed_type(self):
