@@ -69,7 +69,7 @@ def set_seed(seed: int, device_specific: bool = False):
 
     Args:
         seed (:obj:`int`): The seed to set.
-        device_specific (:obj:`bool`): Whether to differ the seed on each device slightly with `self.process_index`
+        device_specific (:obj:`bool`, `optional`, defaults to :obj:`False`): Whether to differ the seed on each device slightly with `self.process_index`
     """
     if device_specific:
         seed += AcceleratorState().process_index
