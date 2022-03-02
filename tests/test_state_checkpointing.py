@@ -89,7 +89,7 @@ class CheckpointTest(unittest.TestCase):
             accelerator.save_state(initial)
             (a, b) = model.a.item(), model.b.item()
             opt_state = optimizer.state_dict()
-            train(3, model, train_dataloader, optimizer, accelerator)
+            ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
             (a1, b1) = model.a.item(), model.b.item()
             opt_state1 = optimizer.state_dict()
 
@@ -101,16 +101,17 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(b, b2)
             self.assertEqual(opt_state, opt_state2)
 
-            train(2, model, train_dataloader, optimizer, accelerator)
+            test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
             checkpoint = os.path.join(tmpdir, "checkpoint")
             accelerator.save_state(checkpoint)
 
             # Load everything back in and make sure all states work
             accelerator.load_state(checkpoint)
-            train(1, model, train_dataloader, optimizer, accelerator)
+            test_rands += train(1, model, train_dataloader, optimizer, accelerator)
             (a3, b3) = model.a.item(), model.b.item()
             opt_state3 = optimizer.state_dict()
             self.assertEqual(a1, a3)
             self.assertEqual(b1, b3)
             self.assertEqual(opt_state1, opt_state3)
+            self.assertEqual(ground_truth_rands, test_rands)
