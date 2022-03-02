@@ -22,6 +22,7 @@ import torch
 
 from packaging import version
 
+from .checkpointing import load_accelerator_state, save_accelerator_state
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
@@ -40,6 +41,7 @@ from .utils import (
 
 if is_deepspeed_available():
     import deepspeed
+
     from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
 
 import logging
@@ -559,6 +561,36 @@ class Accelerator:
                 Where to save the content of :obj:`obj`.
         """
         save(obj, f)
+
+    def save_state(self, output_dir: str):
+        """
+        Saves the current states of the model, optimizer, scaler, and RNG generators.
+
+        Args:
+            output_dir (:obj:`str` or :obj:`os.PathLike`):
+                The name of the folder to save all relevant weights and states.
+        """
+        # Check if folder exists
+        output_dir = os.path.expanduser(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        logger.info(f"Saving current state to {output_dir}")
+        weights = [self.get_state_dict(m) for m in self._models]
+        return save_accelerator_state(output_dir, weights, self._optimizers, self.state.process_index, self.scaler)
+
+    def load_state(self, input_dir: str):
+        """
+        Loads the current states of the model, optimizer, scaler, and RNG generators.
+
+        Args:
+            input_dir (:obj:`str` or :obj:`os.PathLike`):
+                The name of the folder all relevant weights and states were saved in.
+        """
+        # Check if folder exists
+        input_dir = os.path.expanduser(input_dir)
+        if not os.path.isdir(input_dir):
+            raise ValueError(f"Tried to find {input_dir} but folder does not exist")
+        logger.info(f"Loading states from {input_dir}")
+        load_accelerator_state(input_dir, self._models, self._optimizers, self.state.process_index, self.scaler)
 
     def free_memory(self):
         """

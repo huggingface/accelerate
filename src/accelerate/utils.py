@@ -44,6 +44,11 @@ def is_sagemaker_available():
 if is_deepspeed_available():
     from deepspeed import DeepSpeedEngine
 
+SCALER_NAME = "scaler.pt"
+MODEL_NAME = "pytorch_model"
+RNG_STATE_NAME = "random_states"
+OPTIMIZER_NAME = "optimizer"
+
 
 class RNGType(Enum):
     TORCH = "torch"
