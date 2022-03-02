@@ -197,7 +197,8 @@ class Accelerator:
 
     def set_seed(self, seed: int, device_specific: bool = False):
         """
-        Sets the random seed to `seed` in ``random``, ``numpy``, ``torch``. Potentially differing it by `self.process_index` if `device_specific`
+        Sets the random seed to `seed` in ``random``, ``numpy``, ``torch``. Potentially differing it by
+        `self.process_index` if `device_specific`
 
         Args:
             seed (:obj:`int`): The seed to set.
