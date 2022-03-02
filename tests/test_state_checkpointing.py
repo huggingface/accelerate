@@ -94,6 +94,14 @@ class CheckpointTest(unittest.TestCase):
             opt_state1 = optimizer.state_dict()
 
             # Train partially
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            accelerator = Accelerator()
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
             accelerator.load_state(initial)
             (a2, b2) = model.a.item(), model.b.item()
             opt_state2 = optimizer.state_dict()
