@@ -22,7 +22,7 @@ import torch
 
 from packaging import version
 
-from .checkpointing import load_accelerator_state, save_accelerator_state
+from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
@@ -188,6 +188,7 @@ class Accelerator:
         # Internal references to the training objects
         self._optimizers = []
         self._models = []
+        self._custom_objects = []
 
         # RNG Types
         self.rng_types = rng_types
@@ -564,7 +565,7 @@ class Accelerator:
 
     def save_state(self, output_dir: str):
         """
-        Saves the current states of the model, optimizer, scaler, and RNG generators.
+        Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
         Args:
             output_dir (:obj:`str` or :obj:`os.PathLike`):
@@ -575,11 +576,16 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
         weights = [self.get_state_dict(m) for m in self._models]
-        return save_accelerator_state(output_dir, weights, self._optimizers, self.state.process_index, self.scaler)
+        save_location = save_accelerator_state(
+            output_dir, weights, self._optimizers, self.state.process_index, self.scaler
+        )
+        for i, obj in enumerate(self._custom_objects):
+            save_custom_state(obj, output_dir, i)
+        return save_location
 
     def load_state(self, input_dir: str):
         """
-        Loads the current states of the model, optimizer, scaler, and RNG generators.
+        Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
         Args:
             input_dir (:obj:`str` or :obj:`os.PathLike`):
@@ -591,6 +597,14 @@ class Accelerator:
             raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         logger.info(f"Loading states from {input_dir}")
         load_accelerator_state(input_dir, self._models, self._optimizers, self.state.process_index, self.scaler)
+        custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
+        if len(custom_checkpoints) != (len(self._custom_objects) + 1):
+            logger.warn("Warning! You are loading a state that does not include registered objects.")
+        else:
+            logger.info(f"Loading in {len(custom_checkpoints)} custom states")
+            self._custom_objects = [
+                load_custom_state(obj, input_dir, index) for index, obj in enumerate(self._custom_objects)
+            ]
 
     def free_memory(self):
         """
@@ -645,6 +659,15 @@ class Accelerator:
                 state_dict[k] = state_dict[k].float()
 
         return state_dict
+
+    def register_for_checkpointing(self, *objects):
+        """
+        Makes note of `objects` and will save or load them in during `save_state` or `load_state`.
+
+        Note: These should be utilized when the state is being loaded or saved in the same script. It
+        is not designed to be used in different scripts
+        """
+        self._custom_objects = list(objects)
 
     @contextmanager
     def autocast(self):

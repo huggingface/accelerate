@@ -132,3 +132,27 @@ def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=
     if is_tpu_available():
         xm.set_rng_state(states["xm_seed"])
     logger.info("All random states loaded successfully")
+
+
+def save_custom_state(obj, path, index: int = 0):
+    """
+    Saves the state of `obj` to `{path}/custom_checkpoint_{index}.pkl`
+    """
+    # Should this be the right way to get a qual_name type value from `obj`?
+    save_location = f"{path}/custom_checkpoint_{index}.pkl"
+    logger.info(f"Saving the state of {str(obj)} to {save_location}")
+    if hasattr(obj, "state_dict"):
+        obj = obj.state_dict()
+    torch.save(obj, save_location)
+
+
+def load_custom_state(obj, path, index: int = 0):
+    """
+    Loads the state of `obj` at `{path}/custom_checkpoint_{index}.pkl`
+    """
+    load_location = f"{path}/custom_checkpoint_{index}.pkl"
+    if hasattr(obj, "load_state_dict"):
+        obj = obj.load_state_dict(load_location)
+    else:
+        obj = torch.load(load_location)
+    return obj
