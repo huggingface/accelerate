@@ -328,6 +328,10 @@ class DataLoaderDispatcher(DataLoader):
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
         super().__init__(dataset, **kwargs)
         self.split_batches = split_batches
+        if version.parse(torch.__version__) < version.parse("1.8.0"):
+            raise ImportError(
+                "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
+            )
 
     def __iter__(self):
         state = AcceleratorState()
@@ -474,7 +478,10 @@ def prepare_data_loader(
         This does not support :obj:`BatchSampler` with varying batch size yet.
     """
     if dispatch_batches is None:
-        dispatch_batches = False if not put_on_device else isinstance(dataloader.dataset, IterableDataset)
+        if version.parse(torch.__version__) < version.parse("1.8.0") or not put_on_device:
+            dispatch_batches = False
+        else:
+            dispatch_batches = isinstance(dataloader.dataset, IterableDataset)
 
     if dispatch_batches and not put_on_device:
         raise ValueError("Using `dispatch_batches=True` requires `put_on_device=True`.")
