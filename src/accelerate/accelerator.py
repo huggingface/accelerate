@@ -166,6 +166,10 @@ class Accelerator:
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
+        if dispatch_batches is True and version.parse(torch.__version__) < version.parse("1.8.0"):
+            raise ImportError(
+                "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
+            )
 
         # Mixed precision attributes
         self.scaler = None
