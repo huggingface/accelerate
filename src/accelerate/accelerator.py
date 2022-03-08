@@ -36,6 +36,7 @@ from .utils import (
     pad_across_processes,
     save,
     wait_for_everyone,
+    get_pretty_name
 )
 
 
@@ -663,9 +664,20 @@ class Accelerator:
         """
         Makes note of `objects` and will save or load them in during `save_state` or `load_state`.
 
-        Note: These should be utilized when the state is being loaded or saved in the same script. It is not designed
+        These should be utilized when the state is being loaded or saved in the same script. It is not designed
         to be used in different scripts
+
+        Note: Every `object` must have a `load_state_dict` and `state_dict` function to be stored.
         """
+        invalid_objects = []
+        for obj in objects:
+            if not hasattr(obj, 'state_dict') or not hasattr(obj, 'load_state_dict'):
+                invalid_objects.append(obj)
+        if len(invalid_objects) > 0:
+            err = "All `objects` must include a `state_dict` and `load_state_dict` function to be stored. The following inputs are invalid:"
+            for index, obj in enumerate(invalid_objects):
+                err += f'\n\t- Item at index {index}, `{get_pretty_name(obj)}`'
+            raise ValueError(err)
         self._custom_objects.extend(objects)
 
     @contextmanager

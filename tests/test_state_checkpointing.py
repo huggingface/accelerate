@@ -17,6 +17,7 @@ import os
 import random
 import tempfile
 import unittest
+import accelerate
 
 import torch
 from torch import nn
@@ -125,19 +126,18 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(ground_truth_rands, test_rands)
 
 class CustomItemsTest(unittest.TestCase):
-    def test_with_tensor(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            set_seed(42)
-            t = torch.tensor([0.,1,2,3])
-            accelerator = Accelerator()
-            accelerator.register_for_checkpointing(t)
-            # Save initial
-            initial = os.path.join(tmpdir, "initial")
-            accelerator.save_state(initial)
-            # Modify
-            t += .5
-            accelerator.load_state(initial)
-            self.assertTrue(torch.equal(t, torch.tensor([0.,1,2,3])))
+    def test_failure(self):
+        t = torch.tensor([1,2,3])
+        t1 = torch.tensor([2,3,4])
+        net = DummyModel()
+        opt = torch.optim.Adam(net.parameters())
+        accelerator = Accelerator()
+        with self.assertRaises(ValueError) as ve:
+            accelerator.register_for_checkpointing(t, t1, net, opt)
+        self.assertTrue("Item at 0" in str(ve))
+        self.assertTrue("Item at 1" in str(ve))
+        self.assertFalse("Item at 2" in str(ve))
+        self.assertFalse("Item at 3" in str(ve))
 
 # Custom items tests
 # 1. A custom scheduler w/ `state_dict`
