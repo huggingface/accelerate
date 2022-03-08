@@ -123,3 +123,7 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(b1, b3)
             self.assertEqual(opt_state1, opt_state3)
             self.assertEqual(ground_truth_rands, test_rands)
+
+# Custom items tests
+# 1. A custom scheduler w/ `state_dict`
+# 2. A custom bias that gets changed during training

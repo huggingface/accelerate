@@ -22,7 +22,7 @@ import torch
 from torch.cuda.amp import GradScaler
 
 from .state import is_tpu_available
-from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, save
+from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, save, get_pretty_name
 
 
 if is_tpu_available():
@@ -141,7 +141,7 @@ def save_custom_state(obj, path, index: int = 0):
     """
     # Should this be the right way to get a qual_name type value from `obj`?
     save_location = Path(path) / f"custom_checkpoint_{index}.pkl"
-    logger.info(f"Saving the state of {str(obj)} to {save_location}")
+    logger.info(f"Saving the state of {get_pretty_name(obj)} to {save_location}")
     if hasattr(obj, "state_dict"):
         obj = obj.state_dict()
     torch.save(obj, save_location)
@@ -152,6 +152,7 @@ def load_custom_state(obj, path, index: int = 0):
     Loads the state of `obj` at `{path}/custom_checkpoint_{index}.pkl`
     """
     load_location = f"{path}/custom_checkpoint_{index}.pkl"
+    logger.info(f"Loading the state of {get_pretty_name(obj)} from {load_location}")
     state = torch.load(load_location)
     if hasattr(obj, "load_state_dict"):
         return obj.load_state_dict(state)
