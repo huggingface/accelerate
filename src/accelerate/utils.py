@@ -691,3 +691,16 @@ def patch_environment(**kwargs):
 
     for key in kwargs:
         del os.environ[key.upper()]
+
+
+def get_pretty_name(obj):
+    """
+    Gets a pretty name from ``obj``
+    """
+    if not hasattr(obj, "__qualname__") and not hasattr(obj, "__name__"):
+        obj = getattr(obj, "__class__", obj)
+    if hasattr(obj, "__qualname__"):
+        return obj.__qualname__
+    if hasattr(obj, "__name__"):
+        return obj.__name__
+    return str(obj)

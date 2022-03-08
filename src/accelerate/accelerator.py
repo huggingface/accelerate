@@ -22,7 +22,7 @@ import torch
 
 from packaging import version
 
-from .checkpointing import load_accelerator_state, save_accelerator_state
+from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
@@ -33,6 +33,7 @@ from .utils import (
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
+    get_pretty_name,
     pad_across_processes,
     save,
     wait_for_everyone,
@@ -192,6 +193,7 @@ class Accelerator:
         # Internal references to the training objects
         self._optimizers = []
         self._models = []
+        self._custom_objects = []
 
         # RNG Types
         self.rng_types = rng_types
@@ -568,7 +570,7 @@ class Accelerator:
 
     def save_state(self, output_dir: str):
         """
-        Saves the current states of the model, optimizer, scaler, and RNG generators.
+        Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
         Args:
             output_dir (:obj:`str` or :obj:`os.PathLike`):
@@ -579,11 +581,16 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
         weights = [self.get_state_dict(m) for m in self._models]
-        return save_accelerator_state(output_dir, weights, self._optimizers, self.state.process_index, self.scaler)
+        save_location = save_accelerator_state(
+            output_dir, weights, self._optimizers, self.state.process_index, self.scaler
+        )
+        for i, obj in enumerate(self._custom_objects):
+            save_custom_state(obj, output_dir, i)
+        return save_location
 
     def load_state(self, input_dir: str):
         """
-        Loads the current states of the model, optimizer, scaler, and RNG generators.
+        Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
         Args:
             input_dir (:obj:`str` or :obj:`os.PathLike`):
@@ -595,6 +602,16 @@ class Accelerator:
             raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         logger.info(f"Loading states from {input_dir}")
         load_accelerator_state(input_dir, self._models, self._optimizers, self.state.process_index, self.scaler)
+        custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
+        if len(custom_checkpoints) != len(self._custom_objects):
+            err = "Warning! Number of found checkpoints does not match the number of registered objects:"
+            err += f"\n\tFound checkpoints: {len(custom_checkpoints)}"
+            err += f"\n\tRegistered objects: {len(self._custom_objects)}\nSkipping."
+            logger.warn(err)
+        else:
+            logger.info(f"Loading in {len(custom_checkpoints)} custom states")
+            for index, obj in enumerate(self._custom_objects):
+                load_custom_state(obj, input_dir, index)
 
     def free_memory(self):
         """
@@ -649,6 +666,26 @@ class Accelerator:
                 state_dict[k] = state_dict[k].float()
 
         return state_dict
+
+    def register_for_checkpointing(self, *objects):
+        """
+        Makes note of `objects` and will save or load them in during `save_state` or `load_state`.
+
+        These should be utilized when the state is being loaded or saved in the same script. It is not designed to be
+        used in different scripts
+
+        Note: Every `object` must have a `load_state_dict` and `state_dict` function to be stored.
+        """
+        invalid_objects = []
+        for obj in objects:
+            if not hasattr(obj, "state_dict") or not hasattr(obj, "load_state_dict"):
+                invalid_objects.append(obj)
+        if len(invalid_objects) > 0:
+            err = "All `objects` must include a `state_dict` and `load_state_dict` function to be stored. The following inputs are invalid:"
+            for index, obj in enumerate(invalid_objects):
+                err += f"\n\t- Item at index {index}, `{get_pretty_name(obj)}`"
+            raise ValueError(err)
+        self._custom_objects.extend(objects)
 
     @contextmanager
     def autocast(self):

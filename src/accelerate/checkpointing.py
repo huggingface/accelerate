@@ -14,6 +14,7 @@
 
 import os
 import random
+from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -21,7 +22,7 @@ import torch
 from torch.cuda.amp import GradScaler
 
 from .state import is_tpu_available
-from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, save
+from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, get_pretty_name, save
 
 
 if is_tpu_available():
@@ -132,3 +133,22 @@ def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=
     if is_tpu_available():
         xm.set_rng_state(states["xm_seed"])
     logger.info("All random states loaded successfully")
+
+
+def save_custom_state(obj, path, index: int = 0):
+    """
+    Saves the state of `obj` to `{path}/custom_checkpoint_{index}.pkl`
+    """
+    # Should this be the right way to get a qual_name type value from `obj`?
+    save_location = Path(path) / f"custom_checkpoint_{index}.pkl"
+    logger.info(f"Saving the state of {get_pretty_name(obj)} to {save_location}")
+    torch.save(obj.state_dict(), save_location)
+
+
+def load_custom_state(obj, path, index: int = 0):
+    """
+    Loads the state of `obj` at `{path}/custom_checkpoint_{index}.pkl`
+    """
+    load_location = f"{path}/custom_checkpoint_{index}.pkl"
+    logger.info(f"Loading the state of {get_pretty_name(obj)} from {load_location}")
+    obj.load_state_dict(torch.load(load_location))

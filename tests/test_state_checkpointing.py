@@ -43,13 +43,13 @@ def dummy_dataloaders(a=2, b=3, batch_size=16, n_train_batches: int = 10, n_vali
     return (train_dataloader, valid_dataloader)
 
 
-def train(num_epochs, model, dataloader, optimizer, accelerator):
+def train(num_epochs, model, dataloader, optimizer, accelerator, scheduler=None):
     "Trains for `num_epochs`"
     rands = []
     for epoch in range(num_epochs):
         # Train quickly
         model.train()
-        for step, batch in enumerate(dataloader):
+        for batch in dataloader:
             x, y = batch
             outputs = model(x)
             loss = torch.nn.functional.mse_loss(outputs, y)
@@ -57,6 +57,8 @@ def train(num_epochs, model, dataloader, optimizer, accelerator):
             optimizer.step()
             optimizer.zero_grad()
         rands.append(random.random())  # Introduce some randomness
+        if scheduler is not None:
+            scheduler.step()
     return rands
 
 
@@ -123,3 +125,41 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(b1, b3)
             self.assertEqual(opt_state1, opt_state3)
             self.assertEqual(ground_truth_rands, test_rands)
+
+    def test_invalid_registration(self):
+        t = torch.tensor([1, 2, 3])
+        t1 = torch.tensor([2, 3, 4])
+        net = DummyModel()
+        opt = torch.optim.Adam(net.parameters())
+        accelerator = Accelerator()
+        with self.assertRaises(ValueError) as ve:
+            accelerator.register_for_checkpointing(t, t1, net, opt)
+        message = str(ve.exception)
+        self.assertTrue("Item at index 0" in message)
+        self.assertTrue("Item at index 1" in message)
+        self.assertFalse("Item at index 2" in message)
+        self.assertFalse("Item at index 3" in message)
+
+    def test_with_scheduler(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.99)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            # Train baseline
+            accelerator = Accelerator()
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
+            accelerator.register_for_checkpointing(scheduler)
+            # Save initial
+            initial = os.path.join(tmpdir, "initial")
+            accelerator.save_state(initial)
+            scheduler_state = scheduler.state_dict()
+            train(3, model, train_dataloader, optimizer, accelerator, scheduler)
+            self.assertNotEqual(scheduler_state, scheduler.state_dict())
+
+            # Load everything back in and make sure all states work
+            accelerator.load_state(initial)
+            self.assertEqual(scheduler_state, scheduler.state_dict())
