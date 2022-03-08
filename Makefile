@@ -26,7 +26,3 @@ style:
 # Run tests for the library
 test:
 	python -m pytest -n auto --dist=loadfile -s -v ./tests/
-
-# Check that docs can build
-docs:
-	cd docs && make html SPHINXOPTS="-W"

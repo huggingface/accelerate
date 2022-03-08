@@ -17,15 +17,7 @@ from setuptools import find_packages
 
 extras = {}
 extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3"]
-extras["docs"] = [
-    "docutils==0.16.0",
-    "recommonmark",
-    "sphinx==3.2.1",
-    "sphinx-markdown-tables",
-    "sphinx-rtd-theme==0.4.3",
-    "sphinx-copybutton",
-    "sphinxext-opengraph==0.4.1",
-]
+extras["docs"] = []
 extras["test"] = [
     "pytest",
     "pytest-xdist",
