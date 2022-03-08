@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# How to contribute to Accelerate?
+# How to contribute to 🤗 Accelerate?
 
 Everyone is welcome to contribute, and we value everybody's contribution. Code
 is thus not the only way to help the community. Answering questions, helping
@@ -30,12 +30,10 @@ Whichever way you choose to contribute, please be mindful to respect our
 
 ## You can contribute in so many ways!
 
-There are 4 ways you can contribute to Accelerate:
+Some of the ways you can contribute to Accelerate:
 * Fixing outstanding issues with the existing code;
 * Contributing to the examples or to the documentation;
 * Submitting issues related to bugs or desired new features.
-
-Please ping @sgugger on your contribution.
 
 ## Submitting a new issue or feature request
 
@@ -56,11 +54,11 @@ Did not find it? :( So we can act quickly on it, please follow these steps:
 * Include your **OS type and version**, the versions of **Python** and **PyTorch**.
 * A short, self-contained, code snippet that allows us to reproduce the bug in
   less than 30s;
-* Provide the *full* traceback if an exception is raised.
+* Provide the with your Accelerate configuration (located by default in `~/.cache/huggingface/accelerate/default_congig.yml`)
 
-### Do you want a new feature (that is not a model)?
+### Do you want a new feature?
 
-A world-class feature request addresses the following points:
+A good feature request addresses the following points:
 
 1. Motivation first:
 * Is it related to a problem/frustration with the library? If so, please explain
@@ -77,14 +75,14 @@ A world-class feature request addresses the following points:
 If your issue is well written we're already 80% of the way there by the time you
 post it.
 
-## Start contributing! (Pull Requests)
+## Submitting a pull request (PR)
 
 Before writing code, we strongly advise you to search through the existing PRs or
 issues to make sure that nobody is already working on the same thing. If you are
 unsure, it is always a good idea to open an issue to get some feedback.
 
 You will need basic `git` proficiency to be able to contribute to
-`accelerate`. `git` is not the easiest tool to use but it has the greatest
+🤗 Accelerate. `git` is not the easiest tool to use but it has the greatest
 manual. Type `git --help` in a shell and enjoy. If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
@@ -94,7 +92,9 @@ Follow these steps to start contributing:
    clicking on the 'Fork' button on the repository's page. This creates a copy of the code
    under your GitHub user account.
 
-2. Clone your fork to your local disk, and add the base repository as a remote:
+2. Clone your fork to your local disk, and add the base repository as a remote. The following command
+   assumes you have your public SSH key uploaded to GitHub. See the following guide for more
+   [information](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository).
 
    ```bash
    $ git clone git@github.com:<your Github handle>/accelerate.git
@@ -102,7 +102,17 @@ Follow these steps to start contributing:
    $ git remote add upstream https://github.com/huggingface/accelerate.git
    ```
 
-3. Create a new branch to hold your development changes:
+3. Create a new branch to hold your development changes, and do this for every new PR you work on.
+
+   Start by synchronizing your `main` branch with the `upstream/main` branch (ore details in the [GitHub Docs](https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/syncing-a-fork)):
+
+   ```bash
+   $ git checkout main
+   $ git fetch upstream
+   $ git merge upstream/main
+   ```
+
+   Once your `main` branch is synchronized, create a new branch from it:
 
    ```bash
    $ git checkout -b a-descriptive-name-for-my-changes
@@ -110,10 +120,10 @@ Follow these steps to start contributing:
 
    **Do not** work on the `master` branch.
 
-4. Set up a development environment by running the following command in a virtual environment:
+4. Set up a development environment by running the following command in a conda or a virtual environment you've created for working on this library:
 
    ```bash
-   $ pip install -e ".[dev]"
+   $ pip install -e ".[quality]"
    ```
 
    (If accelerate was already installed in the virtual environment, remove
@@ -129,6 +139,9 @@ Follow these steps to start contributing:
    ```bash
    $ pytest tests/<TEST_TO_RUN>.py
    ```
+   
+   > For the following commands leveraging the `make` utility, we recommend using the WSL system when running on
+   > Windows. More information [here](https://docs.microsoft.com/en-us/windows/wsl/about).
 
    You can also run the full suite with the following command.
 
@@ -196,11 +209,13 @@ Follow these steps to start contributing:
 2. If your pull request addresses an issue, please mention the issue number in
    the pull request description to make sure they are linked (and people
    consulting the issue know you are working on it);
-3. To indicate a work in progress please prefix the title with `[WIP]`. These
-   are useful to avoid duplicated work, and to differentiate it from PRs ready
-   to be merged;
+3. To indicate a work in progress please prefix the title with `[WIP]`, or mark
+   the PR as a draft PR. These are useful to avoid duplicated work, and to differentiate
+   it from PRs ready to be merged;
 4. Make sure existing tests pass;
 5. Add high-coverage tests. No quality testing = no merge.
+
+See an example of a good PR here: https://github.com/huggingface/accelerate/pull/255
 
 ### Tests
 
