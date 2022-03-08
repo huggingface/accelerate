@@ -134,10 +134,11 @@ class CustomItemsTest(unittest.TestCase):
         accelerator = Accelerator()
         with self.assertRaises(ValueError) as ve:
             accelerator.register_for_checkpointing(t, t1, net, opt)
-        self.assertTrue("Item at 0" in str(ve))
-        self.assertTrue("Item at 1" in str(ve))
-        self.assertFalse("Item at 2" in str(ve))
-        self.assertFalse("Item at 3" in str(ve))
+        message = str(ve.exception)
+        self.assertTrue("Item at index 0" in message)
+        self.assertTrue("Item at index 1" in message)
+        self.assertFalse("Item at index 2" in message)
+        self.assertFalse("Item at index 3" in message)
 
 # Custom items tests
 # 1. A custom scheduler w/ `state_dict`
