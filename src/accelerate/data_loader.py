@@ -94,8 +94,7 @@ class BatchSamplerShard(BatchSampler):
 
     This does not support `BatchSampler` with varying batch size yet.
 
-    </Tip>
-"""
+    </Tip>"""
 
     def __init__(
         self,
@@ -477,8 +476,7 @@ def prepare_data_loader(
 
     This does not support `BatchSampler` with varying batch size yet.
 
-    </Tip>
-"""
+    </Tip>"""
     if dispatch_batches is None:
         if version.parse(torch.__version__) < version.parse("1.8.0") or not put_on_device:
             dispatch_batches = False

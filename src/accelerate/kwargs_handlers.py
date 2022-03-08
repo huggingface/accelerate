@@ -47,8 +47,7 @@ class DistributedDataParallelKwargs(KwargsHandler):
 
     `gradient_as_bucket_view` is only available in PyTorch 1.7.0 and later versions.
 
-    </Tip>
-"""
+    </Tip>"""
 
     dim: int = 0
     broadcast_buffers: bool = True
@@ -69,8 +68,7 @@ class GradScalerKwargs(KwargsHandler):
 
     `GradScaler` is only available in PyTorch 1.5.0 and later versions.
 
-    </Tip>
-"""
+    </Tip>"""
 
     init_scale: float = 65536.0
     growth_factor: float = 2.0
