@@ -61,17 +61,17 @@ class Accelerator:
             etc...).
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
-            `True` the actual batch size used will be the same on any kind of distributed processes, but it must
-            be a round multiple of the `num_processes` you are using. If `False`, actual batch size used will
-            be the one set in your script multiplied by the number of processes.
+            `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a
+            round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
+            in your script multiplied by the number of processes.
         mixed_precision (`str`, *optional*):
             Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'. Will
-            default to the value in the environment variable `MIXED_PRECISION`, which will use the default value
-            in the accelerate config of the current system or the flag passed with the `accelerate.launch`
-            command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+            default to the value in the environment variable `MIXED_PRECISION`, which will use the default value in the
+            accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
+            requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
         cpu (`bool`, *optional*):
-            Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and
-            force the execution on one process only.
+            Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
+            the execution on one process only.
         deepspeed_plugin (`DeepSpeedPlugin`, *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -82,18 +82,17 @@ class Accelerator:
             - `"torch"`: the base torch random number generator
             - `"cuda"`: the CUDA random number generator (GPU only)
             - `"xla"`: the XLA random number generator (TPU only)
-            - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in
-              your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
+            - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
+              dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
-            Will default to `["torch"]` for PyTorch versions <=1.5.1 and `["generator"]` for PyTorch versions
-            >= 1.6.
+            Will default to `["torch"]` for PyTorch versions <=1.5.1 and `["generator"]` for PyTorch versions >= 1.6.
         dispatch_batches (`bool`, *optional*):
-            If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main
-            process and then the batches are split and broadcast to each process. Will default to `True` for
-            `DataLoader` whose underlying dataset is an `IterableDataset`, `False` otherwise.
+            If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
+            and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
+            underlying dataset is an `IterableDataset`, `False` otherwise.
         kwargs_handlers (`List[KwargHandler]`, *optional*)
-            A list of `KwargHandler` to customize how the objects related to distributed training or mixed
-            precision are created. See [kwargs](kwargs) for more information.
+            A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
+            are created. See [kwargs](kwargs) for more information.
 
     Attributes
 
@@ -296,8 +295,8 @@ class Accelerator:
 
     def prepare(self, *args):
         """
-        Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the
-        same order.
+        Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
+        order.
 
         Accepts the following type of objects:
 
@@ -516,9 +515,8 @@ class Accelerator:
                 The tensors to gather across all processes.
 
         Returns:
-            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The gathered tensor(s). Note
-            that the first dimension of the result is *num_processes* multiplied by the first dimension of the input
-            tensors.
+            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The gathered tensor(s). Note that the
+            first dimension of the result is *num_processes* multiplied by the first dimension of the input tensors.
         """
         return gather(tensor)
 
@@ -541,8 +539,8 @@ class Accelerator:
 
     def unwrap_model(self, model):
         """
-        Unwraps the `model` from the additional layer possible added by [`~Accelerator.prepare`].
-        Useful before saving the model.
+        Unwraps the `model` from the additional layer possible added by [`~Accelerator.prepare`]. Useful before saving
+        the model.
 
         Args:
             model (`torch.nn.Module`):

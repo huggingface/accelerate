@@ -127,19 +127,19 @@ class ComputeEnvironment(str, Enum):
 # Inspired by Alex Martelli's 'Borg'.
 class AcceleratorState:
     """
-    This is a variation of a [singleton class](https://en.wikipedia.org/wiki/Singleton_pattern) in the sense that
-    all instance of `AcceleratorState` share the same state, which is initialized on the first instantiation.
+    This is a variation of a [singleton class](https://en.wikipedia.org/wiki/Singleton_pattern) in the sense that all
+    instance of `AcceleratorState` share the same state, which is initialized on the first instantiation.
 
     Attributes:
 
         - **device** (`torch.device`) -- The device to use.
-        - **distributed_type** (`~accelerate.state.DistributedType`) -- The type of distributed environment
-          currently in use.
+        - **distributed_type** (`~accelerate.state.DistributedType`) -- The type of distributed environment currently
+          in use.
         - **num_processes** (`int`) -- The number of processes currently launched in parallel.
         - **process_index** (`int`) -- The index of the current process.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
-        - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision. If you are
-          using mixed precision, define if you want to use FP16 or BF16 (bfloat16) as the floating point.
+        - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision. If you are using
+          mixed precision, define if you want to use FP16 or BF16 (bfloat16) as the floating point.
     """
 
     _shared_state = {}

@@ -69,7 +69,8 @@ def set_seed(seed: int, device_specific: bool = False):
 
     Args:
         seed (`int`): The seed to set.
-        device_specific (`bool`, *optional*, defaults to `False`): Whether to differ the seed on each device slightly with `self.process_index`.
+        device_specific (`bool`, *optional*, defaults to `False`):
+            Whether to differ the seed on each device slightly with `self.process_index`.
     """
     if device_specific:
         seed += AcceleratorState().process_index
@@ -156,8 +157,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
             The base type of the objects to which apply `func`.
         error_on_other_type (`bool`, *optional*, defaults to `False`):
             Whether to return an error or not if after unpacking `data`, we get on an object that is not of type
-            `main_type`. If `False`, the function will leave objects of types different than `main_type`
-            unchanged.
+            `main_type`. If `False`, the function will leave objects of types different than `main_type` unchanged.
         **kwargs:
             Keyword arguments that will be passed to `func` when applied on the unpacked data.
 
@@ -236,8 +236,7 @@ def get_data_structure(data):
 
 def initialize_tensors(data_structure):
     """
-    Recursively initializes tensors from a nested list/tuple/dictionary of
-    [`~utils.TensorInformation`].
+    Recursively initializes tensors from a nested list/tuple/dictionary of [`~utils.TensorInformation`].
 
     Returns:
         The same data structure as `data` with tensors instead of [`~utils.TensorInformation`].

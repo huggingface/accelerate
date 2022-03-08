@@ -66,10 +66,13 @@ script on 1, 2, 4 or 64 GPUs.
 You should execute this instruction as soon as all objects for training are created, before starting your actual
 training loop.
 
-Warning,None
+<Tip warning={true}>
+
 Your training dataloader may change length when going through this method: if you run on X GPUs, it will have its
 length divided by X (since your actual batch size will be multiplied by X), unless you set
 `split_batches=True`.
+
+</Tip>
 
 Any instruction using your training dataloader length (for instance if you need the number of total training steps
 to create a learning rate scheduler) should go after the call to [`~Accelerator.prepare`].
@@ -196,7 +199,7 @@ on several GPUs (if the machine on which you are running your notebook has them)
 Just define a function responsible for your whole training and/or evaluation in a cell of the notebook, then execute a
 cell with the following code:
 
-```
+```python
 from accelerate import notebook_launcher
 
 notebook_launcher(training_function)
@@ -230,7 +233,7 @@ have different lengths depending on the inputs (such as an LSTM) or the training
 To introduce special behavior in your script for TPUs you can check the `distributed_type` of your
 `accelerator`:
 
-```python
+```python docstyle-ignore
 from accelerate import DistributedType
 
 if accelerator.distributed_type == DistributedType.TPU:
@@ -258,7 +261,7 @@ We list here all smaller issues you could have in your script conversion and how
 Some of your instructions only need to run for one process on a given server: for instance a data download or a log
 statement. To do this, wrap the statement in a test like this:
 
-```python
+```python docstyle-ignore
 if accelerator.is_local_main_process:
     # Is executed once per server
 ```
@@ -276,7 +279,7 @@ The *local* means per machine: if you are running your training on two servers w
 be executed once on each of those servers. If you need to execute something only once for all processes (and not per
 machine) for instance, uploading the final model to the 🤗 model hub, wrap it in a test like this:
 
-```python
+```python docstyle-ignore
 if accelerator.is_main_process:
     # Is executed once only
 ```

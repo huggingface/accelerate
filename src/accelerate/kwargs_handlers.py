@@ -39,8 +39,9 @@ class KwargsHandler:
 class DistributedDataParallelKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize how your model is wrapped in a
-    `torch.nn.parallel.DistributedDataParallel`. Please refer to the documentation of this [wrapper](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) for more information
-    on each argument.
+    `torch.nn.parallel.DistributedDataParallel`. Please refer to the documentation of this
+    [wrapper](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) for more
+    information on each argument.
 
     <Tip warning={true}>
 
@@ -60,8 +61,9 @@ class DistributedDataParallelKwargs(KwargsHandler):
 @dataclass
 class GradScalerKwargs(KwargsHandler):
     """
-    Use this object in your [`Accelerator`] to customize the behavior of mixed precision, specifically
-    how the `torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more information on each argument.
+    Use this object in your [`Accelerator`] to customize the behavior of mixed precision, specifically how the
+    `torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this
+    [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more information on each argument.
 
     <Tip warning={true}>
 
@@ -80,9 +82,10 @@ class GradScalerKwargs(KwargsHandler):
 @dataclass
 class InitProcessGroupKwargs(KwargsHandler):
     """
-    Use this object in your [`Accelerator`] to customize the initialization of the distributed
-    processes. Please refer to the documentation of this [method](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more information on
-    each argument.
+    Use this object in your [`Accelerator`] to customize the initialization of the distributed processes. Please refer
+    to the documentation of this
+    [method](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
+    information on each argument.
     """
 
     init_method: Optional[str] = None
