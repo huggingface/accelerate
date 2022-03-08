@@ -151,8 +151,8 @@ def load_custom_state(obj, path, index: int = 0):
     Loads the state of `obj` at `{path}/custom_checkpoint_{index}.pkl`
     """
     load_location = f"{path}/custom_checkpoint_{index}.pkl"
+    state = torch.load(load_location)
     if hasattr(obj, "load_state_dict"):
-        obj = obj.load_state_dict(load_location)
+        return obj.load_state_dict(state)
     else:
-        obj = torch.load(load_location)
-    return obj
+        return state

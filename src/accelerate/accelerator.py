@@ -667,7 +667,7 @@ class Accelerator:
         Note: These should be utilized when the state is being loaded or saved in the same script. It is not designed
         to be used in different scripts
         """
-        self._custom_objects = list(objects)
+        self._custom_objects.extend(objects)
 
     @contextmanager
     def autocast(self):
