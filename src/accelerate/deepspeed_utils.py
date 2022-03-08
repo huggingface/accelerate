@@ -71,7 +71,7 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
     Internal wrapper around a deepspeed optimizer.
 
     Args:
-        optimizer (:obj:`torch.optim.optimizer.Optimizer`):
+        optimizer (`torch.optim.optimizer.Optimizer`):
             The optimizer to wrap.
     """
 

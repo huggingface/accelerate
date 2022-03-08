@@ -31,17 +31,17 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
     multiple cores for instance).
 
     Args:
-        function (:obj:`Callable`):
+        function (`Callable`):
             The training function to execute. If it accepts arguments, the first argument should be the index of the
             process run.
-        args (:obj:`Tuple`):
-            Tuple of arguments to pass to the function (it will receive :obj:`*args`).
-        num_processes (:obj:`int`, `optional`):
+        args (`Tuple`):
+            Tuple of arguments to pass to the function (it will receive `*args`).
+        num_processes (`int`, *optional*):
             The number of processes to use for training. Will default to 8 in Colab/Kaggle if a TPU is available, to
             the number of GPUs available otherwise.
-        mixed_precision (:obj:`str`, `optional`, defaults to :obj:`no`):
-            If :obj:`fp16` or :obj:`bf16`, will use mixed precision training on multi-GPU.
-        use_port (:obj:`str`, `optional`, defaults to :obj:`"29500"`):
+        mixed_precision (`str`, *optional*, defaults to `"no"`):
+            If `fp16` or `bf16`, will use mixed precision training on multi-GPU.
+        use_port (`str`, *optional*, defaults to `"29500"`):
             The port to use to communicate between processes when launching a multi-GPU training.
     """
     # Are we in a google colab or a Kaggle Kernel?
@@ -140,18 +140,19 @@ def debug_launcher(function, args=(), num_processes=2):
     """
     Launches a training function using several processes on CPU for debugging purposes.
 
-    .. warning::
+    <Tip warning={true}>
 
-        This function is provided for internal testing and debugging, but it's not intended for real trainings. It will
-        only use the CPU.
+    This function is provided for internal testing and debugging, but it's not intended for real trainings. It will
+    only use the CPU.
 
+    </Tip>
 
     Args:
-        function (:obj:`Callable`):
+        function (`Callable`):
             The training function to execute.
-        args (:obj:`Tuple`):
-            Tuple of arguments to pass to the function (it will receive :obj:`*args`).
-        num_processes (:obj:`int`, *optional*, defaults to 2):
+        args (`Tuple`):
+            Tuple of arguments to pass to the function (it will receive `*args`).
+        num_processes (`int`, *optional*, defaults to 2):
             The number of processes to use for training.
     """
     if version.parse(torch.__version__) < version.parse("1.5.0"):

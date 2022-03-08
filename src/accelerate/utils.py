@@ -65,11 +65,11 @@ class TensorInformation:
 
 def set_seed(seed: int, device_specific: bool = False):
     """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch``.
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch`.
 
     Args:
-        seed (:obj:`int`): The seed to set.
-        device_specific (:obj:`bool`, `optional`, defaults to :obj:`False`): Whether to differ the seed on each device slightly with `self.process_index`
+        seed (`int`): The seed to set.
+        device_specific (`bool`, *optional*, defaults to `False`): Whether to differ the seed on each device slightly with `self.process_index`.
     """
     if device_specific:
         seed += AcceleratorState().process_index
@@ -146,23 +146,23 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
     Recursively apply a function on a data structure that is a nested list/tuple/dictionary of a given base type.
 
     Args:
-        func (:obj:`callable`):
+        func (`callable`):
             The function to recursively apply.
-        data (nested list/tuple/dictionary of :obj:`main_type`):
-            The data on which to apply :obj:`func`
+        data (nested list/tuple/dictionary of `main_type`):
+            The data on which to apply `func`
         *args:
-            Positional arguments that will be passed to :obj:`func` when applied on the unpacked data.
-        main_type (:obj:`type`, `optional`, defaults to :obj:`torch.Tensor`):
-            The base type of the objects to which apply :obj:`func`.
-        error_on_other_type (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to return an error or not if after unpacking :obj:`data`, we get on an object that is not of type
-            :obj:`main_type`. If :obj:`False`, the function will leave objects of types different than :obj:`main_type`
+            Positional arguments that will be passed to `func` when applied on the unpacked data.
+        main_type (`type`, *optional*, defaults to `torch.Tensor`):
+            The base type of the objects to which apply `func`.
+        error_on_other_type (`bool`, *optional*, defaults to `False`):
+            Whether to return an error or not if after unpacking `data`, we get on an object that is not of type
+            `main_type`. If `False`, the function will leave objects of types different than `main_type`
             unchanged.
         **kwargs:
-            Keyword arguments that will be passed to :obj:`func` when applied on the unpacked data.
+            Keyword arguments that will be passed to `func` when applied on the unpacked data.
 
     Returns:
-        The same data structure as :obj:`data` with :obj:`func` applied to every object of type :obj:`main_type`.
+        The same data structure as `data` with `func` applied to every object of type `main_type`.
     """
     if isinstance(data, (tuple, list)):
         return honor_type(
@@ -198,13 +198,13 @@ def send_to_device(tensor, device):
     Recursively sends the elements in a nested list/tuple/dictionary of tensors to a given device.
 
     Args:
-        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+        tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to send to a given device.
-        device (:obj:`torch.device`):
-            The device to send the data to
+        device (`torch.device`):
+            The device to send the data to.
 
     Returns:
-        The same data structure as :obj:`tensor` with all tensors sent to the proper device.
+        The same data structure as `tensor` with all tensors sent to the proper device.
     """
 
     def _send_to_device(t, device):
@@ -221,11 +221,11 @@ def get_data_structure(data):
     Recursively gathers the information needed to rebuild a nested list/tuple/dictionary of tensors.
 
     Args:
-        data (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+        data (nested list/tuple/dictionary of `torch.Tensor`):
             The data to send to analyze.
 
     Returns:
-        The same data structure as :obj:`data` with :class:`~accelerate.utils.TensorInformation` instead of tensors.
+        The same data structure as `data` with [`~utils.TensorInformation`] instead of tensors.
     """
 
     def _get_data_structure(tensor):
@@ -237,10 +237,10 @@ def get_data_structure(data):
 def initialize_tensors(data_structure):
     """
     Recursively initializes tensors from a nested list/tuple/dictionary of
-    :class:`~accelerate.utils.TensorInformation`.
+    [`~utils.TensorInformation`].
 
     Returns:
-        The same data structure as :obj:`data` with tensors instead of :class:`~accelerate.utils.TensorInformation`.
+        The same data structure as `data` with tensors instead of [`~utils.TensorInformation`].
     """
 
     def _initialize_tensor(tensor_info):
@@ -254,11 +254,11 @@ def convert_to_fp32(tensor):
     Recursively converts the elements nested list/tuple/dictionary of tensors in FP16/BF16 precision to FP32.
 
     Args:
-        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+        tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to convert from FP16/BF16 to FP32.
 
     Returns:
-        The same data structure as :obj:`tensor` with all tensors that were in FP16/BF16 precision converted to FP32.
+        The same data structure as `tensor` with all tensors that were in FP16/BF16 precision converted to FP32.
     """
 
     def _convert_to_fp32(tensor):
@@ -279,11 +279,11 @@ def convert_outputs_to_fp32(model_forward):
     precision will be convert back to FP32.
 
     Args:
-        model_forward (:obj:`Callable`):
+        model_forward (`Callable`):
             The function which outputs we want to treat.
 
     Returns:
-        The same function as :obj:`model_forward` but with converted outputs.
+        The same function as `model_forward` but with converted outputs.
     """
 
     def convert_outputs(*args, **kwargs):
@@ -298,10 +298,10 @@ def extract_model_from_parallel(model):
     Extract a model from its distributed containers.
 
     Args:
-        model (:obj:`torch.nn.Module`): The model to extract.
+        model (`torch.nn.Module`): The model to extract.
 
     Returns:
-        :obj:`torch.nn.Module`: The extracted model.
+        `torch.nn.Module`: The extracted model.
     """
     options = (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)
     if is_deepspeed_available():
@@ -343,11 +343,11 @@ def gather(tensor):
     Recursively gather tensor in a nested list/tuple/dictionary of tensors from all devices.
 
     Args:
-        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+        tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to gather.
 
     Returns:
-        The same data structure as :obj:`tensor` with all tensors sent to the proper device.
+        The same data structure as `tensor` with all tensors sent to the proper device.
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         return _tpu_gather(tensor, name="accelerate.utils.gather")
@@ -380,7 +380,7 @@ def gather_object(object: Any):
             The data to gather.
 
     Returns:
-        The same data structure as :obj:`object` with all the objects sent to every device.
+        The same data structure as `object` with all the objects sent to every device.
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         raise NotImplementedError("gather objects in TPU is not supported")
@@ -413,13 +413,13 @@ def broadcast(tensor, from_process: int = 0):
     Recursively broadcast tensor in a nested list/tuple/dictionary of tensors to all devices.
 
     Args:
-        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+        tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to gather.
-        from_process (:obj:`int`, `optional`, defaults to 0):
+        from_process (`int`, *optional*, defaults to 0):
             The process from which to send the data
 
     Returns:
-        The same data structure as :obj:`tensor` with all tensors broadcasted to the proper device.
+        The same data structure as `tensor` with all tensors broadcasted to the proper device.
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
@@ -438,7 +438,7 @@ def broadcast_object_list(object_list, from_process: int = 0):
     Args:
         object_list (list of picklable objects):
             The list of objects to broadcast. This list will be modified inplace.
-        from_process (:obj:`int`, `optional`, defaults to 0):
+        from_process (`int`, *optional*, defaults to 0):
             The process from which to send the data.
 
     Returns:
@@ -459,13 +459,13 @@ def slice_tensors(data, tensor_slice):
     Recursively takes a slice in a nested list/tuple/dictionary of tensors.
 
     Args:
-        data (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+        data (nested list/tuple/dictionary of `torch.Tensor`):
             The data to slice.
-        tensor_slice (:obj:`slice`):
+        tensor_slice (`slice`):
             The slice to take.
 
     Returns:
-        The same data structure as :obj:`data` with all the tensors slices.
+        The same data structure as `data` with all the tensors slices.
     """
 
     def _slice_tensor(tensor, tensor_slice):
@@ -479,10 +479,10 @@ def find_batch_size(data):
     Recursively finds the batch size in a nested list/tuple/dictionary of lists of tensors.
 
     Args:
-        data (nested list/tuple/dictionary of :obj:`torch.Tensor`): The data from which to find the batch size.
+        data (nested list/tuple/dictionary of `torch.Tensor`): The data from which to find the batch size.
 
     Returns:
-        :obj:`int`: The batch size.
+        `int`: The batch size.
     """
     if isinstance(data, (tuple, list)):
         return find_batch_size(data[0])
@@ -499,13 +499,13 @@ def concatenate(data, dim=0):
     Recursively concatenate the tensors in a nested list/tuple/dictionary of lists of tensors with the same shape.
 
     Args:
-        data (nested list/tuple/dictionary of lists of tensors :obj:`torch.Tensor`):
+        data (nested list/tuple/dictionary of lists of tensors `torch.Tensor`):
             The data to concatenate.
-        dim (:obj:`int`, `optional`, defaults to 0):
+        dim (`int`, *optional*, defaults to 0):
             The dimension on which to concatenate.
 
     Returns:
-        The same data structure as :obj:`data` with all the tensors concatenated.
+        The same data structure as `data` with all the tensors concatenated.
     """
     if isinstance(data[0], (tuple, list)):
         return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
@@ -522,13 +522,13 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     can safely be gathered.
 
     Args:
-        tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+        tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to gather.
-        dim (:obj:`int`, `optional`, defaults to 0):
+        dim (`int`, *optional*, defaults to 0):
             The dimension on which to pad.
-        pad_index (:obj:`int`, `optional`, defaults to 0):
+        pad_index (`int`, *optional*, defaults to 0):
             The value with which to pad.
-        pad_first (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        pad_first (`bool`, *optional*, defaults to `False`):
             Whether to pad at the beginning or the end.
     """
 
@@ -566,9 +566,11 @@ def wait_for_everyone():
     """
     Introduces a blocking point in the script, making sure all processes have reached this point before continuing.
 
-    Warning::
+    <Tip warning={true}>
 
-        Make sure all processes will reach this instruction otherwise one of your processes will hang forever.
+    Make sure all processes will reach this instruction otherwise one of your processes will hang forever.
+
+    </Tip>
     """
     if (
         AcceleratorState().distributed_type == DistributedType.MULTI_GPU
@@ -582,7 +584,7 @@ def wait_for_everyone():
 
 def save(obj, f):
     """
-    Save the data to disk. Use in place of :obj:`torch.save()`.
+    Save the data to disk. Use in place of `torch.save()`.
 
     Args:
         obj: The data to save
@@ -599,11 +601,11 @@ class PrepareForLaunch:
     Prepare a function that will launched in a distributed setup.
 
     Args:
-        launcher (:obj:`Callable`):
+        launcher (`Callable`):
             The function to launch.
-        distributed_type (:class:`~accelerate.state.DistributedType`):
+        distributed_type ([`~state.DistributedType`]):
             The distributed type to prepare for.
-        debug (:obj:`bool`, *optional*, defaults to :obj:`False`):
+        debug (`bool`, *optional*, defaults to `False`):
             Whether or not this is a debug launch.
     """
 
@@ -680,9 +682,9 @@ class DeepSpeedPlugin:
 @contextmanager
 def patch_environment(**kwargs):
     """
-    A context manager that will add each keyword argument passed to ``os.environ`` and remove them when exiting.
+    A context manager that will add each keyword argument passed to `os.environ` and remove them when exiting.
 
-    Will convert the values in :obj:`kwargs` to strings and upper-case all the keys.
+    Will convert the values in `kwargs` to strings and upper-case all the keys.
     """
     for key, value in kwargs.items():
         os.environ[key.upper()] = str(value)

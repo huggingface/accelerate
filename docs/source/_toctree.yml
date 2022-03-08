@@ -1,0 +1,22 @@
+- sections: 
+  - local: index
+    title: 🤗 Accelerate
+  - local: quicktour
+    title: Quick tour
+  - local: installation
+    title: Installation
+  title: Get started
+- sections:
+  - local: sagemaker
+    title: Amazon SageMaker
+  title: Guides
+- sections:
+  - local: accelerator
+    title: Accelerator
+  - local: launcher
+    title: Notebook Launcher
+  - local: kwargs
+    title: Kwargs Handlers
+  - local: internal
+    title: Internals
+  title: API Reference
