@@ -38,9 +38,12 @@ can leave those `.to(device)` calls but you should use the device provided by th
 To fully deactivate the automatic device placement, pass along `device_placement=False` when initializing your
 [`Accelerator`].
 
-Warning,None
+<Tip warning={true}>
+
 If you place your objects manually on the proper device, be careful to create your optimizer after putting your
 model on `accelerator.device` or your training will fail on TPU.
+
+</Tip>
 
 3. Pass all objects relevant to training (optimizer, model, training dataloader) to the
 [`~Accelerator.prepare`] method. This will make sure everything is ready for training.
@@ -54,10 +57,13 @@ different portion of the training dataset. Also, the random states of all proces
 beginning of each iteration through your dataloader, to make sure the data is shuffled the same way (if you decided to
 use `shuffle=True` or any kind of random sampler).
 
-Note,None
+<Tip>
+
 The actual batch size for your training will be the number of devices used multiplied by the batch size you set in
 your script: for instance training on 4 GPUs with a batch size of 16 set when creating the training dataloader will
 train at an actual batch size of 64.
+
+</Tip>
 
 Alternatively, you can use the option `split_batches=True` when creating initializing your
 [`Accelerator`], in which case the batch size will always stay the same, whether your run your
