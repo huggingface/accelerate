@@ -15,6 +15,7 @@
 import os
 import random
 from typing import List
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -139,7 +140,7 @@ def save_custom_state(obj, path, index: int = 0):
     Saves the state of `obj` to `{path}/custom_checkpoint_{index}.pkl`
     """
     # Should this be the right way to get a qual_name type value from `obj`?
-    save_location = f"{path}/custom_checkpoint_{index}.pkl"
+    save_location = Path(path)/f'custom_checkpoint_{index}.pkl'
     logger.info(f"Saving the state of {str(obj)} to {save_location}")
     if hasattr(obj, "state_dict"):
         obj = obj.state_dict()
