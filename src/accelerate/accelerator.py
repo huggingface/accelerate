@@ -602,9 +602,8 @@ class Accelerator:
             logger.warn("Warning! You are loading a state that does not include registered objects.")
         else:
             logger.info(f"Loading in {len(custom_checkpoints)} custom states")
-            self._custom_objects = [
-                load_custom_state(obj, input_dir, index) for index, obj in enumerate(self._custom_objects)
-            ]
+            for index, obj in enumerate(self._custom_objects):
+                load_custom_state(obj, input_dir, index)
 
     def free_memory(self):
         """
