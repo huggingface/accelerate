@@ -126,8 +126,6 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(opt_state1, opt_state3)
             self.assertEqual(ground_truth_rands, test_rands)
 
-
-class CustomItemsTest(unittest.TestCase):
     def test_invalid_registration(self):
         t = torch.tensor([1, 2, 3])
         t1 = torch.tensor([2, 3, 4])

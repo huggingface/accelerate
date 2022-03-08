@@ -142,8 +142,7 @@ def save_custom_state(obj, path, index: int = 0):
     # Should this be the right way to get a qual_name type value from `obj`?
     save_location = Path(path) / f"custom_checkpoint_{index}.pkl"
     logger.info(f"Saving the state of {get_pretty_name(obj)} to {save_location}")
-    obj = obj.state_dict()
-    torch.save(obj, save_location)
+    torch.save(obj.state_dict(), save_location)
 
 
 def load_custom_state(obj, path, index: int = 0):

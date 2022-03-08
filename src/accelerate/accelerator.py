@@ -600,7 +600,9 @@ class Accelerator:
         load_accelerator_state(input_dir, self._models, self._optimizers, self.state.process_index, self.scaler)
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
-            logger.warn("Warning! You are loading a state that does not include registered objects.")
+            logger.warn(
+                "Warning! Number of found checkpoints does not match the number of registered objects. Skipping."
+            )
         else:
             logger.info(f"Loading in {len(custom_checkpoints)} custom states")
             for index, obj in enumerate(self._custom_objects):
