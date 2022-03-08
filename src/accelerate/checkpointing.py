@@ -22,7 +22,7 @@ import torch
 from torch.cuda.amp import GradScaler
 
 from .state import is_tpu_available
-from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, save, get_pretty_name
+from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, get_pretty_name, save
 
 
 if is_tpu_available():
