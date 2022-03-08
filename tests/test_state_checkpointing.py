@@ -124,6 +124,20 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(opt_state1, opt_state3)
             self.assertEqual(ground_truth_rands, test_rands)
 
+class CustomItemsTest(unittest.TestCase):
+    def test_with_tensor(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            t = torch.tensor([0.,1,2,3])
+            accelerator = Accelerator()
+            accelerator.register_for_checkpointing(t)
+            # Save initial
+            initial = os.path.join(tmpdir, "initial")
+            accelerator.save_state(initial)
+            # Modify
+            t += .5
+            accelerator.load_state(initial)
+            self.assertEqual(t, torch.tensor([0.,1,2,3]))
+
 # Custom items tests
 # 1. A custom scheduler w/ `state_dict`
-# 2. A custom bias that gets changed during training
