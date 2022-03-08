@@ -598,7 +598,7 @@ class Accelerator:
         logger.info(f"Loading states from {input_dir}")
         load_accelerator_state(input_dir, self._models, self._optimizers, self.state.process_index, self.scaler)
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
-        if len(custom_checkpoints) != (len(self._custom_objects) + 1):
+        if len(custom_checkpoints) != self._custom_objects:
             logger.warn("Warning! You are loading a state that does not include registered objects.")
         else:
             logger.info(f"Loading in {len(custom_checkpoints)} custom states")
