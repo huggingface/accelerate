@@ -137,7 +137,7 @@ class CustomItemsTest(unittest.TestCase):
             # Modify
             t += .5
             accelerator.load_state(initial)
-            self.assertTrue(torch.eq(t, torch.tensor([0.,1,2,3])))
+            self.assertTrue(torch.equal(t, torch.tensor([0.,1,2,3])))
 
 # Custom items tests
 # 1. A custom scheduler w/ `state_dict`
