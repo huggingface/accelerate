@@ -672,7 +672,11 @@ class Accelerator:
         These should be utilized when the state is being loaded or saved in the same script. It is not designed to be
         used in different scripts
 
-        Note: Every `object` must have a `load_state_dict` and `state_dict` function to be stored.
+        <Tip>
+        
+        Every `object` must have a `load_state_dict` and `state_dict` function to be stored.
+
+        </Tip>
         """
         invalid_objects = []
         for obj in objects:

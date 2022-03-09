@@ -696,7 +696,7 @@ def patch_environment(**kwargs):
 
 def get_pretty_name(obj):
     """
-    Gets a pretty name from ``obj``
+    Gets a pretty name from `obj`.
     """
     if not hasattr(obj, "__qualname__") and not hasattr(obj, "__name__"):
         obj = getattr(obj, "__class__", obj)
