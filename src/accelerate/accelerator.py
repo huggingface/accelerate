@@ -673,7 +673,7 @@ class Accelerator:
         used in different scripts
 
         <Tip>
-        
+
         Every `object` must have a `load_state_dict` and `state_dict` function to be stored.
 
         </Tip>
