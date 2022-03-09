@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pickle
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -267,6 +269,11 @@ def training_check():
     model = accelerator.unwrap_model(model).cpu()
     assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
     assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+
+    try:
+        _ = pickle.dumps(model)
+    except AttributeError:
+        assert False, "Could not pickle model"
 
     # TEST that previous fp16 flag still works
     print("Legacy FP16 training check.")

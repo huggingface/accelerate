@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import update_wrapper
 from typing import Any, List, Optional, Union
 
 import numpy as np
@@ -273,10 +274,12 @@ def convert_to_fp32(tensor):
     return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
 
 
-def convert_outputs_to_fp32(model_forward):
+class ConvertOutputsToFp32:
     """
     Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
     precision will be convert back to FP32.
+
+    Use a class instead of a decorator because otherwise, the prepared model can no longer be pickled (issue #273).
 
     Args:
         model_forward (:obj:`Callable`):
@@ -285,12 +288,15 @@ def convert_outputs_to_fp32(model_forward):
     Returns:
         The same function as :obj:`model_forward` but with converted outputs.
     """
+    def __init__(self, model_forward):
+        self.model_forward = model_forward
+        update_wrapper(self, model_forward)
 
-    def convert_outputs(*args, **kwargs):
-        outputs = model_forward(*args, **kwargs)
-        return convert_to_fp32(outputs)
+    def __call__(self, *args, **kwargs):
+        return convert_to_fp32(self.model_forward(*args, **kwargs))
 
-    return convert_outputs
+
+convert_outputs_to_fp32 = ConvertOutputsToFp32
 
 
 def extract_model_from_parallel(model):
