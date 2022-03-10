@@ -288,6 +288,7 @@ class ConvertOutputsToFp32:
     Returns:
         The same function as :obj:`model_forward` but with converted outputs.
     """
+
     def __init__(self, model_forward):
         self.model_forward = model_forward
         update_wrapper(self, model_forward)

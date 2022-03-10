@@ -270,11 +270,6 @@ def training_check():
     assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
     assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
-    try:
-        _ = pickle.dumps(model)
-    except AttributeError:
-        assert False, "Could not pickle model"
-
     # TEST that previous fp16 flag still works
     print("Legacy FP16 training check.")
     accelerator = Accelerator(fp16=True)
