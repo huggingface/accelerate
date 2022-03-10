@@ -20,7 +20,7 @@ from typing import Optional
 
 class KwargsHandler:
     """
-    Internal mixin that implements a :obj:`to_kwargs()` method for a dataclass.
+    Internal mixin that implements a `to_kwargs()` method for a dataclass.
     """
 
     def to_dict(self):
@@ -38,15 +38,16 @@ class KwargsHandler:
 @dataclass
 class DistributedDataParallelKwargs(KwargsHandler):
     """
-    Use this object in your :class:`~accelerate.Accelerator` to customize how your model is wrapped in a
-    :obj:`torch.nn.parallel.DistributedDataParallel`. Please refer to the documentation of this `wrapper
-    <https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html>`__ for more information
-    on each argument.
+    Use this object in your [`Accelerator`] to customize how your model is wrapped in a
+    `torch.nn.parallel.DistributedDataParallel`. Please refer to the documentation of this
+    [wrapper](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) for more
+    information on each argument.
 
-    .. warning::
+    <Tip warning={true}>
 
-        :obj:`gradient_as_bucket_view` is only available in PyTorch 1.7.0 and later versions.
-    """
+    `gradient_as_bucket_view` is only available in PyTorch 1.7.0 and later versions.
+
+    </Tip>"""
 
     dim: int = 0
     broadcast_buffers: bool = True
@@ -59,14 +60,15 @@ class DistributedDataParallelKwargs(KwargsHandler):
 @dataclass
 class GradScalerKwargs(KwargsHandler):
     """
-    Use this object in your :class:`~accelerate.Accelerator` to customize the behavior of mixed precision, specifically
-    how the :obj:`torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this `scaler
-    <https://pytorch.org/docs/stable/amp.html?highlight=gradscaler>`__ for more information on each argument.
+    Use this object in your [`Accelerator`] to customize the behavior of mixed precision, specifically how the
+    `torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this
+    [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more information on each argument.
 
-    .. warning::
+    <Tip warning={true}>
 
-        :obj:`GradScaler` is only available in PyTorch 1.5.0 and later versions.
-    """
+    `GradScaler` is only available in PyTorch 1.5.0 and later versions.
+
+    </Tip>"""
 
     init_scale: float = 65536.0
     growth_factor: float = 2.0
@@ -78,10 +80,10 @@ class GradScalerKwargs(KwargsHandler):
 @dataclass
 class InitProcessGroupKwargs(KwargsHandler):
     """
-    Use this object in your :class:`~accelerate.Accelerator` to customize the initialization of the distributed
-    processes. Please refer to the documentation of this `method
-    <https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group>`__ for more information on
-    each argument.
+    Use this object in your [`Accelerator`] to customize the initialization of the distributed processes. Please refer
+    to the documentation of this
+    [method](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
+    information on each argument.
     """
 
     init_method: Optional[str] = None

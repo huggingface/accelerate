@@ -56,49 +56,48 @@ class Accelerator:
     Creates an instance of an accelerator for distributed training (on multi-GPU, TPU) or mixed precision training.
 
     Args:
-        device_placement (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        device_placement (`bool`, *optional*, defaults to `True`):
             Whether or not the accelerator should put objects on device (tensors yielded by the dataloader, model,
             etc...).
-        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        split_batches (`bool`, *optional*, defaults to `False`):
             Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
-            :obj:`True` the actual batch size used will be the same on any kind of distributed processes, but it must
-            be a round multiple of the :obj:`num_processes` you are using. If :obj:`False`, actual batch size used will
-            be the one set in your script multiplied by the number of processes.
-        mixed_precision (:obj:`str`, `optional`):
+            `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a
+            round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
+            in your script multiplied by the number of processes.
+        mixed_precision (`str`, *optional*):
             Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'. Will
-            default to the value in the environment variable :obj:`MIXED_PRECISION`, which will use the default value
-            in the accelerate config of the current system or the flag passed with the :obj:`accelerate.launch`
-            command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
-        cpu (:obj:`bool`, `optional`):
-            Whether or not to force the script to execute on CPU. Will ignore GPU available if set to :obj:`True` and
-            force the execution on one process only.
-        deepspeed_plugin (:obj:`DeepSpeedPlugin`, `optional`):
+            default to the value in the environment variable `MIXED_PRECISION`, which will use the default value in the
+            accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
+            requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+        cpu (`bool`, *optional*):
+            Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
+            the execution on one process only.
+        deepspeed_plugin (`DeepSpeedPlugin`, *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
-            directly using `accelerate config`
-        rng_types (list of :obj:`str` or :class:`~accelerate.utils.RNGType`):
+            directly using *accelerate config*
+        rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
 
-            - :obj:`"torch"`: the base torch random number generator
-            - :obj:`"cuda"`: the CUDA random number generator (GPU only)
-            - :obj:`"xla"`: the XLA random number generator (TPU only)
-            - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler in
-              your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
+            - `"torch"`: the base torch random number generator
+            - `"cuda"`: the CUDA random number generator (GPU only)
+            - `"xla"`: the XLA random number generator (TPU only)
+            - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
+              dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
-            Will default to :obj:`["torch"]` for PyTorch versions <=1.5.1 and :obj:`["generator"]` for PyTorch versions
-            >= 1.6.
-        dispatch_batches (:obj:`bool`, `optional`):
-            If set to :obj:`True`, the dataloader prepared by the Accelerator is only iterated through on the main
-            process and then the batches are split and broadcast to each process. Will default to :obj:`True` for
-            :obj:`DataLoader` whose underlying dataset is an :obj:`IterableDataset`, :obj:`False` otherwise.
-        kwargs_handlers (list of kwargs handlers, `optional`)
-            A list of :obj:`KwargHandler` to customize how the objects related to distributed training or mixed
-            precision are created. See :doc:`kwargs` for more information.
+            Will default to `["torch"]` for PyTorch versions <=1.5.1 and `["generator"]` for PyTorch versions >= 1.6.
+        dispatch_batches (`bool`, *optional*):
+            If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
+            and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
+            underlying dataset is an `IterableDataset`, `False` otherwise.
+        kwargs_handlers (`List[KwargHandler]`, *optional*)
+            A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
+            are created. See [kwargs](kwargs) for more information.
 
     Attributes
 
-        - **device** (:obj:`torch.device`) -- The device to use.
-        - **state** (:class:`~accelerate.AcceleratorState`) -- The distributed setup state.
+        - **device** (`torch.device`) -- The device to use.
+        - **state** ([`~state.AcceleratorState`]) -- The distributed setup state.
     """
 
     def __init__(
@@ -276,7 +275,7 @@ class Accelerator:
 
     def print(self, *args, **kwargs):
         """
-        Use in replacement of :obj:`print()` to only print once per server.
+        Use in replacement of `print()` to only print once per server.
         """
         if self.is_local_main_process:
             print(*args, **kwargs)
@@ -296,14 +295,14 @@ class Accelerator:
 
     def prepare(self, *args):
         """
-        Prepare all objects passed in :obj:`args` for distributed training and mixed precision, then return them in the
-        same order.
+        Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
+        order.
 
         Accepts the following type of objects:
 
-            - :obj:`torch.utils.data.DataLoader`: PyTorch Dataloader
-            - :obj:`torch.nn.Module`: PyTorch Module
-            - :obj:`torch.optim.Optimizer`: PyTorch Optimizer
+            - `torch.utils.data.DataLoader`: PyTorch Dataloader
+            - `torch.nn.Module`: PyTorch Module
+            - `torch.optim.Optimizer`: PyTorch Optimizer
         """
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
@@ -460,7 +459,7 @@ class Accelerator:
 
     def backward(self, loss, **kwargs):
         """
-        Use :obj:`accelerator.backward(loss)` in lieu of :obj:`loss.backward()`.
+        Use `accelerator.backward(loss)` in lieu of `loss.backward()`.
         """
         if self.distributed_type == DistributedType.DEEPSPEED:
             self.deepspeed_engine.backward(loss, **kwargs)
@@ -474,9 +473,9 @@ class Accelerator:
         Unscale the gradients in mixed precision training with AMP. This is a noop in all other settings.
 
         Args:
-            optimizer (:obj:`torch.optim.Optimizer` or :obj:`List[torch.optim.Optimizer]`, `optional`):
+            optimizer (`torch.optim.Optimizer` or `List[torch.optim.Optimizer]`, *optional*):
                 The optimizer(s) for which to unscale gradients. If not set, will unscale gradients on all optimizers
-                that were passed to :meth:`~accelerate.Accelerator.prepare`.
+                that were passed to [`~Accelerator.prepare`].
         """
         if self.state.use_fp16 and self.native_amp:
             if optimizer is None:
@@ -491,34 +490,33 @@ class Accelerator:
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
         """
-        Should be used in place of :func:`torch.nn.utils.clip_grad_norm_`.
+        Should be used in place of `torch.nn.utils.clip_grad_norm_`.
         """
         self.unscale_gradients()
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
     def clip_grad_value_(self, parameters, clip_value):
         """
-        Should be used in place of :func:`torch.nn.utils.clip_grad_value_`.
+        Should be used in place of `torch.nn.utils.clip_grad_value_`.
         """
         self.unscale_gradients()
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
     def gather(self, tensor):
         """
-        Gather the values in `tensor` accross all processes and concatenate them on the first dimension. Useful to
+        Gather the values in *tensor* accross all processes and concatenate them on the first dimension. Useful to
         regroup the predictions from all processes when doing evaluation.
 
         Note:
             This gather happens in all processes.
 
         Args:
-            tensor (:obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`):
+            tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors to gather across all processes.
 
         Returns:
-            :obj:`torch.Tensor`, or a nested tuple/list/dictionary of :obj:`torch.Tensor`: The gathered tensor(s). Note
-            that the first dimension of the result is `num_processes` multiplied by the first dimension of the input
-            tensors.
+            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The gathered tensor(s). Note that the
+            first dimension of the result is *num_processes* multiplied by the first dimension of the input tensors.
         """
         return gather(tensor)
 
@@ -528,24 +526,24 @@ class Accelerator:
         they can safely be gathered.
 
         Args:
-            tensor (nested list/tuple/dictionary of :obj:`torch.Tensor`):
+            tensor (nested list/tuple/dictionary of `torch.Tensor`):
                 The data to gather.
-            dim (:obj:`int`, `optional`, defaults to 0):
+            dim (`int`, *optional*, defaults to 0):
                 The dimension on which to pad.
-            pad_index (:obj:`int`, `optional`, defaults to 0):
+            pad_index (`int`, *optional*, defaults to 0):
                 The value with which to pad.
-            pad_first (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            pad_first (`bool`, *optional*, defaults to `False`):
                 Whether to pad at the beginning or the end.
         """
         return pad_across_processes(tensor, dim=dim, pad_index=pad_index, pad_first=pad_first)
 
     def unwrap_model(self, model):
         """
-        Unwraps the :obj:`model` from the additional layer possible added by :meth:`~accelerate.Accelerator.prepare`.
-        Useful before saving the model.
+        Unwraps the `model` from the additional layer possible added by [`~Accelerator.prepare`]. Useful before saving
+        the model.
 
         Args:
-            model (:obj:`torch.nn.Module`):
+            model (`torch.nn.Module`):
                 The model to unwrap.
         """
         return extract_model_from_parallel(model)
@@ -559,12 +557,12 @@ class Accelerator:
 
     def save(self, obj, f):
         """
-        Save the object passed to disk once per machine. Use in place of :obj:`torch.save`.
+        Save the object passed to disk once per machine. Use in place of `torch.save`.
 
         Args:
             obj: The object to save.
-            f (:obj:`str` or :obj:`os.PathLike`):
-                Where to save the content of :obj:`obj`.
+            f (`str` or `os.PathLike`):
+                Where to save the content of `obj`.
         """
         save(obj, f)
 
@@ -573,7 +571,7 @@ class Accelerator:
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
         Args:
-            output_dir (:obj:`str` or :obj:`os.PathLike`):
+            output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
         """
         # Check if folder exists
@@ -593,7 +591,7 @@ class Accelerator:
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
         Args:
-            input_dir (:obj:`str` or :obj:`os.PathLike`):
+            input_dir (`str` or `os.PathLike`):
                 The name of the folder all relevant weights and states were saved in.
         """
         # Check if folder exists
@@ -674,7 +672,11 @@ class Accelerator:
         These should be utilized when the state is being loaded or saved in the same script. It is not designed to be
         used in different scripts
 
-        Note: Every `object` must have a `load_state_dict` and `state_dict` function to be stored.
+        <Tip>
+
+        Every `object` must have a `load_state_dict` and `state_dict` function to be stored.
+
+        </Tip>
         """
         invalid_objects = []
         for obj in objects:

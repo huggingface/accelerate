@@ -41,12 +41,12 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     Internal wrapper around a torch optimizer.
 
     Args:
-        optimizer (:obj:`torch.optim.optimizer.Optimizer`):
+        optimizer (`torch.optim.optimizer.Optimizer`):
             The optimizer to wrap.
-        device_placement (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        device_placement (`bool`, *optional*, defaults to `True`):
             Whether or not the optimizer should handle device placement. If so, it will place the state dictionary of
-            :obj:`optimizer` on the right device.
-        scaler (:obj:`torch.cuda.amp.grad_scaler.GradScaler`, `optional`):
+            `optimizer` on the right device.
+        scaler (`torch.cuda.amp.grad_scaler.GradScaler`, *optional*):
             The scaler to use in the step function if training with mixed precision.
     """
 

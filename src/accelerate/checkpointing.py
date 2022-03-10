@@ -41,15 +41,15 @@ def save_accelerator_state(
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
 
     Args:
-        output_dir (:obj:`str` or :obj:`os.PathLike`):
+        output_dir (`str` or `os.PathLike`):
             The name of the folder to save all relevant weights and states.
-        model_states (:obj:`List[torch.nn.Module]`):
+        model_states (`List[torch.nn.Module]`):
             A list of model states
-        optimizers (:obj:`List[torch.optim.Optimizer]`):
+        optimizers (`List[torch.optim.Optimizer]`):
             A list of optimizer instances
-        process_index (:obj:`int`):
+        process_index (`int`):
             The current process index in the Accelerator state
-        scaler (:obj:`torch.cuda.amp.GradScaler`, `optional`):
+        scaler (`torch.cuda.amp.GradScaler`, *optional*):
             An optional gradient scaler instance to save
     """
     # Model states
@@ -92,16 +92,16 @@ def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
 
     Args:
-        input_dir (:obj:`str` or :obj:`os.PathLike`):
+        input_dir (`str` or `os.PathLike`):
             The name of the folder to load all relevant weights and states.
-        model_stmodelsates (:obj:`List[torch.nn.Module]`):
+        model_stmodelsates (`List[torch.nn.Module]`):
             A list of model instances
-        optimizers (:obj:`List[torch.optim.Optimizer]`):
+        optimizers (`List[torch.optim.Optimizer]`):
             A list of optimizer instances
-        process_index (:obj:`int`):
+        process_index (`int`):
             The current process index in the Accelerator state
-        scaler (:obj:`torch.cuda.amp.GradScaler`, `optional`):
-            An optional `GradScaler` instance to load
+        scaler (`torch.cuda.amp.GradScaler`, *optional*):
+            An optional *GradScaler* instance to load
     """
     # Model states
     for i, model in enumerate(models):

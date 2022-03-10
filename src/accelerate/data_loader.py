@@ -67,34 +67,34 @@ for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
 
 class BatchSamplerShard(BatchSampler):
     """
-    Wraps a PyTorch :obj:`BatchSampler` to generate batches for one of the processes only. Instances of this class will
-    always yield a number of batches that is a round multiple of :obj:`num_processes` and that all have the same size.
-    Depending on the value of the :obj:`drop_last` attribute of the batch sampler passed, it will either stop the
-    iteration at the first batch that would be too small / not present on all processes or loop with indices from the
-    beginning.
+    Wraps a PyTorch `BatchSampler` to generate batches for one of the processes only. Instances of this class will
+    always yield a number of batches that is a round multiple of `num_processes` and that all have the same size.
+    Depending on the value of the `drop_last` attribute of the batch sampler passed, it will either stop the iteration
+    at the first batch that would be too small / not present on all processes or loop with indices from the beginning.
 
     Args:
-        batch_sampler (:obj:`torch.utils.data.sampler.BatchSampler`):
+        batch_sampler (`torch.utils.data.sampler.BatchSampler`):
             The batch sampler to split in several shards.
-        num_processes (:obj:`int`, `optional`, defaults to 1):
+        num_processes (`int`, *optional*, defaults to 1):
             The number of processes running concurrently.
-        process_index (:obj:`int`, `optional`, defaults to 0):
+        process_index (`int`, *optional*, defaults to 0):
             The index of the current process.
-        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        split_batches (`bool`, *optional*, defaults to `False`):
             Whether the shards should be created by splitting a batch to give a piece of it on each process, or by
             yielding different full batches on each process.
 
-            On two processes with a sampler of :obj:`[[0, 1, 2, 3], [4, 5, 6, 7]]`, this will result in:
+            On two processes with a sampler of `[[0, 1, 2, 3], [4, 5, 6, 7]]`, this will result in:
 
-            - the sampler on process 0 to yield :obj:`[0, 1, 2, 3]` and the sampler on process 1 to yield :obj:`[4, 5,
-              6, 7]` if this argument is set to :obj:`False`.
-            - the sampler on process 0 to yield :obj:`[0, 1]` then :obj:`[4, 5]` and the sampler on process 1 to yield
-              :obj:`[2, 3]` then :obj:`[6, 7]` if this argument is set to :obj:`True`.
+            - the sampler on process 0 to yield `[0, 1, 2, 3]` and the sampler on process 1 to yield `[4, 5, 6, 7]` if
+              this argument is set to `False`.
+            - the sampler on process 0 to yield `[0, 1]` then `[4, 5]` and the sampler on process 1 to yield `[2, 3]`
+              then `[6, 7]` if this argument is set to `True`.
 
-    .. warning::
+    <Tip warning={true}>
 
-        This does not support :obj:`BatchSampler` with varying batch size yet.
-    """
+    This does not support `BatchSampler` with varying batch size yet.
+
+    </Tip>"""
 
     def __init__(
         self,
@@ -188,35 +188,35 @@ class BatchSamplerShard(BatchSampler):
 
 class IterableDatasetShard(IterableDataset):
     """
-    Wraps a PyTorch :obj:`IterableDataset` to generate samples for one of the processes only. Instances of this class
-    will always yield a number of samples that is a round multiple of the actual batch size (depending of the value of
-    :obj:`split_batches`, this is either :obj:`batch_size` or :obj:`batch_size x num_processes`). Depending on the
-    value of the :obj:`drop_last` attribute of the batch sampler passed, it will either stop the iteration at the first
-    batch that would be too small or loop with indices from the beginning.
+    Wraps a PyTorch `IterableDataset` to generate samples for one of the processes only. Instances of this class will
+    always yield a number of samples that is a round multiple of the actual batch size (depending of the value of
+    `split_batches`, this is either `batch_size` or `batch_size x num_processes`). Depending on the value of the
+    `drop_last` attribute of the batch sampler passed, it will either stop the iteration at the first batch that would
+    be too small or loop with indices from the beginning.
 
     Args:
-        dataset (:obj:`torch.utils.data.dataset.IterableDataset`):
+        dataset (`torch.utils.data.dataset.IterableDataset`):
             The batch sampler to split in several shards.
-        batch_size (:obj:`int`, `optional`, defaults to 1):
-            The size of the batches per shard (if :obj:`split_batches=False`) or the size of the batches (if
-            :obj:`split_batches=True`).
-        drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        batch_size (`int`, *optional*, defaults to 1):
+            The size of the batches per shard (if `split_batches=False`) or the size of the batches (if
+            `split_batches=True`).
+        drop_last (`bool`, *optional*, defaults to `False`):
             Whether or not to drop the last incomplete batch or complete the last batches by using the samples from the
             beginning.
-        num_processes (:obj:`int`, `optional`, defaults to 1):
+        num_processes (`int`, *optional*, defaults to 1):
             The number of processes running concurrently.
-        process_index (:obj:`int`, `optional`, defaults to 0):
+        process_index (`int`, *optional*, defaults to 0):
             The index of the current process.
-        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        split_batches (`bool`, *optional*, defaults to `False`):
             Whether the shards should be created by splitting a batch to give a piece of it on each process, or by
             yielding different full batches on each process.
 
-            On two processes with an iterable dataset yielding of :obj:`[0, 1, 2, 3, 4, 5, 6, 7]`, this will result in:
+            On two processes with an iterable dataset yielding of `[0, 1, 2, 3, 4, 5, 6, 7]`, this will result in:
 
-            - the shard on process 0 to yield :obj:`[0, 1, 2, 3]` and the shard on process 1 to yield :obj:`[4, 5, 6,
-              7]` if this argument is set to :obj:`False`.
-            - the shard on process 0 to yield :obj:`[0, 1, 4, 5]` and the sampler on process 1 to yield :obj:`[2, 3, 6,
-              7]` if this argument is set to :obj:`True`.
+            - the shard on process 0 to yield `[0, 1, 2, 3]` and the shard on process 1 to yield `[4, 5, 6, 7]` if this
+              argument is set to `False`.
+            - the shard on process 0 to yield `[0, 1, 4, 5]` and the sampler on process 1 to yield `[2, 3, 6, 7]` if
+              this argument is set to `True`.
     """
 
     def __init__(
@@ -269,25 +269,25 @@ class IterableDatasetShard(IterableDataset):
 
 class DataLoaderShard(DataLoader):
     """
-    Subclass of a PyTorch :obj:`DataLoader` that will deal with device placement and current distributed setup.
+    Subclass of a PyTorch `DataLoader` that will deal with device placement and current distributed setup.
 
     Args:
-        dataset (:obj:`torch.utils.data.dataset.Dataset`):
+        dataset (`torch.utils.data.dataset.Dataset`):
             The dataset to use to build this datalaoder.
-        device (:obj:`torch.device`, `optional`):
+        device (`torch.device`, *optional*):
             If passed, the device to put all batches on.
-        rng_types (list of :obj:`str` or :class:`~accelerate.utils.RNGType`):
+        rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration. Should be one or
             several of:
 
-            - :obj:`"torch"`: the base torch random number generator
-            - :obj:`"cuda"`: the CUDA random number generator (GPU only)
-            - :obj:`"xla"`: the XLA random number generator (TPU only)
-            - :obj:`"generator"`: an optional :obj:`torch.Generator`
-        generator (:obj:`torch.Generator`, `optional`):
+            - `"torch"`: the base torch random number generator
+            - `"cuda"`: the CUDA random number generator (GPU only)
+            - `"xla"`: the XLA random number generator (TPU only)
+            - `"generator"`: an optional `torch.Generator`
+        generator (`torch.Generator`, *optional*):
             A random number generator to keep synchronized across processes.
         kwargs:
-            All other keyword arguments to pass to the regular :obj:`DataLoader` initialization.
+            All other keyword arguments to pass to the regular `DataLoader` initialization.
     """
 
     def __init__(self, dataset, device=None, rng_types=None, generator=None, **kwargs):
@@ -308,21 +308,21 @@ class DataLoaderShard(DataLoader):
 
 class DataLoaderDispatcher(DataLoader):
     """
-    Subclass of a PyTorch :obj:`DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
+    Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
     process their part of the batch.
 
     Args:
-        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether the resulting :obj:`DataLoader` should split the batches of the original data loader across devices
-            or yield full batches (in which case it will yield batches starting at the :obj:`process_index`-th and
-            advancing of :obj:`num_processes` batches at each iteration).
+        split_batches (`bool`, *optional*, defaults to `False`):
+            Whether the resulting `DataLoader` should split the batches of the original data loader across devices or
+            yield full batches (in which case it will yield batches starting at the `process_index`-th and advancing of
+            `num_processes` batches at each iteration).
 
-            Another way to see this is that the observed batch size will be the same as the initial :obj:`dataloader`
-            if this option is set to :obj:`True`, the batch size of the initial :obj:`dataloader` multiplied by
-            :obj:`num_processes` otherwise.
+            Another way to see this is that the observed batch size will be the same as the initial `dataloader` if
+            this option is set to `True`, the batch size of the initial `dataloader` multiplied by `num_processes`
+            otherwise.
 
-            Setting this option to :obj:`True` requires that the batch size of the :obj:`dataloader` is a round
-            multiple of :obj:`batch_size`.
+            Setting this option to `True` requires that the batch size of the `dataloader` is a round multiple of
+            `batch_size`.
     """
 
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
@@ -425,58 +425,58 @@ def prepare_data_loader(
     dispatch_batches: Optional[bool] = None,
 ) -> DataLoader:
     """
-    Wraps a PyTorch :obj:`DataLoader` to generate batches for one of the processes only.
+    Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
 
-    Depending on the value of the :obj:`drop_last` attribute of the :obj:`dataloader` passed, it will either stop the
-    iteration at the first batch that would be too small / not present on all processes or loop with indices from the
-    beginning.
+    Depending on the value of the `drop_last` attribute of the `dataloader` passed, it will either stop the iteration
+    at the first batch that would be too small / not present on all processes or loop with indices from the beginning.
 
     Args:
-        dataloader (:obj:`torch.utils.data.dataloader.DataLoader`):
+        dataloader (`torch.utils.data.dataloader.DataLoader`):
             The data loader to split across several devices.
-        device (:obj:`torch.device`):
-            The target device for the returned :obj:`DataLoader`.
-        num_processes (:obj:`int`, `optional`):
+        device (`torch.device`):
+            The target device for the returned `DataLoader`.
+        num_processes (`int`, *optional*):
             The number of processes running concurrently. Will default to the value given by
-            :class:`~accelerate.AcceleratorState`.
-        process_index (:obj:`int`, `optional`):
-            The index of the current process. Will default to the value given by :class:`~accelerate.AcceleratorState`.
-        split_batches (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether the resulting :obj:`DataLoader` should split the batches of the original data loader across devices
-            or yield full batches (in which case it will yield batches starting at the :obj:`process_index`-th and
-            advancing of :obj:`num_processes` batches at each iteration).
+            [`~state.AcceleratorState`].
+        process_index (`int`, *optional*):
+            The index of the current process. Will default to the value given by [`~state.AcceleratorState`].
+        split_batches (`bool`, *optional*, defaults to `False`):
+            Whether the resulting `DataLoader` should split the batches of the original data loader across devices or
+            yield full batches (in which case it will yield batches starting at the `process_index`-th and advancing of
+            `num_processes` batches at each iteration).
 
-            Another way to see this is that the observed batch size will be the same as the initial :obj:`dataloader`
-            if this option is set to :obj:`True`, the batch size of the initial :obj:`dataloader` multiplied by
-            :obj:`num_processes` otherwise.
+            Another way to see this is that the observed batch size will be the same as the initial `dataloader` if
+            this option is set to `True`, the batch size of the initial `dataloader` multiplied by `num_processes`
+            otherwise.
 
-            Setting this option to :obj:`True` requires that the batch size of the :obj:`dataloader` is a round
-            multiple of :obj:`batch_size`.
-        put_on_device (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to put the batches on :obj:`device` (only works if the batches are nested list, tuples or
+            Setting this option to `True` requires that the batch size of the `dataloader` is a round multiple of
+            `batch_size`.
+        put_on_device (`bool`, *optional*, defaults to `False`):
+            Whether or not to put the batches on `device` (only works if the batches are nested list, tuples or
             dictionaries of tensors).
-        rng_types (list of :obj:`str` or :class:`~accelerate.utils.RNGType`):
+        rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration. Should be one or
             several of:
 
-            - :obj:`"torch"`: the base torch random number generator
-            - :obj:`"cuda"`: the CUDA random number generator (GPU only)
-            - :obj:`"xla"`: the XLA random number generator (TPU only)
-            - :obj:`"generator"`: the :obj:`torch.Generator` of the sampler (or batch sampler if there is no sampler in
-              your dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
+            - `"torch"`: the base torch random number generator
+            - `"cuda"`: the CUDA random number generator (GPU only)
+            - `"xla"`: the XLA random number generator (TPU only)
+            - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
+              dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
-        dispatch_batches (:obj:`bool`, `optional`):
-            If set to :obj:`True`, the datalaoder prepared is only iterated through on the main process and then the
-            batches are split and broadcast to each process. Will default to :obj:`True` when the underlying dataset is
-            an :obj:`IterableDataset`, :obj:`False` otherwise.
+        dispatch_batches (`bool`, *optional*):
+            If set to `True`, the datalaoder prepared is only iterated through on the main process and then the batches
+            are split and broadcast to each process. Will default to `True` when the underlying dataset is an
+            `IterableDataset`, `False` otherwise.
 
     Returns:
-        :obj:`torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
+        `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
 
-    .. warning::
+    <Tip warning={true}>
 
-        This does not support :obj:`BatchSampler` with varying batch size yet.
-    """
+    This does not support `BatchSampler` with varying batch size yet.
+
+    </Tip>"""
     if dispatch_batches is None:
         if version.parse(torch.__version__) < version.parse("1.8.0") or not put_on_device:
             dispatch_batches = False
