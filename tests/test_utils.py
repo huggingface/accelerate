@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import os
+import pickle
 import unittest
 from collections import UserDict, namedtuple
 
 import torch
 
-from accelerate.utils import patch_environment, send_to_device
+from accelerate.test_utils.training import RegressionModel
+from accelerate.utils import convert_outputs_to_fp32, patch_environment, send_to_device
 
 
 TestNamedTuple = namedtuple("TestNamedTuple", "a b c")
@@ -71,3 +73,8 @@ class UtilsTester(unittest.TestCase):
 
         self.assertNotIn("AA", os.environ)
         self.assertNotIn("BB", os.environ)
+
+    def test_convert_to_32_lets_model_pickle(self):
+        model = RegressionModel()
+        model.forward = convert_outputs_to_fp32(model.forward)
+        _ = pickle.dumps(model)
