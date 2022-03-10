@@ -3,7 +3,7 @@ name: Build documentation
 on:
   push:
     branches:
-      - master
+      - main
       - doc-builder*
       - v*-release
 
@@ -57,9 +57,14 @@ jobs:
           git config --global user.name "Hugging Face Doc Builder"
           git config --global user.email docs@huggingface.co
           
+      - name: Create build directory
+        run: |
           cd doc-build
-          git pull origin main
+          git pull
           cd ..
+          mkdir build_dir
+          mkdir build_dir/accelerate
+          cp doc-build/accelerate/_versions.yml build_dir/accelerate
 
       - name: Make documentation
         run: |
@@ -71,13 +76,19 @@ jobs:
 
       - name: Push to repositories
         run: |
-          cd doc-build &&
+          cd doc-build
+          git pull
+          mv ../build_dir/accelerate/_versions.yml accelerate/
+          rm -rf accelerate/$(ls ../build_dir/accelerate)
+          mv ../build_dir/accelerate/$(ls ../build_dir/accelerate) accelerate/$(ls ../build_dir/accelerate)
+          git status
+
           if [[ `git status --porcelain` ]]; then 
-            git add . &&
-            git stash && git pull && git stash apply &&
-            git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/accelerate/commit/${{ github.sha }}" &&
+            git add .
+            git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/accelerate/commit/${{ github.sha }}"
             git push origin main
           else
             echo "No diff in the documentation."
-          fi &&
-          cd .. &&
+          fi
+
+          cd ..
