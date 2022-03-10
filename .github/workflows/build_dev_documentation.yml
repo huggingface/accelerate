@@ -48,7 +48,7 @@ jobs:
           cd ..
           
           cd accelerate
-          pip install .[dev]
+          pip install .[quality]
           cd ..
 
       - name: Setup git
