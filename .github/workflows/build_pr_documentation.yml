@@ -8,11 +8,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_pr_documentation:
+  build:
     uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@workflow_templates
     with:
       commit_sha: ${{ github.event.pull_request.head.sha }}
       pr_number: ${{ github.event.number }}
       package: accelerate
     secrets:
-      token: $(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm')
+      token: ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm
