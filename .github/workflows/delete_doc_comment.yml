@@ -12,4 +12,4 @@ jobs:
       pr_number: ${{ github.event.number }}
       package: accelerate
     secrets:
-      token: ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm
+      token: $(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm')
