@@ -25,7 +25,7 @@ jobs:
 
   doc-build:
     uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@workflow_templates
-
+    needs: prepare_doc_build
     with:
       commit_sha: ${{ github.event.pull_request.head.sha }}
       pr_number: ${{ github.event.number }}
