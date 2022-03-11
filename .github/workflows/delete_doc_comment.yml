@@ -1,0 +1,15 @@
+name: Delete dev documentation
+
+on:
+  pull_request:
+    types: [ closed ]
+
+
+jobs:
+  build_pr_documentation:
+    uses: huggingface/doc-builder/.github/workflows/delete_doc_comment.yml@workflow_templates
+    with:
+      pr_number: ${{ github.event.number }}
+      package: accelerate
+    secrets:
+      token: $(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm')
