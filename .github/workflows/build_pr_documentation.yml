@@ -8,22 +8,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prepare_doc_build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          repository: 'huggingface/accelerate'
-          path: accelerate
-
-      - name: Setup environment
-        run: |
-          cd accelerate
-          pip install .[quality]
-          cd ..
-
-  doc-build:
+  build_pr_documentation:
     uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@workflow_templates
     needs: prepare_doc_build
     with:
