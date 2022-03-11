@@ -24,7 +24,7 @@ jobs:
           cd ..
 
   doc-build:
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@main
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@workflow_templates
 
     with:
       commit_sha: ${{ github.event.pull_request.head.sha }}
