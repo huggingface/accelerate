@@ -15,6 +15,7 @@
 import importlib
 import os
 import random
+import sys
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -28,6 +29,14 @@ import torch
 from packaging import version
 
 from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
+
+
+# The package importlib_metadata is in a different place, depending on the python version.
+if sys.version_info < (3, 8):
+    import importlib_metadata  # noqa: F401
+
+else:
+    import importlib.metadata as importlib_metadata  # noqa: F401
 
 
 if is_tpu_available():
