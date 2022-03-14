@@ -14,5 +14,6 @@ jobs:
     with:
       commit_sha: ${{ github.sha }}
       package: accelerate
+      notebook_folder: accelerate_doc
     secrets:
       token: ${{ secrets.HUGGINGFACE_PUSH }}
