@@ -26,7 +26,7 @@ limitations under the License.
         <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/master">
     </a>
     -->
-    <a href="https://github.com/huggingface/accelerate/blob/master/LICENSE">
+    <a href="https://github.com/huggingface/accelerate/blob/main/LICENSE">
         <img alt="License" src="https://img.shields.io/github/license/huggingface/accelerate.svg?color=blue">
     </a>
     <a href="https://huggingface.co/docs/accelerate/index.html">
@@ -35,7 +35,7 @@ limitations under the License.
     <a href="https://github.com/huggingface/accelerate/releases">
         <img alt="GitHub release" src="https://img.shields.io/github/release/huggingface/accelerate.svg">
     </a>
-    <a href="https://github.com/huggingface/accelerate/blob/master/CODE_OF_CONDUCT.md">
+    <a href="https://github.com/huggingface/accelerate/blob/main/CODE_OF_CONDUCT.md">
         <img alt="Contributor Covenant" src="https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg">
     </a>
 </p>

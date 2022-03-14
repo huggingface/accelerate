@@ -26,7 +26,7 @@ on the awesome projects it made possible, shout out on Twitter every time it has
 helped you, or simply star the repo to say "thank you".
 
 Whichever way you choose to contribute, please be mindful to respect our
-[code of conduct](https://github.com/huggingface/accelerate/blob/master/CODE_OF_CONDUCT.md).
+[code of conduct](https://github.com/huggingface/accelerate/blob/main/CODE_OF_CONDUCT.md).
 
 ## You can contribute in so many ways!
 
@@ -118,7 +118,7 @@ Follow these steps to start contributing:
    $ git checkout -b a-descriptive-name-for-my-changes
    ```
 
-   **Do not** work on the `master` branch.
+   **Do not** work on the `main` branch.
 
 4. Set up a development environment by running the following command in a conda or a virtual environment you've created for working on this library:
 
@@ -184,7 +184,7 @@ Follow these steps to start contributing:
 
    ```bash
    $ git fetch upstream
-   $ git rebase upstream/master
+   $ git rebase upstream/main
    ```
 
    Push the changes to your account using:
@@ -220,7 +220,7 @@ See an example of a good PR here: https://github.com/huggingface/accelerate/pull
 ### Tests
 
 An extensive test suite is included to test the library behavior and several examples. Library tests can be found in
-the [tests folder](https://github.com/huggingface/accelerate/tree/master/tests).
+the [tests folder](https://github.com/huggingface/accelerate/tree/main/tests).
 
 We use `pytest` in order to run the tests. From the root of the
 repository, here's how to run tests with `pytest` for the library:
