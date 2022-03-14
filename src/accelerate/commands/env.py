@@ -44,7 +44,7 @@ def env_command(args):
     print("\nCopy-and-paste the text below in your GitHub issue\n")
     print("\n".join([f"- {prop}: {val}" for prop, val in info.items()]))
 
-    print("- `Accelerate` configs:")
+    print("- `Accelerate` default config:" if args.config_file is None else "- `Accelerate` config passed:")
     accelerate_config_str = (
         "\n".join([f"\t- {prop}: {val}" for prop, val in accelerate_config.items()])
         if isinstance(accelerate_config, dict)
