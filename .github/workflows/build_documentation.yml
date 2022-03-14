@@ -6,7 +6,6 @@ on:
       - main
       - doc-builder*
       - v*-release
-      - use_templates
 
 jobs:
    build:
