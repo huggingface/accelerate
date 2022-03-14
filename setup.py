@@ -22,6 +22,7 @@ extras["test"] = [
     "pytest",
     "pytest-xdist",
 ]
+extras["dev"] = extras["quality"] + extras["test"]
 
 extras["sagemaker"] = [
     "sagemaker",  # boto3 is a required package in sagemaker
