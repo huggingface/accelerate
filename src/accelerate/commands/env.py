@@ -2,9 +2,9 @@ import argparse
 import platform
 
 import numpy as np
+import torch
 
 from accelerate import __version__ as version
-from accelerate.file_utils import is_torch_available
 
 
 def env_command_parser(subparsers=None):
@@ -19,13 +19,8 @@ def env_command_parser(subparsers=None):
 
 
 def env_command(args):
-    pt_version = "not installed"
-    pt_cuda_available = "NA"
-    if is_torch_available():
-        import torch
-
-        pt_version = torch.__version__
-        pt_cuda_available = torch.cuda.is_available()
+    pt_version = torch.__version__
+    pt_cuda_available = torch.cuda.is_available()
 
     info = {
         "`accelerate` version": version,
