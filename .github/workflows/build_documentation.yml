@@ -6,6 +6,7 @@ on:
       - main
       - doc-builder*
       - v*-release
+      - build_documentation
 
 jobs:
    build:
