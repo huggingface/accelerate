@@ -14,6 +14,7 @@
 
 import gc
 import os
+import sys
 import warnings
 from contextlib import contextmanager
 from typing import List, Optional, Union
@@ -705,7 +706,7 @@ class Accelerator:
 
             autocast_context.__enter__()
             yield
-            autocast_context.__exit__()
+            autocast_context.__exit__(*sys.exc_info())
         else:
             yield
 
