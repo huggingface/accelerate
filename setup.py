@@ -66,7 +66,7 @@ setup(
 )
 
 # Release checklist
-# 1. Change the version in __init__.py, setup.py as well as docs/source/conf.py.
+# 1. Change the version in __init__.py and setup.py.
 # 2. Commit these changes with the message: "Release: VERSION"
 # 3. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
 #    Push the tag to git: git push --tags origin main
