@@ -30,7 +30,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.6.0",
+    version="0.7.0.dev0",
     description="Accelerate",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -78,8 +78,9 @@ setup(
 #      twine upload dist/* -r pypitest --repository-url=https://test.pypi.org/legacy/
 # 6. Check that you can install it in a virtualenv by running:
 #      pip install -i https://testpypi.python.org/pypi accelerate
+#      accelerate env
+#      accelerate test
 # 7. Upload the final version to actual pypi:
 #      twine upload dist/* -r pypi
 # 8. Add release notes to the tag in github once everything is looking hunky-dory.
-# 9. Add the release version to docs/source/_static/js/custom.js and .github/deploy_doc.sh
-# 10. Update the version in __init__.py, setup.py to the new version "-dev" and push to master
+# 9. Update the version in __init__.py, setup.py to the new version "-dev" and push to master
