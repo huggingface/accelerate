@@ -268,3 +268,8 @@ class AcceleratorState:
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
         return repr
+
+    # For backward compatibility
+    @property
+    def use_fp16(self):
+        return self.mixed_precision != "no"

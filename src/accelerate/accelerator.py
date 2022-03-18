@@ -478,7 +478,7 @@ class Accelerator:
                 The optimizer(s) for which to unscale gradients. If not set, will unscale gradients on all optimizers
                 that were passed to [`~Accelerator.prepare`].
         """
-        if self.state.use_fp16 and self.native_amp:
+        if self.use_fp16 and self.native_amp:
             if optimizer is None:
                 # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
                 optimizer = self._optimizers
