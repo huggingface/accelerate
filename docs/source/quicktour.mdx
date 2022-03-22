@@ -344,7 +344,7 @@ Note that since all the model parameters are references to tensors, this will lo
 
 When training your model, you may want to save the current state of the model, optimizer, random generators, and potentially LR schedulers to be restored in the _same script_.
 You can use `accelerator.save_state` and `accelerator.load_state` respectively to do so, just by simply passing in a save location. 
-If you have registered any other stateful items to be stored through `accelerator.register_for_checkpointing`
+If you have registered any other stateful items to be stored through `accelerator.register_for_checkpointing` they will also be saved and/or loaded.
 <Tip>
     Every object passed to `register_for_checkpointing` must have a `load_state_dict` and `save_dict` function to be stored
 </Tip>
