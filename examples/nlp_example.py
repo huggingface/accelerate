@@ -142,6 +142,10 @@ def training_function(config, args):
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+        
+        accelerator.wait_for_everyone()
+        unwrapped_model = accelerator.unwrap_model(model)
+        unwrapped_model.save_pretrained('accl_out', save_function=accelerator.save, state_dict=accelerator.get_state_dict(model))
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
