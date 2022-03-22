@@ -340,6 +340,16 @@ unwrapped_model.load_state_dict(torch.load(filename))
 
 Note that since all the model parameters are references to tensors, this will load your weights inside `model`.
 
+## Saving/loading entire states
+
+When training your model, you may want to save the current state of the model, optimizer, random generators, and potentially LR schedulers to be restored in the _same script_.
+You can use `accelerator.save_state` and `accelerator.load_state` respectively to do so, just by simply passing in a save location. 
+If you have registered any other stateful items to be stored through `accelerator.register_for_checkpointing`
+<Tip>
+    Every object passed to `register_for_checkpointing` must have a `load_state_dict` and `save_dict` function to be stored
+</Tip>
+
+
 ### Gradient clipping
 
 If you are using gradient clipping in your script, you should replace the calls to
