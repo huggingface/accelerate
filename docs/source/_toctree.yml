@@ -19,4 +19,6 @@
     title: Kwargs Handlers
   - local: internal
     title: Internals
+  - local: checkpoint
+    title: Checkpointing
   title: API Reference
