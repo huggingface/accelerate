@@ -31,15 +31,13 @@ import torch
 accelerator = Accelerator()
 
 my_scheduler = torch.optim.lr_scheduler.StepLR(my_optimizer, step_size=1, gamma=0.99)
-my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
-    my_model, my_optimizer, my_training_dataloader
-)
+my_model, my_optimizer, my_training_dataloader = accelerate.prepare(my_model, my_optimizer, my_training_dataloader)
 
 # Register the LR scheduler
 accelerate.register_for_checkpointing(my_scheduler)
 
 # Save the starting state
-accelerate.save_state('my/save/path')
+accelerate.save_state("my/save/path")
 
 device = accelerator.device
 my_model.to(device)
@@ -56,7 +54,7 @@ for epoch in range(num_epochs):
         accelerator.backward(loss)
         my_optimizer.step()
     my_scheduler.step()
-    
+
 # Restore previous state
-accelerate.load_state('my/save/path')
+accelerate.load_state("my/save/path")
 ```
