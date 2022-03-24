@@ -51,7 +51,7 @@ RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer"
 
 
-class MetaEnum(EnumMeta):
+class EnumWithContains(EnumMeta):
     "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
 
     def __contains__(cls, item):
@@ -62,7 +62,7 @@ class MetaEnum(EnumMeta):
         return True
 
 
-class BaseEnum(Enum, metaclass=MetaEnum):
+class BaseEnum(Enum, metaclass=EnumWithContains):
     "An enum class that can get the value of an item with `str(Enum.key)`"
 
     def __str__(self):
