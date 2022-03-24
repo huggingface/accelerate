@@ -107,24 +107,23 @@ class Accelerator:
         device_placement: bool = True,
         split_batches: bool = False,
         fp16: bool = None,
-        mixed_precision: str = None,
+        mixed_precision: Union[PrecisionType, str] = None,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         dispatch_batches: Optional[bool] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
-
         if mixed_precision is not None:
-            mixed_precision = mixed_precision.lower()
+            mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
                 raise ValueError(
-                    f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+                    f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
                 )
 
         if fp16:
             warnings.warn('fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
-            mixed_precision = "fp16"
+            mixed_precision = PrecisionType.FP16
 
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None

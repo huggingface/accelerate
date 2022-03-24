@@ -52,6 +52,8 @@ OPTIMIZER_NAME = "optimizer"
 
 
 class MetaEnum(EnumMeta):
+    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
+
     def __contains__(cls, item):
         try:
             cls(item)
@@ -61,7 +63,15 @@ class MetaEnum(EnumMeta):
 
 
 class BaseEnum(Enum, metaclass=MetaEnum):
-    pass
+    "An enum class that can get the value of an item with `str(Enum.key)`"
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def list(cls):
+        "Method to list all the possible items in `cls`"
+        return list(map(lambda item: str(item), cls))
 
 
 class PrecisionType(BaseEnum):

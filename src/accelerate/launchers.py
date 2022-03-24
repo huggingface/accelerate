@@ -107,10 +107,11 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                     "function."
                 )
 
-            mixed_precision = mixed_precision.lower()
-            if mixed_precision not in PrecisionType:
+            try:
+                mixed_precision = PrecisionType(mixed_precision.lower())
+            except ValueError:
                 raise ValueError(
-                    f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+                    f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
                 )
 
             if use_fp16:

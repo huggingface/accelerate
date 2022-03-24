@@ -58,7 +58,7 @@ def launch_command_parser(subparsers=None):
         "--mixed_precision",
         default="no",
         type=str,
-        choices=PrecisionType,
+        choices=["no", "fp16", "bf16"],
         help="Whether or not to use mixed precision training. "
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
@@ -163,10 +163,12 @@ def simple_launcher(args):
 
     current_env = os.environ.copy()
     current_env["USE_CPU"] = str(args.cpu)
-
-    mixed_precision = args.mixed_precision.lower()
-    if mixed_precision not in PrecisionType:
-        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
+    try:
+        mixed_precision = PrecisionType(args.mixed_precision.lower())
+    except ValueError:
+        raise ValueError(
+            f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
+        )
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
@@ -212,10 +214,12 @@ def multi_gpu_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
-    mixed_precision = args.mixed_precision.lower()
-
-    if mixed_precision not in PrecisionType:
-        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
+    try:
+        mixed_precision = PrecisionType(args.mixed_precision.lower())
+    except ValueError:
+        raise ValueError(
+            f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
+        )
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
@@ -259,10 +263,12 @@ def deepspeed_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
-    mixed_precision = args.mixed_precision.lower()
-
-    if mixed_precision not in PrecisionType:
-        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
+    try:
+        mixed_precision = PrecisionType(args.mixed_precision.lower())
+    except ValueError:
+        raise ValueError(
+            f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
+        )
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
@@ -388,10 +394,12 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     print("Converting Arguments to Hyperparameters")
     hyperparameters = _convert_nargs_to_dict(args.training_script_args)
 
-    mixed_precision = args.mixed_precision.lower()
-
-    if mixed_precision not in PrecisionType:
-        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
+    try:
+        mixed_precision = PrecisionType(args.mixed_precision.lower())
+    except ValueError:
+        raise ValueError(
+            f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
+        )
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
