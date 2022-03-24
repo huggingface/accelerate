@@ -125,6 +125,7 @@ class Accelerator:
             for log_type in log_with:
                 if str(log_type) not in LoggerType:
                     raise ValueError(f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}")
+        self.log_with = log_with
 
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
@@ -578,7 +579,7 @@ class Accelerator:
         project_location = Path(project_name)
         self.trackers = []
         for tracker in self.log_with:
-            if tracker.lower() == "tensorboard" and is_tensorboard_available():
+            if (str(tracker).lower() == "tensorboard" or str(tracker).lower() == "all") and is_tensorboard_available():
                 self.trackers.append(TensorBoardTracker(project_location))
         if config is not None:
             for tracker in self.trackers:
