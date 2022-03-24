@@ -123,7 +123,7 @@ class Accelerator:
 
         if fp16:
             warnings.warn('fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
-            mixed_precision = PrecisionType.FP16
+            mixed_precision = "fp16"
 
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None
