@@ -22,7 +22,7 @@ from typing import List, Optional, Union
 
 import torch
 
-from accelerate.accelerate.src.accelerate.tracking import TensorBoardTracker
+from .tracking import TensorBoardTracker
 from packaging import version
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
