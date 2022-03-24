@@ -18,7 +18,7 @@ import random
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, EnumMeta
 from functools import update_wrapper
 from typing import Any, List, Optional, Union
 
@@ -50,12 +50,27 @@ MODEL_NAME = "pytorch_model"
 RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer"
 
-class PrecisionType(Enum):
+
+class MetaEnum(EnumMeta):
+    def __contains__(cls, item):
+        try:
+            cls(item)
+        except ValueError:
+            return False
+        return True
+
+
+class BaseEnum(Enum, metaclass=MetaEnum):
+    pass
+
+
+class PrecisionType(BaseEnum):
     NO = "no"
     FP16 = "fp16"
     BF16 = "bf16"
 
-class RNGType(Enum):
+
+class RNGType(BaseEnum):
     TORCH = "torch"
     CUDA = "cuda"
     XLA = "xla"

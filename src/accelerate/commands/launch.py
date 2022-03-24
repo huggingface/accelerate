@@ -58,8 +58,7 @@ def launch_command_parser(subparsers=None):
         "--mixed_precision",
         default="no",
         type=str,
-        choices=PrecisionType
-,
+        choices=PrecisionType,
         help="Whether or not to use mixed precision training. "
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
