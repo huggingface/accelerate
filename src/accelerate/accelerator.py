@@ -17,10 +17,12 @@ import os
 import sys
 import warnings
 from contextlib import contextmanager
+from pathlib import Path
 from typing import List, Optional, Union
 
 import torch
 
+from accelerate.accelerate.src.accelerate.tracking import TensorBoardTracker
 from packaging import version
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
@@ -30,12 +32,14 @@ from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .utils import (
     DeepSpeedPlugin,
+    LoggerType,
     PrecisionType,
     RNGType,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
     get_pretty_name,
+    is_tensorboard_available,
     pad_across_processes,
     save,
     wait_for_everyone,
@@ -111,9 +115,17 @@ class Accelerator:
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
+        log_with: Optional[List[Union[LoggerType, str]]] = None,
         dispatch_batches: Optional[bool] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
+        if log_with is not None:
+            if not isinstance(log_with, list):
+                log_with = [log_with]
+            for log_type in log_with:
+                if str(log_type) not in LoggerType:
+                    raise ValueError(f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}")
+
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
@@ -555,6 +567,30 @@ class Accelerator:
         nothing when the script is only run in one process). Useful to do before saving a model.
         """
         wait_for_everyone()
+
+    def init_trackers(self, project_name: str, config: dict = None):
+        """
+        Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
+
+        Args:
+            project_name (`str`):
+        """
+        project_location = Path(project_name)
+        self.trackers = []
+        for tracker in self.log_with:
+            if tracker.lower() == "tensorboard" and is_tensorboard_available():
+                self.trackers.append(TensorBoardTracker(project_location))
+        if config is not None:
+            for tracker in self.trackers:
+                tracker.store_init_configuration(config)
+
+    def log(self, values: dict):
+        """
+        Logs `values` to all stored trackers in `self.trackers`. Values should be a dictionary-like object containing
+        only types `int`, `float`, or `str`.
+        """
+        for tracker in self.trackers:
+            tracker.log(values)
 
     def save(self, obj, f):
         """

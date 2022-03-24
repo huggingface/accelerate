@@ -34,6 +34,10 @@ if is_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
+def is_tensorboard_available():
+    return importlib.util.find_spec("tensorboard") is not None or importlib.util.find_spec("tensorboardX") is not None
+
+
 def is_boto3_available():
     return importlib.util.find_spec("boto3") is not None
 
@@ -72,6 +76,11 @@ class BaseEnum(Enum, metaclass=EnumWithContains):
     def list(cls):
         "Method to list all the possible items in `cls`"
         return list(map(lambda item: str(item), cls))
+
+
+class LoggerType(BaseEnum):
+    ALL = "all"
+    TENSORBOARD = "tensorboard"
 
 
 class PrecisionType(BaseEnum):
