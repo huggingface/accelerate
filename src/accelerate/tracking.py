@@ -18,8 +18,10 @@
 import logging
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
+from .utils import is_tensorboard_available
 
-from torch.utils import tensorboard
+if is_tensorboard_available():
+    from torch.utils import tensorboard
 
 
 logger = logging.getLogger(__name__)

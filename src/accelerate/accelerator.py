@@ -120,6 +120,7 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         if log_with is not None:
+            # Deal with "all" in here
             if not isinstance(log_with, list):
                 log_with = [log_with]
             for log_type in log_with:
