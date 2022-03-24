@@ -30,6 +30,7 @@ from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .utils import (
     DeepSpeedPlugin,
+    PrecisionType,
     RNGType,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
@@ -106,19 +107,18 @@ class Accelerator:
         device_placement: bool = True,
         split_batches: bool = False,
         fp16: bool = None,
-        mixed_precision: str = None,
+        mixed_precision: Union[PrecisionType, str] = None,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         dispatch_batches: Optional[bool] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
-
         if mixed_precision is not None:
-            mixed_precision = mixed_precision.lower()
-            if mixed_precision not in ["no", "fp16", "bf16"]:
+            mixed_precision = str(mixed_precision)
+            if mixed_precision not in PrecisionType:
                 raise ValueError(
-                    f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
+                    f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
                 )
 
         if fp16:

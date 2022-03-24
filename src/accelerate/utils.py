@@ -18,7 +18,7 @@ import random
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, EnumMeta
 from functools import update_wrapper
 from typing import Any, List, Optional, Union
 
@@ -51,7 +51,36 @@ RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer"
 
 
-class RNGType(Enum):
+class EnumWithContains(EnumMeta):
+    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
+
+    def __contains__(cls, item):
+        try:
+            cls(item)
+        except ValueError:
+            return False
+        return True
+
+
+class BaseEnum(Enum, metaclass=EnumWithContains):
+    "An enum class that can get the value of an item with `str(Enum.key)`"
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def list(cls):
+        "Method to list all the possible items in `cls`"
+        return list(map(lambda item: str(item), cls))
+
+
+class PrecisionType(BaseEnum):
+    NO = "no"
+    FP16 = "fp16"
+    BF16 = "bf16"
+
+
+class RNGType(BaseEnum):
     TORCH = "torch"
     CUDA = "cuda"
     XLA = "xla"
