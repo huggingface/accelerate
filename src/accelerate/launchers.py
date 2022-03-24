@@ -22,7 +22,7 @@ import torch
 from packaging import version
 
 from .state import AcceleratorState
-from .utils import PrepareForLaunch, patch_environment
+from .utils import PrecisionType, PrepareForLaunch, patch_environment
 
 
 def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mixed_precision="no", use_port="29500"):
@@ -108,7 +108,7 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                 )
 
             mixed_precision = mixed_precision.lower()
-            if mixed_precision not in ["no", "fp16", "bf16"]:
+            if mixed_precision not in PrecisionType:
                 raise ValueError(
                     f"Unknown mixed_precision: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
                 )

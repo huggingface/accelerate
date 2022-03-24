@@ -50,6 +50,10 @@ MODEL_NAME = "pytorch_model"
 RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer"
 
+class PrecisionType(Enum):
+    NO = "no"
+    FP16 = "fp16"
+    BF16 = "bf16"
 
 class RNGType(Enum):
     TORCH = "torch"

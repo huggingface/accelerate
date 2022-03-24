@@ -27,7 +27,7 @@ from typing import Dict, List
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.state import ComputeEnvironment, DistributedType
-from accelerate.utils import PrepareForLaunch, is_sagemaker_available
+from accelerate.utils import PrecisionType, PrepareForLaunch, is_sagemaker_available
 
 
 def launch_command_parser(subparsers=None):
@@ -58,7 +58,8 @@ def launch_command_parser(subparsers=None):
         "--mixed_precision",
         default="no",
         type=str,
-        choices=["no", "fp16", "bf16"],
+        choices=PrecisionType
+,
         help="Whether or not to use mixed precision training. "
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
@@ -165,7 +166,7 @@ def simple_launcher(args):
     current_env["USE_CPU"] = str(args.cpu)
 
     mixed_precision = args.mixed_precision.lower()
-    if mixed_precision not in ["no", "fp16", "bf16"]:
+    if mixed_precision not in PrecisionType:
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
 
     if args.fp16:
@@ -214,7 +215,7 @@ def multi_gpu_launcher(args):
     current_env = os.environ.copy()
     mixed_precision = args.mixed_precision.lower()
 
-    if mixed_precision not in ["no", "fp16", "bf16"]:
+    if mixed_precision not in PrecisionType:
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
 
     if args.fp16:
@@ -261,7 +262,7 @@ def deepspeed_launcher(args):
     current_env = os.environ.copy()
     mixed_precision = args.mixed_precision.lower()
 
-    if mixed_precision not in ["no", "fp16", "bf16"]:
+    if mixed_precision not in PrecisionType:
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
 
     if args.fp16:
@@ -390,7 +391,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
     mixed_precision = args.mixed_precision.lower()
 
-    if mixed_precision not in ["no", "fp16", "bf16"]:
+    if mixed_precision not in PrecisionType:
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'.")
 
     if args.fp16:

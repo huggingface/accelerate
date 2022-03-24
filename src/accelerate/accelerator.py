@@ -30,6 +30,7 @@ from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .utils import (
     DeepSpeedPlugin,
+    PrecisionType,
     RNGType,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
@@ -116,7 +117,7 @@ class Accelerator:
 
         if mixed_precision is not None:
             mixed_precision = mixed_precision.lower()
-            if mixed_precision not in ["no", "fp16", "bf16"]:
+            if mixed_precision not in PrecisionType:
                 raise ValueError(
                     f"Unknown mixed_precision mode: {mixed_precision}. Choose between 'no', 'fp16' and 'bf16'."
                 )
