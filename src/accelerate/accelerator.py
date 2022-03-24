@@ -22,7 +22,7 @@ from typing import List, Optional, Union
 
 import torch
 
-from .tracking import TensorBoardTracker
+from .tracking import TensorBoardTracker, get_available_trackers
 from packaging import version
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
@@ -115,17 +115,22 @@ class Accelerator:
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
-        log_with: Optional[List[Union[LoggerType, str]]] = None,
+        log_with: Optional[List[Union[str, LoggerType]]] = None,
         dispatch_batches: Optional[bool] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         if log_with is not None:
             # Deal with "all" in here
-            if not isinstance(log_with, list):
-                log_with = [log_with]
-            for log_type in log_with:
-                if str(log_type) not in LoggerType:
-                    raise ValueError(f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}")
+            if "all" in log_with or LoggerType.ALL in log_with:
+                log_with = get_available_trackers()
+            else:
+                if not isinstance(log_with, list):
+                    log_with = [log_with]
+                for i, log_type in enumerate(log_with):
+                    if log_type not in LoggerType:
+                        raise ValueError(f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}")
+                    log_with[i] = LoggerType(log_type)
+                log_with = list(set(log_with))
         self.log_with = log_with
 
         if mixed_precision is not None:
@@ -580,7 +585,7 @@ class Accelerator:
         project_location = Path(project_name)
         self.trackers = []
         for tracker in self.log_with:
-            if (str(tracker).lower() == "tensorboard" or str(tracker).lower() == "all") and is_tensorboard_available():
+            if str(tracker).lower() == "tensorboard" and is_tensorboard_available():
                 self.trackers.append(TensorBoardTracker(project_location))
         if config is not None:
             for tracker in self.trackers:
@@ -591,8 +596,9 @@ class Accelerator:
         Logs `values` to all stored trackers in `self.trackers`. Values should be a dictionary-like object containing
         only types `int`, `float`, or `str`.
         """
-        for tracker in self.trackers:
-            tracker.log(values)
+        if self.is_main_process:
+            for tracker in self.trackers:
+                tracker.log(values)
 
     def save(self, obj, f):
         """

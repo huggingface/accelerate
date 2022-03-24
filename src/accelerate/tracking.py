@@ -18,13 +18,19 @@
 import logging
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from .utils import is_tensorboard_available
+from .utils import is_tensorboard_available, LoggerType
 
 if is_tensorboard_available():
     from torch.utils import tensorboard
 
 
 logger = logging.getLogger(__name__)
+
+def get_available_trackers():
+    trackers = []
+    if is_tensorboard_available: 
+        trackers.append(LoggerType.TENSORBOARD)
+    return trackers
 
 
 class GeneralTracker(object, metaclass=ABCMeta):
@@ -55,6 +61,9 @@ class TensorBoardTracker(GeneralTracker):
         )
 
     def store_init_configuration(self, values):
+        """
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+        """
         self.writer.add_hparams(values, metric_dict={})
         self.writer.flush()
         logger.info("Stored initial configuration hyperparameters to TensorBoard")
