@@ -59,8 +59,9 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.flush()
         logger.info("Stored initial configuration hyperparameters to TensorBoard")
 
-    # add_scalar has the option for `global_step`, should we include this?
+    # add_scalar has the option for `global_step`, should we include this as an optional argument?
     # Need to see how rest of API fleshes out first with other integrations
+    # Potential other option: keep track of number of times `optimizer.step` is called internally
     def log(self, values: dict):
         """
         Logs `values`. Values should be a dictionary-like object containing only types `int`, `float`, or `str`.
