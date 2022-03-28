@@ -76,7 +76,7 @@ class TensorBoardTracker(GeneralTracker):
 
     log_directory = Path("tensorboard")
 
-    def __init__(self, run_name: str = ""):
+    def __init__(self, run_name: str):
         self.run_name = run_name
         self.writer = tensorboard.SummaryWriter(self.logging_dir / self.run_name)
         logger.info(f"Initialized TensorBoard project {self.run_name} writing to {self.logging_dir}")
@@ -90,8 +90,8 @@ class TensorBoardTracker(GeneralTracker):
 
         Args:
             values (Dictionary `str` to `bool`, `str`, `float` or `int`):
-                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`, `str`,
-                `float`, `int`, or `None`.
+                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
+                `str`, `float`, `int`, or `None`.
         """
         self.writer.add_hparams(values, metric_dict={})
         self.writer.flush()
@@ -102,8 +102,8 @@ class TensorBoardTracker(GeneralTracker):
         Logs `values` to the current run.
 
         Args:
-            values (`dict`):
-                Values to be logged as key-value pairs. Value be of type `int`, `float`, or `str`.
+            values (Dictionary `str` to `str`, `float`, or `int`):
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, or `int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
@@ -127,7 +127,7 @@ class WandBTracker(GeneralTracker):
 
     log_directory = None
 
-    def __init__(self, run_name: str = ""):
+    def __init__(self, run_name: str):
         self.run_name = run_name
         wandb.init(self.run_name)
         logger.info(f"Initialized WandB project {self.run_name}")
@@ -140,9 +140,9 @@ class WandBTracker(GeneralTracker):
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
 
         Args:
-            values (`dict`):
-                Values to be stored as initial hyperparameters as key-value pairs. Value be of type `bool`, `str`,
-                `float`, `int`, or `None`.
+            values (Dictionary `str` to `bool`, `str`, `float` or `int`):
+                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
+                `str`, `float`, `int`, or `None`.
         """
         wandb.config(values)
         logger.info("Stored initial configuration hyperparameters to WandB")
@@ -152,8 +152,8 @@ class WandBTracker(GeneralTracker):
         Logs `values` to the current run.
 
         Args:
-            values (`dict`):
-                Values to be logged as key-value pairs.
+            values (Dictionary `str` to `str`, `float`, or `int`):
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, or `int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
@@ -174,7 +174,7 @@ class CometMLTracker(GeneralTracker):
 
     log_directory = None
 
-    def __init__(self, run_name: str = ""):
+    def __init__(self, run_name: str):
         self.run_name = run_name
         self.writer = Experiment(project_name=run_name)
         logger.info(f"Initialized CometML project {self.run_name}")
@@ -187,9 +187,9 @@ class CometMLTracker(GeneralTracker):
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
 
         Args:
-            values (`dict`):
-                Values to be stored as initial hyperparameters as key-value pairs. Value be of type `bool`, `str`,
-                `float`, `int`, or `None`.
+            values (Dictionary `str` to `bool`, `str`, `float` or `int`):
+                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
+                `str`, `float`, `int`, or `None`.
         """
         self.writer.log_parameters(values)
         logger.info("Stored initial configuration hyperparameters to CometML")
@@ -199,8 +199,8 @@ class CometMLTracker(GeneralTracker):
         Logs `values` to the current run.
 
         Args:
-            values (`dict`):
-                Values to be logged as key-value pairs.
+            values (Dictionary `str` to `str`, `float`, or `int`):
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, or `int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
