@@ -95,8 +95,7 @@ class TensorBoardTracker(GeneralTracker):
         """
         global_step = None
         if "global_step" in values.keys():
-            global_step = values["global_step"]
-            values.pop("global_step")
+            global_step = values.pop("global_step")
         for k, v in values.items():
             if isinstance(v, (int, float)):
                 self.writer.add_scalar(k, v, global_step=global_step)
