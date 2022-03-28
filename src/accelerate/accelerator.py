@@ -576,12 +576,15 @@ class Accelerator:
         """
         wait_for_everyone()
 
-    def init_trackers(self, project_name: str, config: dict = None):
+    def init_trackers(self, project_name: str, config: Optional[dict] = None):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
 
         Args:
             project_name (`str`):
+                The name of the project. All trackers will save their data based on this
+            config (`dict`, Optional):
+                Optional starting configuration to be logged.
         """
         project_location = Path(project_name)
         self.trackers = []
@@ -592,10 +595,16 @@ class Accelerator:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
-    def log(self, values: dict):
+    def log(self, values: dict, step: Optional[int] = None):
         """
-        Logs `values` to all stored trackers in `self.trackers`. Values should be a dictionary-like object containing
-        only types `int`, `float`, or `str`.
+        Logs `values` to all stored trackers in `self.trackers`. 
+        
+        Args:
+            values (`dict`):
+                Values should be a dictionary-like object containing
+                only types `int`, `float`, or `str`.
+            step (`int`, Optional):
+                The run step. If included, the log will be affiliated with this step.
         """
         if self.is_main_process:
             for tracker in self.trackers:
