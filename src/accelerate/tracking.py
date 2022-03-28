@@ -89,8 +89,8 @@ class TensorBoardTracker(GeneralTracker):
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
 
         Args:
-            values (`dict`):
-                Values to be stored as initial hyperparameters as key-value pairs. Value be of type `bool`, `str`,
+            values (Dictionary `str` to `bool`, `str`, `float` or `int`):
+                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`, `str`,
                 `float`, `int`, or `None`.
         """
         self.writer.add_hparams(values, metric_dict={})
