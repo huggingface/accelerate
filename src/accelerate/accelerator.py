@@ -22,7 +22,6 @@ from typing import List, Optional, Union
 
 import torch
 
-from .tracking import TensorBoardTracker, get_available_trackers
 from packaging import version
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
@@ -30,6 +29,7 @@ from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
+from .tracking import TensorBoardTracker, get_available_trackers
 from .utils import (
     DeepSpeedPlugin,
     LoggerType,
@@ -120,7 +120,6 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         if log_with is not None:
-            # Deal with "all" in here
             if "all" in log_with or LoggerType.ALL in log_with:
                 log_with = get_available_trackers()
             else:
@@ -128,7 +127,9 @@ class Accelerator:
                     log_with = [log_with]
                 for i, log_type in enumerate(log_with):
                     if log_type not in LoggerType:
-                        raise ValueError(f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}")
+                        raise ValueError(
+                            f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}"
+                        )
                     log_with[i] = LoggerType(log_type)
                 log_with = list(set(log_with))
         self.log_with = log_with
