@@ -18,6 +18,7 @@
 import logging
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
+from typing import Optional
 
 from .utils import LoggerType, is_comet_ml_available, is_tensorboard_available, is_wandb_available
 
@@ -60,7 +61,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def log(self, values):
+    def log(self, values, step: Optional[int]):
         pass
 
 
@@ -96,23 +97,21 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.flush()
         logger.info("Stored initial configuration hyperparameters to TensorBoard")
 
-    def log(self, values: dict):
+    def log(self, values: dict, step: Optional[int] = None):
         """
-        Logs `values` to the current run. If `global_step` is included as a key, this will be logged directly in the
-        internal call.
+        Logs `values` to the current run.
 
         Args:
             values (`dict`):
                 Values to be logged as key-value pairs. Value be of type `int`, `float`, or `str`.
+            step (`int`, Optional):
+                The run step. If included, the log will be affiliated with this step.
         """
-        global_step = None
-        if "global_step" in values.keys():
-            global_step = values.pop("global_step")
         for k, v in values.items():
             if isinstance(v, (int, float)):
-                self.writer.add_scalar(k, v, global_step=global_step)
+                self.writer.add_scalar(k, v, global_step=step)
             elif isinstance(v, str):
-                self.writer.add_text(k, v, global_step=global_step)
+                self.writer.add_text(k, v, global_step=step)
         self.writer.flush()
         logger.info("Successfully logged to TensorBoard")
 
@@ -148,19 +147,17 @@ class WandBTracker(GeneralTracker):
         wandb.config(values)
         logger.info("Stored initial configuration hyperparameters to WandB")
 
-    def log(self, values: dict):
+    def log(self, values: dict, step: Optional[int] = None):
         """
-        Logs `values` to the current run. If `global_step` is included as a key, this will be logged directly in the
-        internal call.
+        Logs `values` to the current run.
 
         Args:
             values (`dict`):
                 Values to be logged as key-value pairs.
+            step (`int`, Optional):
+                The run step. If included, the log will be affiliated with this step.
         """
-        global_step = None
-        if "global_step" in values.keys():
-            global_step = values.pop("global_step")
-        wandb.log(values, step=global_step)
+        wandb.log(values, step=step)
         logger.info("Successfully logged to WandB")
 
 
@@ -197,19 +194,17 @@ class CometMLTracker(GeneralTracker):
         self.writer.log_parameters(values)
         logger.info("Stored initial configuration hyperparameters to CometML")
 
-    def log(self, values: dict):
+    def log(self, values: dict, step: Optional[int] = None):
         """
-        Logs `values` to the current run. If `global_step` is included as a key, this will be logged directly in the
-        internal call.
+        Logs `values` to the current run.
 
         Args:
             values (`dict`):
                 Values to be logged as key-value pairs.
+            step (`int`, Optional):
+                The run step. If included, the log will be affiliated with this step.
         """
-        global_step = None
-        if "global_step" in values.keys():
-            global_step = values.pop("global_step")
-        if global_step is not None:
-            self.writer.set_step(global_step)
+        if step is not None:
+            self.writer.set_step(step)
         self.writer.log_others(values)
         logger.info("Successfully logged to CometML")
