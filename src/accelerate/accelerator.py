@@ -597,12 +597,11 @@ class Accelerator:
 
     def log(self, values: dict, step: Optional[int] = None):
         """
-        Logs `values` to all stored trackers in `self.trackers`. 
-        
+        Logs `values` to all stored trackers in `self.trackers`.
+
         Args:
             values (`dict`):
-                Values should be a dictionary-like object containing
-                only types `int`, `float`, or `str`.
+                Values should be a dictionary-like object containing only types `int`, `float`, or `str`.
             step (`int`, Optional):
                 The run step. If included, the log will be affiliated with this step.
         """
