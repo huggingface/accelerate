@@ -42,6 +42,10 @@ def is_wandb_available():
     return importlib.util.find_spec("wandb")
 
 
+def is_comet_ml_available():
+    return importlib.util.find_spec("comet_ml")
+
+
 def is_boto3_available():
     return importlib.util.find_spec("boto3") is not None
 
@@ -85,6 +89,8 @@ class BaseEnum(Enum, metaclass=EnumWithContains):
 class LoggerType(BaseEnum):
     ALL = "all"
     TENSORBOARD = "tensorboard"
+    WANDB = "wandb"
+    COMETML = "comet_ml"
 
 
 class PrecisionType(BaseEnum):

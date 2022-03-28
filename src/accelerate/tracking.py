@@ -19,24 +19,33 @@ import logging
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
 
-from .utils import LoggerType, is_tensorboard_available, is_wandb_available
+from .utils import LoggerType, is_comet_ml_available, is_tensorboard_available, is_wandb_available
 
+
+_available_trackers = []
 
 if is_tensorboard_available():
     from torch.utils import tensorboard
 
+    _available_trackers.append(LoggerType.TENSORBOARD)
+
 if is_wandb_available():
     import wandb
+
+    _available_trackers.append(LoggerType.WANDB)
+
+if is_comet_ml_available():
+    from comet_ml import Experiment
+
+    _available_trackers.append(LoggerType.COMETML)
 
 
 logger = logging.getLogger(__name__)
 
 
 def get_available_trackers():
-    trackers = []
-    if is_tensorboard_available:
-        trackers.append(LoggerType.TENSORBOARD)
-    return trackers
+    "Returns a list of all supported available trackers in the system"
+    return _available_trackers
 
 
 class GeneralTracker(object, metaclass=ABCMeta):
@@ -117,7 +126,7 @@ class WandBTracker(GeneralTracker):
             The name of the experiment run.
     """
 
-    log_directory = Path("wandb")
+    log_directory = None
 
     def __init__(self, run_name: str = ""):
         self.run_name = run_name
@@ -153,3 +162,54 @@ class WandBTracker(GeneralTracker):
             global_step = values.pop("global_step")
         wandb.log(values, step=global_step)
         logger.info("Successfully logged to WandB")
+
+
+class CometMLTracker(GeneralTracker):
+    """
+    A `Tracker` class that supports `comet_ml`. Should be initialized at the start of your script.
+
+    API keys must be stored in a Comet config file.
+
+    Args:
+        run_name (`str`):
+            The name of the experiment run.
+    """
+
+    log_directory = None
+
+    def __init__(self, run_name: str = ""):
+        self.run_name = run_name
+        self.writer = Experiment(project_name=run_name)
+        logger.info(f"Initialized CometML project {self.run_name}")
+        logger.info(
+            "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
+        )
+
+    def store_init_configuration(self, values: dict):
+        """
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+
+        Args:
+            values (`dict`):
+                Values to be stored as initial hyperparameters as key-value pairs. Value be of type `bool`, `str`,
+                `float`, `int`, or `None`.
+        """
+        self.writer.log_parameters(values)
+        logger.info("Stored initial configuration hyperparameters to CometML")
+
+    def log(self, values: dict):
+        """
+        Logs `values` to the current run. If `global_step` is included as a key, this will be logged directly in the
+        internal call.
+
+        Args:
+            values (`dict`):
+                Values to be logged as key-value pairs.
+        """
+        global_step = None
+        if "global_step" in values.keys():
+            global_step = values.pop("global_step")
+        if global_step is not None:
+            self.writer.set_step(global_step)
+        self.writer.log_others(values)
+        logger.info("Successfully logged to CometML")
