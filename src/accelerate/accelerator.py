@@ -583,7 +583,7 @@ class Accelerator:
         Args:
             project_name (`str`):
                 The name of the project. All trackers will save their data based on this
-            config (`dict`, Optional):
+            config (`dict`, *optional*):
                 Optional starting configuration to be logged.
         """
         project_location = Path(project_name)
@@ -602,7 +602,7 @@ class Accelerator:
         Args:
             values (`dict`):
                 Values should be a dictionary-like object containing only types `int`, `float`, or `str`.
-            step (`int`, Optional):
+            step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
         if self.is_main_process:

@@ -104,7 +104,7 @@ class TensorBoardTracker(GeneralTracker):
         Args:
             values (`dict`):
                 Values to be logged as key-value pairs. Value be of type `int`, `float`, or `str`.
-            step (`int`, Optional):
+            step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
         for k, v in values.items():
@@ -154,7 +154,7 @@ class WandBTracker(GeneralTracker):
         Args:
             values (`dict`):
                 Values to be logged as key-value pairs.
-            step (`int`, Optional):
+            step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
         wandb.log(values, step=step)
@@ -201,7 +201,7 @@ class CometMLTracker(GeneralTracker):
         Args:
             values (`dict`):
                 Values to be logged as key-value pairs.
-            step (`int`, Optional):
+            step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
         if step is not None:
