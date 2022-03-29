@@ -21,4 +21,6 @@
     title: Internals
   - local: checkpoint
     title: Checkpointing
+  - local: tracking
+    title: Experiment Tracking
   title: API Reference
