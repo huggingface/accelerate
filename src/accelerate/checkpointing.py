@@ -107,14 +107,14 @@ def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=
     for i, model in enumerate(models):
         weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
         input_model_file = os.path.join(input_dir, weights_name)
-        models[i].load_state_dict(torch.load(input_model_file))
+        models[i].load_state_dict(torch.load(input_model_file, map_location="cpu"))
     logger.info("All model weights loaded successfully")
 
     # Optimizer states
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = os.path.join(input_dir, optimizer_name)
-        optimizers[i].load_state_dict(torch.load(input_optimizer_file))
+        optimizers[i].load_state_dict(torch.load(input_optimizer_file, map_location="cpu"))
     logger.info("All optimizer states loaded successfully")
 
     # GradScaler state
