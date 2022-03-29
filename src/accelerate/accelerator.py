@@ -92,6 +92,15 @@ class Accelerator:
               dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
             Will default to `["torch"]` for PyTorch versions <=1.5.1 and `["generator"]` for PyTorch versions >= 1.6.
+        log_with (list of `str` or [`~utils.LoggerType`], *optional*):
+            A list of loggers to be setup for experiment tracking. Should be one or several of:
+
+            - `"all"`
+            - `"tensorboard"`
+            - `"wandb"`
+            - `"comet_ml"`
+
+            If `"all`" is selected, will pick up all available trackers in the environment and intialize them.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
