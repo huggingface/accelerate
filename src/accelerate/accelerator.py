@@ -130,11 +130,11 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         if log_with is not None:
+            if not isinstance(log_with, list):
+                log_with = [log_with]
             if "all" in log_with or LoggerType.ALL in log_with:
                 log_with = get_available_trackers()
             else:
-                if not isinstance(log_with, list):
-                    log_with = [log_with]
                 for i, log_type in enumerate(log_with):
                     if log_type not in LoggerType:
                         raise ValueError(

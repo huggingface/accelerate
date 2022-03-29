@@ -21,6 +21,7 @@ extras["docs"] = []
 extras["test"] = [
     "pytest",
     "pytest-xdist",
+    "tensorflow"
 ]
 extras["dev"] = extras["quality"] + extras["test"]
 
