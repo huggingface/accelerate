@@ -74,6 +74,13 @@ for iteration in config["num_iterations"]:
         accelerator.log({"training_loss": loss}, step=step)
 ```
 
+[[autodoc]] TensorBoardTracker
+
+[[autodoc]] WandBTracker
+
+[[autodoc]] CometMLTracker
+
+
 ## Implementing Custom Trackers
 
 To implement a new tracker to be used in `Accelerator`, a new one can be made through implementing the [`~GeneralTracker`] class.
@@ -104,6 +111,8 @@ class WandBTracker(GeneralTracker):
     def log(self, values: dict, step: Optional[int] = None):
         wandb.log(values, step=step)
 ```
+
+[[autodoc]] GeneralTracker
 
 
 ## When a wrapper won't do
