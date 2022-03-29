@@ -136,5 +136,5 @@ for iteration in config["num_iterations"]:
         accelerator.backward(loss)
         my_optimizer.step()
 +       if accelerator.is_main_process:
-+         run["logs/training/batch/loss"].log(loss)
++           run["logs/training/batch/loss"].log(loss)
 ```
