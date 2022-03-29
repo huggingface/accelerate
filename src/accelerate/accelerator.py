@@ -28,7 +28,7 @@ from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
-from .tracking import TensorBoardTracker, get_available_trackers
+from .tracking import CometMLTracker, TensorBoardTracker, WandBTracker, get_available_trackers
 from .utils import (
     DeepSpeedPlugin,
     LoggerType,
@@ -38,7 +38,9 @@ from .utils import (
     extract_model_from_parallel,
     gather,
     get_pretty_name,
+    is_comet_ml_available,
     is_tensorboard_available,
+    is_wandb_available,
     pad_across_processes,
     save,
     wait_for_everyone,
@@ -598,6 +600,10 @@ class Accelerator:
         for tracker in self.log_with:
             if str(tracker).lower() == "tensorboard" and is_tensorboard_available():
                 self.trackers.append(TensorBoardTracker(project_name))
+            elif str(tracker).lower() == "wandb" and is_wandb_available():
+                self.trackers.append(WandBTracker(project_name))
+            elif str(tracker).lower() == "comet_ml" and is_comet_ml_available():
+                self.trackers.append(CometMLTracker(project_name))
         if config is not None:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
@@ -614,7 +620,7 @@ class Accelerator:
         """
         if self.is_main_process:
             for tracker in self.trackers:
-                tracker.log(values)
+                tracker.log(values, step=step)
 
     def save(self, obj, f):
         """
