@@ -74,11 +74,11 @@ for iteration in config["num_iterations"]:
         accelerator.log({"training_loss": loss}, step=step)
 ```
 
-[[autodoc]] TensorBoardTracker
+[[autodoc]] tracking.TensorBoardTracker
 
-[[autodoc]] WandBTracker
+[[autodoc]] tracking.WandBTracker
 
-[[autodoc]] CometMLTracker
+[[autodoc]] tracking.CometMLTracker
 
 
 ## Implementing Custom Trackers
@@ -111,9 +111,6 @@ class WandBTracker(GeneralTracker):
     def log(self, values: dict, step: Optional[int] = None):
         wandb.log(values, step=step)
 ```
-
-[[autodoc]] GeneralTracker
-
 
 ## When a wrapper cannot work
 
