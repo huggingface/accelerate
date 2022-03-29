@@ -86,7 +86,6 @@ Every tracker must implement three functions:
   - `__init__`: Should store a `run_name` and initialize the tracker API of the integrated library
   - `store_init_configuration`: Should take in a `values` dictionary and store them as a one-time experiment configuration
   - `log`: Should take in a `values` dictionary and a `step`, and should log them to the run
-As well as contain a `log_directory` attribute. If the integrated library does not store anything locally, should be set to `None`.
 
 A brief example can be seen below with an integration with Weights and Biases, containing only the relevent information:
 ```python
@@ -97,8 +96,6 @@ import wandb
 
 
 class WandBTracker(GeneralTracker):
-    log_directory = None
-
     def __init__(self, run_name: str):
         self.run_name = run_name
         wandb.init(self.run_name)

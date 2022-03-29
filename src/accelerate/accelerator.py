@@ -17,7 +17,6 @@ import os
 import sys
 import warnings
 from contextlib import contextmanager
-from pathlib import Path
 from typing import List, Optional, Union
 
 import torch
@@ -595,11 +594,10 @@ class Accelerator:
             config (`dict`, *optional*):
                 Optional starting configuration to be logged.
         """
-        project_location = Path(project_name)
         self.trackers = []
         for tracker in self.log_with:
             if str(tracker).lower() == "tensorboard" and is_tensorboard_available():
-                self.trackers.append(TensorBoardTracker(project_location))
+                self.trackers.append(TensorBoardTracker(project_name))
         if config is not None:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)

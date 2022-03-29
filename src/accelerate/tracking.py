@@ -17,7 +17,6 @@
 
 import logging
 from abc import ABCMeta, abstractmethod
-from pathlib import Path
 from typing import Optional
 
 from .utils import LoggerType, is_comet_ml_available, is_tensorboard_available, is_wandb_available
@@ -54,21 +53,30 @@ class GeneralTracker(object, metaclass=ABCMeta):
     A base Tracker class to be used for all logging integration implementations.
     """
 
-    log_directory: str
-
     @abstractmethod
-    def store_init_configuration(self, values):
+    def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Implementations should use the experiment configuration
         functionality of a tracking API.
+
+        Args:
+            values (Dictionary `str` to `bool`, `str`, `float` or `int`):
+                Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
+                `str`, `float`, `int`, or `None`.
         """
         pass
 
     @abstractmethod
-    def log(self, values, step: Optional[int]):
+    def log(self, values: dict, step: Optional[int]):
         """
         Logs `values` to the current run. Base `log` implementations of a tracking API should go in here, along with
         special behavior for the `step parameter.
+
+        Args:
+            values (Dictionary `str` to `str`, `float`, or `int`):
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, or `int`.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
         """
         pass
 
@@ -79,15 +87,13 @@ class TensorBoardTracker(GeneralTracker):
 
     Args:
         run_name (`str`):
-            The name of the experiment run. Logs are then stored in `tensorboard/{run_name}`
+            The name of the experiment run
     """
-
-    log_directory = Path("tensorboard")
 
     def __init__(self, run_name: str):
         self.run_name = run_name
-        self.writer = tensorboard.SummaryWriter(self.logging_dir / self.run_name)
-        logger.info(f"Initialized TensorBoard project {self.run_name} writing to {self.logging_dir}")
+        self.writer = tensorboard.SummaryWriter(self.run_name)
+        logger.info(f"Initialized TensorBoard project {self.run_name}")
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
@@ -133,8 +139,6 @@ class WandBTracker(GeneralTracker):
             The name of the experiment run.
     """
 
-    log_directory = None
-
     def __init__(self, run_name: str):
         self.run_name = run_name
         wandb.init(self.run_name)
@@ -179,8 +183,6 @@ class CometMLTracker(GeneralTracker):
         run_name (`str`):
             The name of the experiment run.
     """
-
-    log_directory = None
 
     def __init__(self, run_name: str):
         self.run_name = run_name
