@@ -18,9 +18,13 @@ Accelerate provides a general tracking API that can be used to log useful items 
 ## Integrated Trackers
 
 Currently `Accelerate` supports three trackers out-of-the-box:
-- [`~TensorBoardTracker`]
-- [`~WandBTracker`]
-- [`~CometMLTracker`]
+
+
+[[autodoc]] tracking.TensorBoardTracker
+
+[[autodoc]] tracking.WandBTracker
+
+[[autodoc]] tracking.CometMLTracker
 
 To use any of them, pass in the selected type(s) to the `log_with` parameter in [`~Accelerate.__init__`]:
 ```python
@@ -73,12 +77,6 @@ for iteration in config["num_iterations"]:
         my_optimizer.step()
         accelerator.log({"training_loss": loss}, step=step)
 ```
-
-[[autodoc]] tracking.TensorBoardTracker
-
-[[autodoc]] tracking.WandBTracker
-
-[[autodoc]] tracking.CometMLTracker
 
 
 ## Implementing Custom Trackers

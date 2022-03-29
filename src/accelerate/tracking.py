@@ -58,10 +58,18 @@ class GeneralTracker(object, metaclass=ABCMeta):
 
     @abstractmethod
     def store_init_configuration(self, values):
+        """
+        Logs `values` as hyperparameters for the run. Implementations should use the experiment configuration
+        functionality of a tracking API.
+        """
         pass
 
     @abstractmethod
     def log(self, values, step: Optional[int]):
+        """
+        Logs `values` to the current run. Base `log` implementations of a tracking API should go in here, along with
+        special behavior for the `step parameter.
+        """
         pass
 
 
