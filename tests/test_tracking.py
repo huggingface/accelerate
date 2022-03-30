@@ -13,9 +13,12 @@
 # limitations under the License.
 
 import logging
-import shutil
+import os
+import re
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 # We use TF to parse the logs
 import tensorflow as tf
@@ -29,29 +32,29 @@ logger = logging.getLogger(__name__)
 
 
 class TensorBoardTrackingTest(unittest.TestCase):
-    @classmethod
-    def teardown_class(cls):
-        shutil.rmtree("test_project_with_config")
-        shutil.rmtree("test_project_with_log")
-
     def test_init_trackers(self):
         hps = None
         project_name = "test_project_with_config"
-        accelerator = Accelerator(log_with="tensorboard")
-        config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
-        accelerator.init_trackers(project_name, config)
-        for child in Path(project_name).glob("*/**"):
-            log = list(filter(lambda x: x.is_file(), child.iterdir()))[0]
-            # The config log is stored one layer deeper in the logged directory
-            # And names are randomly generated each time
-        si = summary_iterator(str(log))
-        # Pull HPS through careful parsing
-        for event in si:
-            for value in event.summary.value:
-                proto_bytes = value.metadata.plugin_data.content
-                plugin_data = plugin_data_pb2.HParamsPluginData.FromString(proto_bytes)
-                if plugin_data.HasField("session_start_info"):
-                    hps = dict(plugin_data.session_start_info.hparams)
+        with tempfile.TemporaryDirectory() as dirpath:
+            oldpwd = os.getcwd()
+            os.chdir(dirpath)
+            accelerator = Accelerator(log_with="tensorboard")
+            config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
+            accelerator.init_trackers(project_name, config)
+            accelerator.end_training()
+            for child in Path(project_name).glob("*/**"):
+                log = list(filter(lambda x: x.is_file(), child.iterdir()))[0]
+                # The config log is stored one layer deeper in the logged directory
+                # And names are randomly generated each time
+            si = summary_iterator(str(log))
+            # Pull HPS through careful parsing
+            for event in si:
+                for value in event.summary.value:
+                    proto_bytes = value.metadata.plugin_data.content
+                    plugin_data = plugin_data_pb2.HParamsPluginData.FromString(proto_bytes)
+                    if plugin_data.HasField("session_start_info"):
+                        hps = dict(plugin_data.session_start_info.hparams)
+            os.chdir(oldpwd)
 
         self.assertTrue(isinstance(hps, dict))
         keys = list(hps.keys())
@@ -65,25 +68,89 @@ class TensorBoardTrackingTest(unittest.TestCase):
     def test_log(self):
         step = None
         project_name = "test_project_with_log"
+        with tempfile.TemporaryDirectory() as dirpath:
+            oldpwd = os.getcwd()
+            os.chdir(dirpath)
+            accelerator = Accelerator(log_with="tensorboard")
+            accelerator.init_trackers(project_name)
+            values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
+            accelerator.log(values, step=0)
+            accelerator.end_training()
+            # Logged values are stored in the outermost-tfevents file and can be read in as a TFRecord
+            # Names are randomly generated each time
+            log = list(filter(lambda x: x.is_file(), Path(project_name).iterdir()))[0]
+            serialized_examples = tf.data.TFRecordDataset(log)
+            for e in serialized_examples:
+                event = event_pb2.Event.FromString(e.numpy())
+                if step is None:
+                    step = event.step
+                for value in event.summary.value:
+                    if value.tag == "total_loss":
+                        total_loss = value.simple_value
+                    elif value.tag == "iteration":
+                        iteration = value.simple_value
+                    elif value.tag == "my_text/text_summary":  # Append /text_summary to the key
+                        my_text = value.tensor.string_val[0].decode()
+            os.chdir(oldpwd)
+        self.assertAlmostEqual(total_loss, values["total_loss"])
+        self.assertEqual(iteration, values["iteration"])
+        self.assertEqual(my_text, values["my_text"])
+
+
+@mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
+class WandBTrackingTest(unittest.TestCase):
+    @staticmethod
+    def get_value_from_log(key: str, log: str, key_occurance: int = 0):
+        """
+        Parses wandb log for `key` and returns the value.
+        If parsing through multiple calls to .log, pass in a `key_occurance`
+        """
+        res = re.findall(rf"(?<={key} )[^\s]+", log)[key_occurance]
+        if '"' in res:
+            return re.findall(r'"([^"]*)"', res)[0]
+        else:
+            return res
+
+    def test_init_trackers(self):
+        project_name = "test_project_with_config"
+        with tempfile.TemporaryDirectory() as dirpath:
+            oldpwd = os.getcwd()
+            os.chdir(dirpath)
+            accelerator = Accelerator(log_with="wandb")
+            config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
+            accelerator.init_trackers(project_name, config)
+            accelerator.end_training()
+            # The latest offline log is stored at wandb/latest-run/*.wandb
+            for child in Path(f"{dirpath}/wandb/latest-run").glob("*"):
+                if child.is_file() and child.suffix == ".wandb":
+                    with open(child, "rb") as f:
+                        content = f.read()
+                    break
+            os.chdir(oldpwd)
+
+        # Check HPS through careful parsing and cleaning
+        cleaned_log = re.sub(r"[\x00-\x1f]+", " ", content.decode("utf8", "ignore"))
+        self.assertEqual(self.get_value_from_log("num_iterations", cleaned_log), "12")
+        self.assertEqual(self.get_value_from_log("learning_rate", cleaned_log), "0.01")
+        self.assertEqual(self.get_value_from_log("some_boolean", cleaned_log), "false")
+        self.assertEqual(self.get_value_from_log("some_string", cleaned_log), "some_value")
+
+    def test_log(self):
+        project_name = "test_project_with_log"
         accelerator = Accelerator(log_with="tensorboard")
         accelerator.init_trackers(project_name)
         values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
         accelerator.log(values, step=0)
-        # Logged values are stored in the outermost-tfevents file and can be read in as a TFRecord
-        # Names are randomly generated each time
-        log = list(filter(lambda x: x.is_file(), Path(project_name).iterdir()))[0]
-        serialized_examples = tf.data.TFRecordDataset(log)
-        for e in serialized_examples:
-            event = event_pb2.Event.FromString(e.numpy())
-            if step is None:
-                step = event.step
-            for value in event.summary.value:
-                if value.tag == "total_loss":
-                    total_loss = value.simple_value
-                elif value.tag == "iteration":
-                    iteration = value.simple_value
-                elif value.tag == "my_text/text_summary":  # Append /text_summary to the key
-                    my_text = value.tensor.string_val[0].decode()
-        self.assertAlmostEqual(total_loss, values["total_loss"])
-        self.assertEqual(iteration, values["iteration"])
-        self.assertEqual(my_text, values["my_text"])
+        accelerator.end_training()
+        # The latest offline log is stored at wandb/latest-run/*.wandb
+        for child in Path("wandb/latest-run").glob("*"):
+            if child.is_file() and child.suffix == ".wandb":
+                with open(child, "rb") as f:
+                    content = f.read()
+                break
+        # Check HPS through careful parsing and cleaning
+        cleaned_log = re.sub(r"[\x00-\x1f]+", " ", content.decode("utf8", "ignore"))
+        self.assertEqual(self.get_value_from_log("total_loss", cleaned_log), "0.1")
+        self.assertEqual(self.get_value_from_log("iteration", cleaned_log), "1")
+        self.assertEqual(self.get_value_from_log("my_text", cleaned_log), "some_value")
+        self.assertEqual(self.get_value_from_log("_step", cleaned_log), "0")

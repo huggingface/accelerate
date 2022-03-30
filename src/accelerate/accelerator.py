@@ -622,6 +622,14 @@ class Accelerator:
             for tracker in self.trackers:
                 tracker.log(values, step=step)
 
+    def end_training(self):
+        """
+        Runs any special end training behaviors, such as stopping loggers
+        """
+        if self.is_main_process:
+            for tracker in self.trackers:
+                tracker.finish()
+
     def save(self, obj, f):
         """
         Save the object passed to disk once per machine. Use in place of `torch.save`.

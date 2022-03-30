@@ -80,6 +80,16 @@ class GeneralTracker(object, metaclass=ABCMeta):
         """
         pass
 
+    @abstractmethod
+    def finish(self):
+        """
+        Should run any finalizing functions within the tracking API. If the API should not have one, just return:
+        ```python
+        super().finish()
+        ```
+        """
+        pass
+
 
 class TensorBoardTracker(GeneralTracker):
     """
@@ -129,6 +139,13 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.flush()
         logger.info("Successfully logged to TensorBoard")
 
+    def finish(self):
+        """
+        Closes `TensorBoard` writer
+        """
+        self.writer.close()
+        logger.info("TensorBoard writer closed")
+
 
 class WandBTracker(GeneralTracker):
     """
@@ -141,7 +158,7 @@ class WandBTracker(GeneralTracker):
 
     def __init__(self, run_name: str):
         self.run_name = run_name
-        wandb.init(self.run_name)
+        self.run = wandb.init(self.run_name)
         logger.info(f"Initialized WandB project {self.run_name}")
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -156,7 +173,7 @@ class WandBTracker(GeneralTracker):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
-        wandb.config(values)
+        wandb.config.update(values)
         logger.info("Stored initial configuration hyperparameters to WandB")
 
     def log(self, values: dict, step: Optional[int] = None):
@@ -169,8 +186,15 @@ class WandBTracker(GeneralTracker):
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
-        wandb.log(values, step=step)
+        self.run.log(values, step=step)
         logger.info("Successfully logged to WandB")
+
+    def finish(self):
+        """
+        Closes `wandb` writer
+        """
+        self.run.finish()
+        logger.info("WandB run closed")
 
 
 class CometMLTracker(GeneralTracker):
@@ -218,3 +242,7 @@ class CometMLTracker(GeneralTracker):
             self.writer.set_step(step)
         self.writer.log_others(values)
         logger.info("Successfully logged to CometML")
+
+    def finish(self):
+        """Do nothing"""
+        super().finish()
