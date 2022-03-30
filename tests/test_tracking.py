@@ -122,7 +122,7 @@ class WandBTrackingTest(unittest.TestCase):
         project_name = "test_project_with_config"
         oldpwd = os.getcwd()
         with tempfile.TemporaryDirectory() as dirpath:
-            os.chmod(dirpath, 0o44)
+            os.chmod(dirpath, 0o777)
             os.chdir(dirpath)
             accelerator = Accelerator(log_with="wandb")
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
@@ -147,7 +147,7 @@ class WandBTrackingTest(unittest.TestCase):
         project_name = "test_project_with_log"
         oldpwd = os.getcwd()
         with tempfile.TemporaryDirectory() as dirpath:
-            os.chmod(dirpath, 0o44)
+            os.chmod(dirpath, 0o777)
             os.chdir(dirpath)
             accelerator = Accelerator(log_with="wandb")
             accelerator.init_trackers(project_name)
