@@ -126,7 +126,7 @@ class WandBTrackingTest(unittest.TestCase):
         accelerator.init_trackers(project_name, config)
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
-        for child in Path(f"wandb/latest-run").glob("*"):
+        for child in Path("wandb/latest-run").glob("*"):
             logger.info(child)
             if child.is_file() and child.suffix == ".wandb":
                 with open(child, "rb") as f:
