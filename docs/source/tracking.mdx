@@ -48,6 +48,12 @@ A `step` can also be passed in to correlate the data with a particular step in t
 accelerator.log({"train_loss": 1.12, "valid_loss": 0.8}, step=1)
 ```
 
+Once you've finished training, make sure to run [`~Accelerator.end_training`] so that all the trackers can run their finish functionalities if they have any.
+```python
+accelerator.end_training()
+```
+
+
 A full example is below:
 ```python
 from accelerate import Accelerator
@@ -76,6 +82,7 @@ for iteration in config["num_iterations"]:
         accelerator.backward(loss)
         my_optimizer.step()
         accelerator.log({"training_loss": loss}, step=step)
+accelerator.end_training()
 ```
 
 

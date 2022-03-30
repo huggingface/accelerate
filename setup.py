@@ -22,9 +22,8 @@ extras["test"] = [
     "pytest",
     "pytest-xdist"
 ]
-extras["trackers"] = ["wandb", "comet-ml"]
-extras["test_trackers"] = ["tensorflow"]
-extras["dev"] = extras["quality"] + extras["test"] + extras["trackers"]
+extras["test_trackers"] = ["wandb", "comet-ml", "tensorflow"]
+extras["dev"] = extras["quality"] + extras["test"]
 
 extras["sagemaker"] = [
     "sagemaker",  # boto3 is a required package in sagemaker
