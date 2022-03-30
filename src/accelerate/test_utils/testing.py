@@ -19,7 +19,7 @@ import unittest
 import torch
 
 from ..state import AcceleratorState, is_tpu_available
-from ..utils import gather
+from ..utils import gather, is_tensorflow_available
 
 
 def are_the_same_tensors(tensor):
@@ -60,6 +60,17 @@ def require_multi_gpu(test_case):
     """
     if torch.cuda.device_count() < 2:
         return unittest.skip("test requires multiple GPUs")(test_case)
+    else:
+        return test_case
+
+
+def require_tensorflow(test_case):
+    """
+    Decorator marking a test that requires TensorFlow installed. These tests are skipped when TensorFlow isn't
+    installed
+    """
+    if not is_tensorflow_available():
+        return unittest.skip("test requires TensorFlow")(test_case)
     else:
         return test_case
 

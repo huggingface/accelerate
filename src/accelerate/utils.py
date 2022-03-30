@@ -34,6 +34,22 @@ if is_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
+def is_tensorflow_available():
+    return importlib.util.find_spec("tensorflow") is not None
+
+
+def is_tensorboard_available():
+    return importlib.util.find_spec("tensorboard") is not None or importlib.util.find_spec("tensorboardX") is not None
+
+
+def is_wandb_available():
+    return importlib.util.find_spec("wandb") is not None
+
+
+def is_comet_ml_available():
+    return importlib.util.find_spec("comet_ml") is not None
+
+
 def is_boto3_available():
     return importlib.util.find_spec("boto3") is not None
 
@@ -72,6 +88,13 @@ class BaseEnum(Enum, metaclass=EnumWithContains):
     def list(cls):
         "Method to list all the possible items in `cls`"
         return list(map(lambda item: str(item), cls))
+
+
+class LoggerType(BaseEnum):
+    ALL = "all"
+    TENSORBOARD = "tensorboard"
+    WANDB = "wandb"
+    COMETML = "comet_ml"
 
 
 class PrecisionType(BaseEnum):

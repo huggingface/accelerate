@@ -28,14 +28,19 @@ from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
+from .tracking import CometMLTracker, TensorBoardTracker, WandBTracker, get_available_trackers
 from .utils import (
     DeepSpeedPlugin,
+    LoggerType,
     PrecisionType,
     RNGType,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
     get_pretty_name,
+    is_comet_ml_available,
+    is_tensorboard_available,
+    is_wandb_available,
     pad_across_processes,
     save,
     wait_for_everyone,
@@ -88,6 +93,17 @@ class Accelerator:
               dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
             Will default to `["torch"]` for PyTorch versions <=1.5.1 and `["generator"]` for PyTorch versions >= 1.6.
+        log_with (list of `str` or [`~utils.LoggerType`], *optional*):
+            A list of loggers to be setup for experiment tracking. Should be one or several of:
+
+            - `"all"`
+            - `"tensorboard"`
+            - `"wandb"`
+            - `"comet_ml"`
+
+            If `"all`" is selected, will pick up all available trackers in the environment and intialize them.
+        logging_dir (`str`, `os.PathLike`, *optional*):
+            A path to a directory for storing logs of locally-compatible loggers.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
@@ -111,9 +127,27 @@ class Accelerator:
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
+        log_with: Optional[List[Union[str, LoggerType]]] = None,
+        logging_dir: Optional[Union[str, os.PathLike]] = "",
         dispatch_batches: Optional[bool] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
+        if log_with is not None:
+            if not isinstance(log_with, list):
+                log_with = [log_with]
+            if "all" in log_with or LoggerType.ALL in log_with:
+                log_with = get_available_trackers()
+            else:
+                for i, log_type in enumerate(log_with):
+                    if log_type not in LoggerType:
+                        raise ValueError(
+                            f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}"
+                        )
+                    log_with[i] = LoggerType(log_type)
+                log_with = list(set(log_with))
+        self.log_with = log_with
+        self.logging_dir = logging_dir
+
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
@@ -555,6 +589,50 @@ class Accelerator:
         nothing when the script is only run in one process). Useful to do before saving a model.
         """
         wait_for_everyone()
+
+    def init_trackers(self, project_name: str, config: Optional[dict] = None):
+        """
+        Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
+
+        Args:
+            project_name (`str`):
+                The name of the project. All trackers will save their data based on this
+            config (`dict`, *optional*):
+                Optional starting configuration to be logged.
+        """
+        self.trackers = []
+        for tracker in self.log_with:
+            if str(tracker).lower() == "tensorboard" and is_tensorboard_available():
+                self.trackers.append(TensorBoardTracker(project_name, self.logging_dir))
+            elif str(tracker).lower() == "wandb" and is_wandb_available():
+                self.trackers.append(WandBTracker(project_name))
+            elif str(tracker).lower() == "comet_ml" and is_comet_ml_available():
+                self.trackers.append(CometMLTracker(project_name))
+        if config is not None:
+            for tracker in self.trackers:
+                tracker.store_init_configuration(config)
+
+    def log(self, values: dict, step: Optional[int] = None):
+        """
+        Logs `values` to all stored trackers in `self.trackers`.
+
+        Args:
+            values (`dict`):
+                Values should be a dictionary-like object containing only types `int`, `float`, or `str`.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+        """
+        if self.is_main_process:
+            for tracker in self.trackers:
+                tracker.log(values, step=step)
+
+    def end_training(self):
+        """
+        Runs any special end training behaviors, such as stopping trackers
+        """
+        if self.is_main_process:
+            for tracker in self.trackers:
+                tracker.finish()
 
     def save(self, obj, f):
         """
