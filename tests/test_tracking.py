@@ -147,7 +147,7 @@ class WandBTrackingTest(unittest.TestCase):
         oldpwd = os.getcwd()
         with tempfile.TemporaryDirectory() as dirpath:
             os.chdir(dirpath)
-            accelerator = Accelerator(log_with="tensorboard")
+            accelerator = Accelerator(log_with="wandb")
             accelerator.init_trackers(project_name)
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
             accelerator.log(values, step=0)
