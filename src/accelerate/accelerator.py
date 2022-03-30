@@ -610,7 +610,7 @@ class Accelerator:
         logger.info(f"Saving current state to {output_dir}")
         weights = [self.get_state_dict(m) for m in self._models]
         save_location = save_accelerator_state(
-            output_dir, weights, self._optimizers, self.state.process_index, self.scaler
+            output_dir, weights, self._optimizers, self._schedulers, self.state.process_index, self.scaler
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)
@@ -629,7 +629,9 @@ class Accelerator:
         if not os.path.isdir(input_dir):
             raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         logger.info(f"Loading states from {input_dir}")
-        load_accelerator_state(input_dir, self._models, self._optimizers, self.state.process_index, self.scaler)
+        load_accelerator_state(
+            input_dir, self._models, self._optimizers, self._schedulers, self.state.process_index, self.scaler
+        )
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
             err = "Warning! Number of found checkpoints does not match the number of registered objects:"
