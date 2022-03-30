@@ -78,7 +78,7 @@ def save_accelerator_state(
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         output_scheduler_file = os.path.join(output_dir, scheduler_name)
         save(state, output_scheduler_file)
-        logger.info(f"Optimizer state saved in {output_scheduler_file}")
+        logger.info(f"Scheduler state saved in {output_scheduler_file}")
     # GradScaler state
     if scaler is not None:
         state = scaler.state_dict()

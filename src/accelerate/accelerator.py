@@ -94,8 +94,8 @@ class Accelerator:
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
             underlying dataset is an `IterableDataset`, `False` otherwise.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
-            Set `True` if you step your learning rate scheduler at the same time as the optimizer, `False` if you only
-            do it under certain circumstances (at the end of each epoch, for instance).
+            Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
+            done under certain circumstances (at the end of each epoch, for instance).
         kwargs_handlers (`List[KwargHandler]`, *optional*)
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.

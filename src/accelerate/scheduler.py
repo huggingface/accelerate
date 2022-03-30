@@ -24,8 +24,10 @@ class AcceleratedScheduler:
     - step was skipped because of gradient accumulation
 
     Args:
-        scheduler (`torch.optim.lr_scheduler._LRScheduler`): The scheduler to wrap.
-        optimizers (one or a list of `torch.optim.Optimizer`): The optimizers used.
+        scheduler (`torch.optim.lr_scheduler._LRScheduler`): 
+            The scheduler to wrap.
+        optimizers (one or a list of `torch.optim.Optimizer`): 
+            The optimizers used.
         step_with_optimizer (`bool`, *optional*, defaults to `True`):
             Whether or not the scheduler should be stepped at each optimizer step.
         split_batches (`bool`, *optional*, defaults to `False`):
