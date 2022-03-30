@@ -80,13 +80,10 @@ class GeneralTracker(object, metaclass=ABCMeta):
         """
         pass
 
-    @abstractmethod
     def finish(self):
         """
         Should run any finalizing functions within the tracking API. If the API should not have one, just return:
-        ```python
-        super().finish()
-        ```
+        If not needed, leave as the default behavior
         """
         pass
 
@@ -242,7 +239,3 @@ class CometMLTracker(GeneralTracker):
             self.writer.set_step(step)
         self.writer.log_others(values)
         logger.info("Successfully logged to CometML")
-
-    def finish(self):
-        """Do nothing"""
-        super().finish()
