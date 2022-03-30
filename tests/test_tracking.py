@@ -15,6 +15,7 @@
 import logging
 import os
 import re
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -120,22 +121,17 @@ class WandBTrackingTest(unittest.TestCase):
 
     def test_init_trackers(self):
         project_name = "test_project_with_config"
-        oldpwd = os.getcwd()
-        with tempfile.TemporaryDirectory() as dirpath:
-            os.chmod(dirpath, 0o777) # Is needed for wandb to write to it
-            os.chdir(dirpath)
-            accelerator = Accelerator(log_with="wandb")
-            config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
-            accelerator.init_trackers(project_name, config)
-            accelerator.end_training()
-            # The latest offline log is stored at wandb/latest-run/*.wandb
-            for child in Path(f"{dirpath}/wandb/latest-run").glob("*"):
-                logger.info(child)
-                if child.is_file() and child.suffix == ".wandb":
-                    with open(child, "rb") as f:
-                        content = f.read()
-                    break
-        os.chdir(oldpwd)
+        accelerator = Accelerator(log_with="wandb")
+        config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
+        accelerator.init_trackers(project_name, config)
+        accelerator.end_training()
+        # The latest offline log is stored at wandb/latest-run/*.wandb
+        for child in Path(f"wandb/latest-run").glob("*"):
+            logger.info(child)
+            if child.is_file() and child.suffix == ".wandb":
+                with open(child, "rb") as f:
+                    content = f.read()
+                break
 
         # Check HPS through careful parsing and cleaning
         cleaned_log = re.sub(r"[\x00-\x1f]+", " ", content.decode("utf8", "ignore"))
@@ -146,27 +142,35 @@ class WandBTrackingTest(unittest.TestCase):
 
     def test_log(self):
         project_name = "test_project_with_log"
-        oldpwd = os.getcwd()
-        with tempfile.TemporaryDirectory() as dirpath:
-            os.chdir(dirpath)
-            accelerator = Accelerator(log_with="wandb")
-            accelerator.init_trackers(project_name)
-            values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
-            accelerator.log(values, step=0)
-            accelerator.end_training()
-            # The latest offline log is stored at wandb/latest-run/*.wandb
-            for child in Path("wandb").glob("*"):
-                logger.debug(child)
-            for child in Path("wandb/latest-run").glob("*"):
-                logger.debug(child)
-                if child.is_file() and child.suffix == ".wandb":
-                    with open(child, "rb") as f:
-                        content = f.read()
-                    break
-        os.chdir(oldpwd)
+        accelerator = Accelerator(log_with="wandb")
+        accelerator.init_trackers(project_name)
+        values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
+        accelerator.log(values, step=0)
+        accelerator.end_training()
+        # The latest offline log is stored at wandb/latest-run/*.wandb
+        for child in Path("wandb/latest-run").glob("*"):
+            if child.is_file() and child.suffix == ".wandb":
+                with open(child, "rb") as f:
+                    content = f.read()
+                break
         # Check HPS through careful parsing and cleaning
         cleaned_log = re.sub(r"[\x00-\x1f]+", " ", content.decode("utf8", "ignore"))
         self.assertEqual(self.get_value_from_log("total_loss", cleaned_log), "0.1")
         self.assertEqual(self.get_value_from_log("iteration", cleaned_log), "1")
         self.assertEqual(self.get_value_from_log("my_text", cleaned_log), "some_value")
         self.assertEqual(self.get_value_from_log("_step", cleaned_log), "0")
+
+    def setUp(self):
+        os.mkdir(".wandb_tests")
+        os.chdir(".wandb_tests")
+
+    def tearDown(self):
+        if os.getcwd().endswith(".wandb_tests"):
+            os.chdir("..")
+        if os.path.exists(".wandb_tests"):
+            shutil.rmtree(".wandb_tests")
+
+    @classmethod
+    def setUpClass(cls):
+        if os.path.exists(".wandb_tests"):
+            shutil.rmtree(".wandb_tests")
