@@ -1,6 +1,6 @@
 name: Run Tests
 
-on: [pull_request, push]
+on: [pull_request]
 
 jobs:
   test:
@@ -25,7 +25,6 @@ jobs:
       with:
         python-version: 3.6
     - name: Install python dependencies
-      run: pip install setuptools==59.5.0
-      run: pip install -e .[test,test_trackers]
+      run: pip install setuptools==59.5.0; pip install -e .[test,test_trackers]
     - name: Run tests
       run: pytest -n auto --dist=loadfile -s -v ./tests/test_tracking -k TensorBoardTrackingTest
