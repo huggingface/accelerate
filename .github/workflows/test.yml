@@ -1,6 +1,6 @@
 name: Run Tests
 
-on: [pull_request]
+on: [pull_request, push]
 
 jobs:
   test:
@@ -15,6 +15,7 @@ jobs:
       run: pip install -e .[test,trackers]
     - name: Run Tests
       run: make test
+
   test-tf:
     runs-on: ubuntu-latest
     steps:
