@@ -82,8 +82,8 @@ class GeneralTracker(object, metaclass=ABCMeta):
 
     def finish(self):
         """
-        Should run any finalizing functions within the tracking API. If the API should not have one, just return:
-        If not needed, leave as the default behavior
+        Should run any finalizing functions within the tracking API. If the API should not have one, just return: If
+        not needed, leave as the default behavior
         """
         pass
 
