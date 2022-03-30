@@ -21,17 +21,23 @@ from pathlib import Path
 from unittest import mock
 
 # We use TF to parse the logs
-import tensorflow as tf
 from accelerate import Accelerator
-from tensorboard.plugins.hparams import plugin_data_pb2
-from tensorflow.core.util import event_pb2
-from tensorflow.python.summary.summary_iterator import summary_iterator
+from accelerate.test_utils.testing import require_tensorflow
+from accelerate.utils import is_tensorflow_available
+
+
+if is_tensorflow_available():
+    import tensorflow as tf
+    from tensorboard.plugins.hparams import plugin_data_pb2
+    from tensorflow.core.util import event_pb2
+    from tensorflow.python.summary.summary_iterator import summary_iterator
 
 
 logger = logging.getLogger(__name__)
 
 
 class TensorBoardTrackingTest(unittest.TestCase):
+    @require_tensorflow
     def test_init_trackers(self):
         hps = None
         project_name = "test_project_with_config"
@@ -65,6 +71,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
         self.assertEqual(hps["some_boolean"].bool_value, False)
         self.assertEqual(hps["some_string"].string_value, "some_value")
 
+    @require_tensorflow
     def test_log(self):
         step = None
         project_name = "test_project_with_log"
@@ -113,8 +120,8 @@ class WandBTrackingTest(unittest.TestCase):
 
     def test_init_trackers(self):
         project_name = "test_project_with_config"
+        oldpwd = os.getcwd()
         with tempfile.TemporaryDirectory() as dirpath:
-            oldpwd = os.getcwd()
             os.chdir(dirpath)
             accelerator = Accelerator(log_with="wandb")
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
@@ -126,7 +133,7 @@ class WandBTrackingTest(unittest.TestCase):
                     with open(child, "rb") as f:
                         content = f.read()
                     break
-            os.chdir(oldpwd)
+        os.chdir(oldpwd)
 
         # Check HPS through careful parsing and cleaning
         cleaned_log = re.sub(r"[\x00-\x1f]+", " ", content.decode("utf8", "ignore"))
@@ -137,17 +144,21 @@ class WandBTrackingTest(unittest.TestCase):
 
     def test_log(self):
         project_name = "test_project_with_log"
-        accelerator = Accelerator(log_with="tensorboard")
-        accelerator.init_trackers(project_name)
-        values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
-        accelerator.log(values, step=0)
-        accelerator.end_training()
-        # The latest offline log is stored at wandb/latest-run/*.wandb
-        for child in Path("wandb/latest-run").glob("*"):
-            if child.is_file() and child.suffix == ".wandb":
-                with open(child, "rb") as f:
-                    content = f.read()
-                break
+        oldpwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as dirpath:
+            os.chdir(dirpath)
+            accelerator = Accelerator(log_with="tensorboard")
+            accelerator.init_trackers(project_name)
+            values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
+            accelerator.log(values, step=0)
+            accelerator.end_training()
+            # The latest offline log is stored at wandb/latest-run/*.wandb
+            for child in Path("{dirpath}/wandb/latest-run").glob("*"):
+                if child.is_file() and child.suffix == ".wandb":
+                    with open(child, "rb") as f:
+                        content = f.read()
+                    break
+        os.chdir(oldpwd)
         # Check HPS through careful parsing and cleaning
         cleaned_log = re.sub(r"[\x00-\x1f]+", " ", content.decode("utf8", "ignore"))
         self.assertEqual(self.get_value_from_log("total_loss", cleaned_log), "0.1")
