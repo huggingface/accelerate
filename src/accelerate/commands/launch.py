@@ -56,7 +56,6 @@ def launch_command_parser(subparsers=None):
     )
     parser.add_argument(
         "--mixed_precision",
-        default="no",
         type=str,
         choices=["no", "fp16", "bf16"],
         help="Whether or not to use mixed precision training. "
