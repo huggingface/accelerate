@@ -102,6 +102,8 @@ class Accelerator:
             - `"comet_ml"`
 
             If `"all`" is selected, will pick up all available trackers in the environment and intialize them.
+        logging_dir (`str`, `os.PathLike`, *optional*):
+            A path to a directory for storing logs of locally-compatible loggers.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
@@ -126,6 +128,7 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType]]] = None,
+        logging_dir: Optional[Union[str, os.PathLike]] = "",
         dispatch_batches: Optional[bool] = None,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
@@ -143,6 +146,7 @@ class Accelerator:
                     log_with[i] = LoggerType(log_type)
                 log_with = list(set(log_with))
         self.log_with = log_with
+        self.logging_dir = logging_dir
 
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
@@ -599,7 +603,7 @@ class Accelerator:
         self.trackers = []
         for tracker in self.log_with:
             if str(tracker).lower() == "tensorboard" and is_tensorboard_available():
-                self.trackers.append(TensorBoardTracker(project_name))
+                self.trackers.append(TensorBoardTracker(project_name, self.logging_dir))
             elif str(tracker).lower() == "wandb" and is_wandb_available():
                 self.trackers.append(WandBTracker(project_name))
             elif str(tracker).lower() == "comet_ml" and is_comet_ml_available():
@@ -624,7 +628,7 @@ class Accelerator:
 
     def end_training(self):
         """
-        Runs any special end training behaviors, such as stopping loggers
+        Runs any special end training behaviors, such as stopping trackers
         """
         if self.is_main_process:
             for tracker in self.trackers:

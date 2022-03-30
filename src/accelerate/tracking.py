@@ -16,8 +16,9 @@
 # Provide a project dir name, then each type of logger gets stored in project/{`logging_dir`}
 
 import logging
+import os
 from abc import ABCMeta, abstractmethod
-from typing import Optional
+from typing import Optional, Union
 
 from .utils import LoggerType, is_comet_ml_available, is_tensorboard_available, is_wandb_available
 
@@ -95,12 +96,15 @@ class TensorBoardTracker(GeneralTracker):
     Args:
         run_name (`str`):
             The name of the experiment run
+        logging_dir (`str`, `os.PathLike`):
+            Location for TensorBoard logs to be stored.
     """
 
-    def __init__(self, run_name: str):
+    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ""):
         self.run_name = run_name
-        self.writer = tensorboard.SummaryWriter(self.run_name)
-        logger.info(f"Initialized TensorBoard project {self.run_name}")
+        self.logging_dir = os.path.join(logging_dir, run_name)
+        self.writer = tensorboard.SummaryWriter(self.logging_dir)
+        logger.info(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
