@@ -45,11 +45,11 @@ model on `accelerator.device` or your training will fail on TPU.
 
 </Tip>
 
-3. Pass all objects relevant to training (optimizer, model, training dataloader) to the
+3. Pass all objects relevant to training (optimizer, model, training dataloader, learning rate scheduler) to the
 [`~Accelerator.prepare`] method. This will make sure everything is ready for training.
 
 ```python
-model, optimizer, train_dataloader = accelerator.prepare(model, optimizer, train_dataloader)
+model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(model, optimizer, train_dataloader, lr_scheduler)
 ```
 
 In particular, your training dataloader will be sharded accross all GPUs/TPU cores available so that each one sees a
@@ -80,8 +80,8 @@ length divided by X (since your actual batch size will be multiplied by X), unle
 
 </Tip>
 
-Any instruction using your training dataloader length (for instance if you need the number of total training steps
-to create a learning rate scheduler) should go after the call to [`~Accelerator.prepare`].
+Any instruction using your training dataloader length (for instance if you want to log the number of total training
+steps) should go after the call to [`~Accelerator.prepare`].
 
 You can perfectly send your dataloader to [`~Accelerator.prepare`] on its own, but it's best to send the
 model and optimizer to [`~Accelerator.prepare`] together.

@@ -27,6 +27,7 @@ from .checkpointing import load_accelerator_state, load_custom_state, save_accel
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
+from .scheduler import SCHEDULER_TYPES, AcceleratedScheduler
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .utils import (
     DeepSpeedPlugin,
@@ -92,6 +93,9 @@ class Accelerator:
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
             underlying dataset is an `IterableDataset`, `False` otherwise.
+        step_lr_at_each_train_step (`bool`, *optional`, defaults to `True`):
+            Set `True` if you step your learning rate scheduler at the same time as the optimizer, `False` if you only
+            do it under certain circumstances (at the end of each epoch, for instance).
         kwargs_handlers (`List[KwargHandler]`, *optional*)
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
@@ -112,6 +116,7 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         dispatch_batches: Optional[bool] = None,
+        step_lr_at_each_train_step: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         if mixed_precision is not None:
@@ -171,6 +176,7 @@ class Accelerator:
             raise ImportError(
                 "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
+        self.step_lr_at_each_train_step = step_lr_at_each_train_step
 
         # Mixed precision attributes
         self.scaler = None
@@ -193,6 +199,7 @@ class Accelerator:
         # Internal references to the training objects
         self._optimizers = []
         self._models = []
+        self._schedulers = []
         self._custom_objects = []
 
         # RNG Types
@@ -281,16 +288,22 @@ class Accelerator:
         if self.is_local_main_process:
             print(*args, **kwargs)
 
-    def _prepare_one(self, obj):
-        if isinstance(obj, torch.utils.data.DataLoader):
+    def _prepare_one(self, obj, first_pass = False):
+        # First pass of preparation: DataLoader, model, optimizer
+        if isinstance(obj, torch.utils.data.DataLoader) and first_pass:
             return self.prepare_data_loader(obj)
-        elif isinstance(obj, torch.nn.Module):
+        elif isinstance(obj, torch.nn.Module) and first_pass:
             self._models.append(obj)
             return self.prepare_model(obj)
-        elif isinstance(obj, torch.optim.Optimizer):
+        elif isinstance(obj, torch.optim.Optimizer) and first_pass:
             optimizer = self.prepare_optimizer(obj)
             self._optimizers.append(optimizer)
             return optimizer
+        # Second pass of preparation: LR scheduler (which need the full list of optimizers)
+        elif isinstance(obj, torch.optim.scheduler._LrScheduler) and not first_pass:
+            scheduler = self.prepare_scheduler(obj)
+            self._schdulers.append(scheduler)
+            return scheduler
         else:
             return obj
 
@@ -328,6 +341,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         else:
+            result = tuple(self._prepare_one(obj, first_pass=True) for obj in args)
             result = tuple(self._prepare_one(obj) for obj in args)
 
         if tpu_should_fix_optimizer:
@@ -457,6 +471,9 @@ class Accelerator:
 
     def prepare_optimizer(self, optimizer):
         return AcceleratedOptimizer(optimizer, device_placement=self.device_placement, scaler=self.scaler)
+    
+    def prepare_scheduler(self, scheduler):
+        return AcceleratedScheduler(scheduler, self._optimizers)
 
     def backward(self, loss, **kwargs):
         """
@@ -617,6 +634,7 @@ class Accelerator:
         Will release all references to the internal objects stored and call the garbage collector. You should call this
         method between two trainings with different models/optimizers.
         """
+        self._schedulers = []
         self._optimizers = []
         self._models = []
         self.deepspeed_engine = None
@@ -717,6 +735,6 @@ class Accelerator:
         case the learning rate should not be changed.
         """
         for optimizer in self._optimizers:
-            if optimizer.is_overflow:
+            if optimizer.step_was_skipped:
                 return True
         return False

@@ -49,6 +49,7 @@ SCALER_NAME = "scaler.pt"
 MODEL_NAME = "pytorch_model"
 RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer"
+SCHEDULER_NAME = "scheduler"
 
 
 class EnumWithContains(EnumMeta):

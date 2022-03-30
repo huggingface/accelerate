@@ -139,11 +139,14 @@ def training_function(config, args):
     # Instantiate optimizer
     optimizer = torch.optim.Adam(params=model.parameters(), lr=lr / 25)
 
+    # Instantiate learning rate scheduler
+    lr_scheduler = OneCycleLR(optimizer=optimizer, max_lr=lr, epochs=num_epochs, steps_per_epoch=len(train_dataloader))
+
     # Prepare everything
     # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
     # prepare method.
-    model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
     # Instantiate learning rate scheduler after preparing the training dataloader as the prepare method
