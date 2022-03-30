@@ -26,7 +26,7 @@ Currently `Accelerate` supports three trackers out-of-the-box:
 
 [[autodoc]] tracking.CometMLTracker
 
-To use any of them, pass in the selected type(s) to the `log_with` parameter in [`~Accelerate.__init__`]:
+To use any of them, pass in the selected type(s) to the `log_with` parameter in [`Accelerate`]:
 ```python
 from accelerate import Accelerate
 from accelerate.utils import LoggerType
@@ -36,7 +36,7 @@ accelerator = Accelerate(log_with="wandb")
 accelerator = Accelerate(log_with=["wandb", LoggerType.TENSORBOARD])
 ```
 
-At the start of your experiment [`~Accelerator.init_tracker`] should be used to setup your project, and potentially add any experiment hyperparameters to be logged:
+At the start of your experiment [`~Accelerator.init_trackers`] should be used to setup your project, and potentially add any experiment hyperparameters to be logged:
 ```python
 hps = {"num_iterations": 5, "learning_rate": 1e-2}
 accelerator.init_trackers("my_project", config=hps)
@@ -90,9 +90,13 @@ accelerator.end_training()
 
 To implement a new tracker to be used in `Accelerator`, a new one can be made through implementing the [`~GeneralTracker`] class.
 Every tracker must implement three functions:
-  - `__init__`: Should store a `run_name` and initialize the tracker API of the integrated library
-  - `store_init_configuration`: Should take in a `values` dictionary and store them as a one-time experiment configuration
-  - `log`: Should take in a `values` dictionary and a `step`, and should log them to the run
+  - `__init__`: 
+        Should store a `run_name` and initialize the tracker API of the integrated library. 
+        If a tracker stores their data locally (such as TensorBoard), a `logging_dir` parameter can be added.
+  - `store_init_configuration`: 
+        Should take in a `values` dictionary and store them as a one-time experiment configuration
+  - `log`: 
+        Should take in a `values` dictionary and a `step`, and should log them to the run
 
 A brief example can be seen below with an integration with Weights and Biases, containing only the relevent information:
 ```python
