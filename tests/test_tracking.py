@@ -130,6 +130,7 @@ class WandBTrackingTest(unittest.TestCase):
             accelerator.end_training()
             # The latest offline log is stored at wandb/latest-run/*.wandb
             for child in Path(f"{dirpath}/wandb/latest-run").glob("*"):
+                logger.info(child)
                 if child.is_file() and child.suffix == ".wandb":
                     with open(child, "rb") as f:
                         content = f.read()
@@ -147,7 +148,6 @@ class WandBTrackingTest(unittest.TestCase):
         project_name = "test_project_with_log"
         oldpwd = os.getcwd()
         with tempfile.TemporaryDirectory() as dirpath:
-            os.chmod(dirpath, 0o777)
             os.chdir(dirpath)
             accelerator = Accelerator(log_with="wandb")
             accelerator.init_trackers(project_name)
@@ -155,7 +155,10 @@ class WandBTrackingTest(unittest.TestCase):
             accelerator.log(values, step=0)
             accelerator.end_training()
             # The latest offline log is stored at wandb/latest-run/*.wandb
-            for child in Path("{dirpath}/wandb/latest-run").glob("*"):
+            for child in Path("wandb").glob("*"):
+                logger.debug(child)
+            for child in Path("wandb/latest-run").glob("*"):
+                logger.debug(child)
                 if child.is_file() and child.suffix == ".wandb":
                     with open(child, "rb") as f:
                         content = f.read()
