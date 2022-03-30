@@ -27,4 +27,4 @@ jobs:
     - name: Install python dependencies
       run: pip install setuptools==59.5.0; pip install -e .[test,test_trackers]
     - name: Run tests
-      run: pytest -n auto --dist=loadfile -s -v ./tests/test_tracking -k TensorBoardTrackingTest
+      run: pytest -n auto --dist=loadfile -s -v ./tests/test_tracking.py -k TensorBoardTrackingTest
