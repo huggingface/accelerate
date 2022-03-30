@@ -27,7 +27,7 @@ from .checkpointing import load_accelerator_state, load_custom_state, save_accel
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
-from .scheduler import SCHEDULER_TYPES, AcceleratedScheduler
+from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .utils import (
     DeepSpeedPlugin,
@@ -93,7 +93,7 @@ class Accelerator:
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
             underlying dataset is an `IterableDataset`, `False` otherwise.
-        step_lr_at_each_train_step (`bool`, *optional`, defaults to `True`):
+        step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if you step your learning rate scheduler at the same time as the optimizer, `False` if you only
             do it under certain circumstances (at the end of each epoch, for instance).
         kwargs_handlers (`List[KwargHandler]`, *optional*)
@@ -116,7 +116,7 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         dispatch_batches: Optional[bool] = None,
-        step_lr_at_each_train_step: bool = True,
+        step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         if mixed_precision is not None:
@@ -176,7 +176,7 @@ class Accelerator:
             raise ImportError(
                 "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
-        self.step_lr_at_each_train_step = step_lr_at_each_train_step
+        self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
         self.scaler = None
@@ -288,7 +288,7 @@ class Accelerator:
         if self.is_local_main_process:
             print(*args, **kwargs)
 
-    def _prepare_one(self, obj, first_pass = False):
+    def _prepare_one(self, obj, first_pass=False):
         # First pass of preparation: DataLoader, model, optimizer
         if isinstance(obj, torch.utils.data.DataLoader) and first_pass:
             return self.prepare_data_loader(obj)
@@ -300,9 +300,9 @@ class Accelerator:
             self._optimizers.append(optimizer)
             return optimizer
         # Second pass of preparation: LR scheduler (which need the full list of optimizers)
-        elif isinstance(obj, torch.optim.scheduler._LrScheduler) and not first_pass:
+        elif isinstance(obj, torch.optim.lr_scheduler._LRScheduler) and not first_pass:
             scheduler = self.prepare_scheduler(obj)
-            self._schdulers.append(scheduler)
+            self._schedulers.append(scheduler)
             return scheduler
         else:
             return obj
@@ -342,7 +342,7 @@ class Accelerator:
             result = self._prepare_deepspeed(*args)
         else:
             result = tuple(self._prepare_one(obj, first_pass=True) for obj in args)
-            result = tuple(self._prepare_one(obj) for obj in args)
+            result = tuple(self._prepare_one(obj) for obj in result)
 
         if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
@@ -471,9 +471,21 @@ class Accelerator:
 
     def prepare_optimizer(self, optimizer):
         return AcceleratedOptimizer(optimizer, device_placement=self.device_placement, scaler=self.scaler)
-    
+
     def prepare_scheduler(self, scheduler):
-        return AcceleratedScheduler(scheduler, self._optimizers)
+        # We try to find the optimizer associated with `scheduler`, the default is the full list.
+        optimizer = self._optimizers
+        for opt in self._optimizers:
+            if getattr(scheduler, "optimizer", None) == opt.optimizer:
+                optimizer = opt
+                break
+
+        return AcceleratedScheduler(
+            scheduler,
+            optimizer,
+            step_with_optimizer=self.step_scheduler_with_optimizer,
+            split_batches=self.split_batches,
+        )
 
     def backward(self, loss, **kwargs):
         """

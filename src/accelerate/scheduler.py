@@ -17,8 +17,8 @@ from .state import AcceleratorState
 
 class AcceleratedScheduler:
     """
-    A wrapper around a learning rate scheduler that will only step when the optimizer(s) have a training step.
-    Useful to avoid making a scheduler step too fast when:
+    A wrapper around a learning rate scheduler that will only step when the optimizer(s) have a training step. Useful
+    to avoid making a scheduler step too fast when:
 
     - gradients went overflow and there was no training step (in mixed precision training)
     - step was skipped because of gradient accumulation
@@ -26,17 +26,27 @@ class AcceleratedScheduler:
     Args:
         scheduler (`torch.optim.lr_scheduler._LRScheduler`): The scheduler to wrap.
         optimizers (one or a list of `torch.optim.Optimizer`): The optimizers used.
+        step_with_optimizer (`bool`, *optional*, defaults to `True`):
+            Whether or not the scheduler should be stepped at each optimizer step.
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether or not the dataloaders split one batch across the different processes (so batch size is the same
             regardless of the number of processes) or create batches on each process (so batch size is the original
             batch size multiplied by the number of processes).
     """
-    def __init__(self, scheduler, optimizers, split_batches: bool = False):
+
+    def __init__(self, scheduler, optimizers, step_with_optimizer: bool = True, split_batches: bool = False):
         self.scheduler = scheduler
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
-    
+        self.step_with_optimizer = step_with_optimizer
+
     def step(self, *args, **kwargs):
+        if not self.step_with_optimizer:
+            # No link between scheduler and optimizer -> just step
+            self.scheduler.step(*args, **kwargs)
+            return
+
+        # Otherwise, first make sure the optimizer was stepped.
         for opt in self.optimizers:
             if opt.step_was_skipped:
                 return
@@ -50,3 +60,19 @@ class AcceleratedScheduler:
             num_processes = AcceleratorState().num_processes
             for _ in range(num_processes):
                 self.scheduler.step(*args, **kwargs)
+
+    # Passthroughs
+    def get_last_lr(self):
+        return self.scheduler.get_last_lr()
+
+    def state_dict(self):
+        return self.scheduler.state_dict()
+
+    def load_state_dict(self, state_dict):
+        self.scheduler.load_state_dict(state_dict)
+
+    def get_lr(self):
+        return self.scheduler.get_lr()
+
+    def print_lr(self, *args, **kwargs):
+        return self.scheduler.print_lr(*args, **kwargs)

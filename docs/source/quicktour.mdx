@@ -49,7 +49,9 @@ model on `accelerator.device` or your training will fail on TPU.
 [`~Accelerator.prepare`] method. This will make sure everything is ready for training.
 
 ```python
-model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(model, optimizer, train_dataloader, lr_scheduler)
+model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+    model, optimizer, train_dataloader, lr_scheduler
+)
 ```
 
 In particular, your training dataloader will be sharded accross all GPUs/TPU cores available so that each one sees a
@@ -71,6 +73,13 @@ script on 1, 2, 4 or 64 GPUs.
 
 You should execute this instruction as soon as all objects for training are created, before starting your actual
 training loop.
+
+<Tip warning={true}>
+
+You should only pass the learning rate scheduler to [`~Accelerator.prepare`] when the scheduler needs to be stepped
+at each optimizer step.
+
+</Tip>
 
 <Tip warning={true}>
 

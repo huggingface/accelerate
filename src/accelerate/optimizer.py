@@ -145,10 +145,10 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         warnings.warn(
             "The `is_overflow` property is deprecated and will be removed in version 1.0 of Accelerate use "
             "`optimizer.step_was_skipped` instead.",
-            FutureWarning
+            FutureWarning,
         )
         return self._is_overflow
-    
+
     @property
     def step_was_skipped(self):
         """Whether or not the optimizer step was skipped."""

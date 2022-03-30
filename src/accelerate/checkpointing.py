@@ -35,7 +35,12 @@ logger = logging.getLogger(__name__)
 
 
 def save_accelerator_state(
-    output_dir: str, model_states: List[dict], optimizers: list, schedulers: list, process_index: int, scaler: GradScaler = None
+    output_dir: str,
+    model_states: List[dict],
+    optimizers: list,
+    schedulers: list,
+    process_index: int,
+    scaler: GradScaler = None,
 ):
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
