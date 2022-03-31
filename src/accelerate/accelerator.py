@@ -29,7 +29,7 @@ from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, In
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
-from .tracking import CometMLTracker, TensorBoardTracker, WandBTracker, get_available_trackers
+from .tracking import CometMLTracker, GeneralTracker, TensorBoardTracker, WandBTracker, get_available_trackers
 from .utils import (
     DeepSpeedPlugin,
     LoggerType,
@@ -94,15 +94,15 @@ class Accelerator:
               dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
 
             Will default to `["torch"]` for PyTorch versions <=1.5.1 and `["generator"]` for PyTorch versions >= 1.6.
-        log_with (list of `str` or [`~utils.LoggerType`], *optional*):
+        log_with (list of `str`, [`~utils.LoggerType`] or [`~tracking.GeneralTracker`], *optional*):
             A list of loggers to be setup for experiment tracking. Should be one or several of:
 
             - `"all"`
             - `"tensorboard"`
             - `"wandb"`
             - `"comet_ml"`
-
             If `"all`" is selected, will pick up all available trackers in the environment and intialize them.
+            Can also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
         dispatch_batches (`bool`, *optional*):
@@ -131,7 +131,7 @@ class Accelerator:
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
-        log_with: Optional[List[Union[str, LoggerType]]] = None,
+        log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = "",
         dispatch_batches: Optional[bool] = None,
         step_scheduler_with_optimizer: bool = True,
@@ -141,16 +141,21 @@ class Accelerator:
             if not isinstance(log_with, list):
                 log_with = [log_with]
             if "all" in log_with or LoggerType.ALL in log_with:
-                log_with = get_available_trackers()
+                loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()
             else:
-                for i, log_type in enumerate(log_with):
-                    if log_type not in LoggerType:
+                loggers = []
+                for log_type in enumerate(log_with):
+                    if log_type not in LoggerType and not issubclass(type(log_type), GeneralTracker):
                         raise ValueError(
                             f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}"
                         )
-                    log_with[i] = LoggerType(log_type)
-                log_with = list(set(log_with))
-        self.log_with = log_with
+                    if issubclass(type(log_type), GeneralTracker):
+                        loggers.append(log_type)
+                    else:
+                        log_type = LoggerType(log_type)
+                        if log_type not in loggers:
+                            loggers.append(log_type)
+        self.log_with = loggers
         self.logging_dir = logging_dir
 
         if mixed_precision is not None:
@@ -631,7 +636,10 @@ class Accelerator:
         """
         self.trackers = []
         for tracker in self.log_with:
-            if str(tracker).lower() == "tensorboard" and is_tensorboard_available():
+            if issubclass(tracker, GeneralTracker):
+                # Custom tracker that they already initalized
+                self.trackers.append(tracker)
+            elif str(tracker).lower() == "tensorboard" and is_tensorboard_available():
                 self.trackers.append(TensorBoardTracker(project_name, self.logging_dir))
             elif str(tracker).lower() == "wandb" and is_wandb_available():
                 self.trackers.append(WandBTracker(project_name))
