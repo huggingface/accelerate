@@ -106,7 +106,7 @@ from typing import Optional
 import wandb
 
 
-class WandBTracker(GeneralTracker):
+class MyCustomTracker(GeneralTracker):
     def __init__(self, run_name: str):
         self.run_name = run_name
         wandb.init(self.run_name)
@@ -116,6 +116,21 @@ class WandBTracker(GeneralTracker):
 
     def log(self, values: dict, step: Optional[int] = None):
         wandb.log(values, step=step)
+```
+
+When you are ready to build your `Accelerator` object, pass in an **instance** of your tracker to [`~Accelerator.log_with`] to have it automatically
+be used with the API:
+
+```python
+tracker = MyCustomTracker("some_run_name")
+accelerator = Accelerate(log_with=tracker)
+```
+
+These also can be mixed with existing trackers, including with `"all"`:
+
+```python
+tracker = MyCustomTracker("some_run_name")
+accelerator = Accelerate(log_with=[tracker, "all"])
 ```
 
 ## When a wrapper cannot work
