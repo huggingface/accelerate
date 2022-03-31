@@ -124,7 +124,7 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         accelerator.init_trackers(project_name, config)
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
-        for child in Path(f"{os.environ['WANDB_DIR']}/wandb/latest-run").glob("*"):
+        for child in Path(f"{self.tmpdir}/wandb/latest-run").glob("*"):
             logger.info(child)
             if child.is_file() and child.suffix == ".wandb":
                 with open(child, "rb") as f:
@@ -146,7 +146,7 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         accelerator.log(values, step=0)
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
-        for child in Path(f"{os.environ['WANDB_DIR']}/wandb/latest-run").glob("*"):
+        for child in Path(f"{self.tmpdir}/wandb/latest-run").glob("*"):
             if child.is_file() and child.suffix == ".wandb":
                 with open(child, "rb") as f:
                     content = f.read()
