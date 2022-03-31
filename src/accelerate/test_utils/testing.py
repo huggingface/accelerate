@@ -64,7 +64,7 @@ class MockingTestCase(unittest.TestCase):
     of a class-wide mock when defining one normally will not do.
 
     Useful when a mock requires specific information available only initialized after `TestCase.setUpClass`, such as
-    the creation of a `tmpdir`.
+    setting an environment variable with that information.
 
     The `add_mocks` function should be ran at the end of a `TestCase`'s `setUp` function, after a call to
     `super().setUp()`
