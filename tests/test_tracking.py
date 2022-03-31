@@ -15,16 +15,14 @@
 import logging
 import os
 import re
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from typing import List, Union
 from unittest import mock
 
 # We use TF to parse the logs
 from accelerate import Accelerator
-from accelerate.test_utils.testing import require_tensorflow
+from accelerate.test_utils.testing import MockingTestCase, TempDirTestCase, require_tensorflow
 from accelerate.utils import is_tensorflow_available
 
 
@@ -36,28 +34,6 @@ if is_tensorflow_available():
 
 
 logger = logging.getLogger(__name__)
-
-
-class LocalTrackingTest(unittest.TestCase):
-    """
-    A TestCase subclass for testing Trackers that save to local folders that might have mocks
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        cls.tmpdir = tempfile.mkdtemp()
-
-    @classmethod
-    def tearDownClass(cls):
-        if os.path.exists(cls.tmpdir):
-            shutil.rmtree(cls.tmpdir)
-
-    def add_mocks(self, mocks: Union[mock.Mock, List[mock.Mock]]):
-        "Add custom mocks for tests that should persist. Should be run in setUp"
-        self.mocks = mocks if isinstance(mocks, (tuple, list)) else [mocks]
-        for m in self.mocks:
-            m.start()
-            self.addCleanup(m.stop)
 
 
 class TensorBoardTrackingTest(unittest.TestCase):
@@ -123,7 +99,12 @@ class TensorBoardTrackingTest(unittest.TestCase):
 
 
 @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
-class WandBTrackingTest(LocalTrackingTest):
+class WandBTrackingTest(TempDirTestCase, MockingTestCase):
+    def setUp(self):
+        super().setUp()
+        # wandb let's us override where logs are stored to via the WANDB_DIR env var
+        self.add_mocks(mock.patch.dict(os.environ, {"WANDB_DIR": self.tmpdir}))
+
     @staticmethod
     def get_value_from_log(key: str, log: str, key_occurance: int = 0):
         """
@@ -176,14 +157,3 @@ class WandBTrackingTest(LocalTrackingTest):
         self.assertEqual(self.get_value_from_log("iteration", cleaned_log), "1")
         self.assertEqual(self.get_value_from_log("my_text", cleaned_log), "some_value")
         self.assertEqual(self.get_value_from_log("_step", cleaned_log), "0")
-
-    def setUp(self):
-        super().setUp()
-        self.add_mocks(mock.patch.dict(os.environ, {"WANDB_DIR": self.tmpdir}))
-
-    def tearDown(self):
-        for path in Path(os.environ["WANDB_DIR"]).glob("**/*"):
-            if path.is_file():
-                path.unlink()
-            elif path.is_dir():
-                shutil.rmtree(path)

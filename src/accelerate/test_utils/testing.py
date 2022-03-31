@@ -13,13 +13,75 @@
 # limitations under the License.
 
 import asyncio
+import os
+import shutil
 import sys
+import tempfile
 import unittest
+from pathlib import Path
+from typing import List, Union
+from unittest import mock
 
 import torch
 
 from ..state import AcceleratorState, is_tpu_available
 from ..utils import gather, is_tensorflow_available
+
+
+class TempDirTestCase(unittest.TestCase):
+    """
+    A TestCase class that keeps a single tmpdir open for the duration of the class, wipes its data at the start of a
+    test, and then destroyes it at the end of the TestCase.
+
+    Useful for when a class or API requires a single constant folder throughout it's use, such as Weights and Biases
+
+    The temporary directory location will be stored in `self.tmpdir`
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        "Creates a tmpdir and stores it in `cls.tmpdir`"
+        cls.tmpdir = tempfile.mkdtemp()
+
+    @classmethod
+    def tearDownClass(cls):
+        "Remove `cls.tmpdir` after test suite has finished"
+        if os.path.exists(cls.tmpdir):
+            shutil.rmtree(cls.tmpdir)
+
+    def setUp(self):
+        "Destroy all contents in `self.tmpdir`, but not `self.tmpdir`"
+        for path in Path(self.tmpdir).glob("**/*"):
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
+
+
+class MockingTestCase(unittest.TestCase):
+    """
+    A TestCase class designed to dynamically add various mockers that should be used in every test, mimicing a behavior
+    of a class-wide mock when defining one normally will not do.
+
+    Useful when a mock requires specific information available only initialized after `TestCase.setUpClass`, such as
+    the creation of a `tmpdir`.
+
+    The `add_mocks` function should be ran at the end of a `TestCase`'s `setUp` function, after a call to
+    `super().setUp()`
+    """
+
+    def add_mocks(self, mocks: Union[mock.Mock, List[mock.Mock]]):
+        """
+        Add custom mocks for tests that should persist. Should be run in setUp.
+
+        Args:
+            mocks (`mock.Mock` or list of `mock.Mock`):
+                Mocks that should be added to the `TestCase` after `TestCase.setUpClass` has been run
+        """
+        self.mocks = mocks if isinstance(mocks, (tuple, list)) else [mocks]
+        for m in self.mocks:
+            m.start()
+            self.addCleanup(m.stop)
 
 
 def are_the_same_tensors(tensor):
