@@ -24,9 +24,8 @@ from unittest import mock
 
 # We use TF to parse the logs
 from accelerate import Accelerator
-from accelerate.test_utils.testing import require_tensorflow
-from accelerate.tracking import GeneralTracker
 from accelerate.test_utils.testing import MockingTestCase, TempDirTestCase, require_tensorflow
+from accelerate.tracking import GeneralTracker
 from accelerate.utils import is_tensorflow_available
 
 
@@ -161,6 +160,7 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         self.assertEqual(self.get_value_from_log("iteration", cleaned_log), "1")
         self.assertEqual(self.get_value_from_log("my_text", cleaned_log), "some_value")
         self.assertEqual(self.get_value_from_log("_step", cleaned_log), "0")
+
 
 class MyCustomTracker(GeneralTracker):
     "Basic tracker that writes to a csv for testing"
