@@ -60,7 +60,7 @@ class TempDirTestCase(unittest.TestCase):
 
 class MockingTestCase(unittest.TestCase):
     """
-    A TestCase class designed to dynamically add various mockers that should be used in every test, mimicing a behavior
+    A TestCase class designed to dynamically add various mockers that should be used in every test, mimicking the behavior
     of a class-wide mock when defining one normally will not do.
 
     Useful when a mock requires specific information available only initialized after `TestCase.setUpClass`, such as
