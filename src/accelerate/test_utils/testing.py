@@ -30,8 +30,8 @@ from ..utils import gather, is_tensorflow_available
 
 class TempDirTestCase(unittest.TestCase):
     """
-    A TestCase class that keeps a single `tempfile.TemporaryDirectory` open for the duration of the class, wipes its data at the start of a
-    test, and then destroyes it at the end of the TestCase.
+    A TestCase class that keeps a single `tempfile.TemporaryDirectory` open for the duration of the class, wipes its
+    data at the start of a test, and then destroyes it at the end of the TestCase.
 
     Useful for when a class or API requires a single constant folder throughout it's use, such as Weights and Biases
 
@@ -78,8 +78,8 @@ class MockingTestCase(unittest.TestCase):
 
     def add_mocks(self, mocks: Union[mock.Mock, List[mock.Mock]]):
         """
-        Add custom mocks for tests that should be repeated on each test. 
-        Should be called during `MockingTestCase.setUp`, after `super().setUp()`.
+        Add custom mocks for tests that should be repeated on each test. Should be called during
+        `MockingTestCase.setUp`, after `super().setUp()`.
 
         Args:
             mocks (`mock.Mock` or list of `mock.Mock`):
