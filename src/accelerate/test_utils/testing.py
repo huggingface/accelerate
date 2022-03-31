@@ -30,7 +30,7 @@ from ..utils import gather, is_tensorflow_available
 
 class TempDirTestCase(unittest.TestCase):
     """
-    A TestCase class that keeps a single tmpdir open for the duration of the class, wipes its data at the start of a
+    A TestCase class that keeps a single `tempfile.TemporaryDirectory` open for the duration of the class, wipes its data at the start of a
     test, and then destroyes it at the end of the TestCase.
 
     Useful for when a class or API requires a single constant folder throughout it's use, such as Weights and Biases
@@ -40,7 +40,7 @@ class TempDirTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        "Creates a tmpdir and stores it in `cls.tmpdir`"
+        "Creates a `tempfile.TemporaryDirectory` and stores it in `cls.tmpdir`"
         cls.tmpdir = tempfile.mkdtemp()
 
     @classmethod
@@ -67,12 +67,19 @@ class MockingTestCase(unittest.TestCase):
     setting an environment variable with that information.
 
     The `add_mocks` function should be ran at the end of a `TestCase`'s `setUp` function, after a call to
-    `super().setUp()`
+    `super().setUp()` such as:
+    ```python
+    def setUp(self):
+        super().setUp()
+        mocks = mock.patch.dict(os.environ, {"SOME_ENV_VAR", "SOME_VALUE"})
+        self.add_mocks(mocks)
+    ```
     """
 
     def add_mocks(self, mocks: Union[mock.Mock, List[mock.Mock]]):
         """
-        Add custom mocks for tests that should persist. Should be run in setUp.
+        Add custom mocks for tests that should be repeated on each test. 
+        Should be called during `MockingTestCase.setUp`, after `super().setUp()`.
 
         Args:
             mocks (`mock.Mock` or list of `mock.Mock`):
