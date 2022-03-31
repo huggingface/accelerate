@@ -248,5 +248,5 @@ class CometMLTracker(GeneralTracker):
         """
         Closes `comet-ml` writer
         """
-        self.writer.finish()
+        self.writer.end()
         logger.info("CometML run closed")

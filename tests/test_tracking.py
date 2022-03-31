@@ -173,12 +173,7 @@ def offline_init(self, run_name: str, tmpdir: str):
     logger.info("Make sure to log any initial configurations with `self.store_init_configuration` before training!")
 
 
-def offline_finish(self):
-    self.writer.end()
-
-
 @mock.patch.object(CometMLTracker, "__init__", offline_init)
-@mock.patch.object(CometMLTracker, "finish", offline_finish)
 class CometMLTest(unittest.TestCase):
     @staticmethod
     def get_value_from_key(log_list, key: str, is_param: bool = False):
