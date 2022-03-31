@@ -16,7 +16,6 @@ import csv
 import logging
 import os
 import re
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,6 +26,7 @@ from unittest import mock
 from accelerate import Accelerator
 from accelerate.test_utils.testing import require_tensorflow
 from accelerate.tracking import GeneralTracker
+from accelerate.test_utils.testing import MockingTestCase, TempDirTestCase, require_tensorflow
 from accelerate.utils import is_tensorflow_available
 
 
@@ -46,13 +46,11 @@ class TensorBoardTrackingTest(unittest.TestCase):
         hps = None
         project_name = "test_project_with_config"
         with tempfile.TemporaryDirectory() as dirpath:
-            oldpwd = os.getcwd()
-            os.chdir(dirpath)
-            accelerator = Accelerator(log_with="tensorboard")
+            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
             accelerator.init_trackers(project_name, config)
             accelerator.end_training()
-            for child in Path(project_name).glob("*/**"):
+            for child in Path(f"{dirpath}/{project_name}").glob("*/**"):
                 log = list(filter(lambda x: x.is_file(), child.iterdir()))[0]
                 # The config log is stored one layer deeper in the logged directory
                 # And names are randomly generated each time
@@ -64,7 +62,6 @@ class TensorBoardTrackingTest(unittest.TestCase):
                     plugin_data = plugin_data_pb2.HParamsPluginData.FromString(proto_bytes)
                     if plugin_data.HasField("session_start_info"):
                         hps = dict(plugin_data.session_start_info.hparams)
-            os.chdir(oldpwd)
 
         self.assertTrue(isinstance(hps, dict))
         keys = list(hps.keys())
@@ -80,16 +77,14 @@ class TensorBoardTrackingTest(unittest.TestCase):
         step = None
         project_name = "test_project_with_log"
         with tempfile.TemporaryDirectory() as dirpath:
-            oldpwd = os.getcwd()
-            os.chdir(dirpath)
-            accelerator = Accelerator(log_with="tensorboard")
+            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
             accelerator.init_trackers(project_name)
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
             accelerator.log(values, step=0)
             accelerator.end_training()
             # Logged values are stored in the outermost-tfevents file and can be read in as a TFRecord
             # Names are randomly generated each time
-            log = list(filter(lambda x: x.is_file(), Path(project_name).iterdir()))[0]
+            log = list(filter(lambda x: x.is_file(), Path(f"{dirpath}/{project_name}").iterdir()))[0]
             serialized_examples = tf.data.TFRecordDataset(log)
             for e in serialized_examples:
                 event = event_pb2.Event.FromString(e.numpy())
@@ -102,14 +97,18 @@ class TensorBoardTrackingTest(unittest.TestCase):
                         iteration = value.simple_value
                     elif value.tag == "my_text/text_summary":  # Append /text_summary to the key
                         my_text = value.tensor.string_val[0].decode()
-            os.chdir(oldpwd)
         self.assertAlmostEqual(total_loss, values["total_loss"])
         self.assertEqual(iteration, values["iteration"])
         self.assertEqual(my_text, values["my_text"])
 
 
 @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
-class WandBTrackingTest(unittest.TestCase):
+class WandBTrackingTest(TempDirTestCase, MockingTestCase):
+    def setUp(self):
+        super().setUp()
+        # wandb let's us override where logs are stored to via the WANDB_DIR env var
+        self.add_mocks(mock.patch.dict(os.environ, {"WANDB_DIR": self.tmpdir}))
+
     @staticmethod
     def get_value_from_log(key: str, log: str, key_occurance: int = 0):
         """
@@ -129,7 +128,7 @@ class WandBTrackingTest(unittest.TestCase):
         accelerator.init_trackers(project_name, config)
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
-        for child in Path("wandb/latest-run").glob("*"):
+        for child in Path(f"{self.tmpdir}/wandb/latest-run").glob("*"):
             logger.info(child)
             if child.is_file() and child.suffix == ".wandb":
                 with open(child, "rb") as f:
@@ -151,7 +150,7 @@ class WandBTrackingTest(unittest.TestCase):
         accelerator.log(values, step=0)
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
-        for child in Path("wandb/latest-run").glob("*"):
+        for child in Path(f"{self.tmpdir}/wandb/latest-run").glob("*"):
             if child.is_file() and child.suffix == ".wandb":
                 with open(child, "rb") as f:
                     content = f.read()
@@ -162,22 +161,6 @@ class WandBTrackingTest(unittest.TestCase):
         self.assertEqual(self.get_value_from_log("iteration", cleaned_log), "1")
         self.assertEqual(self.get_value_from_log("my_text", cleaned_log), "some_value")
         self.assertEqual(self.get_value_from_log("_step", cleaned_log), "0")
-
-    def setUp(self):
-        os.mkdir(".wandb_tests")
-        os.chdir(".wandb_tests")
-
-    def tearDown(self):
-        if os.getcwd().endswith(".wandb_tests"):
-            os.chdir("..")
-        if os.path.exists(".wandb_tests"):
-            shutil.rmtree(".wandb_tests")
-
-    @classmethod
-    def setUpClass(cls):
-        if os.path.exists(".wandb_tests"):
-            shutil.rmtree(".wandb_tests")
-
 
 class MyCustomTracker(GeneralTracker):
     "Basic tracker that writes to a csv for testing"
