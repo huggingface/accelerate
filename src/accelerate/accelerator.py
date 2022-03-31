@@ -137,6 +137,7 @@ class Accelerator:
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
+        loggers = []
         if log_with is not None:
             if not isinstance(log_with, (list, tuple)):
                 log_with = [log_with]
@@ -144,7 +145,6 @@ class Accelerator:
             if "all" in log_with or LoggerType.ALL in log_with:
                 loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()
             else:
-                loggers = []
                 for log_type in log_with:
                     if log_type not in LoggerType and not issubclass(type(log_type), GeneralTracker):
                         raise ValueError(
