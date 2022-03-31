@@ -19,6 +19,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from typing import List, Union
 from unittest import mock
 
 # We use TF to parse the logs
@@ -37,19 +38,39 @@ if is_tensorflow_available():
 logger = logging.getLogger(__name__)
 
 
+class LocalTrackingTest(unittest.TestCase):
+    """
+    A TestCase subclass for testing Trackers that save to local folders that might have mocks
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdir = tempfile.mkdtemp()
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists(cls.tmpdir):
+            shutil.rmtree(cls.tmpdir)
+
+    def add_mocks(self, mocks: Union[mock.Mock, List[mock.Mock]]):
+        "Add custom mocks for tests that should persist. Should be run in setUp"
+        self.mocks = mocks if isinstance(mocks, (tuple, list)) else [mocks]
+        for m in self.mocks:
+            m.start()
+            self.addCleanup(m.stop)
+
+
 class TensorBoardTrackingTest(unittest.TestCase):
     @require_tensorflow
     def test_init_trackers(self):
         hps = None
         project_name = "test_project_with_config"
         with tempfile.TemporaryDirectory() as dirpath:
-            oldpwd = os.getcwd()
-            os.chdir(dirpath)
-            accelerator = Accelerator(log_with="tensorboard")
+            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
             accelerator.init_trackers(project_name, config)
             accelerator.end_training()
-            for child in Path(project_name).glob("*/**"):
+            for child in Path(f"{dirpath}/{project_name}").glob("*/**"):
                 log = list(filter(lambda x: x.is_file(), child.iterdir()))[0]
                 # The config log is stored one layer deeper in the logged directory
                 # And names are randomly generated each time
@@ -61,7 +82,6 @@ class TensorBoardTrackingTest(unittest.TestCase):
                     plugin_data = plugin_data_pb2.HParamsPluginData.FromString(proto_bytes)
                     if plugin_data.HasField("session_start_info"):
                         hps = dict(plugin_data.session_start_info.hparams)
-            os.chdir(oldpwd)
 
         self.assertTrue(isinstance(hps, dict))
         keys = list(hps.keys())
@@ -77,16 +97,14 @@ class TensorBoardTrackingTest(unittest.TestCase):
         step = None
         project_name = "test_project_with_log"
         with tempfile.TemporaryDirectory() as dirpath:
-            oldpwd = os.getcwd()
-            os.chdir(dirpath)
-            accelerator = Accelerator(log_with="tensorboard")
+            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
             accelerator.init_trackers(project_name)
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
             accelerator.log(values, step=0)
             accelerator.end_training()
             # Logged values are stored in the outermost-tfevents file and can be read in as a TFRecord
             # Names are randomly generated each time
-            log = list(filter(lambda x: x.is_file(), Path(project_name).iterdir()))[0]
+            log = list(filter(lambda x: x.is_file(), Path(f"{dirpath}/{project_name}").iterdir()))[0]
             serialized_examples = tf.data.TFRecordDataset(log)
             for e in serialized_examples:
                 event = event_pb2.Event.FromString(e.numpy())
@@ -99,14 +117,13 @@ class TensorBoardTrackingTest(unittest.TestCase):
                         iteration = value.simple_value
                     elif value.tag == "my_text/text_summary":  # Append /text_summary to the key
                         my_text = value.tensor.string_val[0].decode()
-            os.chdir(oldpwd)
         self.assertAlmostEqual(total_loss, values["total_loss"])
         self.assertEqual(iteration, values["iteration"])
         self.assertEqual(my_text, values["my_text"])
 
 
 @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
-class WandBTrackingTest(unittest.TestCase):
+class WandBTrackingTest(LocalTrackingTest):
     @staticmethod
     def get_value_from_log(key: str, log: str, key_occurance: int = 0):
         """
@@ -126,7 +143,7 @@ class WandBTrackingTest(unittest.TestCase):
         accelerator.init_trackers(project_name, config)
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
-        for child in Path("wandb/latest-run").glob("*"):
+        for child in Path(f"{os.environ['WANDB_DIR']}/wandb/latest-run").glob("*"):
             logger.info(child)
             if child.is_file() and child.suffix == ".wandb":
                 with open(child, "rb") as f:
@@ -148,7 +165,7 @@ class WandBTrackingTest(unittest.TestCase):
         accelerator.log(values, step=0)
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
-        for child in Path("wandb/latest-run").glob("*"):
+        for child in Path(f"{os.environ['WANDB_DIR']}/wandb/latest-run").glob("*"):
             if child.is_file() and child.suffix == ".wandb":
                 with open(child, "rb") as f:
                     content = f.read()
@@ -161,16 +178,12 @@ class WandBTrackingTest(unittest.TestCase):
         self.assertEqual(self.get_value_from_log("_step", cleaned_log), "0")
 
     def setUp(self):
-        os.mkdir(".wandb_tests")
-        os.chdir(".wandb_tests")
+        super().setUp()
+        self.add_mocks(mock.patch.dict(os.environ, {"WANDB_DIR": self.tmpdir}))
 
     def tearDown(self):
-        if os.getcwd().endswith(".wandb_tests"):
-            os.chdir("..")
-        if os.path.exists(".wandb_tests"):
-            shutil.rmtree(".wandb_tests")
-
-    @classmethod
-    def setUpClass(cls):
-        if os.path.exists(".wandb_tests"):
-            shutil.rmtree(".wandb_tests")
+        for path in Path(os.environ["WANDB_DIR"]).glob("**/*"):
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
