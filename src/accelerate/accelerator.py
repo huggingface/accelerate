@@ -638,7 +638,7 @@ class Accelerator:
         self.trackers = []
         for tracker in self.log_with:
             if issubclass(type(tracker), GeneralTracker):
-                # Custom tracker that they already initalized
+                # Custom trackers are already initialized
                 self.trackers.append(tracker)
             elif str(tracker).lower() == "tensorboard" and is_tensorboard_available():
                 self.trackers.append(TensorBoardTracker(project_name, self.logging_dir))
