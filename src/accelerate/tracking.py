@@ -243,3 +243,10 @@ class CometMLTracker(GeneralTracker):
             self.writer.set_step(step)
         self.writer.log_others(values)
         logger.info("Successfully logged to CometML")
+
+    def finish(self):
+        """
+        Closes `comet-ml` writer
+        """
+        self.writer.end()
+        logger.info("CometML run closed")

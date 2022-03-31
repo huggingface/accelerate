@@ -13,11 +13,13 @@
 # limitations under the License.
 
 import csv
+import json
 import logging
 import os
 import re
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from typing import Optional
 from unittest import mock
@@ -25,8 +27,9 @@ from unittest import mock
 # We use TF to parse the logs
 from accelerate import Accelerator
 from accelerate.test_utils.testing import MockingTestCase, TempDirTestCase, require_tensorflow
-from accelerate.tracking import GeneralTracker
+from accelerate.tracking import CometMLTracker, GeneralTracker
 from accelerate.utils import is_tensorflow_available
+from comet_ml import OfflineExperiment
 
 
 if is_tensorflow_available():
@@ -160,6 +163,66 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         self.assertEqual(self.get_value_from_log("iteration", cleaned_log), "1")
         self.assertEqual(self.get_value_from_log("my_text", cleaned_log), "some_value")
         self.assertEqual(self.get_value_from_log("_step", cleaned_log), "0")
+
+
+# Comet has a special `OfflineExperiment` we need to use for testing
+def offline_init(self, run_name: str, tmpdir: str):
+    self.run_name = run_name
+    self.writer = OfflineExperiment(project_name=run_name, offline_directory=tmpdir)
+    logger.info(f"Initialized offline CometML project {self.run_name}")
+    logger.info("Make sure to log any initial configurations with `self.store_init_configuration` before training!")
+
+
+@mock.patch.object(CometMLTracker, "__init__", offline_init)
+class CometMLTest(unittest.TestCase):
+    @staticmethod
+    def get_value_from_key(log_list, key: str, is_param: bool = False):
+        "Extracts `key` from Comet `log`"
+        for log in log_list:
+            j = json.loads(log)["payload"]
+            if is_param and "param" in j.keys():
+                if j["param"]["paramName"] == key:
+                    return j["param"]["paramValue"]
+            if "log_other" in j.keys():
+                if j["log_other"]["key"] == key:
+                    return j["log_other"]["val"]
+
+    def test_init_trackers(self):
+        with tempfile.TemporaryDirectory() as d:
+            tracker = CometMLTracker("test_project_with_config", d)
+            accelerator = Accelerator(log_with=tracker)
+            config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
+            accelerator.init_trackers(None, config)
+            accelerator.end_training()
+            log = os.listdir(d)[0]  # Comet is nice, it's just a zip file here
+            # We parse the raw logs
+            p = os.path.join(d, log)
+            archive = zipfile.ZipFile(p, "r")
+            log = archive.open("messages.json").read().decode("utf-8")
+        list_of_json = log.split("\n")[:-1]
+        self.assertEqual(self.get_value_from_key(list_of_json, "num_iterations", True), 12)
+        self.assertEqual(self.get_value_from_key(list_of_json, "learning_rate", True), 0.01)
+        self.assertEqual(self.get_value_from_key(list_of_json, "some_boolean", True), False)
+        self.assertEqual(self.get_value_from_key(list_of_json, "some_string", True), "some_value")
+
+    def test_log(self):
+        with tempfile.TemporaryDirectory() as d:
+            tracker = CometMLTracker("test_project_with_config", d)
+            accelerator = Accelerator(log_with=tracker)
+            accelerator.init_trackers(None)
+            values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
+            accelerator.log(values, step=0)
+            accelerator.end_training()
+            log = os.listdir(d)[0]  # Comet is nice, it's just a zip file here
+            # We parse the raw logs
+            p = os.path.join(d, log)
+            archive = zipfile.ZipFile(p, "r")
+            log = archive.open("messages.json").read().decode("utf-8")
+        list_of_json = log.split("\n")[:-1]
+        self.assertEqual(self.get_value_from_key(list_of_json, "curr_step", True), 0)
+        self.assertEqual(self.get_value_from_key(list_of_json, "total_loss"), 0.1)
+        self.assertEqual(self.get_value_from_key(list_of_json, "iteration"), 1)
+        self.assertEqual(self.get_value_from_key(list_of_json, "my_text"), "some_value")
 
 
 class MyCustomTracker(GeneralTracker):
