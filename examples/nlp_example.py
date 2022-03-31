@@ -78,7 +78,7 @@ def training_function(config, args):
 
     # We also rename the 'label' column to 'labels' which is the expected name for labels by the models of the
     # transformers library
-    tokenized_datasets.rename_column_("label", "labels")
+    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
 
     # If the batch size is too big we use gradient accumulation
     gradient_accumulation_steps = 1
