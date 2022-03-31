@@ -101,8 +101,8 @@ class Accelerator:
             - `"tensorboard"`
             - `"wandb"`
             - `"comet_ml"`
-            If `"all`" is selected, will pick up all available trackers in the environment and intialize them.
-            Can also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
+            If `"all`" is selected, will pick up all available trackers in the environment and intialize them. Can also
+            accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
         dispatch_batches (`bool`, *optional*):
@@ -138,13 +138,14 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         if log_with is not None:
-            if not isinstance(log_with, list):
+            if not isinstance(log_with, (list, tuple)):
                 log_with = [log_with]
+                logger.debug(f"{log_with}")
             if "all" in log_with or LoggerType.ALL in log_with:
                 loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()
             else:
                 loggers = []
-                for log_type in enumerate(log_with):
+                for log_type in log_with:
                     if log_type not in LoggerType and not issubclass(type(log_type), GeneralTracker):
                         raise ValueError(
                             f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}"
@@ -636,7 +637,7 @@ class Accelerator:
         """
         self.trackers = []
         for tracker in self.log_with:
-            if issubclass(tracker, GeneralTracker):
+            if issubclass(type(tracker), GeneralTracker):
                 # Custom tracker that they already initalized
                 self.trackers.append(tracker)
             elif str(tracker).lower() == "tensorboard" and is_tensorboard_available():

@@ -18,15 +18,15 @@ import os
 import re
 import shutil
 import tempfile
-from typing import Optional
 import unittest
 from pathlib import Path
+from typing import Optional
 from unittest import mock
 
 # We use TF to parse the logs
 from accelerate import Accelerator
-from accelerate.tracking import GeneralTracker
 from accelerate.test_utils.testing import require_tensorflow
+from accelerate.tracking import GeneralTracker
 from accelerate.utils import is_tensorflow_available
 
 
@@ -178,31 +178,35 @@ class WandBTrackingTest(unittest.TestCase):
         if os.path.exists(".wandb_tests"):
             shutil.rmtree(".wandb_tests")
 
+
 class MyCustomTracker(GeneralTracker):
     "Basic tracker that writes to a csv for testing"
-    _col_names = ["name", "values"]
-    def __init__(self, dir:str):
-        f = open(f'{dir}/log.csv', "w+")
-        self.writer = csv.DictWriter(f, self._col_names)
+    _col_names = [
+        "total_loss",
+        "iteration",
+        "my_text",
+        "learning_rate",
+        "num_iterations",
+        "some_boolean",
+        "some_string",
+    ]
 
-    def store_init_configuration(self, values:dict):
-        self.writer.writerow(
-            {
-                "name":"hyperparameters",
-                "values":values
-            }
-        )
-    
-    def log(self, values:dict, step:Optional[int]):
-        self.writer.writerow(
-            {
-                "name":f"step_{step}",
-                "values":values
-            }
-        )
-    
+    def __init__(self, dir: str):
+        self.f = open(f"{dir}/log.csv", "w+")
+        self.writer = csv.DictWriter(self.f, fieldnames=self._col_names)
+        self.writer.writeheader()
+
+    def store_init_configuration(self, values: dict):
+        logger.info("Call init")
+        self.writer.writerow(values)
+
+    def log(self, values: dict, step: Optional[int]):
+        logger.info("Call log")
+        self.writer.writerow(values)
+
     def finish(self):
-        self.writer.close()
+        self.f.close()
+
 
 class CustomTrackerTestCase(unittest.TestCase):
     def test_init_trackers(self):
@@ -210,10 +214,40 @@ class CustomTrackerTestCase(unittest.TestCase):
             tracker = MyCustomTracker(d)
             accelerator = Accelerator(log_with=tracker)
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
-            accelerator.init_tracking("Some name", config)
+            accelerator.init_trackers("Some name", config)
             accelerator.end_training()
-            with open(f"{d}/log.csv", "r") as log:
-                reader = csv.DictReader(log)
-                wrote_config = next(reader)
-                self.assertEqual(wrote_config, config)
+            with open(f"{d}/log.csv", "r") as f:
+                data = csv.DictReader(f)
+                data = next(data)
+                truth = {
+                    "total_loss": "",
+                    "iteration": "",
+                    "my_text": "",
+                    "learning_rate": "0.01",
+                    "num_iterations": "12",
+                    "some_boolean": "False",
+                    "some_string": "some_value",
+                }
+                self.assertDictEqual(data, truth)
 
+    def test_log(self):
+        with tempfile.TemporaryDirectory() as d:
+            tracker = MyCustomTracker(d)
+            accelerator = Accelerator(log_with=tracker)
+            accelerator.init_trackers("Some name")
+            values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
+            accelerator.log(values, step=0)
+            accelerator.end_training()
+            with open(f"{d}/log.csv", "r") as f:
+                data = csv.DictReader(f)
+                data = next(data)
+                truth = {
+                    "total_loss": "0.1",
+                    "iteration": "1",
+                    "my_text": "some_value",
+                    "learning_rate": "",
+                    "num_iterations": "",
+                    "some_boolean": "",
+                    "some_string": "",
+                }
+                self.assertDictEqual(data, truth)
