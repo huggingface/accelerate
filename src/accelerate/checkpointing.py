@@ -22,7 +22,7 @@ import torch
 from torch.cuda.amp import GradScaler
 
 from .state import is_tpu_available
-from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, get_pretty_name, save
+from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, SCHEDULER_NAME, get_pretty_name, save
 
 
 if is_tpu_available():
@@ -35,7 +35,12 @@ logger = logging.getLogger(__name__)
 
 
 def save_accelerator_state(
-    output_dir: str, model_states: List[dict], optimizers: list, process_index: int, scaler: GradScaler = None
+    output_dir: str,
+    model_states: List[dict],
+    optimizers: list,
+    schedulers: list,
+    process_index: int,
+    scaler: GradScaler = None,
 ):
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
@@ -47,6 +52,8 @@ def save_accelerator_state(
             A list of model states
         optimizers (`List[torch.optim.Optimizer]`):
             A list of optimizer instances
+        schedulers (`List[torch.optim.lr_scheduler._LRScheduler]`):
+            A list of learning rate schedulers
         process_index (`int`):
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
@@ -65,6 +72,13 @@ def save_accelerator_state(
         output_optimizer_file = os.path.join(output_dir, optimizer_name)
         save(state, output_optimizer_file)
         logger.info(f"Optimizer state saved in {output_optimizer_file}")
+    # Scheduler states
+    for i, scheduler in enumerate(schedulers):
+        state = scheduler.state_dict()
+        scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
+        output_scheduler_file = os.path.join(output_dir, scheduler_name)
+        save(state, output_scheduler_file)
+        logger.info(f"Scheduler state saved in {output_scheduler_file}")
     # GradScaler state
     if scaler is not None:
         state = scaler.state_dict()
@@ -87,7 +101,7 @@ def save_accelerator_state(
     return output_dir
 
 
-def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=None):
+def load_accelerator_state(input_dir, models, optimizers, schedulers, process_index, scaler=None):
     """
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
 
@@ -98,6 +112,8 @@ def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=
             A list of model instances
         optimizers (`List[torch.optim.Optimizer]`):
             A list of optimizer instances
+        schedulers (`List[torch.optim.lr_scheduler._LRScheduler]`):
+            A list of learning rate schedulers
         process_index (`int`):
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
@@ -116,6 +132,13 @@ def load_accelerator_state(input_dir, models, optimizers, process_index, scaler=
         input_optimizer_file = os.path.join(input_dir, optimizer_name)
         optimizers[i].load_state_dict(torch.load(input_optimizer_file, map_location="cpu"))
     logger.info("All optimizer states loaded successfully")
+
+    # Scheduler states
+    for i, scheduler in enumerate(schedulers):
+        scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
+        input_scheduler_file = os.path.join(input_dir, scheduler_name)
+        scheduler.load_state_dict(torch.load(input_scheduler_file))
+    logger.info("All scheduler states loaded successfully")
 
     # GradScaler state
     if scaler is not None:

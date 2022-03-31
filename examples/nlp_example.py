@@ -113,19 +113,18 @@ def training_function(config, args):
     # Instantiate optimizer
     optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
 
-    # Prepare everything
-    # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
-    # prepare method.
-    model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader
-    )
-
-    # Instantiate learning rate scheduler after preparing the training dataloader as the prepare method
-    # may change its length.
+    # Instantiate scheduler
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer=optimizer,
         num_warmup_steps=100,
         num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
+    )
+
+    # Prepare everything
+    # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
+    # prepare method.
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
     # Now we train the model

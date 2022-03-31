@@ -27,6 +27,7 @@ from .checkpointing import load_accelerator_state, load_custom_state, save_accel
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .optimizer import AcceleratedOptimizer
+from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .tracking import CometMLTracker, TensorBoardTracker, WandBTracker, get_available_trackers
 from .utils import (
@@ -108,6 +109,9 @@ class Accelerator:
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
             underlying dataset is an `IterableDataset`, `False` otherwise.
+        step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
+            Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
+            done under certain circumstances (at the end of each epoch, for instance).
         kwargs_handlers (`List[KwargHandler]`, *optional*)
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
@@ -130,6 +134,7 @@ class Accelerator:
         log_with: Optional[List[Union[str, LoggerType]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = "",
         dispatch_batches: Optional[bool] = None,
+        step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         if log_with is not None:
@@ -205,6 +210,7 @@ class Accelerator:
             raise ImportError(
                 "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
+        self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
         self.scaler = None
@@ -227,6 +233,7 @@ class Accelerator:
         # Internal references to the training objects
         self._optimizers = []
         self._models = []
+        self._schedulers = []
         self._custom_objects = []
 
         # RNG Types
@@ -315,16 +322,22 @@ class Accelerator:
         if self.is_local_main_process:
             print(*args, **kwargs)
 
-    def _prepare_one(self, obj):
-        if isinstance(obj, torch.utils.data.DataLoader):
+    def _prepare_one(self, obj, first_pass=False):
+        # First pass of preparation: DataLoader, model, optimizer
+        if isinstance(obj, torch.utils.data.DataLoader) and first_pass:
             return self.prepare_data_loader(obj)
-        elif isinstance(obj, torch.nn.Module):
+        elif isinstance(obj, torch.nn.Module) and first_pass:
             self._models.append(obj)
             return self.prepare_model(obj)
-        elif isinstance(obj, torch.optim.Optimizer):
+        elif isinstance(obj, torch.optim.Optimizer) and first_pass:
             optimizer = self.prepare_optimizer(obj)
             self._optimizers.append(optimizer)
             return optimizer
+        # Second pass of preparation: LR scheduler (which need the full list of optimizers)
+        elif isinstance(obj, torch.optim.lr_scheduler._LRScheduler) and not first_pass:
+            scheduler = self.prepare_scheduler(obj)
+            self._schedulers.append(scheduler)
+            return scheduler
         else:
             return obj
 
@@ -362,7 +375,8 @@ class Accelerator:
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         else:
-            result = tuple(self._prepare_one(obj) for obj in args)
+            result = tuple(self._prepare_one(obj, first_pass=True) for obj in args)
+            result = tuple(self._prepare_one(obj) for obj in result)
 
         if tpu_should_fix_optimizer:
             # 2. grabbing new model parameters
@@ -491,6 +505,21 @@ class Accelerator:
 
     def prepare_optimizer(self, optimizer):
         return AcceleratedOptimizer(optimizer, device_placement=self.device_placement, scaler=self.scaler)
+
+    def prepare_scheduler(self, scheduler):
+        # We try to find the optimizer associated with `scheduler`, the default is the full list.
+        optimizer = self._optimizers
+        for opt in self._optimizers:
+            if getattr(scheduler, "optimizer", None) == opt.optimizer:
+                optimizer = opt
+                break
+
+        return AcceleratedScheduler(
+            scheduler,
+            optimizer,
+            step_with_optimizer=self.step_scheduler_with_optimizer,
+            split_batches=self.split_batches,
+        )
 
     def backward(self, loss, **kwargs):
         """
@@ -659,7 +688,7 @@ class Accelerator:
         logger.info(f"Saving current state to {output_dir}")
         weights = [self.get_state_dict(m) for m in self._models]
         save_location = save_accelerator_state(
-            output_dir, weights, self._optimizers, self.state.process_index, self.scaler
+            output_dir, weights, self._optimizers, self._schedulers, self.state.process_index, self.scaler
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)
@@ -678,7 +707,9 @@ class Accelerator:
         if not os.path.isdir(input_dir):
             raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         logger.info(f"Loading states from {input_dir}")
-        load_accelerator_state(input_dir, self._models, self._optimizers, self.state.process_index, self.scaler)
+        load_accelerator_state(
+            input_dir, self._models, self._optimizers, self._schedulers, self.state.process_index, self.scaler
+        )
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
             err = "Warning! Number of found checkpoints does not match the number of registered objects:"
@@ -695,6 +726,7 @@ class Accelerator:
         Will release all references to the internal objects stored and call the garbage collector. You should call this
         method between two trainings with different models/optimizers.
         """
+        self._schedulers = []
         self._optimizers = []
         self._models = []
         self.deepspeed_engine = None
@@ -795,6 +827,6 @@ class Accelerator:
         case the learning rate should not be changed.
         """
         for optimizer in self._optimizers:
-            if optimizer.is_overflow:
+            if optimizer.step_was_skipped:
                 return True
         return False
