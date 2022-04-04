@@ -284,9 +284,10 @@ class Accelerator:
     @property
     def mixed_precision(self):
         if self.distributed_type == DistributedType.DEEPSPEED:
-            if self.state.deepspeed_plugin.deepspeed_config["fp16"]["enabled"]:
+            config = self.state.deepspeed_plugin.deepspeed_config
+            if "fp16" in config and config["fp16"]["enabled"]:
                 mixed_precision = "fp16"
-            elif self.state.deepspeed_plugin.deepspeed_config["bf16"]["enabled"]:
+            elif "bf16" in config and config["bf16"]["enabled"]:
                 mixed_precision = "bf16"
             else:
                 mixed_precision = "no"
