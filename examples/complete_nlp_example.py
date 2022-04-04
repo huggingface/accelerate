@@ -170,9 +170,8 @@ def training_function(config, args):
         if args.with_tracking:
             total_loss = 0
         for step, batch in enumerate(train_dataloader):
-            if args.resume_from_checkpoint and epoch == 0:
-                for _ in range(resume_step - 1):
-                    pass
+            if args.resume_from_checkpoint and epoch == 0 and step < resume_step:
+                continue
             else:
                 # We could avoid this line since we set the accelerator with `device_placement=True`.
                 batch.to(accelerator.device)
