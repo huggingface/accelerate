@@ -170,28 +170,28 @@ def training_function(config, args):
         if args.with_tracking:
             total_loss = 0
         for step, batch in enumerate(train_dataloader):
+            # We need to skip steps until we reach the resumed step
             if args.resume_from_checkpoint and epoch == 0 and step < resume_step:
                 continue
-            else:
-                # We could avoid this line since we set the accelerator with `device_placement=True`.
-                batch.to(accelerator.device)
-                outputs = model(**batch)
-                loss = outputs.loss
-                loss = loss / gradient_accumulation_steps
-                # We keep track of the loss at each epoch
-                if args.with_tracking:
-                    total_loss += loss.detach().float()
-                accelerator.backward(loss)
-                if step % gradient_accumulation_steps == 0:
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
+            # We could avoid this line since we set the accelerator with `device_placement=True`.
+            batch.to(accelerator.device)
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss = loss / gradient_accumulation_steps
+            # We keep track of the loss at each epoch
+            if args.with_tracking:
+                total_loss += loss.detach().float()
+            accelerator.backward(loss)
+            if step % gradient_accumulation_steps == 0:
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
 
-                overall_step += 1
+            overall_step += 1
 
-                if isinstance(checkpointing_steps, int):
-                    if overall_step % checkpointing_steps == 0:
-                        accelerator.save_state(f"step_{overall_step}")
+            if isinstance(checkpointing_steps, int):
+                if overall_step % checkpointing_steps == 0:
+                    accelerator.save_state(f"step_{overall_step}")
         if state_restored:
             model.eval()
             for step, batch in enumerate(eval_dataloader):
