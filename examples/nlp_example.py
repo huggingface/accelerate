@@ -51,14 +51,27 @@ EVAL_BATCH_SIZE = 32
 
 def training_function(config, args):
     # Initialize accelerator
-    accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu, mixed_precision=args.mixed_precision)
+    if args.with_tracking:
+        accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all")
+    else:
+        accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu, mixed_precision=args.mixed_precision)
 
+    if hasattr(args.checkpointing_steps, "isdigit"):
+        checkpointing_steps = args.checkpointing_steps
+        if args.checkpointing_steps.isdigit():
+            checkpointing_steps = int(args.checkpointing_steps)
+    else:
+        checkpointing_steps = None
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     correct_bias = config["correct_bias"]
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
+
+    # We need to initialize the trackers we use, and also store our configuration
+    if args.with_tracking:
+        accelerator.init_trackers("cv_example", config)
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")
@@ -127,20 +140,37 @@ def training_function(config, args):
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
+    # Potentially load in the weights and states from a previous save
+    if args.resume_from_checkpoint:
+        accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
+        accelerator.load_state(args.resume_from_checkpoint)
+
+    overall_step = 0
     # Now we train the model
     for epoch in range(num_epochs):
         model.train()
+        if args.with_tracking:
+            total_loss = 0
         for step, batch in enumerate(train_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / gradient_accumulation_steps
+            # We keep track of the loss at each epoch
+            if args.with_tracking:
+                total_loss += loss.detach().float()
             accelerator.backward(loss)
             if step % gradient_accumulation_steps == 0:
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+
+            overall_step += 1
+
+            if isinstance(checkpointing_steps, int):
+                if overall_step % checkpointing_steps == 0:
+                    accelerator.save_state(f"step_{overall_step}")
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
@@ -157,6 +187,18 @@ def training_function(config, args):
         eval_metric = metric.compute()
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
+        if args.with_tracking:
+            accelerator.log(
+                {
+                    "accuracy": eval_metric["accuracy"],
+                    "f1": eval_metric["f1"],
+                    "total_loss": total_loss,
+                },
+                step=epoch,
+            )
+
+        if args.checkpointing_steps == "epoch":
+            accelerator.save_state(f"epoch_{epoch}")
 
 
 def main():
@@ -172,6 +214,19 @@ def main():
         "and an Nvidia Ampere GPU.",
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
+    parser.add_argument(
+        "--checkpointing_steps",
+        required=False,
+        help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint", required=False, help="If the training should continue from a checkpoint folder."
+    )
+    parser.add_argument(
+        "--with_tracking",
+        required=False,
+        help="Whether to load in all available experiment trackers from the enviornment and use them for logging.",
+    )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
     training_function(config, args)
