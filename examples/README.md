@@ -183,3 +183,13 @@ To run it in each of these various modes, use the following commands:
         ```
     * In PyTorch:
         Add an `xmp.spawn` line in your script as you usually do.
+
+## Finer Examples
+
+While the first two scripts are extremely barebones when it comes to what you can do with accelerate, there are two complementary scripts for each: `complete_cv_example.py` and `complete_nlp_example.py`.
+
+These two serve to document what else the `Accelerate` library is able to do, outside of just the basic training loop. They each have the following additional arguments:
+
+- `checkpointing_steps`, whether the various states should be saved at the end of every `n` steps, or `"epoch"` for each epoch. States are then saved to folders named `step_{n}` or `epoch_{n}`
+- `resume_from_checkpoint`, should be used if you want to resume training off of a previous call to the script and passed a `checkpointing_steps` to it.
+- `with_tracking`, should be used if you want to log the training run using all available experiment trackers in your environment. Currently supported trackers include TensorBoard, Weights and Biases, and CometML.
