@@ -229,7 +229,7 @@ def main():
     parser.add_argument(
         "--with_tracking",
         required=False,
-        help="Whether to load in all available experiment trackers from the enviornment and use them for logging.",
+        help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
