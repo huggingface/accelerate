@@ -233,7 +233,7 @@ def multi_gpu_launcher(args):
 
 
 def deepspeed_launcher(args):
-    cmd = ["deepspeed"]
+    cmd = ["deepspeed", "--no_local_rank"]
     if args.num_machines > 1:
         cmd.extend(
             [
