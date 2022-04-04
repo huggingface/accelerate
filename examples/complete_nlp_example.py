@@ -156,10 +156,10 @@ def training_function(config, args):
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
             if "epoch" in path.name:
-                num_epochs = -int(path.name.replace("epoch_", ""))
+                num_epochs -= int(path.name.replace("epoch_", ""))
             else:
                 resume_step = int(path.name.replace("step_", ""))
-                num_epochs = -resume_step // len(train_dataloader)
+                num_epochs -= resume_step // len(train_dataloader)
                 resume_step = (num_epochs * len(train_dataloader)) - resume_step
                 state_restored = False
 
