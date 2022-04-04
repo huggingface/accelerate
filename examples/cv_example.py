@@ -148,11 +148,7 @@ def training_function(config, args):
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
-
-    # Instantiate learning rate scheduler after preparing the training dataloader as the prepare method
-    # may change its length.
-    lr_scheduler = OneCycleLR(optimizer=optimizer, max_lr=lr, epochs=num_epochs, steps_per_epoch=len(train_dataloader))
-
+    
     # Now we train the model
     for epoch in range(num_epochs):
         model.train()
