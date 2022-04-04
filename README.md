@@ -168,7 +168,7 @@ mpirun -np 2 python examples/nlp_example.py
 
 ## Launching training using DeepSpeed
 
-🤗 Accelerate supports training on single/multiple GPUs using DeepSpeed. to use it, you don't need to change anything in your training code; you can set everything using just `accelerate config`. However, if you desire to tweak your DeepSpeed related args from your python script, we provide you the `DeepSpeedPlugin`.
+🤗 Accelerate supports training on single/multiple GPUs using DeepSpeed. To use it, you don't need to change anything in your training code; you can set everything using just `accelerate config`. However, if you desire to tweak your DeepSpeed related args from your python script, we provide you the `DeepSpeedPlugin`.
 
 ```python
 from accelerator import Accelerator, DeepSpeedPlugin
