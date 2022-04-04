@@ -148,7 +148,7 @@ def training_function(config, args):
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
-    
+
     # Now we train the model
     for epoch in range(num_epochs):
         model.train()

@@ -14,32 +14,28 @@
 # limitations under the License.
 import argparse
 import os
+import re
 
+import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import OneCycleLR
+from torch.utils.data import DataLoader, Dataset
 
-from accelerate import Accelerator, DistributedType
-from datasets import load_dataset, load_metric
-from transformers import (
-    AdamW,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    get_linear_schedule_with_warmup,
-    set_seed,
-)
+import PIL
+from accelerate import Accelerator
+from timm import create_model
+from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
 
 
 ########################################################################
 # This is a fully working simple example to use Accelerate
 #
-# This example trains a Bert base model on GLUE MRPC
+# This example trains a ResNet50 on the Oxford-IIT Pet Dataset
 # in any of the following settings (with the same script):
 #   - single CPU or single GPU
 #   - multi GPUS (using PyTorch distributed mode)
 #   - (multi) TPUs
 #   - fp16 (mixed-precision) or fp32 (normal precision)
-#
-# This example also demonstrates the checkpointing and sharding capabilities
 #
 # To run it in each of these various modes, follow the instructions
 # in the readme for examples:
@@ -48,8 +44,31 @@ from transformers import (
 ########################################################################
 
 
-MAX_GPU_BATCH_SIZE = 16
-EVAL_BATCH_SIZE = 32
+# Function to get the label from the filename
+def extract_label(fname):
+    stem = fname.split(os.path.sep)[-1]
+    return re.search(r"^(.*)_\d+\.jpg$", stem).groups()[0]
+
+
+class PetsDataset(Dataset):
+    def __init__(self, file_names, image_transform=None, label_to_id=None):
+        self.file_names = file_names
+        self.image_transform = image_transform
+        self.label_to_id = label_to_id
+
+    def __len__(self):
+        return len(self.file_names)
+
+    def __getitem__(self, idx):
+        fname = self.file_names[idx]
+        raw_image = PIL.Image.open(fname)
+        image = raw_image.convert("RGB")
+        if self.image_transform is not None:
+            image = self.image_transform(image)
+        label = extract_label(fname)
+        if self.label_to_id is not None:
+            label = self.label_to_id[label]
+        return {"image": image, "label": label}
 
 
 def training_function(config, args):
@@ -68,73 +87,73 @@ def training_function(config, args):
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
-    correct_bias = config["correct_bias"]
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
+    image_size = config["image_size"]
+    if not isinstance(image_size, (list, tuple)):
+        image_size = (image_size, image_size)
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        accelerator.init_trackers("nlp_example", config)
+        accelerator.init_trackers("cv_example", config)
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    datasets = load_dataset("glue", "mrpc")
-    metric = load_metric("glue", "mrpc")
+    # Grab all the image filenames
+    file_names = [os.path.join(args.data_dir, fname) for fname in os.listdir(args.data_dir) if fname.endswith(".jpg")]
 
-    def tokenize_function(examples):
-        # max_length=None => use the model max length (it's actually the default)
-        outputs = tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=None)
-        return outputs
+    # Build the label correspondences
+    all_labels = [extract_label(fname) for fname in file_names]
+    id_to_label = list(set(all_labels))
+    id_to_label.sort()
+    label_to_id = {lbl: i for i, lbl in enumerate(id_to_label)}
 
-    # Apply the method we just defined to all the examples in all the splits of the dataset
-    tokenized_datasets = datasets.map(
-        tokenize_function,
-        batched=True,
-        remove_columns=["idx", "sentence1", "sentence2"],
+    # Set the seed before splitting the data.
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    # Split our filenames between train and validation
+    random_perm = np.random.permutation(len(file_names))
+    cut = int(0.8 * len(file_names))
+    train_split = random_perm[:cut]
+    eval_split = random_perm[cut:]
+
+    # For training we use a simple RandomResizedCrop
+    train_tfm = Compose([RandomResizedCrop(image_size, scale=(0.5, 1.0)), ToTensor()])
+    train_dataset = PetsDataset(
+        [file_names[i] for i in train_split], image_transform=train_tfm, label_to_id=label_to_id
     )
 
-    # We also rename the 'label' column to 'labels' which is the expected name for labels by the models of the
-    # transformers library
-    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
-
-    # If the batch size is too big we use gradient accumulation
-    gradient_accumulation_steps = 1
-    if batch_size > MAX_GPU_BATCH_SIZE:
-        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
-        batch_size = MAX_GPU_BATCH_SIZE
-
-    def collate_fn(examples):
-        # On TPU it's best to pad everything to the same length or training will be very slow.
-        if accelerator.distributed_type == DistributedType.TPU:
-            return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
-        return tokenizer.pad(examples, padding="longest", return_tensors="pt")
+    # For evaluation, we use a deterministic Resize
+    eval_tfm = Compose([Resize(image_size), ToTensor()])
+    eval_dataset = PetsDataset([file_names[i] for i in eval_split], image_transform=eval_tfm, label_to_id=label_to_id)
 
     # Instantiate dataloaders.
-    train_dataloader = DataLoader(
-        tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size
-    )
-    eval_dataloader = DataLoader(
-        tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE
-    )
-
-    set_seed(seed)
+    train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, num_workers=4)
+    eval_dataloader = DataLoader(eval_dataset, shuffle=False, batch_size=batch_size, num_workers=4)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
+    model = create_model("resnet50d", pretrained=True, num_classes=len(label_to_id))
 
     # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
     # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
     # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
     model = model.to(accelerator.device)
 
-    # Instantiate optimizer
-    optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
+    # Freezing the base model
+    for param in model.parameters():
+        param.requires_grad = False
+    for param in model.get_classifier().parameters():
+        param.requires_grad = True
 
-    # Instantiate scheduler
-    lr_scheduler = get_linear_schedule_with_warmup(
-        optimizer=optimizer,
-        num_warmup_steps=100,
-        num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
-    )
+    # We normalize the batches of images to be a bit faster.
+    mean = torch.tensor(model.default_cfg["mean"])[None, :, None, None].to(accelerator.device)
+    std = torch.tensor(model.default_cfg["std"])[None, :, None, None].to(accelerator.device)
+
+    # Instantiate optimizer
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=lr / 25)
+
+    # Instantiate learning rate scheduler
+    lr_scheduler = OneCycleLR(optimizer=optimizer, max_lr=lr, epochs=num_epochs, steps_per_epoch=len(train_dataloader))
 
     # Prepare everything
     # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
@@ -174,57 +193,50 @@ def training_function(config, args):
             if args.resume_from_checkpoint and epoch == 0 and step < resume_step:
                 continue
             # We could avoid this line since we set the accelerator with `device_placement=True`.
-            batch.to(accelerator.device)
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss = loss / gradient_accumulation_steps
+            batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+            inputs = (batch["image"] - mean) / std
+            outputs = model(inputs)
+            loss = torch.nn.functional.cross_entropy(outputs, batch["label"])
             # We keep track of the loss at each epoch
             if args.with_tracking:
                 total_loss += loss.detach().float()
             accelerator.backward(loss)
-            if step % gradient_accumulation_steps == 0:
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
-
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
             overall_step += 1
-
             if isinstance(checkpointing_steps, int):
                 if overall_step % checkpointing_steps == 0:
                     accelerator.save_state(f"step_{overall_step}")
         if state_restored:
             model.eval()
+            accurate = 0
+            num_elems = 0
             for step, batch in enumerate(eval_dataloader):
                 # We could avoid this line since we set the accelerator with `device_placement=True`.
-                batch.to(accelerator.device)
+                batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+                inputs = (batch["image"] - mean) / std
                 with torch.no_grad():
-                    outputs = model(**batch)
-                predictions = outputs.logits.argmax(dim=-1)
-                metric.add_batch(
-                    predictions=accelerator.gather(predictions),
-                    references=accelerator.gather(batch["labels"]),
-                )
+                    outputs = model(inputs)
+                predictions = outputs.argmax(dim=-1)
+                accurate_preds = accelerator.gather(predictions) == accelerator.gather(batch["label"])
+                num_elems += accurate_preds.shape[0]
+                accurate += accurate_preds.long().sum()
 
-            eval_metric = metric.compute()
+            eval_metric = accurate.item() / num_elems
             # Use accelerator.print to print only on the main process.
-            accelerator.print(f"epoch {epoch}:", eval_metric)
+            accelerator.print(f"epoch {epoch}: {100 * eval_metric:.2f}")
             if args.with_tracking:
                 accelerator.log(
-                    {
-                        "accuracy": eval_metric["accuracy"],
-                        "f1": eval_metric["f1"],
-                        "total_loss": total_loss,
-                        "epoch": epoch,
-                    },
-                    step=overall_step,
+                    {"accuracy": 100 * eval_metric, "total_loss": total_loss, "epoch": epoch}, step=overall_step
                 )
-
             if args.checkpointing_steps == "epoch":
                 accelerator.save_state(f"epoch_{epoch}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
+    parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
     parser.add_argument("--fp16", action="store_true", help="If passed, will use FP16 training.")
     parser.add_argument(
         "--mixed_precision",
@@ -236,25 +248,8 @@ def main():
         "and an Nvidia Ampere GPU.",
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
-    parser.add_argument(
-        "--checkpointing_steps",
-        type=str,
-        default=None,
-        help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
-    )
-    parser.add_argument(
-        "--resume_from_checkpoint",
-        type=str,
-        default=None,
-        help="If the training should continue from a checkpoint folder.",
-    )
-    parser.add_argument(
-        "--with_tracking",
-        required=False,
-        help="Whether to load in all available experiment trackers from the environment and use them for logging.",
-    )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
+    config = {"lr": 3e-2, "num_epochs": 3, "seed": 42, "batch_size": 64, "image_size": 224}
     training_function(config, args)
 
 
