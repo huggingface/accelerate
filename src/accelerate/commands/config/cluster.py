@@ -54,9 +54,10 @@ def get_cluster_input():
 
     if distributed_type == DistributedType.NO:
         use_cpu = _ask_field(
-            "Do you want to run your training on CPU only (even if a GPU is available)? [no]:",
-            lambda x: bool(x),
+            "Do you want to run your training on CPU only (even if a GPU is available)? [yes/NO]:",
+            _convert_yes_no_to_bool,
             default=False,
+            error_message="Please enter yes or no.",
         )
     elif distributed_type == DistributedType.MULTI_CPU:
         use_cpu = True
