@@ -160,9 +160,9 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         # Check HPS through careful parsing and cleaning
         cleaned_log = re.sub(r"[\x00-\x1f]+", " ", content.decode("utf8", "ignore"))
         self.assertTrue("0.1" in self.get_value_from_log("total_loss", cleaned_log))
-        self.assertEqual("1" in self.get_value_from_log("iteration", cleaned_log))
-        self.assertEqual("some_value" in self.get_value_from_log("my_text", cleaned_log))
-        self.assertEqual("0" in self.get_value_from_log("_step", cleaned_log))
+        self.assertTrue("1" in self.get_value_from_log("iteration", cleaned_log))
+        self.assertTrue("some_value" in self.get_value_from_log("my_text", cleaned_log))
+        self.assertTrue("0" in self.get_value_from_log("_step", cleaned_log))
 
 
 # Comet has a special `OfflineExperiment` we need to use for testing
