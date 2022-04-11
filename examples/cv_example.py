@@ -166,7 +166,7 @@ def training_function(config, args):
         model.eval()
         accurate = 0
         num_elems = 0
-        for step, batch in enumerate(eval_dataloader):
+        for _, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
             inputs = (batch["image"] - mean) / std
