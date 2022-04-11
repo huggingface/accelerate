@@ -29,7 +29,9 @@ from transformers import (
 
 
 ########################################################################
-# This is a fully working simple example to use Accelerate
+# This is a fully working simple example to use Accelerate,
+# specifically showcasing the experiment tracking capability,
+# and builds off the `nlp_example.py` script.
 #
 # This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):
@@ -38,32 +40,34 @@ from transformers import (
 #   - (multi) TPUs
 #   - fp16 (mixed-precision) or fp32 (normal precision)
 #
+# To help focus on the differences in the code, building `DataLoaders`
+# was refactored into its own function.
+# New additions from the base script can be found quickly by
+# looking for the # New Code # tags
+#
 # To run it in each of these various modes, follow the instructions
 # in the readme for examples:
 # https://github.com/huggingface/accelerate/tree/main/examples
 #
 ########################################################################
 
-
 MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
 
-def training_function(config, args):
-    # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
-    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
-    lr = config["lr"]
-    num_epochs = int(config["num_epochs"])
-    correct_bias = config["correct_bias"]
-    seed = int(config["seed"])
-    batch_size = int(config["batch_size"])
+def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
+    """
+    Creates a set of `DataLoader`s for the `glue` dataset,
+    using "bert-base-cased" as the tokenizer.
 
+    Args:
+        accelerator (`Accelerator`):
+            An `Accelerator` object
+        batch_size (`int`, *optional*):
+            The batch size for the train and validation DataLoaders.
+    """
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")
-    metric = load_metric("glue", "mrpc")
-
-    set_seed(seed)
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
@@ -81,12 +85,6 @@ def training_function(config, args):
     # transformers library
     tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
 
-    # If the batch size is too big we use gradient accumulation
-    gradient_accumulation_steps = 1
-    if batch_size > MAX_GPU_BATCH_SIZE:
-        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
-        batch_size = MAX_GPU_BATCH_SIZE
-
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
         if accelerator.distributed_type == DistributedType.TPU:
@@ -100,6 +98,37 @@ def training_function(config, args):
     eval_dataloader = DataLoader(
         tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE
     )
+
+    return train_dataloader, eval_dataloader
+
+
+def training_function(config, args):
+    # Initialize Accelerator
+
+    # New Code #
+    # We pass in "all" to `log_with` to grab all available trackers in the environment
+    # Note: If using a custom `Tracker` class, should be passed in here such as:
+    # >>> log_with = ["all", MyCustomTrackerClassInstance()]
+    if args.with_tracking:
+        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all")
+    else:
+        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
+    lr = config["lr"]
+    num_epochs = int(config["num_epochs"])
+    correct_bias = config["correct_bias"]
+    seed = int(config["seed"])
+    batch_size = int(config["batch_size"])
+    set_seed(seed)
+
+    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
+    metric = load_metric("glue", "mrpc")
+
+    # If the batch size is too big we use gradient accumulation
+    gradient_accumulation_steps = 1
+    if batch_size > MAX_GPU_BATCH_SIZE:
+        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
+        batch_size = MAX_GPU_BATCH_SIZE
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
@@ -126,14 +155,25 @@ def training_function(config, args):
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
+    # New Code #
+    # We need to initalize the trackers we use. Overall configurations can also be stored
+    if args.with_tracking:
+        accelerator.init_trackers("accelerate_glue_with_tracking", config)
+
     # Now we train the model
     for epoch in range(num_epochs):
         model.train()
+        # New Code #
+        # For our tracking example, we will log the total loss of each epoch
+        if args.with_tracking:
+            total_loss = 0
         for step, batch in enumerate(train_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
             loss = outputs.loss
+            # New Code #
+            total_loss += loss.detach().float()
             loss = loss / gradient_accumulation_steps
             accelerator.backward(loss)
             if step % gradient_accumulation_steps == 0:
@@ -143,19 +183,33 @@ def training_function(config, args):
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
+            # We could avoid this line since we set the accelerator with `device_placement=True` (the default).
             batch.to(accelerator.device)
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
+            # It is slightly faster to call this once, than multiple times
+            predictions, references = accelerator.gather((predictions, batch["labels"]))
             metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
+                predictions=predictions,
+                references=references,
             )
 
         eval_metric = metric.compute()
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
+
+        # New Code #
+        # To actually log, we call `Accelerator.log`
+        # The values passed can be of `str`, `int`, or `float`
+        accelerator.log(
+            {"accuracy": eval_metric["accuracy"], "f1": eval_metric["f1"], "train_loss": total_loss, "epoch": epoch}
+        )
+
+    # New Code #
+    # When a run is finished, you should call `accelerator.end_training()`
+    # to close all of the open trackers
+    accelerator.end_training()
 
 
 def main():
@@ -170,6 +224,11 @@ def main():
         "and an Nvidia Ampere GPU.",
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
+    parser.add_argument(
+        "--with_tracking",
+        action="store_true",
+        help="Whether to load in all available experiment trackers from the environment and use them for logging.",
+    )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
     training_function(config, args)
