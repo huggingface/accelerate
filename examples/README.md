@@ -186,9 +186,19 @@ To run it in each of these various modes, use the following commands:
 
 ## Finer Examples
 
-While the first two scripts are extremely barebones when it comes to what you can do with accelerate, there are two complementary scripts for each: `complete_cv_example.py` and `complete_nlp_example.py`.
+While the first two scripts are extremely barebones when it comes to what you can do with accelerate, more advanced features are documented in two other locations.
 
-These two serve to document what else the `Accelerate` library is able to do, outside of just the basic training loop. They each have the following additional arguments:
+### `by_feature` examples
+
+These scripts are *individual* examples highlighting one particular feature or use-case within Accelerate. They all stem from the [nlp_example.py](./nlp_example.py) script, and any changes or modifications is denoted with a `# New Code #` comment.
+
+Read the README.md file located in the `by_feature` folder for more information.
+
+### `complete_*` examples
+
+These two scripts contain *every* single feature currently available in Accelerate in one place, as one giant script.
+
+New arguments that can be passed include:
 
 - `checkpointing_steps`, whether the various states should be saved at the end of every `n` steps, or `"epoch"` for each epoch. States are then saved to folders named `step_{n}` or `epoch_{n}`
 - `resume_from_checkpoint`, should be used if you want to resume training off of a previous call to the script and passed a `checkpointing_steps` to it.
