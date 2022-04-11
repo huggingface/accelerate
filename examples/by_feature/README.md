@@ -19,6 +19,12 @@ Adjustments to each script from the base `nlp_example.py` file can be found quic
 
 All following scripts also accept these arguments in addition to their added ones.
 
+These arguments should be added at the end of any method for starting the python script (such as `python`, `accelerate launch`, `python -m torch.distributed.launch`), such as:
+
+```bash
+accelerate launch ../nlp_example.py --mixed_precision fp16 --cpu 0
+```
+
 ### Checkpointing and Resuming Training (`checkpointing.py`)
 
 - Shows how to use `Accelerator.save_state` and `Accelerator.load_state` to save or continue training
@@ -28,9 +34,23 @@ All following scripts also accept these arguments in addition to their added one
   - `output_dir`, where saved state folders should be saved to, default is current working directory
   - `resume_from_checkpoint`, what checkpoint folder to resume from. ("epoch_0", "step_22", ...)
 
+These arguments should be added at the end of any method for starting the python script (such as `python`, `accelerate launch`, `python -m torch.distributed.launch`), such as:
+
+(Note, `resume_from_checkpoint` assumes that we've ran the script for one epoch with the `--checkpointing_steps epoch` flag)
+
+```bash
+accelerate launch ./checkpointing.py --checkpointing_steps epoch output_dir "checkpointing_tutorial" --resume_from_checkpoint "checkpointing_tutorial/epoch_0"
+```
+
 ### Experiment Tracking (`tracking.py`)
 
 - Shows how to use `Accelerate.init_trackers` and `Accelerator.log`
 - Can be used with Weights and Biases, TensorBoard, or CometML.
 - Arguments available:
   - `with_tracking`, whether to load in all available experiment trackers from the environment.
+
+These arguments should be added at the end of any method for starting the python script (such as `python`, `accelerate launch`, `python -m torch.distributed.launch`), such as:
+
+```bash
+accelerate launch ./tracking.py --with_tracking
+```
