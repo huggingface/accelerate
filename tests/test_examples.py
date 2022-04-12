@@ -81,32 +81,41 @@ class ExampleDifferenceTests(unittest.TestCase):
     information found in the `by_feature` scripts, line for line.
     """
 
-    def one_complete_example(self, complete_file_name: str):
+    def one_complete_example(self, complete_file_name: str, parser_only: bool):
         """
         Tests a single `complete` example against all of the implemented `by_feature` scripts
 
         Args:
             complete_file_name (`str`):
                 The filename of a complete example
+            parser_only (`bool`):
+                Whether to look at the main training function, or the argument parser
         """
         by_feature_path = os.path.abspath(os.path.join("examples", "by_feature"))
         examples_path = os.path.abspath("examples")
         for item in os.listdir(by_feature_path):
             item_path = os.path.join(by_feature_path, item)
             if os.path.isfile(item_path) and ".py" in item_path:
-                with self.subTest(feature_script=item):
+                with self.subTest(feature_script=item, section="main()" if parser_only else "training_function()"):
                     diff = compare_against_test(
                         os.path.join(examples_path, "nlp_example.py"),
                         os.path.join(examples_path, complete_file_name),
                         item_path,
+                        parser_only
                     )
-                    self.assertEqual(diff, [])
+                    self.assertEqual(len(diff), 0)
 
-    def test_complete_nlp_example(self):
-        self.one_complete_example("complete_nlp_example.py")
+    def test_complete_nlp_example_parser(self):
+        self.one_complete_example("complete_nlp_example.py", True)
 
-    def test_complete_cv_example(self):
-        self.one_complete_example("complete_cv_example.py")
+    def test_complete_nlp_example_body(self):
+        self.one_complete_example("complete_nlp_example.py", False)
+
+    def test_complete_cv_example_parser(self):
+        self.one_complete_example("complete_cv_example.py", True)
+
+    def test_complete_cv_example_body(self):
+        self.one_complete_example("complete_cv_example.py", False)
 
 
 class FeatureExamplesTests(unittest.TestCase):
