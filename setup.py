@@ -22,7 +22,9 @@ extras["test"] = [
     "pytest",
     "pytest-xdist",
     "datasets",
-    "transformers"
+    "transformers",
+    "scipy",
+    "sklearn"
 ]
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorflow"]
 extras["dev"] = extras["quality"] + extras["test"]
