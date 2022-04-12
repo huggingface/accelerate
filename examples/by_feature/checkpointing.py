@@ -217,6 +217,8 @@ def training_function(config, args):
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
+            # We could avoid this line since we set the accelerator with `device_placement=True` (the default).
+            batch.to(accelerator.device)
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
