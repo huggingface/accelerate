@@ -15,7 +15,11 @@
 # limitations under the License.
 
 
-from pyparsing import line
+import logging
+import os
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_train_func(lines: list):
@@ -37,7 +41,8 @@ def get_train_func(lines: list):
                 return good_lines
             good_lines.append(line)
 
-def get_main_func(lines:list):
+
+def get_main_func(lines: list):
     """
     Finds the main function from inside segmented source code
 
@@ -59,8 +64,7 @@ def get_main_func(lines:list):
 
 def clean_lines(lines: list):
     """
-    Filters `lines` and removes any entries that
-    start with a comment ('#') or is just a newline ('\n')
+    Filters `lines` and removes any entries that start with a comment ('#') or is just a newline ('\n')
 
     Args:
         lines (`list`):
@@ -69,7 +73,7 @@ def clean_lines(lines: list):
     return [line for line in lines if not line.lstrip().startswith("#") and line != "\n"]
 
 
-def compare_against_test(base_filename: str, full_filename: str, feature_filename: str, parser_only: bool):
+def compare_against_test(base_filename: str, feature_filename: str, parser_only: bool):
     """
     Checks whether the content aligned in `test_filename` is included inside of `full_filename`.
 
@@ -78,17 +82,14 @@ def compare_against_test(base_filename: str, full_filename: str, feature_filenam
     Args:
         base_filename (`str`):
             The base template for the script, such as `nlp_example.py` or `cv_example.py`
-        full_filename (`str`):
-            The complete example script to check. Should be most of the time `complete_nlp_example.py`
         feature_filename (`str`):
-            The script located in `by_feature` where we want to verify its behavior is mimicked
-            in `full_filename`
-        parser_only(`bool`):
+            The script located in `by_feature` where we want to verify its behavior is mimicked in `full_filename`
+        parser_only (`bool`):
             Whether to compare against the contents of `main()` or `training_function()`
     """
     with open(base_filename, "r") as f:
         base_file_contents = f.readlines()
-    with open(full_filename, "r") as f:
+    with open(os.path.abspath(os.path.join("examples", "nlp_example.py")), "r") as f:
         full_file_contents = f.readlines()
     with open(feature_filename, "r") as f:
         feature_file_contents = f.readlines()
@@ -112,12 +113,9 @@ def compare_against_test(base_filename: str, full_filename: str, feature_filenam
 
     # Extract out just the new parts from the full_file_training_func
     new_full_example_parts = [
-        line
-        for line in full_file_func
-        if (line not in base_file_func) and (line.lstrip() != _dl_line)
+        line for line in full_file_func if (line not in base_file_func) and (line.lstrip() != _dl_line)
     ]
 
     # Finally, get the overall diff
     diff_from_example = [line for line in new_feature_code if line not in new_full_example_parts]
-
     return diff_from_example

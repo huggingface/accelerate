@@ -73,7 +73,7 @@ class PetsDataset(Dataset):
 
 def training_function(config, args):
     # Initialize accelerator
-    accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu, mixed_precision=args.mix_precision)
+    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mix_precision)
 
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
@@ -185,7 +185,6 @@ def training_function(config, args):
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
     parser.add_argument("--data_dir", required=True, help="The data folder on disk.")
-    parser.add_argument("--fp16", action="store_true", help="If passed, will use FP16 training.")
     parser.add_argument(
         "--mixed_precision",
         type=str,
@@ -194,6 +193,12 @@ def main():
         help="Whether to use mixed precision. Choose"
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
         "and an Nvidia Ampere GPU.",
+    )
+    parser.add_argument(
+        "--checkpointing_steps",
+        type=str,
+        default=None,
+        help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()

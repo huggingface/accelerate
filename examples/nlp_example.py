@@ -148,9 +148,10 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
+            predictions, references = accelerator.gather((predictions, batch["labels"]))
             metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
+                predictions=predictions,
+                references=references,
             )
 
         eval_metric = metric.compute()

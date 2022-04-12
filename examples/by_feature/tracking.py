@@ -234,7 +234,7 @@ def main():
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     parser.add_argument(
         "--with_tracking",
-        action="store_true",
+        required=False,
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
     args = parser.parse_args()

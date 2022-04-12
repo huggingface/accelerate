@@ -91,31 +91,25 @@ class ExampleDifferenceTests(unittest.TestCase):
             parser_only (`bool`):
                 Whether to look at the main training function, or the argument parser
         """
+        self.maxDiff = None
         by_feature_path = os.path.abspath(os.path.join("examples", "by_feature"))
         examples_path = os.path.abspath("examples")
         for item in os.listdir(by_feature_path):
             item_path = os.path.join(by_feature_path, item)
             if os.path.isfile(item_path) and ".py" in item_path:
-                with self.subTest(feature_script=item, section="main()" if parser_only else "training_function()"):
+                with self.subTest(
+                    tested_script=complete_file_name,
+                    feature_script=item,
+                    tested_section="main()" if parser_only else "training_function()",
+                ):
                     diff = compare_against_test(
-                        os.path.join(examples_path, "nlp_example.py"),
-                        os.path.join(examples_path, complete_file_name),
-                        item_path,
-                        parser_only
+                        os.path.join(examples_path, complete_file_name), item_path, parser_only
                     )
-                    self.assertEqual(len(diff), 0)
+                    self.assertEqual("\n".join(diff), "")
 
-    def test_complete_nlp_example_parser(self):
+    def test_nlp_examples(self):
         self.one_complete_example("complete_nlp_example.py", True)
-
-    def test_complete_nlp_example_body(self):
         self.one_complete_example("complete_nlp_example.py", False)
-
-    def test_complete_cv_example_parser(self):
-        self.one_complete_example("complete_cv_example.py", True)
-
-    def test_complete_cv_example_body(self):
-        self.one_complete_example("complete_cv_example.py", False)
 
 
 class FeatureExamplesTests(unittest.TestCase):

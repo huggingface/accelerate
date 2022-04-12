@@ -74,16 +74,10 @@ class PetsDataset(Dataset):
 def training_function(config, args):
     # Initialize accelerator
     if args.with_tracking:
-        accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all")
+        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all")
     else:
-        accelerator = Accelerator(fp16=args.fp16, cpu=args.cpu, mixed_precision=args.mixed_precision)
+        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
 
-    if hasattr(args.checkpointing_steps, "isdigit"):
-        checkpointing_steps = args.checkpointing_steps
-        if args.checkpointing_steps.isdigit():
-            checkpointing_steps = int(args.checkpointing_steps)
-    else:
-        checkpointing_steps = None
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
@@ -92,6 +86,19 @@ def training_function(config, args):
     image_size = config["image_size"]
     if not isinstance(image_size, (list, tuple)):
         image_size = (image_size, image_size)
+
+    # Parse out whether we are saving every epoch or after a certain number of batches
+    if hasattr(args.checkpointing_steps, "isdigit"):
+        if args.checkpointing_steps == "epoch":
+            checkpointing_steps = args.checkpointing_steps
+        elif args.checkpointing_steps.isdigit():
+            checkpointing_steps = int(args.checkpointing_steps)
+        else:
+            raise ValueError(
+                f"Argument `checkpointing_steps` must be either a number or `epoch`. `{args.checkpointing_steps}` passed."
+            )
+    else:
+        checkpointing_steps = None
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
@@ -163,24 +170,27 @@ def training_function(config, args):
     )
 
     # Potentially load in the weights and states from a previous save
-    state_restored = True
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
             accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
             accelerator.load_state(args.resume_from_checkpoint)
-            resume_step = None
+            path = os.path.basename(args.resume_from_checkpoint)
         else:
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
-            if "epoch" in path.name:
-                num_epochs -= int(path.name.replace("epoch_", ""))
-            else:
-                resume_step = int(path.name.replace("step_", ""))
-                num_epochs -= resume_step // len(train_dataloader)
-                resume_step = (num_epochs * len(train_dataloader)) - resume_step
-                state_restored = False
+        # Extract `epoch_{i}` or `step_{i}`
+        training_difference = os.path.splitext(path)[0]
+
+        if "epoch" in training_difference:
+            num_epochs -= int(training_difference.replace("epoch_", ""))
+            resume_step = None
+        else:
+            resume_step = int(training_difference.replace("step_", ""))
+            num_epochs -= resume_step // len(train_dataloader)
+            # If resuming by step, we also need to know exactly how far into the DataLoader we went
+            resume_step = (num_epochs * len(train_dataloader)) - resume_step
 
     overall_step = 0
     # Now we train the model
@@ -190,8 +200,9 @@ def training_function(config, args):
             total_loss = 0
         for step, batch in enumerate(train_dataloader):
             # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == 0 and step < resume_step:
-                continue
+            if args.resume_from_checkpoint and epoch == 0:
+                if resume_step is not None and step < resume_step:
+                    pass
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
             inputs = (batch["image"] - mean) / std
@@ -206,32 +217,40 @@ def training_function(config, args):
             optimizer.zero_grad()
             overall_step += 1
             if isinstance(checkpointing_steps, int):
+                output_dir = f"step_{overall_step}"
                 if overall_step % checkpointing_steps == 0:
-                    accelerator.save_state(f"step_{overall_step}")
-        if state_restored:
-            model.eval()
-            accurate = 0
-            num_elems = 0
-            for step, batch in enumerate(eval_dataloader):
-                # We could avoid this line since we set the accelerator with `device_placement=True`.
-                batch = {k: v.to(accelerator.device) for k, v in batch.items()}
-                inputs = (batch["image"] - mean) / std
-                with torch.no_grad():
-                    outputs = model(inputs)
-                predictions = outputs.argmax(dim=-1)
-                accurate_preds = accelerator.gather(predictions) == accelerator.gather(batch["label"])
-                num_elems += accurate_preds.shape[0]
-                accurate += accurate_preds.long().sum()
+                    if args.output_dir is not None:
+                        output_dir = os.path.join(args.output_dir, output_dir)
+                    accelerator.save_state(output_dir)
+        model.eval()
+        accurate = 0
+        num_elems = 0
+        for step, batch in enumerate(eval_dataloader):
+            # We could avoid this line since we set the accelerator with `device_placement=True`.
+            batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+            inputs = (batch["image"] - mean) / std
+            with torch.no_grad():
+                outputs = model(inputs)
+            predictions = outputs.argmax(dim=-1)
+            accurate_preds = accelerator.gather(predictions) == accelerator.gather(batch["label"])
+            num_elems += accurate_preds.shape[0]
+            accurate += accurate_preds.long().sum()
 
-            eval_metric = accurate.item() / num_elems
-            # Use accelerator.print to print only on the main process.
-            accelerator.print(f"epoch {epoch}: {100 * eval_metric:.2f}")
-            if args.with_tracking:
-                accelerator.log(
-                    {"accuracy": 100 * eval_metric, "total_loss": total_loss, "epoch": epoch}, step=overall_step
-                )
-            if args.checkpointing_steps == "epoch":
-                accelerator.save_state(f"epoch_{epoch}")
+        eval_metric = accurate.item() / num_elems
+        # Use accelerator.print to print only on the main process.
+        accelerator.print(f"epoch {epoch}: {100 * eval_metric:.2f}")
+        if args.with_tracking:
+            accelerator.log(
+                {"accuracy": 100 * eval_metric, "total_loss": total_loss, "epoch": epoch}, step=overall_step
+            )
+        if checkpointing_steps == "epoch":
+            output_dir = f"epoch_{epoch}"
+            if args.output_dir is not None:
+                output_dir = os.path.join(args.output_dir, output_dir)
+            accelerator.save_state(output_dir)
+
+    if args.with_tracking:
+        accelerator.end_training()
 
 
 def main():
@@ -253,6 +272,12 @@ def main():
         type=str,
         default=None,
         help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=".",
+        help="Optional save directory where all checkpoint folders will be stored. Default is the current working directory.",
     )
     parser.add_argument(
         "--resume_from_checkpoint",
