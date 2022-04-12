@@ -274,7 +274,7 @@ def main():
         help="If the training should continue from a checkpoint folder.",
     )
     args = parser.parse_args()
-    config = {"lr": 1e-4, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
     training_function(config, args)
 
 

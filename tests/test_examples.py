@@ -84,11 +84,8 @@ class FeatureExamplesTests(unittest.TestCase):
             --output_dir {tmpdir}
             """.split()
             with mock.patch.object(sys, "argv", testargs):
-                with mock.patch("accelerate.Accelerator.print") as mocked_print:
-                    checkpointing.main()
-                    call = mocked_print.mock_calls[-1]
-                    self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
-                    self.assertTrue(os.path.exists(os.path.join(tmpdir, "epoch_0")))
+                checkpointing.main()
+                self.assertTrue(os.path.exists(os.path.join(tmpdir, "epoch_0")))
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_steps(self):
@@ -99,17 +96,11 @@ class FeatureExamplesTests(unittest.TestCase):
             --output_dir {tmpdir}
             """.split()
             with mock.patch.object(sys, "argv", testargs):
-                with mock.patch("accelerate.Accelerator.print") as mocked_print:
-                    checkpointing.main()
-                    call = mocked_print.mock_calls[-1]
-                    self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
-                    self.assertTrue(os.path.exists(os.path.join(tmpdir, "step_2")))
+                checkpointing.main()
+                self.assertTrue(os.path.exists(os.path.join(tmpdir, "step_2")))
 
     @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
     def test_tracking(self):
         testargs = ["tracking.py"]
         with mock.patch.object(sys, "argv", testargs):
-            with mock.patch("accelerate.Accelerator.print") as mocked_print:
-                tracking.main()
-                call = mocked_print.mock_calls[-1]
-                self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
+            tracking.main()

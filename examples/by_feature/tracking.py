@@ -238,7 +238,7 @@ def main():
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
     args = parser.parse_args()
-    config = {"lr": 1e-4, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
     training_function(config, args)
 
 
