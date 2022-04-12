@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import os
 
 import torch
 from torch.utils.data import DataLoader
@@ -158,7 +159,8 @@ def training_function(config, args):
     # New Code #
     # We need to initalize the trackers we use. Overall configurations can also be stored
     if args.with_tracking:
-        accelerator.init_trackers("nlp_example", config)
+        run = os.path.split(__file__).split(".")[0]
+        accelerator.init_trackers(run, config)
 
     # Now we train the model
     for epoch in range(num_epochs):

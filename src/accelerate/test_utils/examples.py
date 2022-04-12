@@ -73,7 +73,7 @@ def clean_lines(lines: list):
     return [line for line in lines if not line.lstrip().startswith("#") and line != "\n"]
 
 
-def compare_against_test(base_filename: str, feature_filename: str, parser_only: bool):
+def compare_against_test(base_filename: str, feature_filename: str, parser_only: bool, secondary_filename: str = None):
     """
     Checks whether the content aligned in `test_filename` is included inside of `full_filename`.
 
@@ -93,29 +93,40 @@ def compare_against_test(base_filename: str, feature_filename: str, parser_only:
         full_file_contents = f.readlines()
     with open(feature_filename, "r") as f:
         feature_file_contents = f.readlines()
+    if secondary_filename is not None:
+        with open(secondary_filename, "r") as f:
+            secondary_file_contents = f.readlines()
 
     # This is our base, we remove all the code from here in our `full_filename` and `feature_filename` to find the new content
     if parser_only:
         base_file_func = clean_lines(get_main_func(base_file_contents))
         full_file_func = clean_lines(get_main_func(full_file_contents))
         feature_file_func = clean_lines(get_main_func(feature_file_contents))
+        if secondary_filename is not None:
+            secondary_file_func = clean_lines(get_main_func(secondary_file_contents))
     else:
         base_file_func = clean_lines(get_train_func(base_file_contents))
         full_file_func = clean_lines(get_train_func(full_file_contents))
         feature_file_func = clean_lines(get_train_func(feature_file_contents))
+        if secondary_filename is not None:
+            secondary_file_func = clean_lines(get_train_func(secondary_file_contents))
 
     _dl_line = "train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)\n"
 
-    # Specific code in our script that differs from the base, aka what is new
+    # Specific code in our script that differs from the full version, aka what is new
     new_feature_code = [
-        line for line in feature_file_func if (line not in base_file_func) and (line.lstrip() != _dl_line)
+        line for line in feature_file_func if (line not in full_file_func) and (line.lstrip() != _dl_line)
     ]
 
     # Extract out just the new parts from the full_file_training_func
     new_full_example_parts = [
-        line for line in full_file_func if (line not in base_file_func) and (line.lstrip() != _dl_line)
+        line for line in base_file_func if (line not in full_file_func) and (line.lstrip() != _dl_line)
     ]
 
     # Finally, get the overall diff
     diff_from_example = [line for line in new_feature_code if line not in new_full_example_parts]
+    if secondary_filename is not None:
+        diff_from_two = [line for line in full_file_contents if line not in secondary_file_func]
+        diff_from_example = [line for line in diff_from_example if line not in diff_from_two]
+
     return diff_from_example

@@ -79,7 +79,8 @@ def training_function(config, args):
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        accelerator.init_trackers("nlp_example", config)
+        run = os.path.split(__file__).split(".")[0]
+        accelerator.init_trackers(run, config)
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")

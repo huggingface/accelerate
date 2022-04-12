@@ -81,7 +81,9 @@ class ExampleDifferenceTests(unittest.TestCase):
     information found in the `by_feature` scripts, line for line.
     """
 
-    def one_complete_example(self, complete_file_name: str, parser_only: bool):
+    def one_complete_example(
+        self, complete_file_name: str, parser_only: bool, secondary_filename: str = None, special_strings: list = None
+    ):
         """
         Tests a single `complete` example against all of the implemented `by_feature` scripts
 
@@ -90,6 +92,12 @@ class ExampleDifferenceTests(unittest.TestCase):
                 The filename of a complete example
             parser_only (`bool`):
                 Whether to look at the main training function, or the argument parser
+            secondary_filename (`str`, *optional*):
+                A potential secondary base file to strip all script information not relevant for checking,
+                such as "cv_example.py" when testing "complete_cv_example.py"
+            special_strings (`list`, *optional*):
+                A list of strings to potentially remove before checking no differences are left. These should be
+                diffs that are file specific, such as different logging variations between files.
         """
         self.maxDiff = None
         by_feature_path = os.path.abspath(os.path.join("examples", "by_feature"))
@@ -103,13 +111,30 @@ class ExampleDifferenceTests(unittest.TestCase):
                     tested_section="main()" if parser_only else "training_function()",
                 ):
                     diff = compare_against_test(
-                        os.path.join(examples_path, complete_file_name), item_path, parser_only
+                        os.path.join(examples_path, complete_file_name), item_path, parser_only, secondary_filename
                     )
-                    self.assertEqual("\n".join(diff), "")
+                    diff = "\n".join(diff)
+                    if special_strings is not None:
+                        for string in special_strings:
+                            diff = diff.replace(string, "")
+                    self.assertEqual(diff, "")
 
     def test_nlp_examples(self):
         self.one_complete_example("complete_nlp_example.py", True)
         self.one_complete_example("complete_nlp_example.py", False)
+
+    def test_cv_examples(self):
+        cv_path = os.path.abspath(os.path.join("examples", "cv_example.py"))
+        special_strings = [
+            " " * 16 + "{\n\n",
+            " " * 18 + '"accuracy": eval_metric["accuracy"],\n\n',
+            " " * 18 + '"f1": eval_metric["f1"],\n\n',
+            " " * 18 + '"train_loss": total_loss,\n\n',
+            " " * 18 + '"epoch": epoch,\n\n',
+            " " * 16 + "}\n",
+            " " * 8,
+        ]
+        self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)
 
 
 class FeatureExamplesTests(unittest.TestCase):
