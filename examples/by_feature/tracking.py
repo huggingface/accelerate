@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import logging
 import os
 
 import torch
@@ -28,7 +29,6 @@ from transformers import (
     set_seed,
 )
 
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,8 @@ def training_function(config, args):
     # We need to initalize the trackers we use. Overall configurations can also be stored
     if args.with_tracking:
         run = os.path.split(__file__)[-1].split(".")[0]
-        logging.info(f"Run location: {run}")
+        if args.logging_dir:
+            run = os.path.join(args.logging_dir, run)
         accelerator.init_trackers(run, config)
 
     # Now we train the model
