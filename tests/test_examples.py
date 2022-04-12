@@ -134,6 +134,7 @@ class ExampleDifferenceTests(unittest.TestCase):
             " " * 16 + "}\n",
             " " * 8,
         ]
+        self.one_complete_example("complete_cv_example.py", True, cv_path, special_strings)
         self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)
 
 
