@@ -267,7 +267,7 @@ def main():
         "--output_dir",
         type=str,
         default=".",
-        help="Optional save directory where all checkpoint folders will be stored, as well as the overall results. Default is the current working directory.",
+        help="Optional save directory where all checkpoint folders will be stored. Default is the current working directory.",
     )
     parser.add_argument(
         "--resume_from_checkpoint",
