@@ -21,6 +21,7 @@ from unittest import mock
 from torch.utils.data import DataLoader
 
 from accelerate import DistributedType
+from accelerate.test_utils.examples import compare_against_test
 from datasets import load_dataset
 from transformers import AutoTokenizer
 
@@ -72,6 +73,40 @@ def mocked_dataloaders(accelerator, batch_size: int = 16):
     eval_dataloader = DataLoader(tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=1)
 
     return train_dataloader, eval_dataloader
+
+
+class ExampleDifferenceTests(unittest.TestCase):
+    """
+    This TestCase checks that all of the `complete_*` scripts contain all of the
+    information found in the `by_feature` scripts, line for line.
+    """
+
+    def one_complete_example(self, complete_file_name: str):
+        """
+        Tests a single `complete` example against all of the implemented `by_feature` scripts
+
+        Args:
+            complete_file_name (`str`):
+                The filename of a complete example
+        """
+        by_feature_path = os.path.abspath(os.path.join("examples", "by_feature"))
+        examples_path = os.path.abspath("examples")
+        for item in os.listdir(by_feature_path):
+            item_path = os.path.join(by_feature_path, item)
+            if os.path.isfile(item_path) and ".py" in item_path:
+                with self.subTest(feature_script=item):
+                    diff = compare_against_test(
+                        os.path.join(examples_path, "nlp_example.py"),
+                        os.path.join(examples_path, complete_file_name),
+                        item_path,
+                    )
+                    self.assertEqual(diff, [])
+
+    def test_complete_nlp_example(self):
+        self.one_complete_example("complete_nlp_example.py")
+
+    def test_complete_cv_example(self):
+        self.one_complete_example("complete_cv_example.py")
 
 
 class FeatureExamplesTests(unittest.TestCase):

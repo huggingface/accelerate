@@ -158,7 +158,7 @@ def training_function(config, args):
     # New Code #
     # We need to initalize the trackers we use. Overall configurations can also be stored
     if args.with_tracking:
-        accelerator.init_trackers("accelerate_glue_with_tracking", config)
+        accelerator.init_trackers("nlp_example", config)
 
     # Now we train the model
     for epoch in range(num_epochs):

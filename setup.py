@@ -21,6 +21,7 @@ extras["docs"] = []
 extras["test"] = [
     "pytest",
     "pytest-xdist",
+    "pytest-subtests",
     "datasets",
     "transformers",
     "scipy",
