@@ -28,6 +28,10 @@ from transformers import (
     set_seed,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 ########################################################################
 # This is a fully working simple example to use Accelerate,
@@ -162,6 +166,7 @@ def training_function(config, args):
     # We need to initalize the trackers we use. Overall configurations can also be stored
     if args.with_tracking:
         run = os.path.split(__file__)[-1].split(".")[0]
+        logging.info(f"Run location: {run}")
         accelerator.init_trackers(run, config)
 
     # Now we train the model
