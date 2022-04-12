@@ -164,6 +164,17 @@ class FeatureExamplesTests(unittest.TestCase):
 
     @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
     def test_tracking(self):
-        testargs = ["tracking.py"]
-        with mock.patch.object(sys, "argv", testargs):
-            tracking.main()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            old_modules = dict(sys.modules)
+            sys.modules.pop("comet_ml", None)
+            sys.modules.pop("wandb", None)
+
+            testargs = f"""
+            tracking.py
+            --with_tracking
+            --logging_dir {tmpdir}
+            """.split()
+            with mock.patch.object(sys, "argv", testargs):
+                tracking.main()
+                self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
+            sys.modules = old_modules

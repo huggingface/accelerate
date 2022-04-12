@@ -111,7 +111,9 @@ def training_function(config, args):
     # Note: If using a custom `Tracker` class, should be passed in here such as:
     # >>> log_with = ["all", MyCustomTrackerClassInstance()]
     if args.with_tracking:
-        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all")
+        accelerator = Accelerator(
+            cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all", logging_dir=args.logging_dir
+        )
     else:
         accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
@@ -159,7 +161,7 @@ def training_function(config, args):
     # New Code #
     # We need to initalize the trackers we use. Overall configurations can also be stored
     if args.with_tracking:
-        run = os.path.split(__file__).split(".")[0]
+        run = os.path.split(__file__)[-1].split(".")[0]
         accelerator.init_trackers(run, config)
 
     # Now we train the model
@@ -236,8 +238,14 @@ def main():
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     parser.add_argument(
         "--with_tracking",
-        required=False,
+        action="store_true",
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
+    )
+    parser.add_argument(
+        "--logging_dir",
+        type=str,
+        default="logs",
+        help="Location on where to store experiment tracking logs`",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}

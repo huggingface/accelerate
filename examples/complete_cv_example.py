@@ -74,7 +74,9 @@ class PetsDataset(Dataset):
 def training_function(config, args):
     # Initialize accelerator
     if args.with_tracking:
-        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all")
+        accelerator = Accelerator(
+            cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all", logging_dir=args.logging_dir
+        )
     else:
         accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
 
@@ -102,7 +104,7 @@ def training_function(config, args):
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        run = os.path.split(__file__).split(".")[0]
+        run = os.path.split(__file__)[-1].split(".")[0]
         accelerator.init_trackers(run, config)
 
     # Grab all the image filenames
@@ -288,8 +290,14 @@ def main():
     )
     parser.add_argument(
         "--with_tracking",
-        required=False,
+        action="store_true",
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
+    )
+    parser.add_argument(
+        "--logging_dir",
+        type=str,
+        default="logs",
+        help="Location on where to store experiment tracking logs`",
     )
     args = parser.parse_args()
     config = {"lr": 3e-2, "num_epochs": 3, "seed": 42, "batch_size": 64, "image_size": 224}
