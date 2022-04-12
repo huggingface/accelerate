@@ -149,7 +149,7 @@ def training_function(config, args):
     # Instantiate scheduler
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer=optimizer,
-        num_warmup_steps=100,
+        num_warmup_steps=0,
         num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
     )
 
@@ -200,6 +200,8 @@ def training_function(config, args):
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+            if isinstance(checkpointing_steps, int):
+                overall_step += 1
 
             # New Code #
             # We save the model, optimizer, lr_scheduler, and seed states by calling `save_state`
@@ -215,8 +217,6 @@ def training_function(config, args):
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True` (the default).
-            batch.to(accelerator.device)
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
@@ -237,7 +237,7 @@ def training_function(config, args):
         # Will contain files: "pytorch_model.bin", "optimizer.bin", "scheduler.bin", and "random_states.pkl"
         # If mixed precision was used, will also save a "scalar.bin" file
         if checkpointing_steps == "epoch":
-            output_dir = f"epoch_{num_epochs}"
+            output_dir = f"epoch_{epoch}"
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
@@ -265,7 +265,7 @@ def main():
         "--output_dir",
         type=str,
         default=".",
-        help="Optional save directory where all checkpoint folders will be stored. Default is the current working directory.",
+        help="Optional save directory where all checkpoint folders will be stored, as well as the overall results. Default is the current working directory.",
     )
     parser.add_argument(
         "--resume_from_checkpoint",
@@ -274,7 +274,7 @@ def main():
         help="If the training should continue from a checkpoint folder.",
     )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
+    config = {"lr": 1e-4, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
     training_function(config, args)
 
 

@@ -144,7 +144,7 @@ def training_function(config, args):
     # Instantiate scheduler
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer=optimizer,
-        num_warmup_steps=100,
+        num_warmup_steps=0,
         num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
     )
 
@@ -173,7 +173,8 @@ def training_function(config, args):
             outputs = model(**batch)
             loss = outputs.loss
             # New Code #
-            total_loss += loss.detach().float()
+            if args.with_tracking:
+                total_loss += loss.detach().float()
             loss = loss / gradient_accumulation_steps
             accelerator.backward(loss)
             if step % gradient_accumulation_steps == 0:
@@ -202,14 +203,21 @@ def training_function(config, args):
         # New Code #
         # To actually log, we call `Accelerator.log`
         # The values passed can be of `str`, `int`, or `float`
-        accelerator.log(
-            {"accuracy": eval_metric["accuracy"], "f1": eval_metric["f1"], "train_loss": total_loss, "epoch": epoch}
-        )
+        if args.with_tracking:
+            accelerator.log(
+                {
+                    "accuracy": eval_metric["accuracy"],
+                    "f1": eval_metric["f1"],
+                    "train_loss": total_loss,
+                    "epoch": epoch,
+                }
+            )
 
     # New Code #
     # When a run is finished, you should call `accelerator.end_training()`
     # to close all of the open trackers
-    accelerator.end_training()
+    if args.with_tracking:
+        accelerator.end_training()
 
 
 def main():
@@ -230,7 +238,7 @@ def main():
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
+    config = {"lr": 1e-4, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
     training_function(config, args)
 
 
