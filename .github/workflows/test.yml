@@ -25,6 +25,6 @@ jobs:
       with:
         python-version: 3.6
     - name: Install Python dependencies
-      run: pip install setuptools==59.5.0; pip install -e .[test]
+      run: pip install setuptools==59.5.0; pip install -e .[test] tensorboard
     - name: Run Tests
       run: make test_examples
