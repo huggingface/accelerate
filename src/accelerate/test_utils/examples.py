@@ -15,8 +15,8 @@
 # limitations under the License.
 """
 A collection of utilities for comparing `examples/complete_*_example.py` scripts with the capabilities inside of each
-`examples/by_feature` example. `compare_against_test` is the main function that should be used when testing,
-while the others are used to either get the code that matters, or to preprocess them (such as stripping comments)
+`examples/by_feature` example. `compare_against_test` is the main function that should be used when testing, while the
+others are used to either get the code that matters, or to preprocess them (such as stripping comments)
 """
 
 import logging
