@@ -49,21 +49,19 @@ MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
 
-def training_function(config, args):
-    # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
-    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
-    lr = config["lr"]
-    num_epochs = int(config["num_epochs"])
-    correct_bias = config["correct_bias"]
-    seed = int(config["seed"])
-    batch_size = int(config["batch_size"])
+def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
+    """
+    Creates a set of `DataLoader`s for the `glue` dataset,
+    using "bert-base-cased" as the tokenizer.
 
+    Args:
+        accelerator (`Accelerator`):
+            An `Accelerator` object
+        batch_size (`int`, *optional*):
+            The batch size for the train and validation DataLoaders.
+    """
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")
-    metric = load_metric("glue", "mrpc")
-
-    set_seed(seed)
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
@@ -81,12 +79,6 @@ def training_function(config, args):
     # transformers library
     tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
 
-    # If the batch size is too big we use gradient accumulation
-    gradient_accumulation_steps = 1
-    if batch_size > MAX_GPU_BATCH_SIZE:
-        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
-        batch_size = MAX_GPU_BATCH_SIZE
-
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
         if accelerator.distributed_type == DistributedType.TPU:
@@ -101,6 +93,29 @@ def training_function(config, args):
         tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE
     )
 
+    return train_dataloader, eval_dataloader
+
+
+def training_function(config, args):
+    # Initialize accelerator
+    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
+    lr = config["lr"]
+    num_epochs = int(config["num_epochs"])
+    correct_bias = config["correct_bias"]
+    seed = int(config["seed"])
+    batch_size = int(config["batch_size"])
+
+    metric = load_metric("glue", "mrpc")
+
+    # If the batch size is too big we use gradient accumulation
+    gradient_accumulation_steps = 1
+    if batch_size > MAX_GPU_BATCH_SIZE:
+        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
+        batch_size = MAX_GPU_BATCH_SIZE
+
+    set_seed(seed)
+    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
 
@@ -148,9 +163,10 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
+            predictions, references = accelerator.gather((predictions, batch["labels"]))
             metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
+                predictions=predictions,
+                references=references,
             )
 
         eval_metric = metric.compute()

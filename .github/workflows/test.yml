@@ -15,3 +15,16 @@ jobs:
       run: pip install setuptools==59.5.0; pip install -e .[test,test_trackers]
     - name: Run Tests
       run: make test
+      
+  test_examples:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.6
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.6
+    - name: Install Python dependencies
+      run: pip install setuptools==59.5.0; pip install -e .[test] tensorboard
+    - name: Run Tests
+      run: make test_examples

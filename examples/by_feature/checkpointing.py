@@ -115,14 +115,17 @@ def training_function(config, args):
 
     # New Code #
     # Parse out whether we are saving every epoch or after a certain number of batches
-    if args.checkpointing_steps == "epoch":
-        checkpointing_steps = args.checkpointing_steps
-    elif args.checkpointing_steps.isdigit():
-        checkpointing_steps = int(args.checkpointing_steps)
+    if hasattr(args.checkpointing_steps, "isdigit"):
+        if args.checkpointing_steps == "epoch":
+            checkpointing_steps = args.checkpointing_steps
+        elif args.checkpointing_steps.isdigit():
+            checkpointing_steps = int(args.checkpointing_steps)
+        else:
+            raise ValueError(
+                f"Argument `checkpointing_steps` must be either a number or `epoch`. `{args.checkpointing_steps}` passed."
+            )
     else:
-        raise ValueError(
-            f"Argument `checkpointing_steps` must be either a number or `epoch`. `{args.checkpointing_steps}` passed."
-        )
+        checkpointing_steps = None
 
     set_seed(seed)
 
@@ -162,21 +165,29 @@ def training_function(config, args):
 
     # New Code #
     # We need to keep track of how many total steps we have iterated over
-    if isinstance(checkpointing_steps, int):
-        overall_step = 0
+    overall_step = 0
 
     # We need to load the checkpoint back in before training here with `load_state`
     # The total number of epochs is adjusted based on where the state is being loaded from,
     # as we assume continuation of the same training script
     if args.resume_from_checkpoint:
-        accelerator.print(f"Resuming from checkpoint: {args.resume_from_checkpoint}")
-        accelerator.load_state(args.resume_from_checkpoint)
+        if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
+            accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
+            accelerator.load_state(args.resume_from_checkpoint)
+            path = os.path.basename(args.resume_from_checkpoint)
+        else:
+            # Get the most recent checkpoint
+            dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
+            dirs.sort(key=os.path.getctime)
+            path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+        # Extract `epoch_{i}` or `step_{i}`
+        training_difference = os.path.splitext(path)[0]
 
-        if "epoch" in args.resume_from_checkpoint:
-            num_epochs -= int(args.resume_from_checkpoint.replace("epoch_", ""))
+        if "epoch" in training_difference:
+            num_epochs -= int(training_difference.replace("epoch_", ""))
             resume_step = None
         else:
-            resume_step = int(args.resume_from_checkpoint.replace("step_", ""))
+            resume_step = int(training_difference.replace("step_", ""))
             num_epochs -= resume_step // len(train_dataloader)
             # If resuming by step, we also need to know exactly how far into the DataLoader we went
             resume_step = (num_epochs * len(train_dataloader)) - resume_step
@@ -200,6 +211,8 @@ def training_function(config, args):
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+            # New Code #
+            overall_step += 1
 
             # New Code #
             # We save the model, optimizer, lr_scheduler, and seed states by calling `save_state`
@@ -237,7 +250,7 @@ def training_function(config, args):
         # Will contain files: "pytorch_model.bin", "optimizer.bin", "scheduler.bin", and "random_states.pkl"
         # If mixed precision was used, will also save a "scalar.bin" file
         if checkpointing_steps == "epoch":
-            output_dir = f"epoch_{num_epochs}"
+            output_dir = f"epoch_{epoch}"
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
@@ -258,7 +271,7 @@ def main():
     parser.add_argument(
         "--checkpointing_steps",
         type=str,
-        default="epoch",
+        default=None,
         help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
     )
     parser.add_argument(
