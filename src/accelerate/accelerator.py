@@ -440,7 +440,10 @@ class Accelerator:
             batch_size_per_device * deepspeed_plugin.gradient_accumulation_steps * self.num_processes
         )
 
-        result = [self._prepare_one(obj) if isinstance(obj, torch.utils.data.DataLoader) else obj for obj in args]
+        result = [
+            self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
+            for obj in args
+        ]
 
         model = None
         optimizer = None
