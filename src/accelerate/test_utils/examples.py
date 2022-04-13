@@ -13,11 +13,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-# A collection of utilities for comparing `examples/complete_*_example.py` scripts with the capabilities inside of each
-# `examples/by_feature` example. `compare_against_test` is the main function that should be used when testing,
-# while the others are used to either get the code that matters, or to preprocess them (such as stripping comments)
-
+"""
+A collection of utilities for comparing `examples/complete_*_example.py` scripts with the capabilities inside of each
+`examples/by_feature` example. `compare_against_test` is the main function that should be used when testing,
+while the others are used to either get the code that matters, or to preprocess them (such as stripping comments)
+"""
 
 import logging
 import os
