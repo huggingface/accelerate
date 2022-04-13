@@ -90,7 +90,7 @@ class ExampleDifferenceTests(unittest.TestCase):
     unclear.
 
     Also, if there are any expected differences between the base script used and
-    `complete_nlp_example.py` (the cannotical base script), these should be included in
+    `complete_nlp_example.py` (the canonical base script), these should be included in
     `special_strings`. These would be differences in how something is logged, print statements,
     etc (such as calls to `Accelerate.log()`)
     """
