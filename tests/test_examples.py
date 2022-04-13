@@ -80,16 +80,16 @@ class ExampleDifferenceTests(unittest.TestCase):
     This TestCase checks that all of the `complete_*` scripts contain all of the
     information found in the `by_feature` scripts, line for line. If one fails,
     then a complete example does not contain all of the features in the features
-    scripts, and should be updated. 
+    scripts, and should be updated.
 
     Each example script should be a single test (such as `test_nlp_example`),
     and should run `one_complete_example` twice: once with `parser_only=True`,
     and the other with `parser_only=False`. This is so that when the test
-    failures are returned to the user, they understand if the discrepancy lies in 
-    the `main` function, or the `training_loop` function. Otherwise it will be 
+    failures are returned to the user, they understand if the discrepancy lies in
+    the `main` function, or the `training_loop` function. Otherwise it will be
     unclear.
 
-    Also, if there are any expected differences between the base script used and 
+    Also, if there are any expected differences between the base script used and
     `complete_nlp_example.py` (the cannotical base script), these should be included in
     `special_strings`. These would be differences in how something is logged, print statements,
     etc (such as calls to `Accelerate.log()`)
