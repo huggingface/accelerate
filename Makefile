@@ -28,4 +28,4 @@ test:
 	python -m pytest -n auto --dist=loadfile -s -v ./tests/ --ignore=./tests/test_examples.py
 
 test_examples:
-	python -m pytest -n auto --dist=loadfile -s -v ./tests/test_examples.py --log-cli-level=INFO
+	python -m pytest -n auto --dist=loadfile -s -v ./tests/test_examples.py
