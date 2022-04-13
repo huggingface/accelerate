@@ -19,12 +19,8 @@ A collection of utilities for comparing `examples/complete_*_example.py` scripts
 others are used to either get the code that matters, or to preprocess them (such as stripping comments)
 """
 
-import logging
 import os
 from typing import List
-
-
-logger = logging.getLogger(__name__)
 
 
 def get_function_contents_by_name(lines: List[str], name: str):
