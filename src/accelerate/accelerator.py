@@ -129,7 +129,7 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
-        logging_dir: Optional[Union[str, os.PathLike]] = "",
+        logging_dir: Optional[Union[str, os.PathLike]] = None,
         dispatch_batches: Optional[bool] = None,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,

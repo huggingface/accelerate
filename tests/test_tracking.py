@@ -243,6 +243,8 @@ class MyCustomTracker(GeneralTracker):
         "some_string",
     ]
 
+    requires_logging_directory = False
+
     def __init__(self, dir: str):
         self.f = open(f"{dir}/log.csv", "w+")
         self.writer = csv.DictWriter(self.f, fieldnames=self._col_names)
