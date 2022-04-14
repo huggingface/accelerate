@@ -98,11 +98,8 @@ class LoggerType(BaseEnum):
     WANDB = "wandb"
     COMETML = "comet_ml"
 
-LOGGER_TYPE_TO_CLASS = {
-    "tensorboard":TensorBoardTracker,
-    "wandb":WandBTracker,
-    "comet_ml":CometMLTracker
-}
+
+LOGGER_TYPE_TO_CLASS = {"tensorboard": TensorBoardTracker, "wandb": WandBTracker, "comet_ml": CometMLTracker}
 
 
 class PrecisionType(BaseEnum):

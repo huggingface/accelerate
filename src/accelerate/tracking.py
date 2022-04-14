@@ -57,13 +57,10 @@ class GeneralTracker(object, metaclass=ABCMeta):
     @abstractproperty
     def requires_logging_directory(self):
         """
-        Whether the logger requires a directory to store their logs. Should either return
-        `True` or `False`.
-        The default behavior is `False`
+        Whether the logger requires a directory to store their logs. Should either return `True` or `False`. The
+        default behavior is `False`
         """
         return False
-
-
 
     @abstractmethod
     def store_init_configuration(self, values: dict):
@@ -110,6 +107,7 @@ class TensorBoardTracker(GeneralTracker):
         logging_dir (`str`, `os.PathLike`):
             Location for TensorBoard logs to be stored.
     """
+
     requires_logging_directory = True
 
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]]):
@@ -168,6 +166,7 @@ class WandBTracker(GeneralTracker):
         run_name (`str`):
             The name of the experiment run.
     """
+
     requires_logging_directory = False
 
     def __init__(self, run_name: str):
@@ -221,6 +220,7 @@ class CometMLTracker(GeneralTracker):
         run_name (`str`):
             The name of the experiment run.
     """
+
     requires_logging_directory = False
 
     def __init__(self, run_name: str):
