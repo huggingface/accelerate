@@ -29,9 +29,8 @@ from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, In
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
-from .tracking import GeneralTracker, get_available_trackers
+from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, get_available_trackers
 from .utils import (
-    LOGGER_TYPE_TO_CLASS,
     DeepSpeedPlugin,
     LoggerType,
     PrecisionType,

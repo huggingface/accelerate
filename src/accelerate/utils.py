@@ -28,7 +28,6 @@ import torch
 from packaging import version
 
 from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
-from .tracking import CometMLTracker, TensorBoardTracker, WandBTracker
 
 
 if is_tpu_available():
@@ -97,9 +96,6 @@ class LoggerType(BaseEnum):
     TENSORBOARD = "tensorboard"
     WANDB = "wandb"
     COMETML = "comet_ml"
-
-
-LOGGER_TYPE_TO_CLASS = {"tensorboard": TensorBoardTracker, "wandb": WandBTracker, "comet_ml": CometMLTracker}
 
 
 class PrecisionType(BaseEnum):

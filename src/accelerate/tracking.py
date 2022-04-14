@@ -264,3 +264,6 @@ class CometMLTracker(GeneralTracker):
         """
         self.writer.end()
         logger.info("CometML run closed")
+
+
+LOGGER_TYPE_TO_CLASS = {"tensorboard": TensorBoardTracker, "wandb": WandBTracker, "comet_ml": CometMLTracker}
