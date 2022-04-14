@@ -60,7 +60,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
         Whether the logger requires a directory to store their logs. Should either return `True` or `False`. The
         default behavior is `False`
         """
-        return False
+        pass
 
     @abstractmethod
     def store_init_configuration(self, values: dict):

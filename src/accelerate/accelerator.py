@@ -154,11 +154,18 @@ class Accelerator:
                         log_type = LoggerType(log_type)
                         if log_type not in loggers:
                             if log_type in get_available_trackers():
+                                tracker_init = LOGGER_TYPE_TO_CLASS[str(log_type)]
+                                if getattr(tracker_init, "requires_logging_directory"):
+                                    if logging_dir is None:
+                                        raise ValueError(
+                                            f"Logging with `{str(log_type)}` requires a `logging_dir` to be passed in."
+                                        )
                                 loggers.append(log_type)
                             else:
                                 logger.info(
                                     f"Tried adding logger {log_type}, but package is unavailable in the system."
                                 )
+
         self.log_with = loggers
         self.logging_dir = logging_dir
 
@@ -650,12 +657,8 @@ class Accelerator:
             else:
                 tracker_init = LOGGER_TYPE_TO_CLASS[str(tracker)]
                 if getattr(tracker_init, "requires_logging_directory"):
-                    if self.logging_dir is None:
-                        raise ValueError(
-                            f"Logging with `{str(tracker)}` requires a `logging_dir` to be passed into `Accelerator.__init__`. Please reinstantiate Accelerator with one, or assign a value to `self.logging_dir`"
-                        )
-                    else:
-                        self.trackers.append(tracker_init(project_name, self.logging_dir))
+                    # We can skip this check since it was done in `__init__`
+                    self.trackers.append(tracker_init(project_name, self.logging_dir))
                 else:
                     self.trackers.append(tracker_init(project_name))
         if config is not None:
