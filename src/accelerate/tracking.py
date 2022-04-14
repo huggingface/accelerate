@@ -17,7 +17,7 @@
 
 import logging
 import os
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Optional, Union
 
 from .utils import LoggerType, is_comet_ml_available, is_tensorboard_available, is_wandb_available
@@ -53,6 +53,17 @@ class GeneralTracker(object, metaclass=ABCMeta):
     """
     A base Tracker class to be used for all logging integration implementations.
     """
+
+    @abstractproperty
+    def requires_logging_directory(self):
+        """
+        Whether the logger requires a directory to store their logs. Should either return
+        `True` or `False`.
+        The default behavior is `False`
+        """
+        return False
+
+
 
     @abstractmethod
     def store_init_configuration(self, values: dict):
@@ -99,8 +110,9 @@ class TensorBoardTracker(GeneralTracker):
         logging_dir (`str`, `os.PathLike`):
             Location for TensorBoard logs to be stored.
     """
+    requires_logging_directory = True
 
-    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ""):
+    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]]):
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
         self.writer = tensorboard.SummaryWriter(self.logging_dir)
@@ -156,6 +168,7 @@ class WandBTracker(GeneralTracker):
         run_name (`str`):
             The name of the experiment run.
     """
+    requires_logging_directory = False
 
     def __init__(self, run_name: str):
         self.run_name = run_name
@@ -208,6 +221,7 @@ class CometMLTracker(GeneralTracker):
         run_name (`str`):
             The name of the experiment run.
     """
+    requires_logging_directory = False
 
     def __init__(self, run_name: str):
         self.run_name = run_name

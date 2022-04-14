@@ -33,6 +33,7 @@ from .tracking import CometMLTracker, GeneralTracker, TensorBoardTracker, WandBT
 from .utils import (
     DeepSpeedPlugin,
     LoggerType,
+    LOGGER_TYPE_TO_CLASS,
     PrecisionType,
     RNGType,
     convert_outputs_to_fp32,
@@ -155,7 +156,12 @@ class Accelerator:
                     else:
                         log_type = LoggerType(log_type)
                         if log_type not in loggers:
-                            loggers.append(log_type)
+                            if log_type in get_available_trackers():
+                                loggers.append(log_type)
+                            else:
+                                logger.info(
+                                    f"Tried adding logger {log_type}, but package is unavailable in the system."
+                                )
         self.log_with = loggers
         self.logging_dir = logging_dir
 
@@ -644,12 +650,17 @@ class Accelerator:
             if issubclass(type(tracker), GeneralTracker):
                 # Custom trackers are already initialized
                 self.trackers.append(tracker)
-            elif str(tracker).lower() == "tensorboard" and is_tensorboard_available():
-                self.trackers.append(TensorBoardTracker(project_name, self.logging_dir))
-            elif str(tracker).lower() == "wandb" and is_wandb_available():
-                self.trackers.append(WandBTracker(project_name))
-            elif str(tracker).lower() == "comet_ml" and is_comet_ml_available():
-                self.trackers.append(CometMLTracker(project_name))
+            else:
+                tracker_init = LOGGER_TYPE_TO_CLASS[str(tracker)]
+                if getattr(tracker_init, "requires_logging_directory"):
+                    if self.logging_dir is None:
+                        raise ValueError(
+                            f"Logging with `{str(tracker)}` requires a `logging_dir` to be passed into `Accelerator.__init__`. Please reinstantiate Accelerator with one, or assign a value to `self.logging_dir`"
+                        )
+                    else:
+                        self.trackers.append(tracker_init(project_name, self.logging_dir))
+                else:
+                    self.trackers.append(tracker_init(project_name))
         if config is not None:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
