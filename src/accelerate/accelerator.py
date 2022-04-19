@@ -725,6 +725,13 @@ class Accelerator:
         gc.collect()
         torch.cuda.empty_cache()
 
+    def clear(self):
+        """
+        Alias for `Accelerate.free_memory`, releases all references to the internal objects stored and call the garbage
+        collector. You should call this method between two trainings with different models/optimizers.
+        """
+        self.free_memory()
+
     def _get_named_parameters(self, *args):
         named_parameters = {}
         for obj in args:
