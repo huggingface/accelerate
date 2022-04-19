@@ -291,6 +291,7 @@ def filter_trackers(
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
     """
+    loggers = []
     if log_with is not None:
         if not isinstance(log_with, (list, tuple)):
             log_with = [log_with]
@@ -316,7 +317,5 @@ def filter_trackers(
                             loggers.append(log_type)
                         else:
                             logger.info(f"Tried adding logger {log_type}, but package is unavailable in the system.")
-    else:
-        loggers = []
 
     return loggers
