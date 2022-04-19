@@ -727,7 +727,7 @@ class Accelerator:
 
     def clear(self):
         """
-        Alias for `Accelerate.free_memory`, releases all references to the internal objects stored and call the garbage
+        Alias for [`Accelerate.free_memory`], releases all references to the internal objects stored and call the garbage
         collector. You should call this method between two trainings with different models/optimizers.
         """
         self.free_memory()
