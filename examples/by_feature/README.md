@@ -54,3 +54,15 @@ These arguments should be added at the end of any method for starting the python
 ```bash
 accelerate launch ./tracking.py --with_tracking
 ```
+
+### Cross Validation (`cross_validation.py`)
+
+- Shows how to use `Accelerator.free_memory` and run cross validation efficiently with `datasets`.
+- Arguments available:
+  - `num_folds`, the number of folds the training dataset should be split into.
+
+These arguments should be added at the end of any method for starting the python script (such as `python`, `accelerate launch`, `python -m torch.distributed.launch`), such as:
+
+```bash
+accelerate launch ./cross_validation.py --num_folds 2
+```
