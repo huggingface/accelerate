@@ -61,6 +61,9 @@ from transformers import (
 MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
+# New Code #
+# We need a different `get_dataloaders` function that will build dataloaders by indexs
+
 
 def get_fold_dataloaders(
     accelerator: Accelerator, dataset: DatasetDict, train_idxs: List[int], valid_idxs: List[int], batch_size: int = 16
@@ -222,6 +225,7 @@ def training_function(config, args):
             # Use accelerator.print to print only on the main process.
             accelerator.print(f"epoch {epoch}:", eval_metric)
 
+        # New Code #
         # We also run predictions on the test set at the very end
         fold_predictions = []
         for step, batch in enumerate(test_dataloader):
@@ -241,6 +245,7 @@ def training_function(config, args):
         test_predictions.append(torch.cat(fold_predictions, dim=0))
         # We now need to release all our memory and get rid of the current model, optimizer, etc
         accelerator.free_memory()
+    # New Code #
     # Finally we check the accuracy of our folded results:
     preds = torch.stack(test_predictions, dim=0).sum(dim=0).div(int(config["n_splits"])).argmax(dim=-1)
     test_metric = metric.compute(predictions=preds, references=test_labels)
@@ -259,6 +264,7 @@ def main():
         "and an Nvidia Ampere GPU.",
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
+    # New Code #
     parser.add_argument("--num_folds", type=int, default=3, help="The number of splits to perform across the dataset")
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
