@@ -103,6 +103,12 @@ class TensorBoardTrackingTest(unittest.TestCase):
         self.assertEqual(iteration, values["iteration"])
         self.assertEqual(my_text, values["my_text"])
 
+    def test_logging_dir(self):
+        with self.assertRaisesRegex(ValueError, "Logging with `tensorboard` requires a `logging_dir`"):
+            _ = Accelerator(log_with="tensorboard")
+        with tempfile.TemporaryDirectory() as dirpath:
+            _ = Accelerator(log_with="tensorboard", logging_dir=dirpath)
+
 
 @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
 class WandBTrackingTest(TempDirTestCase, MockingTestCase):
@@ -236,6 +242,8 @@ class MyCustomTracker(GeneralTracker):
         "some_boolean",
         "some_string",
     ]
+
+    requires_logging_directory = False
 
     def __init__(self, dir: str):
         self.f = open(f"{dir}/log.csv", "w+")
