@@ -29,7 +29,7 @@ from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, In
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
-from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, get_available_trackers
+from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     DeepSpeedPlugin,
     LoggerType,
@@ -134,39 +134,8 @@ class Accelerator:
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
-        loggers = []
-        if log_with is not None:
-            if not isinstance(log_with, (list, tuple)):
-                log_with = [log_with]
-                logger.debug(f"{log_with}")
-            if "all" in log_with or LoggerType.ALL in log_with:
-                loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()
-            else:
-                for log_type in log_with:
-                    if log_type not in LoggerType and not issubclass(type(log_type), GeneralTracker):
-                        raise ValueError(
-                            f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}"
-                        )
-                    if issubclass(type(log_type), GeneralTracker):
-                        loggers.append(log_type)
-                    else:
-                        log_type = LoggerType(log_type)
-                        if log_type not in loggers:
-                            if log_type in get_available_trackers():
-                                tracker_init = LOGGER_TYPE_TO_CLASS[str(log_type)]
-                                if getattr(tracker_init, "requires_logging_directory"):
-                                    if logging_dir is None:
-                                        raise ValueError(
-                                            f"Logging with `{str(log_type)}` requires a `logging_dir` to be passed in."
-                                        )
-                                loggers.append(log_type)
-                            else:
-                                logger.info(
-                                    f"Tried adding logger {log_type}, but package is unavailable in the system."
-                                )
-
-        self.log_with = loggers
         self.logging_dir = logging_dir
+        self.log_with = filter_trackers(log_with, self.logging_dir)
 
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
