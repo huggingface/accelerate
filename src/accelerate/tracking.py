@@ -57,8 +57,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
     @abstractproperty
     def requires_logging_directory(self):
         """
-        Whether the logger requires a directory to store their logs. Should either return `True` or `False`. The
-        default behavior is `False`
+        Whether the logger requires a directory to store their logs. Should either return `True` or `False`.
         """
         pass
 
