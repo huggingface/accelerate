@@ -22,6 +22,7 @@ from torch.utils.data import DataLoader
 
 from accelerate import DistributedType
 from accelerate.test_utils.examples import compare_against_test
+from accelerate.test_utils.testing import slow
 from datasets import load_dataset
 from transformers import AutoTokenizer
 
@@ -31,11 +32,14 @@ sys.path.extend(SRC_DIRS)
 
 if SRC_DIRS is not None:
     import checkpointing
+    import cross_validation
     import tracking
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
 # Should mock `{script_name}.get_dataloaders` via:
 # @mock.patch("{script_name}.get_dataloaders", mocked_dataloaders)
+
+EXCLUDE_EXAMPLES = ["cross_validation.py"]
 
 
 def mocked_dataloaders(accelerator, batch_size: int = 16):
@@ -117,21 +121,22 @@ class ExampleDifferenceTests(unittest.TestCase):
         by_feature_path = os.path.abspath(os.path.join("examples", "by_feature"))
         examples_path = os.path.abspath("examples")
         for item in os.listdir(by_feature_path):
-            item_path = os.path.join(by_feature_path, item)
-            if os.path.isfile(item_path) and ".py" in item_path:
-                with self.subTest(
-                    tested_script=complete_file_name,
-                    feature_script=item,
-                    tested_section="main()" if parser_only else "training_function()",
-                ):
-                    diff = compare_against_test(
-                        os.path.join(examples_path, complete_file_name), item_path, parser_only, secondary_filename
-                    )
-                    diff = "\n".join(diff)
-                    if special_strings is not None:
-                        for string in special_strings:
-                            diff = diff.replace(string, "")
-                    self.assertEqual(diff, "")
+            if item not in EXCLUDE_EXAMPLES:
+                item_path = os.path.join(by_feature_path, item)
+                if os.path.isfile(item_path) and ".py" in item_path:
+                    with self.subTest(
+                        tested_script=complete_file_name,
+                        feature_script=item,
+                        tested_section="main()" if parser_only else "training_function()",
+                    ):
+                        diff = compare_against_test(
+                            os.path.join(examples_path, complete_file_name), item_path, parser_only, secondary_filename
+                        )
+                        diff = "\n".join(diff)
+                        if special_strings is not None:
+                            for string in special_strings:
+                                diff = diff.replace(string, "")
+                        self.assertEqual(diff, "")
 
     def test_nlp_examples(self):
         self.one_complete_example("complete_nlp_example.py", True)
@@ -188,3 +193,15 @@ class FeatureExamplesTests(unittest.TestCase):
             with mock.patch.object(sys, "argv", testargs):
                 tracking.main()
                 self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
+
+    @slow
+    def test_cross_validation(self):
+        testargs = """
+        cross_validation.py
+        --num_folds 2
+        """.split()
+        with mock.patch.object(sys, "argv", testargs):
+            with mock.patch("accelerate.Accelerator.print") as mocked_print:
+                cross_validation.main()
+                call = mocked_print.mock_calls[-1]
+                self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
