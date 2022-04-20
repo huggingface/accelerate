@@ -195,7 +195,7 @@ class FeatureExamplesTests(unittest.TestCase):
                 call = mocked_print.mock_calls[-1]
                 self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
 
-    @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
+    @mock.patch("multi_node_metrics.get_dataloaders", mocked_dataloaders)
     def test_multi_node_metrics(self):
         testargs = ["multi_node_metrics.py"]
         with mock.patch.object(sys, "argv", testargs):
