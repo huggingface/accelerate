@@ -58,18 +58,6 @@ class DistributedDataParallelKwargs(KwargsHandler):
 
 
 @dataclass
-class FullyShardedDataParallelKwargs(KwargsHandler):
-    """
-    Use this object in your [`Accelerator`] to customize how your model is wrapped in a
-    `torch.distributed.fsdp.FullyShardedDataParallel`. Please refer to the documentation of this
-    [wrapper](https://pytorch.org/docs/stable/fsdp.html) for more information on each argument.
-    """
-
-    offload_params: bool = False  # `offload_params` argument in the `CPUOffload`
-    min_num_params: int = 1e8  # `min_num_params` argument in the `default_auto_wrap_policy`
-
-
-@dataclass
 class GradScalerKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize the behavior of mixed precision, specifically how the
