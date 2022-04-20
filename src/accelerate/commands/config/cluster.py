@@ -99,6 +99,29 @@ def get_cluster_input():
                 default=1,
             )
 
+    if distributed_type in [DistributedType.MULTI_GPU]:
+        use_fsdp = _ask_field(
+            "Do you want to use FullyShardedDataParallel? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+        if use_fsdp:
+            distributed_type = DistributedType.FSDP
+        fsdp_config = {}
+        if distributed_type == DistributedType.FSDP:
+            fsdp_config["offload_params"] = _ask_field(
+                "Do you want to offload parameters and gradients to CPU? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            fsdp_config["min_num_params"] = _ask_field(
+                "What should be your FSDP's minimum number of parameters for Auto Wrapping? [1e8]: ",
+                lambda x: int(x),
+                default=1e8,
+            )
+
     if distributed_type == DistributedType.TPU:
         main_training_function = _ask_field(
             "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
@@ -134,5 +157,6 @@ def get_cluster_input():
         main_process_port=main_process_port,
         main_training_function=main_training_function,
         deepspeed_config=deepspeed_config,
+        fsdp_config=fsdp_config,
         use_cpu=use_cpu,
     )

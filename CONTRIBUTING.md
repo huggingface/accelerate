@@ -54,7 +54,7 @@ Did not find it? :( So we can act quickly on it, please follow these steps:
 * Include your **OS type and version**, the versions of **Python** and **PyTorch**.
 * A short, self-contained, code snippet that allows us to reproduce the bug in
   less than 30s;
-* Provide the with your Accelerate configuration (located by default in `~/.cache/huggingface/accelerate/default_congig.yml`)
+* Provide the with your Accelerate configuration (located by default in `~/.cache/huggingface/accelerate/default_config.yaml`)
 
 ### Do you want a new feature?
 

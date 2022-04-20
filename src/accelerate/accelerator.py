@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import gc
 import os
 import sys
@@ -348,6 +349,32 @@ class Accelerator:
         else:
             return obj
 
+    def _prepare_fsdp(self, *args):
+        result = []
+        for obj in args:
+            if isinstance(obj, torch.nn.Module):
+                model = obj
+                break
+        optimizers = []
+
+        self._schedulers = []
+        for obj in args:
+            if isinstance(obj, torch.optim.Optimizer):
+                optimizer = obj.optimizer.__class__(model.parameters(), **obj.optimizer.defaults)
+                obj = self.prepare_optimizer(optimizer)
+                optimizers.append(obj)
+            elif isinstance(obj, AcceleratedScheduler):
+                obj.optimizer = optimizers
+                for i, opt in enumerate(self._optimizers):
+                    if getattr(obj.scheduler, "optimizer", None) == opt.optimizer:
+                        obj.scheduler.optimizer = optimizers[i]
+                        obj.optimizers = [optimizers[i]]
+                        break
+                self._schedulers.append(obj)
+            result.append(obj)
+        self._optimizers = optimizers
+        return tuple(result)
+
     def prepare(self, *args):
         """
         Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
@@ -359,6 +386,19 @@ class Accelerator:
             - `torch.nn.Module`: PyTorch Module
             - `torch.optim.Optimizer`: PyTorch Optimizer
         """
+        if self.distributed_type == DistributedType.FSDP:
+            model_count = 0
+            optimizer_present = False
+            for obj in args:
+                if isinstance(obj, torch.nn.Module):
+                    model_count += 1
+                if isinstance(obj, torch.optim.Optimizer):
+                    optimizer_present = True
+            if model_count > 1 and optimizer_present:
+                raise ValueError(
+                    "For FSDP to work, prepare must be called for all the models before optimizers are created"
+                )
+
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
@@ -395,6 +435,9 @@ class Accelerator:
                 if isinstance(obj, torch.optim.Optimizer):
                     obj._switch_parameters(mapping)
 
+        if self.distributed_type == DistributedType.FSDP:
+            result = self._prepare_fsdp(*result)
+
         return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model):
@@ -405,6 +448,21 @@ class Accelerator:
             model = torch.nn.parallel.DistributedDataParallel(
                 model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
             )
+        elif self.distributed_type == DistributedType.FSDP:
+            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
+            from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+            from torch.distributed.fsdp.wrap import default_auto_wrap_policy
+
+            auto_wrap_policy = None
+            cpu_offload = None
+            if os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true":
+                cpu_offload = CPUOffload(offload_params=True)
+
+            if int(os.environ.get("FSDP_MIN_NUM_PARAMS", "0")) > 0:
+                auto_wrap_policy = functools.partial(
+                    default_auto_wrap_policy, min_num_params=int(os.environ["FSDP_MIN_NUM_PARAMS"])
+                )
+            model = FSDP(model, auto_wrap_policy=auto_wrap_policy, cpu_offload=cpu_offload)
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)

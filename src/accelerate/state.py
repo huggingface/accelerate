@@ -89,6 +89,7 @@ class DistributedType(str, Enum):
     MULTI_CPU = "MULTI_CPU"
     MULTI_GPU = "MULTI_GPU"
     DEEPSPEED = "DEEPSPEED"
+    FSDP = "FSDP"
     TPU = "TPU"
 
 
@@ -203,10 +204,13 @@ class AcceleratorState:
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-                self.mixed_precision = (
-                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-                )
-
+                if os.environ.get("USE_FSDP", "false") == "true":
+                    self.distributed_type = DistributedType.FSDP
+                    self.mixed_precision = "no"
+                else:
+                    self.mixed_precision = (
+                        parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+                    )
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
