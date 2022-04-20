@@ -33,13 +33,14 @@ sys.path.extend(SRC_DIRS)
 if SRC_DIRS is not None:
     import checkpointing
     import cross_validation
+    import multi_process_metrics
     import tracking
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
 # Should mock `{script_name}.get_dataloaders` via:
 # @mock.patch("{script_name}.get_dataloaders", mocked_dataloaders)
 
-EXCLUDE_EXAMPLES = ["cross_validation.py"]
+EXCLUDE_EXAMPLES = ["cross_validation.py", "multi_process_metrics.py"]
 
 
 def mocked_dataloaders(accelerator, batch_size: int = 16):
@@ -182,18 +183,6 @@ class FeatureExamplesTests(unittest.TestCase):
                 checkpointing.main()
                 self.assertTrue(os.path.exists(os.path.join(tmpdir, "step_2")))
 
-    @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
-    def test_tracking(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            testargs = f"""
-            tracking.py
-            --with_tracking
-            --logging_dir {tmpdir}
-            """.split()
-            with mock.patch.object(sys, "argv", testargs):
-                tracking.main()
-                self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
-
     @slow
     def test_cross_validation(self):
         testargs = """
@@ -205,3 +194,21 @@ class FeatureExamplesTests(unittest.TestCase):
                 cross_validation.main()
                 call = mocked_print.mock_calls[-1]
                 self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
+
+    @mock.patch("multi_process_metrics.get_dataloaders", mocked_dataloaders)
+    def test_multi_process_metrics(self):
+        testargs = ["multi_process_metrics.py"]
+        with mock.patch.object(sys, "argv", testargs):
+            multi_process_metrics.main()
+
+    @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
+    def test_tracking(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            testargs = f"""
+            tracking.py
+            --with_tracking
+            --logging_dir {tmpdir}
+            """.split()
+            with mock.patch.object(sys, "argv", testargs):
+                tracking.main()
+                self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
