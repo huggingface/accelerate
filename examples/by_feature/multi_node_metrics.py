@@ -29,7 +29,10 @@ from transformers import (
 
 
 ########################################################################
-# This is a fully working simple example to use Accelerate
+# This is a fully working simple example to use Accelerate,
+# specifically showcasing how to properly calculate the metrics on the
+# validation dataset when in a distributed system, and builds off the
+# `nlp_example.py` script.
 #
 # This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):
@@ -37,6 +40,11 @@ from transformers import (
 #   - multi GPUS (using PyTorch distributed mode)
 #   - (multi) TPUs
 #   - fp16 (mixed-precision) or fp32 (normal precision)
+#
+# To help focus on the differences in the code, building `DataLoaders`
+# was refactored into its own function.
+# New additions from the base script can be found quickly by
+# looking for the # New Code # tags
 #
 # To run it in each of these various modes, follow the instructions
 # in the readme for examples:
@@ -157,6 +165,7 @@ def training_function(config, args):
                 optimizer.zero_grad()
 
         model.eval()
+        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
@@ -164,6 +173,17 @@ def training_function(config, args):
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             predictions, references = accelerator.gather((predictions, batch["labels"]))
+            # New Code #
+            # First we check if it's a distributed system
+            if accelerator.num_processes > 1:
+                # Then see if we're on the last batch of our eval dataloader
+                if step == len(eval_dataloader):
+                    # Last batch needs to be truncated on distributed systems as it contains additional samples
+                    predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
+                    references = references[: len(eval_dataloader.dataset) - samples_seen]
+                else:
+                    # Otherwise we add the number of samples seen
+                    samples_seen += references.shape[0]
             metric.add_batch(
                 predictions=predictions,
                 references=references,
