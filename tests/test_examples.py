@@ -33,7 +33,7 @@ sys.path.extend(SRC_DIRS)
 if SRC_DIRS is not None:
     import checkpointing
     import cross_validation
-    import multi_node_metrics
+    import multi_process_metrics
     import tracking
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
@@ -199,7 +199,7 @@ class FeatureExamplesTests(unittest.TestCase):
     def test_multi_process_metrics(self):
         testargs = ["multi_process_metrics.py"]
         with mock.patch.object(sys, "argv", testargs):
-            multi_node_metrics.main()
+            multi_process_metrics.main()
 
     @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
     def test_tracking(self):
