@@ -201,7 +201,7 @@ def training_function(config, args):
             resume_step -= starting_epoch * len(train_dataloader)
 
     # Now we train the model
-    for epoch in range(num_epochs):
+    for epoch in range(starting_epoch, num_epochs):
         model.train()
         if args.with_tracking:
             total_loss = 0
