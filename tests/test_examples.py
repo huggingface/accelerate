@@ -184,7 +184,7 @@ class FeatureExamplesTests(TempDirTestCase):
             self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_4")))
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
-    def test_load_states(self):
+    def test_load_states_by_epoch(self):
         testargs = f"""
         checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
@@ -197,6 +197,8 @@ class FeatureExamplesTests(TempDirTestCase):
                 self.assertNotIn("epoch 1:", call.args)
             self.assertIn("epoch 2:", mocked_print.mock_calls[-1].args[0])
 
+    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
+    def test_load_states_by_steps(self):
         testargs = f"""
         checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "step_4")}
