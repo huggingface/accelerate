@@ -189,14 +189,15 @@ class FeatureExamplesTests(TempDirTestCase):
         checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
         """.split()
+        dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
         with mock.patch("accelerate.Accelerator.print") as mocked_print:
             with mock.patch.object(sys, "argv", testargs):
                 checkpointing.main()
             with self.assertRaises(AssertionError):
-                mocked_print.assert_any_call("epoch 0:", {"accuracy": 0.5, "f1": 0.0})
+                mocked_print.assert_any_call("epoch 0:", dummy_results)
             with self.assertRaises(AssertionError):
-                mocked_print.assert_any_call("epoch 1:", {"accuracy": 0.5, "f1": 0.0})
-            mocked_print.assert_any_call("epoch 2:", {"accuracy": 0.5, "f1": 0.0})
+                mocked_print.assert_any_call("epoch 1:", dummy_results)
+            mocked_print.assert_any_call("epoch 2:", dummy_results)
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_load_states_by_steps(self):
@@ -204,13 +205,14 @@ class FeatureExamplesTests(TempDirTestCase):
         checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "step_4")}
         """.split()
+        dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
         with mock.patch("accelerate.Accelerator.print") as mocked_print:
             with mock.patch.object(sys, "argv", testargs):
                 checkpointing.main()
             with self.assertRaises(AssertionError):
-                mocked_print.assert_any_call("epoch 0:", {"accuracy": 0.5, "f1": 0.0})
-            mocked_print.assert_any_call("epoch 1:", {"accuracy": 0.5, "f1": 0.0})
-            mocked_print.assert_any_call("epoch 2:", {"accuracy": 0.5, "f1": 0.0})
+                mocked_print.assert_any_call("epoch 0:", dummy_results)
+            mocked_print.assert_any_call("epoch 1:", dummy_results)
+            mocked_print.assert_any_call("epoch 2:", dummy_results)
 
     @slow
     def test_cross_validation(self):
