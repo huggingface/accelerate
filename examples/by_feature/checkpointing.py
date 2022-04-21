@@ -166,6 +166,8 @@ def training_function(config, args):
     # New Code #
     # We need to keep track of how many total steps we have iterated over
     overall_step = 0
+    # We also need to keep track of the stating epoch so files are named properly
+    starting_epoch = 0
 
     # We need to load the checkpoint back in before training here with `load_state`
     # The total number of epochs is adjusted based on where the state is being loaded from,
@@ -184,23 +186,23 @@ def training_function(config, args):
         training_difference = os.path.splitext(path)[0]
 
         if "epoch" in training_difference:
-            num_epochs -= int(training_difference.replace("epoch_", ""))
+            starting_epoch = int(training_difference.replace("epoch_", "")) + 1
             resume_step = None
         else:
             resume_step = int(training_difference.replace("step_", ""))
-            num_epochs -= resume_step // len(train_dataloader)
-            # If resuming by step, we also need to know exactly how far into the DataLoader we went
-            resume_step = (num_epochs * len(train_dataloader)) - resume_step
+            starting_epoch = resume_step // len(train_dataloader)
+            resume_step -= starting_epoch * len(train_dataloader)
 
     # Now we train the model
-    for epoch in range(num_epochs):
+    for epoch in range(starting_epoch, num_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
             # New Code #
             # We need to skip steps until we reach the resumed step during the first epoch
-            if args.resume_from_checkpoint and epoch == 0:
+            if args.resume_from_checkpoint and epoch == starting_epoch:
                 if resume_step is not None and step < resume_step:
-                    pass
+                    overall_step += 1
+                    continue
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
@@ -246,7 +248,7 @@ def training_function(config, args):
 
         # New Code #
         # We save the model, optimizer, lr_scheduler, and seed states by calling `save_state`
-        # These are saved to folders named `step_{overall_step}`
+        # These are saved to folders named `epoch_{epoch}`
         # Will contain files: "pytorch_model.bin", "optimizer.bin", "scheduler.bin", and "random_states.pkl"
         # If mixed precision was used, will also save a "scalar.bin" file
         if checkpointing_steps == "epoch":
