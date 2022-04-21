@@ -153,7 +153,10 @@ def training_function(config, args):
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
+    # We need to keep track of how many total steps we have iterated over
     overall_step = 0
+    # We also need to keep track of the stating epoch so files are named properly
+    starting_epoch = 0
 
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
@@ -170,24 +173,24 @@ def training_function(config, args):
         training_difference = os.path.splitext(path)[0]
 
         if "epoch" in training_difference:
-            num_epochs -= int(training_difference.replace("epoch_", ""))
+            starting_epoch = int(training_difference.replace("epoch_", "")) + 1
             resume_step = None
         else:
             resume_step = int(training_difference.replace("step_", ""))
-            num_epochs -= resume_step // len(train_dataloader)
-            # If resuming by step, we also need to know exactly how far into the DataLoader we went
-            resume_step = (num_epochs * len(train_dataloader)) - resume_step
+            starting_epoch = resume_step // len(train_dataloader)
+            resume_step -= starting_epoch * len(train_dataloader)
 
     # Now we train the model
-    for epoch in range(num_epochs):
+    for epoch in range(starting_epoch, num_epochs):
         model.train()
         if args.with_tracking:
             total_loss = 0
         for step, batch in enumerate(train_dataloader):
             # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == 0:
+            if args.resume_from_checkpoint and epoch == starting_epoch:
                 if resume_step is not None and step < resume_step:
-                    pass
+                    overall_step += 1
+                    continue
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
