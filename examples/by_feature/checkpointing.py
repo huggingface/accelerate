@@ -224,7 +224,6 @@ def training_function(config, args):
             if isinstance(checkpointing_steps, int):
                 output_dir = f"step_{overall_step}"
                 if overall_step % checkpointing_steps == 0:
-                    accelerator.print(f"Saving step_{overall_step}")
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
