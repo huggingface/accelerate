@@ -192,10 +192,11 @@ class FeatureExamplesTests(TempDirTestCase):
         with mock.patch("accelerate.Accelerator.print") as mocked_print:
             with mock.patch.object(sys, "argv", testargs):
                 checkpointing.main()
-            for call in mocked_print.mock_calls:
-                self.assertNotIn("epoch 0:", call.args)
-                self.assertNotIn("epoch 1:", call.args)
-            self.assertIn("epoch 2:", mocked_print.mock_calls[-1].args[0])
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 0:", {"accuracy": 0.5, "f1": 0.0})
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 1:", {"accuracy": 0.5, "f1": 0.0})
+            mocked_print.assert_any_call("epoch 2:", {"accuracy": 0.5, "f1": 0.0})
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_load_states_by_steps(self):
@@ -206,10 +207,10 @@ class FeatureExamplesTests(TempDirTestCase):
         with mock.patch("accelerate.Accelerator.print") as mocked_print:
             with mock.patch.object(sys, "argv", testargs):
                 checkpointing.main()
-            for call in mocked_print.mock_calls:
-                self.assertNotIn("epoch 0:", call.args)
-            self.assertIn("epoch 1:", mocked_print.mock_calls[-2].args[0])
-            self.assertIn("epoch 2:", mocked_print.mock_calls[-1].args[0])
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 0:", {"accuracy": 0.5, "f1": 0.0})
+            mocked_print.assert_any_call("epoch 1:", {"accuracy": 0.5, "f1": 0.0})
+            mocked_print.assert_any_call("epoch 2:", {"accuracy": 0.5, "f1": 0.0})
 
     @slow
     def test_cross_validation(self):
