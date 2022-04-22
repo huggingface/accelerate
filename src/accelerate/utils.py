@@ -791,6 +791,15 @@ class FullyShardedDataParallelPlugin:
             if self.min_num_params > 0:
                 self.auto_wrap_policy = functools.partial(default_auto_wrap_policy, min_num_params=self.min_num_params)
 
+        self.fsdp_config = {
+            "sharding_strategy": str(self.sharding_strategy),
+            "cpu_offload": self.cpu_offload.offload_params,
+            "min_num_params": self.min_num_params,
+            "is_default_auto_wrap_policy": self.auto_wrap_policy.__name__ == "default_auto_wrap_policy",
+            "ignored_modules_present": self.ignored_modules is not None,
+            "backward_prefetch_present": self.backward_prefetch is not None,
+        }
+
 
 @contextmanager
 def patch_environment(**kwargs):
