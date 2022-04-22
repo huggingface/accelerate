@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 
 from accelerate import DistributedType
 from accelerate.test_utils.examples import compare_against_test
-from accelerate.test_utils.testing import slow
+from accelerate.test_utils.testing import TempDirTestCase, slow
 from datasets import load_dataset
 from transformers import AutoTokenizer
 
@@ -33,13 +33,14 @@ sys.path.extend(SRC_DIRS)
 if SRC_DIRS is not None:
     import checkpointing
     import cross_validation
+    import multi_process_metrics
     import tracking
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
 # Should mock `{script_name}.get_dataloaders` via:
 # @mock.patch("{script_name}.get_dataloaders", mocked_dataloaders)
 
-EXCLUDE_EXAMPLES = ["cross_validation.py", "memory.py"]
+EXCLUDE_EXAMPLES = ["cross_validation.py", "multi_process_metrics.py", "memory.py"]
 
 
 def mocked_dataloaders(accelerator, batch_size: int = 16):
@@ -157,42 +158,61 @@ class ExampleDifferenceTests(unittest.TestCase):
         self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)
 
 
-class FeatureExamplesTests(unittest.TestCase):
+class FeatureExamplesTests(TempDirTestCase):
+    clear_on_setup = False
+
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_epoch(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            testargs = f"""
-            checkpointing.py
-            --checkpointing_steps epoch
-            --output_dir {tmpdir}
-            """.split()
-            with mock.patch.object(sys, "argv", testargs):
-                checkpointing.main()
-                self.assertTrue(os.path.exists(os.path.join(tmpdir, "epoch_0")))
+        testargs = f"""
+        checkpointing.py
+        --checkpointing_steps epoch
+        --output_dir {self.tmpdir}
+        """.split()
+        with mock.patch.object(sys, "argv", testargs):
+            checkpointing.main()
+            self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_steps(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            testargs = f"""
-            checkpointing.py
-            --checkpointing_steps 2
-            --output_dir {tmpdir}
-            """.split()
+        testargs = f"""
+        checkpointing.py
+        --checkpointing_steps 2
+        --output_dir {self.tmpdir}
+        """.split()
+        with mock.patch.object(sys, "argv", testargs):
+            checkpointing.main()
+            self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_4")))
+
+    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
+    def test_load_states_by_epoch(self):
+        testargs = f"""
+        checkpointing.py
+        --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
+        """.split()
+        dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
+        with mock.patch("accelerate.Accelerator.print") as mocked_print:
             with mock.patch.object(sys, "argv", testargs):
                 checkpointing.main()
-                self.assertTrue(os.path.exists(os.path.join(tmpdir, "step_2")))
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 0:", dummy_results)
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 1:", dummy_results)
+            mocked_print.assert_any_call("epoch 2:", dummy_results)
 
-    @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
-    def test_tracking(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            testargs = f"""
-            tracking.py
-            --with_tracking
-            --logging_dir {tmpdir}
-            """.split()
+    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
+    def test_load_states_by_steps(self):
+        testargs = f"""
+        checkpointing.py
+        --resume_from_checkpoint {os.path.join(self.tmpdir, "step_4")}
+        """.split()
+        dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
+        with mock.patch("accelerate.Accelerator.print") as mocked_print:
             with mock.patch.object(sys, "argv", testargs):
-                tracking.main()
-                self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
+                checkpointing.main()
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 0:", dummy_results)
+            mocked_print.assert_any_call("epoch 1:", dummy_results)
+            mocked_print.assert_any_call("epoch 2:", dummy_results)
 
     @slow
     def test_cross_validation(self):
@@ -205,3 +225,21 @@ class FeatureExamplesTests(unittest.TestCase):
                 cross_validation.main()
                 call = mocked_print.mock_calls[-1]
                 self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
+
+    @mock.patch("multi_process_metrics.get_dataloaders", mocked_dataloaders)
+    def test_multi_process_metrics(self):
+        testargs = ["multi_process_metrics.py"]
+        with mock.patch.object(sys, "argv", testargs):
+            multi_process_metrics.main()
+
+    @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
+    def test_tracking(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            testargs = f"""
+            tracking.py
+            --with_tracking
+            --logging_dir {tmpdir}
+            """.split()
+            with mock.patch.object(sys, "argv", testargs):
+                tracking.main()
+                self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))

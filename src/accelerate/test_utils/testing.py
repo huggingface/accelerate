@@ -69,6 +69,8 @@ class TempDirTestCase(unittest.TestCase):
     The temporary directory location will be stored in `self.tmpdir`
     """
 
+    clear_on_setup = True
+
     @classmethod
     def setUpClass(cls):
         "Creates a `tempfile.TemporaryDirectory` and stores it in `cls.tmpdir`"
@@ -82,11 +84,12 @@ class TempDirTestCase(unittest.TestCase):
 
     def setUp(self):
         "Destroy all contents in `self.tmpdir`, but not `self.tmpdir`"
-        for path in Path(self.tmpdir).glob("**/*"):
-            if path.is_file():
-                path.unlink()
-            elif path.is_dir():
-                shutil.rmtree(path)
+        if self.clear_on_setup:
+            for path in Path(self.tmpdir).glob("**/*"):
+                if path.is_file():
+                    path.unlink()
+                elif path.is_dir():
+                    shutil.rmtree(path)
 
 
 class MockingTestCase(unittest.TestCase):
