@@ -18,11 +18,7 @@ A collection of utilities for ensuring that training can always occur. Heavily i
 """
 
 import functools
-from typing import List, Union
-
-from torch.utils import DataLoader
-
-from accelerate.data_loader import DataLoaderDispatcher, DataLoaderShard
+import inspect
 
 
 def should_reduce_batch_size(exception: Exception) -> bool:
@@ -44,38 +40,76 @@ def should_reduce_batch_size(exception: Exception) -> bool:
 
 
 def memory_aware(
-    function: callable = None, dataloaders: List[Union[DataLoader, DataLoaderDispatcher, DataLoaderShard]] = None
+    function: callable = None,
+    starting_batch_size: int = 128,
+    function_arg_name: str = "dataloaders",
+    dataloader_function: callable = None,
+    dataloader_arg_name: str = "batch_size",
+    dataloader_function_kwargs: dict = {},
 ):
     """
-    A decorator that will reduce the batch size in half of all `dataloaders` if the wrapped function fails from any
-    exceptions related to out-of-memory or CUDNN not supported until the function executes completely.
+    A decorator that tries to execute `function`. If the wrapped function fails from any exceptions related to
+    out-of-memory or CUDNN not supported, the batch size is cut in half, new dataloaders are built, and the function is
+    ran again until it executes completely.
+
+    If the `DataLoader(s)` are built outside of `function`, a `dataloader_function` can be passed with optional
+    `dataloader_function_kwargs`. These will then be passed into `function` as `arg_name`
 
     Args:
         function (`callable`, *optional*):
-            A function to wrap that utilizes all declared `dataloaders`
-        dataloaders (list of `DataLoader`, [`~data_loader.DataLoaderDispatcher`], or [`~data_loader.DataLoaderShard`], *optional*):
-            A list of prepared or unprepared `DataLoaders`.
+            A function to wrap that utilizes a batch size or dataloaders
+        starting_batch_size (`int`, *optional*, defaults to 128):
+            The initial batch size to fit with.
+        function_arg_name(`str`, *optional*):
+            The argument in `function` to pass in generated `dataloaders` or the active batch size
+        dataloader_function (`callable`, *optional*):
+            An optional generator that builds PyTorch `DataLoaders`.
+        dataloader_arg_name (`str`, *optional*, defaults to "batch_size"):
+            The name of the argument to pass to `dataloader_function` to specify the batch_size parameter
+        dataloader_function_kwargs (`dict`, *optional*):
+            Optional kwargs that get passed to `dataloader_function`. Should not include `function_arg_name`.
     """
-    if not isinstance(dataloaders, (tuple, list)):
-        dataloaders = [dataloaders]
-    if not all(
-        (isinstance(dataloader, (DataLoaderDispatcher, DataLoaderShard, DataLoader)) for dataloader in dataloaders)
-    ):
-        raise TypeError(
-            "Unsupported operation attempted. One or more dataloaders passed were not of type(s) `DataLoaderDispatcher`, `DataLoaderShard`, or `torch.utils.DataLoader`"
+    if function_arg_name in dataloader_function_kwargs:
+        raise ValueError(
+            f"`dataloader_function_kwargs` should not contain {function_arg_name} as it is changed and passed dynamically."
         )
-
     if function is None:
-        return functools.partial(memory_aware, dataloaders=dataloaders)
+        if dataloader_function is None:
+            return functools.partial(
+                memory_aware, starting_batch_size=starting_batch_size, function_arg_name=function_arg_name
+            )
+        else:
+            return functools.partial(
+                memory_aware,
+                starting_batch_size=starting_batch_size,
+                function_arg_name=function_arg_name,
+                dataloader_function=dataloader_function,
+                dataloader_arg_name=dataloader_arg_name,
+                dataloader_function_kwargs=dataloader_function_kwargs,
+            )
+
+    batch_size = starting_batch_size
 
     def decorator(*args, **kwargs):
+        # Access our `batch_size`
+        nonlocal batch_size
+        args = list(args)
+        param_name_to_idx = {param: i for i, param in enumerate(inspect.signature(function).parameters)}
+        # We need to know what `arg` is our `batch_size` argument
+        arg_idx = param_name_to_idx[function_arg_name]
         while True:
             try:
-                return function(*args, **kwargs)
+                if dataloader_function is not None:
+                    dataloader_function_kwargs[dataloader_arg_name] = batch_size
+                    dataloaders = dataloader_function(**dataloader_function_kwargs)
+                    args[arg_idx] = dataloaders
+                    return function(*args, **kwargs)
+                else:
+                    args[arg_idx] = batch_size
+                    return function(*args, **kwargs)
             except Exception as e:
                 if should_reduce_batch_size(e):
-                    for dataloader in dataloaders:
-                        dataloader.batch_size /= 2
+                    batch_size /= 2
                 else:
                     raise
 
