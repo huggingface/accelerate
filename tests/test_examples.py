@@ -22,6 +22,7 @@ from torch.utils.data import DataLoader
 
 from accelerate import DistributedType
 from accelerate.test_utils.examples import compare_against_test
+from accelerate.test_utils.testing import TempDirTestCase, slow
 from datasets import load_dataset
 from transformers import AutoTokenizer
 
@@ -31,11 +32,15 @@ sys.path.extend(SRC_DIRS)
 
 if SRC_DIRS is not None:
     import checkpointing
+    import cross_validation
+    import multi_process_metrics
     import tracking
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
 # Should mock `{script_name}.get_dataloaders` via:
 # @mock.patch("{script_name}.get_dataloaders", mocked_dataloaders)
+
+EXCLUDE_EXAMPLES = ["cross_validation.py", "multi_process_metrics.py"]
 
 
 def mocked_dataloaders(accelerator, batch_size: int = 16):
@@ -117,21 +122,22 @@ class ExampleDifferenceTests(unittest.TestCase):
         by_feature_path = os.path.abspath(os.path.join("examples", "by_feature"))
         examples_path = os.path.abspath("examples")
         for item in os.listdir(by_feature_path):
-            item_path = os.path.join(by_feature_path, item)
-            if os.path.isfile(item_path) and ".py" in item_path:
-                with self.subTest(
-                    tested_script=complete_file_name,
-                    feature_script=item,
-                    tested_section="main()" if parser_only else "training_function()",
-                ):
-                    diff = compare_against_test(
-                        os.path.join(examples_path, complete_file_name), item_path, parser_only, secondary_filename
-                    )
-                    diff = "\n".join(diff)
-                    if special_strings is not None:
-                        for string in special_strings:
-                            diff = diff.replace(string, "")
-                    self.assertEqual(diff, "")
+            if item not in EXCLUDE_EXAMPLES:
+                item_path = os.path.join(by_feature_path, item)
+                if os.path.isfile(item_path) and ".py" in item_path:
+                    with self.subTest(
+                        tested_script=complete_file_name,
+                        feature_script=item,
+                        tested_section="main()" if parser_only else "training_function()",
+                    ):
+                        diff = compare_against_test(
+                            os.path.join(examples_path, complete_file_name), item_path, parser_only, secondary_filename
+                        )
+                        diff = "\n".join(diff)
+                        if special_strings is not None:
+                            for string in special_strings:
+                                diff = diff.replace(string, "")
+                        self.assertEqual(diff, "")
 
     def test_nlp_examples(self):
         self.one_complete_example("complete_nlp_example.py", True)
@@ -152,30 +158,79 @@ class ExampleDifferenceTests(unittest.TestCase):
         self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)
 
 
-class FeatureExamplesTests(unittest.TestCase):
+class FeatureExamplesTests(TempDirTestCase):
+    clear_on_setup = False
+
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_epoch(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            testargs = f"""
-            checkpointing.py
-            --checkpointing_steps epoch
-            --output_dir {tmpdir}
-            """.split()
-            with mock.patch.object(sys, "argv", testargs):
-                checkpointing.main()
-                self.assertTrue(os.path.exists(os.path.join(tmpdir, "epoch_0")))
+        testargs = f"""
+        checkpointing.py
+        --checkpointing_steps epoch
+        --output_dir {self.tmpdir}
+        """.split()
+        with mock.patch.object(sys, "argv", testargs):
+            checkpointing.main()
+            self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_steps(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            testargs = f"""
-            checkpointing.py
-            --checkpointing_steps 2
-            --output_dir {tmpdir}
-            """.split()
+        testargs = f"""
+        checkpointing.py
+        --checkpointing_steps 2
+        --output_dir {self.tmpdir}
+        """.split()
+        with mock.patch.object(sys, "argv", testargs):
+            checkpointing.main()
+            self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_4")))
+
+    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
+    def test_load_states_by_epoch(self):
+        testargs = f"""
+        checkpointing.py
+        --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
+        """.split()
+        dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
+        with mock.patch("accelerate.Accelerator.print") as mocked_print:
             with mock.patch.object(sys, "argv", testargs):
                 checkpointing.main()
-                self.assertTrue(os.path.exists(os.path.join(tmpdir, "step_2")))
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 0:", dummy_results)
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 1:", dummy_results)
+            mocked_print.assert_any_call("epoch 2:", dummy_results)
+
+    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
+    def test_load_states_by_steps(self):
+        testargs = f"""
+        checkpointing.py
+        --resume_from_checkpoint {os.path.join(self.tmpdir, "step_4")}
+        """.split()
+        dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
+        with mock.patch("accelerate.Accelerator.print") as mocked_print:
+            with mock.patch.object(sys, "argv", testargs):
+                checkpointing.main()
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 0:", dummy_results)
+            mocked_print.assert_any_call("epoch 1:", dummy_results)
+            mocked_print.assert_any_call("epoch 2:", dummy_results)
+
+    @slow
+    def test_cross_validation(self):
+        testargs = """
+        cross_validation.py
+        --num_folds 2
+        """.split()
+        with mock.patch.object(sys, "argv", testargs):
+            with mock.patch("accelerate.Accelerator.print") as mocked_print:
+                cross_validation.main()
+                call = mocked_print.mock_calls[-1]
+                self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
+
+    @mock.patch("multi_process_metrics.get_dataloaders", mocked_dataloaders)
+    def test_multi_process_metrics(self):
+        testargs = ["multi_process_metrics.py"]
+        with mock.patch.object(sys, "argv", testargs):
+            multi_process_metrics.main()
 
     @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
     def test_tracking(self):

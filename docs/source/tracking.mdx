@@ -28,12 +28,12 @@ Currently `Accelerate` supports three trackers out-of-the-box:
 
 To use any of them, pass in the selected type(s) to the `log_with` parameter in [`Accelerate`]:
 ```python
-from accelerate import Accelerate
+from accelerate import Accelerator
 from accelerate.utils import LoggerType
 
-accelerator = Accelerate(log_with="all")  # For all available trackers in the environment
-accelerator = Accelerate(log_with="wandb")
-accelerator = Accelerate(log_with=["wandb", LoggerType.TENSORBOARD])
+accelerator = Accelerator(log_with="all")  # For all available trackers in the environment
+accelerator = Accelerator(log_with="wandb")
+accelerator = Accelerator(log_with=["wandb", LoggerType.TENSORBOARD])
 ```
 
 At the start of your experiment [`~Accelerator.init_trackers`] should be used to setup your project, and potentially add any experiment hyperparameters to be logged:
@@ -123,14 +123,14 @@ be used with the API:
 
 ```python
 tracker = MyCustomTracker("some_run_name")
-accelerator = Accelerate(log_with=tracker)
+accelerator = Accelerator(log_with=tracker)
 ```
 
 These also can be mixed with existing trackers, including with `"all"`:
 
 ```python
 tracker = MyCustomTracker("some_run_name")
-accelerator = Accelerate(log_with=[tracker, "all"])
+accelerator = Accelerator(log_with=[tracker, "all"])
 ```
 
 ## When a wrapper cannot work

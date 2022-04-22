@@ -29,7 +29,7 @@ from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, In
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
-from .tracking import CometMLTracker, GeneralTracker, TensorBoardTracker, WandBTracker, get_available_trackers
+from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     DeepSpeedPlugin,
     FullyShardedDataParallelPlugin,
@@ -40,9 +40,6 @@ from .utils import (
     extract_model_from_parallel,
     gather,
     get_pretty_name,
-    is_comet_ml_available,
-    is_tensorboard_available,
-    is_wandb_available,
     pad_across_processes,
     save,
     wait_for_everyone,
@@ -137,32 +134,13 @@ class Accelerator:
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
-        logging_dir: Optional[Union[str, os.PathLike]] = "",
+        logging_dir: Optional[Union[str, os.PathLike]] = None,
         dispatch_batches: Optional[bool] = None,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
-        loggers = []
-        if log_with is not None:
-            if not isinstance(log_with, (list, tuple)):
-                log_with = [log_with]
-                logger.debug(f"{log_with}")
-            if "all" in log_with or LoggerType.ALL in log_with:
-                loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()
-            else:
-                for log_type in log_with:
-                    if log_type not in LoggerType and not issubclass(type(log_type), GeneralTracker):
-                        raise ValueError(
-                            f"Unsupported logging capability: {log_type}. Choose between {LoggerType.list()}"
-                        )
-                    if issubclass(type(log_type), GeneralTracker):
-                        loggers.append(log_type)
-                    else:
-                        log_type = LoggerType(log_type)
-                        if log_type not in loggers:
-                            loggers.append(log_type)
-        self.log_with = loggers
         self.logging_dir = logging_dir
+        self.log_with = filter_trackers(log_with, self.logging_dir)
 
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
@@ -737,12 +715,13 @@ class Accelerator:
             if issubclass(type(tracker), GeneralTracker):
                 # Custom trackers are already initialized
                 self.trackers.append(tracker)
-            elif str(tracker).lower() == "tensorboard" and is_tensorboard_available():
-                self.trackers.append(TensorBoardTracker(project_name, self.logging_dir))
-            elif str(tracker).lower() == "wandb" and is_wandb_available():
-                self.trackers.append(WandBTracker(project_name))
-            elif str(tracker).lower() == "comet_ml" and is_comet_ml_available():
-                self.trackers.append(CometMLTracker(project_name))
+            else:
+                tracker_init = LOGGER_TYPE_TO_CLASS[str(tracker)]
+                if getattr(tracker_init, "requires_logging_directory"):
+                    # We can skip this check since it was done in `__init__`
+                    self.trackers.append(tracker_init(project_name, self.logging_dir))
+                else:
+                    self.trackers.append(tracker_init(project_name))
         if config is not None:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
@@ -838,6 +817,13 @@ class Accelerator:
         self.deepspeed_engine = None
         gc.collect()
         torch.cuda.empty_cache()
+
+    def clear(self):
+        """
+        Alias for [`Accelerate.free_memory`], releases all references to the internal objects stored and call the
+        garbage collector. You should call this method between two trainings with different models/optimizers.
+        """
+        self.free_memory()
 
     def _get_named_parameters(self, *args):
         named_parameters = {}
