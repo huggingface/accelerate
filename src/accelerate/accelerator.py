@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import functools
 import gc
 import os
 import sys
@@ -33,6 +32,7 @@ from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .tracking import CometMLTracker, GeneralTracker, TensorBoardTracker, WandBTracker, get_available_trackers
 from .utils import (
     DeepSpeedPlugin,
+    FullyShardedDataParallelPlugin,
     LoggerType,
     PrecisionType,
     RNGType,
@@ -84,6 +84,9 @@ class Accelerator:
         deepspeed_plugin (`DeepSpeedPlugin`, *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
+        fsdp_plugin (`FullyShardedDataParallelPlugin`, *optional*):
+            Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
+            using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -131,6 +134,7 @@ class Accelerator:
         mixed_precision: Union[PrecisionType, str] = None,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
+        fsdp_plugin: FullyShardedDataParallelPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = "",
@@ -178,6 +182,16 @@ class Accelerator:
                 deepspeed_plugin, DeepSpeedPlugin
             ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
 
+        if os.environ.get("USE_FSDP", "false") == "true":
+            if version.parse(torch.__version__) < version.parse("1.12.0.dev20220418+cu113"):
+                raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
+            if fsdp_plugin is None:  # init from env variables
+                fsdp_plugin = FullyShardedDataParallelPlugin()
+            else:
+                assert isinstance(
+                    fsdp_plugin, FullyShardedDataParallelPlugin
+                ), "`fsdp_plugin` must be a FullyShardedDataParallelPlugin object."
+
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -206,6 +220,7 @@ class Accelerator:
             mixed_precision=mixed_precision,
             cpu=cpu,
             deepspeed_plugin=deepspeed_plugin,
+            fsdp_plugin=fsdp_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -358,12 +373,23 @@ class Accelerator:
         optimizers = []
 
         self._schedulers = []
+        self._models = []
+        intermediate_result = []
         for obj in args:
             if isinstance(obj, torch.optim.Optimizer):
+                if len(obj.param_groups) > 1:
+                    logger.warn(
+                        "FSDP Warning: When using FSDP, several parameter groups will be conflated into a single one due to nested module wrapping and parameter flattening."
+                    )
                 optimizer = obj.optimizer.__class__(model.parameters(), **obj.optimizer.defaults)
                 obj = self.prepare_optimizer(optimizer)
                 optimizers.append(obj)
-            elif isinstance(obj, AcceleratedScheduler):
+            elif isinstance(obj, torch.nn.Module):
+                self._models.append(obj)
+            intermediate_result.append(obj)
+
+        for obj in intermediate_result:
+            if isinstance(obj, AcceleratedScheduler):
                 obj.optimizer = optimizers
                 for i, opt in enumerate(self._optimizers):
                     if getattr(obj.scheduler, "optimizer", None) == opt.optimizer:
@@ -397,6 +423,10 @@ class Accelerator:
             if model_count > 1 and optimizer_present:
                 raise ValueError(
                     "For FSDP to work, prepare must be called for all the models before optimizers are created"
+                )
+            elif model_count == 1 and optimizer_present:
+                logger.warn(
+                    "FSDP Warning: When using FSDP, it is efficient and recommended to call prepare for the model before creating the optimizer"
                 )
 
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
@@ -441,7 +471,7 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model):
-        if self.device_placement:
+        if self.device_placement and self.distributed_type != DistributedType.FSDP:
             model = model.to(self.device)
         if self.distributed_type == DistributedType.MULTI_GPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
@@ -449,20 +479,19 @@ class Accelerator:
                 model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
             )
         elif self.distributed_type == DistributedType.FSDP:
-            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-            from torch.distributed.fsdp.wrap import default_auto_wrap_policy
 
-            auto_wrap_policy = None
-            cpu_offload = None
-            if os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true":
-                cpu_offload = CPUOffload(offload_params=True)
-
-            if int(os.environ.get("FSDP_MIN_NUM_PARAMS", "0")) > 0:
-                auto_wrap_policy = functools.partial(
-                    default_auto_wrap_policy, min_num_params=int(os.environ["FSDP_MIN_NUM_PARAMS"])
-                )
-            model = FSDP(model, auto_wrap_policy=auto_wrap_policy, cpu_offload=cpu_offload)
+            fsdp_plugin = self.state.fsdp_plugin
+            model = FSDP(
+                model,
+                sharding_strategy=fsdp_plugin.sharding_strategy,
+                cpu_offload=fsdp_plugin.cpu_offload,
+                auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
+                backward_prefetch=fsdp_plugin.backward_prefetch,
+                ignored_modules=fsdp_plugin.ignored_modules,
+            ).to(self.device)
+            if fsdp_plugin.cpu_offload.offload_params:
+                model.to("cpu")
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
@@ -624,6 +653,12 @@ class Accelerator:
         """
         Should be used in place of `torch.nn.utils.clip_grad_norm_`.
         """
+        if self.distributed_type == DistributedType.FSDP:
+            parameters = [p for p in parameters]
+            for model in self._models:
+                if parameters == [p for p in model.parameters()]:
+                    model.clip_grad_norm_(max_norm, norm_type)
+                    return
         self.unscale_gradients()
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 

@@ -24,13 +24,10 @@ from ast import literal_eval
 from pathlib import Path
 from typing import Dict, List
 
-import torch
-
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.state import ComputeEnvironment, DistributedType
 from accelerate.utils import PrecisionType, PrepareForLaunch, is_sagemaker_available
-from packaging import version
 
 
 def launch_command_parser(subparsers=None):
@@ -70,7 +67,13 @@ def launch_command_parser(subparsers=None):
         "--min_num_params",
         type=int,
         default=1e8,
-        help="FSDP's minimum number of parameters for Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
+        help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--sharding_strategy",
+        type=int,
+        default=1,
+        help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
     )
     parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
@@ -250,6 +253,7 @@ def multi_gpu_launcher(args):
         current_env["USE_FSDP"] = "true"
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.min_num_params)
+        current_env["FSDP_SHARDING_STRATEGY"] = str(args.sharding_strategy)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
     if process.returncode != 0:
@@ -500,8 +504,6 @@ def launch_command(args):
     if args.use_deepspeed and not args.cpu:
         deepspeed_launcher(args)
     elif args.use_fsdp and not args.cpu:
-        if version.parse(torch.__version__) < version.parse("1.12.0.dev20220418+cu113"):
-            raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
         multi_gpu_launcher(args)
     elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)

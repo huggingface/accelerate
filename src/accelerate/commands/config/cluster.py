@@ -110,6 +110,16 @@ def get_cluster_input():
             distributed_type = DistributedType.FSDP
         fsdp_config = {}
         if distributed_type == DistributedType.FSDP:
+            from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
+
+            message = ""
+            for k, v in ShardingStrategy.__members__.items():
+                message += " [" + str(ShardingStrategy[k].value) + "] " + k + ","
+            fsdp_config["sharding_strategy"] = _ask_field(
+                f"What should be your sharding strategy ({message[:-1]})? [1]: ",
+                lambda x: int(x),
+                default=1,
+            )
             fsdp_config["offload_params"] = _ask_field(
                 "Do you want to offload parameters and gradients to CPU? [yes/NO]: ",
                 _convert_yes_no_to_bool,
@@ -117,7 +127,7 @@ def get_cluster_input():
                 error_message="Please enter yes or no.",
             )
             fsdp_config["min_num_params"] = _ask_field(
-                "What should be your FSDP's minimum number of parameters for Auto Wrapping? [1e8]: ",
+                "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
                 lambda x: int(x),
                 default=1e8,
             )
