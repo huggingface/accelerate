@@ -39,7 +39,7 @@ if SRC_DIRS is not None:
 # Should mock `{script_name}.get_dataloaders` via:
 # @mock.patch("{script_name}.get_dataloaders", mocked_dataloaders)
 
-EXCLUDE_EXAMPLES = ["cross_validation.py"]
+EXCLUDE_EXAMPLES = ["cross_validation.py", "memory.py"]
 
 
 def mocked_dataloaders(accelerator, batch_size: int = 16):
