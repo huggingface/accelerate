@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import argparse
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -49,25 +51,19 @@ from transformers import (
 #
 ########################################################################
 
-# New Code #
-set_seed(42)
-
-# New Code #
-# In our particular use case, we rely on the `Accelerator` object being present
-# when we want to build the DataLoaders. For our wrapper to work we *must* build
-# our `Accelerator` object before we execute the function
-accelerator = Accelerator()
 
 MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
 
-def get_dataloaders(batch_size: int = 16):
+def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
     """
     Creates a set of `DataLoader`s for the `glue` dataset,
     using "bert-base-cased" as the tokenizer.
 
     Args:
+        accelerator (`Accelerator`):
+            An `Accelerator` object
         batch_size (`int`, *optional*):
             The batch size for the train and validation DataLoaders.
     """
@@ -107,87 +103,115 @@ def get_dataloaders(batch_size: int = 16):
     return train_dataloader, eval_dataloader
 
 
-# New Code #
-# If the batch size is too big we use gradient accumulation
-gradient_accumulation_steps = 1
-batch_size = 16
-if batch_size > MAX_GPU_BATCH_SIZE:
-    gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
-    batch_size = MAX_GPU_BATCH_SIZE
+def training_function(config, args):
+    # Initialize accelerator
+    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
+    lr = config["lr"]
+    num_epochs = int(config["num_epochs"])
+    correct_bias = config["correct_bias"]
+    seed = int(config["seed"])
+    batch_size = int(config["batch_size"])
 
-# Our `DataLoaders` need to be built before declaring our main training function in the script
-train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
+    metric = load_metric("glue", "mrpc")
 
-# Similarly we can also get our model, optimizer, and scheduler to keep our training loop clean
-model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
+    # If the batch size is too big we use gradient accumulation
+    gradient_accumulation_steps = 1
+    if batch_size > MAX_GPU_BATCH_SIZE:
+        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
+        batch_size = MAX_GPU_BATCH_SIZE
 
-# We could avoid this line since the accelerator is set with `device_placement=True` (default value).
-# Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
-# creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
-model = model.to(accelerator.device)
+    set_seed(seed)
+    # Instantiate the model (we build the model here so that the seed also control new weights initialization)
+    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
 
-# Instantiate optimizer
-optimizer = AdamW(params=model.parameters(), lr=2e-5, correct_bias=True)
+    # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
+    # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
+    # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
+    model = model.to(accelerator.device)
 
-# Instantiate scheduler
-lr_scheduler = get_linear_schedule_with_warmup(
-    optimizer=optimizer,
-    num_warmup_steps=100,
-    num_training_steps=(len(train_dataloader) * 3),
-)
+    # Instantiate optimizer
+    optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
 
-# Prepare everything
-# There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
-# prepare method.
-model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
-)
+    # New Code #
+    # We now can define an inner training loop function. It should take a batch size as the only parameter,
+    # and build the dataloaders in there.
+    # It also gets our decorator
+    @memory_aware(starting_batch_size=batch_size)
+    def inner_training_loop(batch_size):
+        # And now just move everything below under this function
+        # Ensure that anything declared outside this function is set as `nonlocal`
+        # so it is in scope
+        nonlocal model, optimizer
+        train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
 
-metric = load_metric("glue", "mrpc")
+        # Instantiate scheduler
+        lr_scheduler = get_linear_schedule_with_warmup(
+            optimizer=optimizer,
+            num_warmup_steps=100,
+            num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
+        )
 
-# New Code #
-# Now we can define our training loop, wrapping it in `memory_aware`
-# This will repeatedly call `training_function` if a CUDA OOM error was hit,
-# and reduces all of the batch_sizes in the dataloaders by half
+        # Prepare everything
+        # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
+        # prepare method.
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+            model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+        )
 
-
-@memory_aware(dataloaders=[train_dataloader, eval_dataloader])
-def training_function():
-    # Train the model as usual
-    for epoch in range(3):
-        model.train()
-        for step, batch in enumerate(train_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
-            batch.to(accelerator.device)
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss = loss / gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % gradient_accumulation_steps == 0:
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
-
-        model.eval()
-        for step, batch in enumerate(eval_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
-            batch.to(accelerator.device)
-            with torch.no_grad():
+        # Now we train the model
+        for epoch in range(num_epochs):
+            model.train()
+            for step, batch in enumerate(train_dataloader):
+                # We could avoid this line since we set the accelerator with `device_placement=True`.
+                batch.to(accelerator.device)
                 outputs = model(**batch)
-            predictions = outputs.logits.argmax(dim=-1)
-            predictions, references = accelerator.gather((predictions, batch["labels"]))
-            metric.add_batch(
-                predictions=predictions,
-                references=references,
-            )
+                loss = outputs.loss
+                loss = loss / gradient_accumulation_steps
+                accelerator.backward(loss)
+                if step % gradient_accumulation_steps == 0:
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
 
-        eval_metric = metric.compute()
-        # Use accelerator.print to print only on the main process.
-        accelerator.print(f"epoch {epoch}:", eval_metric)
+            model.eval()
+            for step, batch in enumerate(eval_dataloader):
+                # We could avoid this line since we set the accelerator with `device_placement=True`.
+                batch.to(accelerator.device)
+                with torch.no_grad():
+                    outputs = model(**batch)
+                predictions = outputs.logits.argmax(dim=-1)
+                predictions, references = accelerator.gather((predictions, batch["labels"]))
+                metric.add_batch(
+                    predictions=predictions,
+                    references=references,
+                )
+
+            eval_metric = metric.compute()
+            # Use accelerator.print to print only on the main process.
+            accelerator.print(f"epoch {epoch}:", eval_metric)
+
+    # New Code #
+    # And call it at the end with no arguments
+    # Note: You could also refactor this outside of your training loop function
+    inner_training_loop()
 
 
 def main():
-    training_function()
+    parser = argparse.ArgumentParser(description="Simple example of training script.")
+    parser.add_argument(
+        "--mixed_precision",
+        type=str,
+        default="no",
+        choices=["no", "fp16", "bf16"],
+        help="Whether to use mixed precision. Choose"
+        "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
+        "and an Nvidia Ampere GPU.",
+    )
+    parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
+    args = parser.parse_args()
+    config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 42, "batch_size": 16}
+    training_function(config, args)
 
 
 if __name__ == "__main__":
