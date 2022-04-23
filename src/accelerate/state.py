@@ -212,7 +212,7 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.FSDP
                     if self.mixed_precision != "no":
                         raise ValueError(
-                            "Mixed precision is currently not supported for FSDPS. Please set `mixed_precision` to `no`."
+                            "Mixed precision is currently not supported for FSDP. Please set `mixed_precision` to `no`."
                         )
                     self.fsdp_plugin = fsdp_plugin
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
