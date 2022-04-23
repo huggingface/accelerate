@@ -16,6 +16,7 @@ import functools
 import importlib
 import os
 import random
+import typing
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -745,21 +746,19 @@ class FullyShardedDataParallelPlugin:
     This plugin is used to enable fully sharded data parallelism.
     """
 
-    from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch, CPUOffload, ShardingStrategy
-
-    sharding_strategy: Optional[ShardingStrategy] = field(
+    sharding_strategy: "typing.Any" = field(
         default=None,
-        metadata={"help": "Possible options are {}".format(ShardingStrategy.__members__)},
+        metadata={"help": "Possible options are [1] FULL_SHARD, [2] SHARD_GRAD_OP"},
     )
-    backward_prefetch: Optional[BackwardPrefetch] = field(
+    backward_prefetch: "typing.Any" = field(
         default=None,
-        metadata={"help": "Possible options are {}".format(BackwardPrefetch.__members__)},
+        metadata={"help": "Possible options are [1] BACKWARD_PRE, [2] BACKWARD_POST"},
     )
-    auto_wrap_policy: Optional[Callable] = field(
+    auto_wrap_policy: "typing.Any" = field(
         default=None,
         metadata={"help": "A callable specifying a policy to recursively wrap layers with FSDP"},
     )
-    cpu_offload: Optional[CPUOffload] = field(
+    cpu_offload: Optional[Callable] = field(
         default=None,
         metadata={"help": "Decides Whether to offload parameters and gradients to CPU."},
     )
@@ -790,15 +789,6 @@ class FullyShardedDataParallelPlugin:
         if self.auto_wrap_policy is None:
             if self.min_num_params > 0:
                 self.auto_wrap_policy = functools.partial(default_auto_wrap_policy, min_num_params=self.min_num_params)
-
-        self.fsdp_config = {
-            "sharding_strategy": str(self.sharding_strategy),
-            "cpu_offload": self.cpu_offload.offload_params,
-            "min_num_params": self.min_num_params,
-            "is_default_auto_wrap_policy": self.auto_wrap_policy.__name__ == "default_auto_wrap_policy",
-            "ignored_modules_present": self.ignored_modules is not None,
-            "backward_prefetch_present": self.backward_prefetch is not None,
-        }
 
 
 @contextmanager

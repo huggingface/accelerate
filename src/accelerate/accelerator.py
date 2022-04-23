@@ -166,9 +166,8 @@ class Accelerator:
             if fsdp_plugin is None:  # init from env variables
                 fsdp_plugin = FullyShardedDataParallelPlugin()
             else:
-                assert isinstance(
-                    fsdp_plugin, FullyShardedDataParallelPlugin
-                ), "`fsdp_plugin` must be a FullyShardedDataParallelPlugin object."
+                if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
+                    raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
 
         # Kwargs handlers
         self.ddp_handler = None
@@ -357,7 +356,8 @@ class Accelerator:
             if isinstance(obj, torch.optim.Optimizer):
                 if len(obj.param_groups) > 1:
                     logger.warn(
-                        "FSDP Warning: When using FSDP, several parameter groups will be conflated into a single one due to nested module wrapping and parameter flattening."
+                        "FSDP Warning: When using FSDP, several parameter groups will be conflated into "
+                        "a single one due to nested module wrapping and parameter flattening."
                     )
                 optimizer = obj.optimizer.__class__(model.parameters(), **obj.optimizer.defaults)
                 obj = self.prepare_optimizer(optimizer)
@@ -400,11 +400,13 @@ class Accelerator:
                     optimizer_present = True
             if model_count > 1 and optimizer_present:
                 raise ValueError(
-                    "For FSDP to work, prepare must be called for all the models before optimizers are created"
+                    "For FSDP to work with multiple models (>1), "
+                    "prepare must be called for all the models before optimizers are created"
                 )
             elif model_count == 1 and optimizer_present:
                 logger.warn(
-                    "FSDP Warning: When using FSDP, it is efficient and recommended to call prepare for the model before creating the optimizer"
+                    "FSDP Warning: When using FSDP, "
+                    "it is efficient and recommended to call prepare for the model before creating the optimizer"
                 )
 
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
@@ -443,7 +445,7 @@ class Accelerator:
                 if isinstance(obj, torch.optim.Optimizer):
                     obj._switch_parameters(mapping)
 
-        if self.distributed_type == DistributedType.FSDP:
+        if self.distributed_type == DistributedType.FSDP and model_count == 1 and optimizer_present:
             result = self._prepare_fsdp(*result)
 
         return result if len(result) > 1 else result[0]
@@ -467,9 +469,9 @@ class Accelerator:
                 auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
                 backward_prefetch=fsdp_plugin.backward_prefetch,
                 ignored_modules=fsdp_plugin.ignored_modules,
-            ).to(self.device)
-            if fsdp_plugin.cpu_offload.offload_params:
-                model.to("cpu")
+            )
+            if not fsdp_plugin.cpu_offload.offload_params:
+                model.to(self.device)
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)

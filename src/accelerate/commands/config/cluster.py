@@ -110,13 +110,8 @@ def get_cluster_input():
             distributed_type = DistributedType.FSDP
         fsdp_config = {}
         if distributed_type == DistributedType.FSDP:
-            from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
-
-            message = ""
-            for k, v in ShardingStrategy.__members__.items():
-                message += " [" + str(ShardingStrategy[k].value) + "] " + k + ","
             fsdp_config["sharding_strategy"] = _ask_field(
-                f"What should be your sharding strategy ({message[:-1]})? [1]: ",
+                "What should be your sharding strategy ([1] FULL_SHARD, [2] SHARD_GRAD_OP)? [1]: ",
                 lambda x: int(x),
                 default=1,
             )

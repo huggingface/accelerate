@@ -275,8 +275,6 @@ class AcceleratorState:
         )
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
-        if self.distributed_type == DistributedType.FSDP:
-            repr += f"fsdp_config: {self.fsdp_plugin.fsdp_config}\n"
         return repr
 
     # For backward compatibility
