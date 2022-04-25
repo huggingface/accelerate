@@ -1,26 +1,28 @@
-- sections: 
-  - local: index
-    title: 🤗 Accelerate
-  - local: quicktour
-    title: Quick tour
-  - local: installation
-    title: Installation
+- sections:
+    - local: index
+      title: 🤗 Accelerate
+    - local: quicktour
+      title: Quick tour
+    - local: installation
+      title: Installation
   title: Get started
 - sections:
-  - local: sagemaker
-    title: Amazon SageMaker
+    - local: sagemaker
+      title: Amazon SageMaker
   title: Guides
 - sections:
-  - local: accelerator
-    title: Accelerator
-  - local: launcher
-    title: Notebook Launcher
-  - local: kwargs
-    title: Kwargs Handlers
-  - local: internal
-    title: Internals
-  - local: checkpoint
-    title: Checkpointing
-  - local: tracking
-    title: Experiment Tracking
+    - local: accelerator
+      title: Accelerator
+    - local: launcher
+      title: Notebook Launcher
+    - local: kwargs
+      title: Kwargs Handlers
+    - local: internal
+      title: Internals
+    - local: checkpoint
+      title: Checkpointing
+    - local: tracking
+      title: Experiment Tracking
+    - local: fsdp
+      title: Fully Sharded Data Parallel
   title: API Reference
