@@ -622,13 +622,13 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     )
 
 
-def reduce(data, reduction="mean"):
+def reduce(tensor, reduction="mean"):
     """
     Recursively reduce the tensors in a nested list/tuple/dictionary of lists of tensors across all processes by the
     mean of a given operation.
 
     Args:
-        data (`torch.Tensor` or a nested list/tuple/dictionary of lists of tensors `torch.Tensor`):
+        tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to reduce.
         reduction (`str`, *optional*, defaults to `"mean"`):
             A reduction method. Can be of "mean", "sum", or "none"
@@ -636,29 +636,23 @@ def reduce(data, reduction="mean"):
     Returns:
         The same data structure as `data` with all the tensors reduced.
     """
-    if reduction not in ["mean", "sum", "none"]:
-        raise ValueError(f"Invalid `reduction` passed: {reduction}." "Must be either 'mean', 'sum', or 'none'.")
-    if reduction == "none":
-        return data
-    if isinstance(data[0], (tuple, list)):
-        return honor_type(data[0], (reduce([d[i] for d in data], reduction=reduction) for i in range(len(data[0]))))
-    elif isinstance(data[0], Mapping):
-        return type(data[0])({k: reduce([d[k] for d in data], reduction=reduction) for k in data[0].keys()})
-    elif not isinstance(data[0], torch.Tensor):
-        raise TypeError(f"Can only reduce tensors but got {type(data[0])}")
-    state = AcceleratorState()
-    cloned_tensor = data.clone()
-    if state.distributed_type == DistributedType.TPU:
-        xm.all_reduce("sum", cloned_tensor)
-        return cloned_tensor
-    elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
-        torch.distributed.reduce(cloned_tensor, ReduceOp.SUM)
-        return cloned_tensor
-    else:
-        if reduction == "sum":
-            return cloned_tensor.sum()
+
+    def _reduce_across_processes(tensor, reduction="mean"):
+        state = AcceleratorState()
+        cloned_tensor = tensor.clone()
+        if state.distributed_type == DistributedType.TPU:
+            xm.all_reduce("sum", cloned_tensor)
+            return cloned_tensor
+        elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
+            torch.distributed.reduce(cloned_tensor, ReduceOp.SUM)
+            return cloned_tensor
         else:
-            return cloned_tensor.mean()
+            if reduction == "sum":
+                return cloned_tensor.sum()
+            else:
+                return cloned_tensor.mean()
+
+    return recursively_apply(_reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction)
 
 
 def wait_for_everyone():
