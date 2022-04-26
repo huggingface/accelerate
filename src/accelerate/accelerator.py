@@ -40,6 +40,7 @@ from .utils import (
     gather,
     get_pretty_name,
     pad_across_processes,
+    reduce,
     save,
     wait_for_everyone,
 )
@@ -556,7 +557,7 @@ class Accelerator:
 
     def gather(self, tensor):
         """
-        Gather the values in *tensor* accross all processes and concatenate them on the first dimension. Useful to
+        Gather the values in *tensor* across all processes and concatenate them on the first dimension. Useful to
         regroup the predictions from all processes when doing evaluation.
 
         Note:
@@ -571,6 +572,18 @@ class Accelerator:
             first dimension of the result is *num_processes* multiplied by the first dimension of the input tensors.
         """
         return gather(tensor)
+
+    def reduce(self, tensor: torch.Tensor, reduction="sum"):
+        """
+        Reduce the values in *tensor* across all processes based on *reduction*.
+
+        Args:
+            tensor (`torch.Tensor`):
+                The tensors to reduce across all processes.
+            reduction (`str`, *optional*, defaults to "sum"):
+                A reduction type, can be one of 'sum', 'mean', or 'none'. If 'none', will not perform any operation.
+        """
+        reduce(tensor, reduction)
 
     def pad_across_processes(self, tensor, dim=0, pad_index=0, pad_first=False):
         """

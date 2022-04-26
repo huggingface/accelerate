@@ -24,6 +24,7 @@ from typing import Any, List, Optional, Union
 
 import numpy as np
 import torch
+from torch.distributed import ReduceOp
 
 from packaging import version
 
@@ -619,6 +620,39 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     return recursively_apply(
         _pad_across_processes, tensor, error_on_other_type=True, dim=dim, pad_index=pad_index, pad_first=pad_first
     )
+
+
+def reduce(tensor, reduction="mean"):
+    """
+    Recursively reduce the tensors in a nested list/tuple/dictionary of lists of tensors across all processes by the
+    mean of a given operation.
+
+    Args:
+        tensor (nested list/tuple/dictionary of `torch.Tensor`):
+            The data to reduce.
+        reduction (`str`, *optional*, defaults to `"mean"`):
+            A reduction method. Can be of "mean", "sum", or "none"
+
+    Returns:
+        The same data structure as `data` with all the tensors reduced.
+    """
+
+    def _reduce_across_processes(tensor, reduction="mean"):
+        state = AcceleratorState()
+        cloned_tensor = tensor.clone()
+        if state.distributed_type == DistributedType.TPU:
+            xm.all_reduce("sum", cloned_tensor)
+            return cloned_tensor
+        elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
+            torch.distributed.reduce(cloned_tensor, ReduceOp.SUM)
+            return cloned_tensor
+        else:
+            if reduction == "sum":
+                return cloned_tensor.sum()
+            else:
+                return cloned_tensor.mean()
+
+    return recursively_apply(_reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction)
 
 
 def wait_for_everyone():
