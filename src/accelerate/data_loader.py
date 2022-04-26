@@ -20,14 +20,17 @@ from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
 from packaging import version
 
-from .operations import broadcast, broadcast_object_list, concatenate, slice_tensors
 from .state import AcceleratorState, DistributedType, is_tpu_available
 from .utils import (
     RNGType,
+    broadcast,
+    broadcast_object_list,
+    concatenate,
     find_batch_size,
     get_data_structure,
     initialize_tensors,
     send_to_device,
+    slice_tensors,
     synchronize_rng_states,
 )
 
