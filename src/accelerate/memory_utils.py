@@ -69,9 +69,8 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
         if len(params) < (len(args) + 1):
             arg_str = ", ".join([f"{arg}={value}" for arg, value in zip(params[1:], args[1:])])
             raise TypeError(
-                f"""Batch size was passed into `{function.__name__}` as the first argument when called.
-            Remove this as the decorator already does so:
-                `{function.__name__}({arg_str})`"""
+                f"Batch size was passed into `{function.__name__}` as the first argument when called."
+                f"Remove this as the decorator already does so: `{function.__name__}({arg_str})`"
             )
         while True:
             try:
