@@ -20,8 +20,6 @@ start their script and let it run.
 
 ## find_executable_batch_size
 
-[[autodoc]] memory_utils.find_executable_batch_size
-
 This algorithm operates with exponential decay, decreasing the batch size in half after each failed run on some 
 training script. To use it, restructure your training function to include an inner function that includes this wrapper, 
 and build your dataloaders inside it. At a minimum, this could look like 4 new lines of code. 
@@ -34,7 +32,7 @@ def training_function(args):
     model.to(accelerator.device)
     optimizer = get_optimizer()
 
-+   @memory_aware(starting_batch_size=args.batch_size)
++   @find_executable_batch_size(starting_batch_size=args.batch_size)
 +   def inner_training_loop(batch_size):
 +       nonlocal model, optimizer # Ensure they can be used in our context
         train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
@@ -49,3 +47,5 @@ def training_function(args):
         validate(model, eval_dataloader)
 +   inner_training_loop()
 ```
+
+[[autodoc]] memory_utils.find_executable_batch_size
