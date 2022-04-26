@@ -624,12 +624,12 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
 
 def reduce(tensor: torch.Tensor, reduction="mean"):
     """
-    Reduce `tensor` across all processes and perform a `reduction`.
+    Reduce a tensor across all processes by the mean of a given operation.
 
     Args:
         tensor (`torch.Tensor`):
             The data to reduce
-        reduction (`str`, *optional*, defaults to "mean"):
+        reduction (`str`, *optional*, defaults to `"mean"`):
             A reduction method. Can be of "mean", "sum", or "none"
     """
     if reduction not in ["mean", "sum", "none"]:
