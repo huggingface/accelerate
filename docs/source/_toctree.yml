@@ -23,4 +23,6 @@
     title: Checkpointing
   - local: tracking
     title: Experiment Tracking
+  - local: memory
+    title: Memory Utilities
   title: API Reference
