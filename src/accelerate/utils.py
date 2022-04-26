@@ -640,9 +640,11 @@ def reduce(tensor: torch.Tensor, reduction="mean"):
     cloned_tensor = tensor.clone()
     if state.distributed_type == DistributedType.TPU:
         xm.all_reduce("sum", cloned_tensor)
+        return cloned_tensor
     elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
         cloned_tensor = tensor.clone()
         torch.distributed.reduce(cloned_tensor, ReduceOp.SUM)
+        return cloned_tensor
     else:
         if reduction == "sum":
             return cloned_tensor.sum()
