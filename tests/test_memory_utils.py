@@ -26,37 +26,37 @@ class MemoryTest(unittest.TestCase):
         batch_sizes = []
 
         @find_executable_batch_size(starting_batch_size=128)
-        def f(batch_size):
+        def mock_training_loop_function(batch_size):
             nonlocal batch_sizes
             batch_sizes.append(batch_size)
             if batch_size != 8:
                 raise_fake_out_of_memory()
 
-        f()
+        mock_training_loop_function()
         self.assertListEqual(batch_sizes, [128, 64, 32, 16, 8])
 
     def test_memory_explicit(self):
         batch_sizes = []
 
         @find_executable_batch_size(starting_batch_size=128)
-        def f(batch_size, arg1):
+        def mock_training_loop_function(batch_size, arg1):
             nonlocal batch_sizes
             batch_sizes.append(batch_size)
             if batch_size != 8:
                 raise_fake_out_of_memory()
             return batch_size, arg1
 
-        bs, arg1 = f("hello")
+        bs, arg1 = mock_training_loop_function("hello")
         self.assertListEqual(batch_sizes, [128, 64, 32, 16, 8])
-        self.assertListEqual([8, "hello"], [bs, arg1])
+        self.assertListEqual([bs, arg1], [8, "hello"])
 
     def test_verbose_guard(self):
         @find_executable_batch_size(starting_batch_size=128)
-        def f(batch_size, arg1, arg2):
+        def mock_training_loop_function(batch_size, arg1, arg2):
             if batch_size != 8:
                 raise raise_fake_out_of_memory()
 
         with self.assertRaises(TypeError) as cm:
-            f(128, "hello", "world")
+            mock_training_loop_function(128, "hello", "world")
             self.assertIn("Batch size was passed into `f`", cm.exception.args[0])
             self.assertIn("`f(arg1='hello', arg2='world')", cm.exception.args[0])
