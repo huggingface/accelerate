@@ -42,7 +42,7 @@ def should_reduce_batch_size(exception: Exception) -> bool:
     return False
 
 
-def memory_aware(function: callable = None, starting_batch_size: int = 128):
+def find_executable_batch_size(function: callable = None, starting_batch_size: int = 128):
     """
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
     CUDNN, the batch size is cut in half and passed to `function`
@@ -56,7 +56,7 @@ def memory_aware(function: callable = None, starting_batch_size: int = 128):
             The batch size to try and fit into memory
     """
     if function is None:
-        return functools.partial(memory_aware, starting_batch_size=starting_batch_size)
+        return functools.partial(find_executable_batch_size, starting_batch_size=starting_batch_size)
 
     batch_size = starting_batch_size
 

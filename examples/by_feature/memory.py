@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from accelerate import Accelerator, DistributedType
 
 # New Code #
-from accelerate.memory_utils import memory_aware
+from accelerate.memory_utils import find_executable_batch_size
 from datasets import load_dataset, load_metric
 from transformers import (
     AdamW,
@@ -137,7 +137,7 @@ def training_function(config, args):
     # We now can define an inner training loop function. It should take a batch size as the only parameter,
     # and build the dataloaders in there.
     # It also gets our decorator
-    @memory_aware(starting_batch_size=batch_size)
+    @find_executable_batch_size(starting_batch_size=batch_size)
     def inner_training_loop(batch_size):
         # And now just move everything below under this function
         # Ensure that anything declared outside this function is set as `nonlocal`

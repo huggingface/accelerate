@@ -14,7 +14,7 @@
 
 import unittest
 
-from accelerate.memory_utils import memory_aware
+from accelerate.memory_utils import find_executable_batch_size
 
 
 def raise_fake_out_of_memory():
@@ -25,7 +25,7 @@ class MemoryTest(unittest.TestCase):
     def test_memory_implicit(self):
         batch_sizes = []
 
-        @memory_aware(starting_batch_size=128)
+        @find_executable_batch_size(starting_batch_size=128)
         def f(batch_size):
             nonlocal batch_sizes
             batch_sizes.append(batch_size)
@@ -38,7 +38,7 @@ class MemoryTest(unittest.TestCase):
     def test_memory_explicit(self):
         batch_sizes = []
 
-        @memory_aware(starting_batch_size=128)
+        @find_executable_batch_size(starting_batch_size=128)
         def f(batch_size, arg1):
             nonlocal batch_sizes
             batch_sizes.append(batch_size)
@@ -51,7 +51,7 @@ class MemoryTest(unittest.TestCase):
         self.assertListEqual([8, "hello"], [bs, arg1])
 
     def test_verbose_guard(self):
-        @memory_aware(starting_batch_size=128)
+        @find_executable_batch_size(starting_batch_size=128)
         def f(batch_size, arg1, arg2):
             if batch_size != 8:
                 raise raise_fake_out_of_memory()
