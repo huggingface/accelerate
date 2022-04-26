@@ -26,7 +26,6 @@ from packaging import version
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
-from .operations import gather, pad_across_processes, reduce
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
@@ -38,7 +37,10 @@ from .utils import (
     RNGType,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
+    gather,
     get_pretty_name,
+    pad_across_processes,
+    reduce,
     save,
     wait_for_everyone,
 )

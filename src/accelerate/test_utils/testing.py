@@ -25,9 +25,8 @@ from unittest import mock
 
 import torch
 
-from ..operations import gather
 from ..state import AcceleratorState, is_tpu_available
-from ..utils import is_tensorflow_available
+from ..utils import gather, is_tensorflow_available
 
 
 def parse_flag_from_env(key, default=False):
