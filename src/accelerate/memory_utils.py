@@ -73,6 +73,8 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
                 f"Remove this as the decorator already does so: `{function.__name__}({arg_str})`"
             )
         while True:
+            if batch_size == 0:
+                raise RuntimeError("No executable batch size found, reached zero.")
             try:
                 return function(batch_size, *args, **kwargs)
             except Exception as e:
@@ -80,7 +82,5 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
                     gc.collect()
                     torch.cuda.empty_cache()
                     batch_size //= 2
-                else:
-                    raise
 
     return decorator
