@@ -32,6 +32,7 @@ from .state import AcceleratorState, DistributedType, is_deepspeed_available
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     DeepSpeedPlugin,
+    FullyShardedDataParallelPlugin,
     LoggerType,
     PrecisionType,
     RNGType,
@@ -81,6 +82,9 @@ class Accelerator:
         deepspeed_plugin (`DeepSpeedPlugin`, *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
+        fsdp_plugin (`FullyShardedDataParallelPlugin`, *optional*):
+            Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
+            using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -128,6 +132,7 @@ class Accelerator:
         mixed_precision: Union[PrecisionType, str] = None,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
+        fsdp_plugin: FullyShardedDataParallelPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
@@ -155,6 +160,15 @@ class Accelerator:
             assert isinstance(
                 deepspeed_plugin, DeepSpeedPlugin
             ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
+
+        if os.environ.get("USE_FSDP", "false") == "true":
+            if version.parse(torch.__version__) < version.parse("1.12.0.dev20220418+cu113"):
+                raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
+            if fsdp_plugin is None:  # init from env variables
+                fsdp_plugin = FullyShardedDataParallelPlugin()
+            else:
+                if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
+                    raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
 
         # Kwargs handlers
         self.ddp_handler = None
@@ -184,6 +198,7 @@ class Accelerator:
             mixed_precision=mixed_precision,
             cpu=cpu,
             deepspeed_plugin=deepspeed_plugin,
+            fsdp_plugin=fsdp_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -327,6 +342,44 @@ class Accelerator:
         else:
             return obj
 
+    def _prepare_fsdp(self, *args):
+        result = []
+        for obj in args:
+            if isinstance(obj, torch.nn.Module):
+                model = obj
+                break
+        optimizers = []
+
+        self._schedulers = []
+        self._models = []
+        intermediate_result = []
+        for obj in args:
+            if isinstance(obj, torch.optim.Optimizer):
+                if len(obj.param_groups) > 1:
+                    logger.warn(
+                        "FSDP Warning: When using FSDP, several parameter groups will be conflated into "
+                        "a single one due to nested module wrapping and parameter flattening."
+                    )
+                optimizer = obj.optimizer.__class__(model.parameters(), **obj.optimizer.defaults)
+                obj = self.prepare_optimizer(optimizer)
+                optimizers.append(obj)
+            elif isinstance(obj, torch.nn.Module):
+                self._models.append(obj)
+            intermediate_result.append(obj)
+
+        for obj in intermediate_result:
+            if isinstance(obj, AcceleratedScheduler):
+                obj.optimizer = optimizers
+                for i, opt in enumerate(self._optimizers):
+                    if getattr(obj.scheduler, "optimizer", None) == opt.optimizer:
+                        obj.scheduler.optimizer = optimizers[i]
+                        obj.optimizers = [optimizers[i]]
+                        break
+                self._schedulers.append(obj)
+            result.append(obj)
+        self._optimizers = optimizers
+        return tuple(result)
+
     def prepare(self, *args):
         """
         Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
@@ -338,6 +391,25 @@ class Accelerator:
             - `torch.nn.Module`: PyTorch Module
             - `torch.optim.Optimizer`: PyTorch Optimizer
         """
+        if self.distributed_type == DistributedType.FSDP:
+            model_count = 0
+            optimizer_present = False
+            for obj in args:
+                if isinstance(obj, torch.nn.Module):
+                    model_count += 1
+                if isinstance(obj, torch.optim.Optimizer):
+                    optimizer_present = True
+            if model_count > 1 and optimizer_present:
+                raise ValueError(
+                    "For FSDP to work with multiple models (>1), "
+                    "prepare must be called for all the models before optimizers are created"
+                )
+            elif model_count == 1 and optimizer_present:
+                logger.warn(
+                    "FSDP Warning: When using FSDP, "
+                    "it is efficient and recommended to call prepare for the model before creating the optimizer"
+                )
+
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
@@ -374,16 +446,33 @@ class Accelerator:
                 if isinstance(obj, torch.optim.Optimizer):
                     obj._switch_parameters(mapping)
 
+        if self.distributed_type == DistributedType.FSDP and model_count == 1 and optimizer_present:
+            result = self._prepare_fsdp(*result)
+
         return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model):
-        if self.device_placement:
+        if self.device_placement and self.distributed_type != DistributedType.FSDP:
             model = model.to(self.device)
         if self.distributed_type == DistributedType.MULTI_GPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(
                 model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
             )
+        elif self.distributed_type == DistributedType.FSDP:
+            from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+
+            fsdp_plugin = self.state.fsdp_plugin
+            model = FSDP(
+                model,
+                sharding_strategy=fsdp_plugin.sharding_strategy,
+                cpu_offload=fsdp_plugin.cpu_offload,
+                auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
+                backward_prefetch=fsdp_plugin.backward_prefetch,
+                ignored_modules=fsdp_plugin.ignored_modules,
+            )
+            if not fsdp_plugin.cpu_offload.offload_params:
+                model.to(self.device)
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
@@ -545,6 +634,12 @@ class Accelerator:
         """
         Should be used in place of `torch.nn.utils.clip_grad_norm_`.
         """
+        if self.distributed_type == DistributedType.FSDP:
+            parameters = [p for p in parameters]
+            for model in self._models:
+                if parameters == [p for p in model.parameters()]:
+                    model.clip_grad_norm_(max_norm, norm_type)
+                    return
         self.unscale_gradients()
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 

@@ -89,6 +89,7 @@ class DistributedType(str, Enum):
     MULTI_CPU = "MULTI_CPU"
     MULTI_GPU = "MULTI_GPU"
     DEEPSPEED = "DEEPSPEED"
+    FSDP = "FSDP"
     TPU = "TPU"
 
 
@@ -149,6 +150,7 @@ class AcceleratorState:
         mixed_precision: str = None,
         cpu: bool = False,
         deepspeed_plugin=None,
+        fsdp_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -206,7 +208,13 @@ class AcceleratorState:
                 self.mixed_precision = (
                     parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
                 )
-
+                if os.environ.get("USE_FSDP", "false") == "true":
+                    self.distributed_type = DistributedType.FSDP
+                    if self.mixed_precision != "no":
+                        raise ValueError(
+                            "Mixed precision is currently not supported for FSDP. Please set `mixed_precision` to `no`."
+                        )
+                    self.fsdp_plugin = fsdp_plugin
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:

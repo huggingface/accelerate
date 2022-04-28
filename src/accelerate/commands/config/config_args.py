@@ -136,6 +136,8 @@ class ClusterConfig(BaseConfig):
 
     # args for deepspeed_plugin
     deepspeed_config: dict = None
+    # args for fsdp
+    fsdp_config: dict = None
 
 
 @dataclass

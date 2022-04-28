@@ -12,15 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import importlib
 import os
 import random
+import typing
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, EnumMeta
 from functools import update_wrapper
-from typing import Any, List, Optional, Union
+from typing import Any, Callable, Iterable, List, Optional, Union
 
 import numpy as np
 import torch
@@ -770,6 +772,57 @@ class DeepSpeedPlugin:
             "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
             "zero_allow_untested_optimizer": True,
         }
+
+
+@dataclass
+class FullyShardedDataParallelPlugin:
+    """
+    This plugin is used to enable fully sharded data parallelism.
+    """
+
+    sharding_strategy: "typing.Any" = field(
+        default=None,
+        metadata={"help": "Possible options are [1] FULL_SHARD, [2] SHARD_GRAD_OP"},
+    )
+    backward_prefetch: "typing.Any" = field(
+        default=None,
+        metadata={"help": "Possible options are [1] BACKWARD_PRE, [2] BACKWARD_POST"},
+    )
+    auto_wrap_policy: "typing.Any" = field(
+        default=None,
+        metadata={"help": "A callable specifying a policy to recursively wrap layers with FSDP"},
+    )
+    cpu_offload: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Decides Whether to offload parameters and gradients to CPU."},
+    )
+    min_num_params: int = field(
+        default=None, metadata={"help": "FSDP's minimum number of parameters for Default Auto Wrapping."}
+    )
+    ignored_modules: Optional[Iterable[torch.nn.Module]] = field(
+        default=None,
+        metadata={"help": "A list of modules to ignore for FSDP."},
+    )
+
+    def __post_init__(self):
+        from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, ShardingStrategy
+        from torch.distributed.fsdp.wrap import default_auto_wrap_policy
+
+        if self.sharding_strategy is None:
+            self.sharding_strategy = ShardingStrategy(int(os.environ.get("FSDP_SHARDING_STRATEGY", 1)))
+
+        if self.cpu_offload is None:
+            if os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true":
+                self.cpu_offload = CPUOffload(offload_params=True)
+            else:
+                self.cpu_offload = CPUOffload(offload_params=False)
+
+        if self.min_num_params is None:
+            self.min_num_params = int(os.environ.get("FSDP_MIN_NUM_PARAMS", 0))
+
+        if self.auto_wrap_policy is None:
+            if self.min_num_params > 0:
+                self.auto_wrap_policy = functools.partial(default_auto_wrap_policy, min_num_params=self.min_num_params)
 
 
 @contextmanager

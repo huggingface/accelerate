@@ -52,6 +52,30 @@ def launch_command_parser(subparsers=None):
         help="Whether to use deepspeed.",
     )
     parser.add_argument(
+        "--use_fsdp",
+        default=False,
+        action="store_true",
+        help="Whether to use fsdp.",
+    )
+    parser.add_argument(
+        "--offload_params",
+        default="false",
+        type=str,
+        help="Decides Whether (true|false) to offload parameters and gradients to CPU. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--min_num_params",
+        type=int,
+        default=1e8,
+        help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--sharding_strategy",
+        type=int,
+        default=1,
+        help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
     parser.add_argument(
@@ -225,7 +249,11 @@ def multi_gpu_launcher(args):
         mixed_precision = "fp16"
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
-
+    if args.use_fsdp:
+        current_env["USE_FSDP"] = "true"
+        current_env["FSDP_OFFLOAD_PARAMS"] = str(args.offload_params).lower()
+        current_env["FSDP_MIN_NUM_PARAMS"] = str(args.min_num_params)
+        current_env["FSDP_SHARDING_STRATEGY"] = str(args.sharding_strategy)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
     if process.returncode != 0:
@@ -433,8 +461,8 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
 def launch_command(args):
     # Sanity checks
-    if sum([args.multi_gpu, args.tpu, args.use_deepspeed]) > 1:
-        raise ValueError("You can only pick one between `--multi_gpu`, `--use_deepspeed`, `--tpu`.")
+    if sum([args.multi_gpu, args.tpu, args.use_deepspeed, args.use_fsdp]) > 1:
+        raise ValueError("You can only pick one between `--multi_gpu`, `--use_deepspeed`, `--tpu`, `--use_fsdp`.")
 
     defaults = None
     # Get the default from the config file.
@@ -444,6 +472,7 @@ def launch_command(args):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
+            args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
@@ -451,6 +480,8 @@ def launch_command(args):
                     for k in defaults.deepspeed_config:
                         if getattr(args, k) is None:
                             setattr(args, k, defaults.deepspeed_config[k])
+                    for k in defaults.fsdp_config:
+                        setattr(args, k, defaults.fsdp_config[k])
                     continue
 
                 # Those args are handled separately
@@ -472,6 +503,8 @@ def launch_command(args):
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
         deepspeed_launcher(args)
+    elif args.use_fsdp and not args.cpu:
+        multi_gpu_launcher(args)
     elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:

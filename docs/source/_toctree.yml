@@ -23,6 +23,8 @@
     title: Checkpointing
   - local: tracking
     title: Experiment Tracking
+  - local: fsdp
+    title: Fully Sharded Data Parallel
   - local: memory
     title: Memory Utilities
   title: API Reference
