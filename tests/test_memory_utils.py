@@ -59,6 +59,17 @@ class MemoryTest(unittest.TestCase):
             mock_training_loop_function()
             self.assertIn("No executable batch size found, reached zero.", cm.exception.args[0])
 
+    def test_approach_zero(self):
+        @find_executable_batch_size(starting_batch_size=16)
+        def mock_training_loop_function(batch_size):
+            if batch_size > 0:
+                raise_fake_out_of_memory()
+            pass
+
+        with self.assertRaises(RuntimeError) as cm:
+            mock_training_loop_function()
+            self.assertIn("No executable batch size found, reached zero.", cm.exception.args[0])
+
     def test_verbose_guard(self):
         @find_executable_batch_size(starting_batch_size=128)
         def mock_training_loop_function(batch_size, arg1, arg2):
