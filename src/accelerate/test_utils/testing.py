@@ -26,7 +26,7 @@ from unittest import mock
 import torch
 
 from ..state import AcceleratorState, is_tpu_available
-from ..utils import gather, is_tensorflow_available
+from ..utils import gather, is_comet_ml_available, is_tensorflow_available, is_wandb_available
 
 
 def parse_flag_from_env(key, default=False):
@@ -53,10 +53,51 @@ def slow(test_case):
     Decorator marking a test as slow. Slow tests are skipped by default. Set the RUN_SLOW environment variable to a
     truthy value to run them.
     """
-    if not _run_slow_tests:
-        return unittest.skip("test is slow")(test_case)
-    else:
-        return test_case
+    return unittest.skipUnless(_run_slow_tests, "test is slow")(test_case)
+
+
+def require_cuda(test_case):
+    """
+    Decorator marking a test that requires CUDA. These tests are skipped when there are no GPU available.
+    """
+    return unittest.skipUnless(torch.cuda.is_available(), "test requires a GPU")(test_case)
+
+
+def require_tpu(test_case):
+    """
+    Decorator marking a test that requires TPUs. These tests are skipped when there are no TPUs available.
+    """
+    return unittest.skipUnless(is_tpu_available(), "test requires TPU")(test_case)
+
+
+def require_multi_gpu(test_case):
+    """
+    Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
+    GPUs.
+    """
+    return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
+
+
+def require_tensorflow(test_case):
+    """
+    Decorator marking a test that requires TensorFlow installed. These tests are skipped when TensorFlow isn't
+    installed
+    """
+    return unittest.skipUnless(is_tensorflow_available(), "test requires TensorFlow")(test_case)
+
+
+def require_wandb(test_case):
+    """
+    Decorator marking a test that requires wandb installed. These tests are skipped when wandb isn't installed
+    """
+    return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
+
+
+def require_comet_ml(test_case):
+    """
+    Decorator marking a test that requires comet_ml installed. These tests are skipped when comet_ml isn't installed
+    """
+    return unittest.skipUnless(is_comet_ml_available(), "test requires comet_ml")(test_case)
 
 
 class TempDirTestCase(unittest.TestCase):
@@ -134,48 +175,6 @@ def are_the_same_tensors(tensor):
         if not torch.equal(tensors[i], tensor):
             return False
     return True
-
-
-def require_cuda(test_case):
-    """
-    Decorator marking a test that requires CUDA. These tests are skipped when there are no GPU available.
-    """
-    if not torch.cuda.is_available():
-        return unittest.skip("test requires a GPU")(test_case)
-    else:
-        return test_case
-
-
-def require_tpu(test_case):
-    """
-    Decorator marking a test that requires TPUs. These tests are skipped when there are no TPUs available.
-    """
-    if not is_tpu_available():
-        return unittest.skip("test requires TPU")(test_case)
-    else:
-        return test_case
-
-
-def require_multi_gpu(test_case):
-    """
-    Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
-    GPUs.
-    """
-    if torch.cuda.device_count() < 2:
-        return unittest.skip("test requires multiple GPUs")(test_case)
-    else:
-        return test_case
-
-
-def require_tensorflow(test_case):
-    """
-    Decorator marking a test that requires TensorFlow installed. These tests are skipped when TensorFlow isn't
-    installed
-    """
-    if not is_tensorflow_available():
-        return unittest.skip("test requires TensorFlow")(test_case)
-    else:
-        return test_case
 
 
 class _RunOutput:

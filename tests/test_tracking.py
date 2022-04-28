@@ -26,10 +26,19 @@ from unittest import mock
 
 # We use TF to parse the logs
 from accelerate import Accelerator
-from accelerate.test_utils.testing import MockingTestCase, TempDirTestCase, require_tensorflow
+from accelerate.test_utils.testing import (
+    MockingTestCase,
+    TempDirTestCase,
+    require_comet_ml,
+    require_tensorflow,
+    require_wandb,
+)
 from accelerate.tracking import CometMLTracker, GeneralTracker
-from accelerate.utils import is_tensorflow_available
-from comet_ml import OfflineExperiment
+from accelerate.utils import is_comet_ml_available, is_tensorflow_available
+
+
+if is_comet_ml_available():
+    from comet_ml import OfflineExperiment
 
 
 if is_tensorflow_available():
@@ -110,6 +119,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
             _ = Accelerator(log_with="tensorboard", logging_dir=dirpath)
 
 
+@require_wandb
 @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
 class WandBTrackingTest(TempDirTestCase, MockingTestCase):
     def setUp(self):
@@ -179,6 +189,7 @@ def offline_init(self, run_name: str, tmpdir: str):
     logger.info("Make sure to log any initial configurations with `self.store_init_configuration` before training!")
 
 
+@require_comet_ml
 @mock.patch.object(CometMLTracker, "__init__", offline_init)
 class CometMLTest(unittest.TestCase):
     @staticmethod
