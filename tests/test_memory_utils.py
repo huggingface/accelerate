@@ -50,7 +50,7 @@ class MemoryTest(unittest.TestCase):
         self.assertListEqual(batch_sizes, [128, 64, 32, 16, 8])
         self.assertListEqual([bs, arg1], [8, "hello"])
 
-    def test_zero(self):
+    def test_start_zero(self):
         @find_executable_batch_size(starting_batch_size=0)
         def mock_training_loop_function(batch_size):
             pass
