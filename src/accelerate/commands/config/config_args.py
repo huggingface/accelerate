@@ -139,6 +139,14 @@ class ClusterConfig(BaseConfig):
     # args for fsdp
     fsdp_config: dict = None
 
+    def __post_init__(self):
+        if self.deepspeed_config is None:
+            self.deepspeed_config = {}
+        if self.fsdp_config is None:
+            self.fsdp_config = {}
+        return super().__post_init__()
+
+
 
 @dataclass
 class SageMakerConfig(BaseConfig):
