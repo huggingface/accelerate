@@ -147,7 +147,6 @@ class ClusterConfig(BaseConfig):
         return super().__post_init__()
 
 
-
 @dataclass
 class SageMakerConfig(BaseConfig):
     ec2_instance_type: str
