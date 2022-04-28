@@ -64,7 +64,7 @@ def get_cluster_input():
     else:
         use_cpu = False
 
-    deepspeed_config = None
+    deepspeed_config = {}
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
         use_deepspeed = _ask_field(
             "Do you want to use DeepSpeed? [yes/NO]: ",
@@ -78,7 +78,6 @@ def get_cluster_input():
                 is_deepspeed_available()
             ), "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
 
-        deepspeed_config = {}
         if distributed_type == DistributedType.DEEPSPEED:
             deepspeed_config["zero_stage"] = _ask_field(
                 "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2, 3)? [2]: ",
@@ -109,7 +108,6 @@ def get_cluster_input():
         )
         if use_fsdp:
             distributed_type = DistributedType.FSDP
-        fsdp_config = {}
         if distributed_type == DistributedType.FSDP:
             fsdp_config["sharding_strategy"] = _ask_field(
                 "What should be your sharding strategy ([1] FULL_SHARD, [2] SHARD_GRAD_OP)? [1]: ",
