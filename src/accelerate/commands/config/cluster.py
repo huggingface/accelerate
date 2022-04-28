@@ -99,6 +99,7 @@ def get_cluster_input():
                 default=1,
             )
 
+    fsdp_config = None
     if distributed_type in [DistributedType.MULTI_GPU]:
         use_fsdp = _ask_field(
             "Do you want to use FullyShardedDataParallel? [yes/NO]: ",
