@@ -82,4 +82,5 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
                     batch_size //= 2
                     if batch_size == 0:
                         raise RuntimeError("No executable batch size found, reached zero.")
+
     return decorator
