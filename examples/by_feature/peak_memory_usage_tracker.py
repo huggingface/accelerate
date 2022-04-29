@@ -15,20 +15,13 @@
 import argparse
 import gc
 import os
-from re import L
 
 import torch
 from torch.utils.data import DataLoader
 
-from accelerate import Accelerator, DistributedType, kwargs_handlers
+from accelerate import Accelerator, DistributedType
 from datasets import load_dataset, load_metric
-from transformers import (
-    AdamW,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    get_linear_schedule_with_warmup,
-    set_seed,
-)
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 
 ########################################################################
@@ -53,6 +46,7 @@ from transformers import (
 
 MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
+
 
 # New Code #
 # Converting Bytes to Megabytes
@@ -104,7 +98,6 @@ def training_function(config, args):
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
-    correct_bias = config["correct_bias"]
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
 
@@ -377,7 +370,7 @@ def main():
         required=True,
     )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "correct_bias": True, "seed": 1, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": 3, "seed": 1, "batch_size": 16}
     training_function(config, args)
 
 
