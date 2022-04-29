@@ -73,7 +73,6 @@ class DummyModel(nn.Module):
     def forward(self, x):
         return x * self.a + self.b
 
-
 class CheckpointTest(unittest.TestCase):
     def test_can_resume_training(self):
         with tempfile.TemporaryDirectory() as tmpdir:
