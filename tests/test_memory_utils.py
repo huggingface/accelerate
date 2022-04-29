@@ -80,3 +80,12 @@ class MemoryTest(unittest.TestCase):
             mock_training_loop_function(128, "hello", "world")
             self.assertIn("Batch size was passed into `f`", cm.exception.args[0])
             self.assertIn("`f(arg1='hello', arg2='world')", cm.exception.args[0])
+
+    def test_any_other_error(self):
+        @find_executable_batch_size(starting_batch_size=16)
+        def mock_training_loop_function(batch_size):
+            raise ValueError("Oops, we had an error!")
+
+        with self.assertRaises(ValueError) as cm:
+            mock_training_loop_function()
+            self.assertIn("Oops, we had an error!", cm.exception.args[0])

@@ -82,5 +82,7 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
                     gc.collect()
                     torch.cuda.empty_cache()
                     batch_size //= 2
+                else:
+                    raise
 
     return decorator
