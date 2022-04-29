@@ -31,7 +31,8 @@ class MultiProcessAdapter(logging.LoggerAdapter):
     def process(self, msg, kwargs):
         main_process_only = kwargs.pop("main_process_only", True)
         if self._should_log(main_process_only):
-            return super().process(msg, kwargs)
+            kwargs["extra"] = self.extra
+            return msg, kwargs
 
 def get_logger(name:str):
     """
