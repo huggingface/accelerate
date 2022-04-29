@@ -13,26 +13,39 @@
 # limitations under the License.
 
 import logging
+from sys import exc_info
 from .state import AcceleratorState
+
+old_factory = logging.getLogRecordFactory()
+
+def multiprocess_record_factory(context_id):
+    def record_factory(*args, **kwargs):
+        record = old_factory(*args, **kwargs)
+
+        record.main_process_only = not main_process_only or (main_process_only and AcceleratorState().local_process_index == 0)
+
 
 class MultiProcessAdapter(logging.LoggerAdapter):
     """
     An adapter to assist with logging in multiprocess.
 
-    `log` takes in an additional `main_process_only` argument, which 
+    `log` takes in an additional `main_process_only` kwarg, which 
     dictates whether it should be called on all processes or only the 
-    main executed one. By default it will.
+    main executed one. Default is `main_process_only=True`.
     """
     @staticmethod
     def _should_log(main_process_only):
         "Check if log should be performed"
         return not main_process_only or (main_process_only and AcceleratorState().local_process_index == 0)
 
-    def process(self, msg, kwargs):
+    def log(self, level, msg, *args, **kwargs):
+        """
+        Delegates logger call after checking if we should log
+        """
         main_process_only = kwargs.pop("main_process_only", True)
-        if self._should_log(main_process_only):
-            return super().process(msg, kwargs)
-        return
+        if self.isEnabledFor(level) and self._should_log(main_process_only):
+            msg, kwargs = self.process(msg, kwargs)
+            self.logger.log(level, msg, *args, **kwargs)
 
 def get_logger(name:str):
     """
