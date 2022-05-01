@@ -52,7 +52,7 @@ Changing it to work with accelerate is really easy and only adds a few lines of 
 + device = accelerator.device
   my_model.to(device)
   # Pass every important object (model, optimizer, dataloader) to *accelerator.prepare*
-+ my_model, my_optimizer, my_training_dataloader = accelerate.prepare(
++ my_model, my_optimizer, my_training_dataloader = accelerator.prepare(
 +     my_model, my_optimizer, my_training_dataloader
 + )
 
