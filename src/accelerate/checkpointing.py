@@ -28,10 +28,10 @@ from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, SCHE
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
 
-import logging
+from .logging import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def save_accelerator_state(

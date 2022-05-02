@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-import logging
 import os
 
 import torch
@@ -28,9 +27,6 @@ from transformers import (
     get_linear_schedule_with_warmup,
     set_seed,
 )
-
-
-logger = logging.getLogger(__name__)
 
 
 ########################################################################

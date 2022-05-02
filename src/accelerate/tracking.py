@@ -15,11 +15,11 @@
 # Expectation:
 # Provide a project dir name, then each type of logger gets stored in project/{`logging_dir`}
 
-import logging
 import os
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import List, Optional, Union
 
+from .logging import get_logger
 from .utils import LoggerType, is_comet_ml_available, is_tensorboard_available, is_wandb_available
 
 
@@ -41,7 +41,7 @@ if is_comet_ml_available():
     _available_trackers.append(LoggerType.COMETML)
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def get_available_trackers():

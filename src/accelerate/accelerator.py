@@ -26,6 +26,7 @@ from packaging import version
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
 from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
+from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, DistributedType, is_deepspeed_available
@@ -52,10 +53,7 @@ if is_deepspeed_available():
 
     from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
 
-import logging
-
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Accelerator:
