@@ -51,7 +51,7 @@ from .utils import (
 if is_deepspeed_available():
     import deepspeed
 
-    from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
+    from .utils.deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
 
 logger = get_logger(__name__)
 
