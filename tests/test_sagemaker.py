@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import pytest
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.commands.launch import _convert_nargs_to_dict
-from accelerate.state import ComputeEnvironment
+from accelerate.utils import ComputeEnvironment
 
 
 @dataclass

@@ -18,8 +18,9 @@ from typing import List, Optional, Union
 import numpy as np
 import torch
 
-from ..state import AcceleratorState, DistributedType, is_tpu_available
-from . import RNGType
+from ..state import AcceleratorState
+from .dataclasses import DistributedType, RNGType
+from .imports import is_tpu_available
 
 
 if is_tpu_available():

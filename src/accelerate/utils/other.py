@@ -17,7 +17,9 @@ from contextlib import contextmanager
 
 import torch
 
-from ..state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
+from ..state import AcceleratorState
+from .dataclasses import DistributedType
+from .imports import is_deepspeed_available, is_tpu_available
 
 
 if is_deepspeed_available():

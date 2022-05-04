@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from ..optimizer import AcceleratedOptimizer
-from ..state import is_apex_available, is_deepspeed_available
+from .imports import is_apex_available, is_deepspeed_available
 
 
 if is_deepspeed_available():

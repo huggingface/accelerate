@@ -17,8 +17,7 @@ from distutils.util import strtobool
 
 import torch
 
-from .utils.dataclasses import DistributedType
-from .utils.imports import is_ccl_available, is_deepspeed_available, is_tpu_available
+from .utils import DistributedType, is_ccl_available, is_deepspeed_available, is_tpu_available
 
 
 if is_tpu_available():

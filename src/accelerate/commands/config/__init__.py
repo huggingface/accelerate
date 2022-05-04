@@ -17,7 +17,7 @@
 import argparse
 import os
 
-from accelerate.state import ComputeEnvironment
+from accelerate.utils import ComputeEnvironment
 
 from .cluster import get_cluster_input
 from .config_args import cache_dir, default_config_file, default_yaml_config_file, load_config_from_file  # noqa: F401

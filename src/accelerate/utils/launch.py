@@ -16,7 +16,7 @@ import os
 
 import torch
 
-from accelerate.state import DistributedType
+from .dataclasses import DistributedType
 
 
 class PrepareForLaunch:
