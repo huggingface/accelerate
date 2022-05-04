@@ -12,29 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
 import os
 from distutils.util import strtobool
 from enum import Enum
+from .utils.dataclasses import DistributedType
+from .utils.imports import is_ccl_available, is_deepspeed_available, is_tpu_available
 
 import torch
 
-
-try:
-    import torch_ccl  # noqa: F401
-
-    _ccl_available = True
-except ImportError:
-    _ccl_available = False
-
-
-try:
+if is_tpu_available():
     import torch_xla.core.xla_model as xm
-
-    _tpu_available = True
-except ImportError:
-    _tpu_available = False
-
 
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
@@ -43,23 +30,6 @@ def get_int_from_env(env_keys, default):
         if val >= 0:
             return val
     return default
-
-
-def is_ccl_available():
-    return _ccl_available
-
-
-def is_apex_available():
-    return importlib.util.find_spec("apex") is not None
-
-
-def is_tpu_available():
-    return _tpu_available
-
-
-def is_deepspeed_available():
-    return importlib.util.find_spec("deepspeed") is not None
-
 
 def parse_flag_from_env(key, default=False):
     value = os.environ.get(key, str(default))
@@ -70,59 +40,6 @@ def parse_choice_from_env(key, default="no"):
     value = os.environ.get(key, str(default))
     return value
 
-
-class DistributedType(str, Enum):
-    """
-    Represents a type of distributed environment.
-
-    Values:
-
-        - **NO** -- Not a distributed environment, just a single process.
-        - **MULTI_CPU** -- Distributed on multiple CPU nodes.
-        - **MULTI_GPU** -- Distributed on multiple GPUs.
-        - **DEEPSPEED** -- Using DeepSpeed.
-        - **TPU** -- Distributed on TPUs.
-    """
-
-    # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
-    NO = "NO"
-    MULTI_CPU = "MULTI_CPU"
-    MULTI_GPU = "MULTI_GPU"
-    DEEPSPEED = "DEEPSPEED"
-    FSDP = "FSDP"
-    TPU = "TPU"
-
-
-class SageMakerDistributedType(str, Enum):
-    """
-    Represents a type of distributed environment.
-
-    Values:
-
-        - **NO** -- Not a distributed environment, just a single process.
-        - **DATA_PARALLEL** -- using sagemaker distributed data parallelism.
-        - **MODEL_PARALLEL** -- using sagemaker distributed model parallelism.
-    """
-
-    # Subclassing str as well as Enum allows the `SageMakerDistributedType` to be JSON-serializable out of the box.
-    NO = "NO"
-    DATA_PARALLEL = "DATA_PARALLEL"
-    MODEL_PARALLEL = "MODEL_PARALLEL"
-
-
-class ComputeEnvironment(str, Enum):
-    """
-    Represents a type of the compute environment.
-
-    Values:
-
-        - **LOCAL_MACHINE** -- private/custom cluster hardware.
-        - **AMAZON_SAGEMAKER** -- Amazon SageMaker as compute environment.
-    """
-
-    # Subclassing str as well as Enum allows the `ComputeEnvironment` to be JSON-serializable out of the box.
-    LOCAL_MACHINE = "LOCAL_MACHINE"
-    AMAZON_SAGEMAKER = "AMAZON_SAGEMAKER"
 
 
 # Inspired by Alex Martelli's 'Borg'.
