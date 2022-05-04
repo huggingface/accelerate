@@ -26,8 +26,13 @@ from typing import Dict, List
 
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
-from accelerate.state import ComputeEnvironment, DistributedType
-from accelerate.utils import PrecisionType, PrepareForLaunch, is_sagemaker_available
+from accelerate.utils import (
+    ComputeEnvironment,
+    DistributedType,
+    PrecisionType,
+    PrepareForLaunch,
+    is_sagemaker_available,
+)
 
 
 def launch_command_parser(subparsers=None):

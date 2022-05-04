@@ -19,9 +19,9 @@ from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
 from accelerate.data_loader import prepare_data_loader
-from accelerate.state import AcceleratorState, DistributedType
+from accelerate.state import AcceleratorState
 from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
-from accelerate.utils import gather, set_seed, synchronize_rng_states
+from accelerate.utils import DistributedType, gather, set_seed, synchronize_rng_states
 from packaging import version
 
 

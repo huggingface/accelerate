@@ -12,8 +12,13 @@ from .data_helpers import (
     send_to_device,
 )
 from .dataclasses import (
+    ComputeEnvironment,
     DeepSpeedPlugin,
+    DistributedDataParallelKwargs,
+    DistributedType,
     FullyShardedDataParallelPlugin,
+    GradScalerKwargs,
+    InitProcessGroupKwargs,
     LoggerType,
     PrecisionType,
     RNGType,
@@ -21,11 +26,16 @@ from .dataclasses import (
 )
 from .deepspeed import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
 from .imports import (
+    is_apex_available,
     is_boto3_available,
+    is_ccl_available,
     is_comet_ml_available,
+    is_deepspeed_available,
     is_sagemaker_available,
     is_tensorboard_available,
     is_tensorflow_available,
+    is_tpu_available,
+    is_wandb_available,
 )
 from .launch import PrepareForLaunch
 from .memory import find_executable_batch_size
@@ -33,6 +43,8 @@ from .operations import (
     broadcast,
     broadcast_object_list,
     concatenate,
+    convert_outputs_to_fp32,
+    convert_to_fp32,
     gather,
     gather_object,
     pad_across_processes,

@@ -15,6 +15,7 @@
 
 import importlib
 
+
 try:
     import torch_ccl  # noqa: F401
 
@@ -24,7 +25,7 @@ except ImportError:
 
 
 try:
-    import torch_xla.core.xla_model as xm
+    import torch_xla.core.xla_model as xm  # noqa: F401
 
     _tpu_available = True
 except ImportError:

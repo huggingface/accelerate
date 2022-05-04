@@ -25,8 +25,8 @@ from unittest import mock
 
 import torch
 
-from ..state import AcceleratorState, is_tpu_available
-from ..utils import gather, is_comet_ml_available, is_tensorflow_available, is_wandb_available
+from ..state import AcceleratorState
+from ..utils import gather, is_comet_ml_available, is_tensorflow_available, is_tpu_available, is_wandb_available
 
 
 def parse_flag_from_env(key, default=False):

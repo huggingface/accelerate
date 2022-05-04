@@ -14,14 +14,16 @@
 
 import os
 from distutils.util import strtobool
-from enum import Enum
-from .utils.dataclasses import DistributedType
-from .utils.imports import is_ccl_available, is_deepspeed_available, is_tpu_available
 
 import torch
 
+from .utils.dataclasses import DistributedType
+from .utils.imports import is_ccl_available, is_deepspeed_available, is_tpu_available
+
+
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
+
 
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
@@ -31,6 +33,7 @@ def get_int_from_env(env_keys, default):
             return val
     return default
 
+
 def parse_flag_from_env(key, default=False):
     value = os.environ.get(key, str(default))
     return strtobool(value) == 1  # As its name indicates `strtobool` actually returns an int...
@@ -39,7 +42,6 @@ def parse_flag_from_env(key, default=False):
 def parse_choice_from_env(key, default="no"):
     value = os.environ.get(key, str(default))
     return value
-
 
 
 # Inspired by Alex Martelli's 'Borg'.

@@ -16,9 +16,8 @@
 import json
 import os
 
-from accelerate.state import ComputeEnvironment, SageMakerDistributedType
-from accelerate.utils import is_boto3_available
-
+from ...utils.dataclasses import ComputeEnvironment, SageMakerDistributedType
+from ...utils.imports import is_boto3_available
 from .config_args import SageMakerConfig
 from .config_utils import _ask_field, _convert_sagemaker_distributed_mode
 
