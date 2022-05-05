@@ -154,7 +154,7 @@ class HooksModelTester(unittest.TestCase):
         self.assertEqual(output.device, torch.device(1))
 
         # We can add a general hook to put back output on same device as input.
-        add_hook_to_module(model, AlignDevicesHook(output_on_same_device_as_input=True))
+        add_hook_to_module(model, AlignDevicesHook(io_same_device=True))
         x = torch.randn(2, 3).to(0)
         output = model(x)
         self.assertEqual(output.device, torch.device(0))
