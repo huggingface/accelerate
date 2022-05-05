@@ -5,6 +5,7 @@
 __version__ = "0.8.0.dev0"
 
 from .accelerator import Accelerator
+from .big_modeling import cpu_offload, disk_offload, dispatch_model, init_empty_weights
 from .launchers import debug_launcher, notebook_launcher
 from .utils import (
     DeepSpeedPlugin,

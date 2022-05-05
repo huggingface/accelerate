@@ -1,0 +1,454 @@
+# Copyright 2022 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import gc
+import json
+import os
+import re
+from collections import defaultdict
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import torch
+import torch.nn as nn
+
+
+WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+
+
+def convert_file_size_to_int(size: Union[int, str]):
+    """
+    Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
+
+    Args:
+        size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
+
+    Example:
+
+    ```py
+    >>> convert_file_size_to_int("1MiB")
+    1048576
+    ```
+    """
+    if isinstance(size, int):
+        return size
+    if size.upper().endswith("GIB"):
+        return int(size[:-3]) * (2**30)
+    if size.upper().endswith("MIB"):
+        return int(size[:-3]) * (2**20)
+    if size.upper().endswith("KIB"):
+        return int(size[:-3]) * (2**10)
+    if size.upper().endswith("GB"):
+        int_size = int(size[:-2]) * (10**9)
+        return int_size // 8 if size.endswith("b") else int_size
+    if size.upper().endswith("MB"):
+        int_size = int(size[:-2]) * (10**6)
+        return int_size // 8 if size.endswith("b") else int_size
+    if size.upper().endswith("KB"):
+        int_size = int(size[:-2]) * (10**3)
+        return int_size // 8 if size.endswith("b") else int_size
+    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
+
+
+def dtype_byte_size(dtype):
+    """
+    Returns the size (in bytes) occupied by one parameter of type `dtype`.
+
+    Example:
+
+    ```py
+    >>> dtype_byte_size(torch.float32)
+    4
+    ```
+    """
+    if dtype == torch.bool:
+        return 1 / 8
+    bit_search = re.search("[^\d](\d+)$", str(dtype))
+    if bit_search is None:
+        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
+    bit_size = int(bit_search.groups()[0])
+    return bit_size // 8
+
+
+def set_module_tensor_to_device(
+    module: nn.Module, tensor_name: str, device: Union[int, str, torch.device], value: Optional[torch.Tensor] = None
+):
+    """
+    A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
+    `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function).
+
+    Args:
+        module (`torch.nn.Module`): The module in which the tensor we want to move lives.
+        param_name (`str`): The full name of the parameter/buffer.
+        device (`int`, `str` or `torch.device`): The device on which to set the tensor.
+        value (`torch.Tensor`, *optional*): The value of the tensor (useful when going from the meta device to any
+            other device).
+    """
+    # Recurse if needed
+    if "." in tensor_name:
+        splits = tensor_name.split(".")
+        for split in splits[:-1]:
+            new_module = getattr(module, split)
+            if new_module is None:
+                raise ValueError(f"{module} has no attribute {split}.")
+            module = new_module
+        tensor_name = splits[-1]
+
+    if tensor_name not in module._parameters and tensor_name not in module._buffers:
+        raise ValueError(f"{module} does not have a parameter or a buffer named {tensor_name}.")
+    is_buffer = tensor_name in module._buffers
+    old_value = getattr(module, tensor_name)
+
+    if old_value.device == torch.device("meta") and device != torch.device("meta") and value is None:
+        raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
+
+    with torch.no_grad():
+        if value is None:
+            new_value = old_value.to(device)
+        elif isinstance(value, torch.Tensor):
+            new_value = value.to(device)
+        else:
+            new_value = torch.tensor(value, device=device)
+    if is_buffer:
+        module._buffers[tensor_name] = new_value
+    else:
+        new_value = nn.Parameter(new_value, requires_grad=old_value.requires_grad)
+        module._parameters[tensor_name] = new_value
+
+
+def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
+    """
+    A helper function that gathers all the tensors (parameters + buffers) of a given module. If `include_buffers=True`
+    it's the same as doing `module.named_parameters(recurse=recurse) + module.named_buffers(recurse=recurse)`.
+
+    Args:
+        module (`torch.nn.Module`): The module we want the tensors or.
+        include_buffer (`bool`, *optional*, defaults to `True`): Whether or not to include the buffers in the result.
+        recurse (`bool`, *optional`, defaults to `False`):
+            Whether or not to go look in every submodule or just return the direct parameters and buffers.
+    """
+    for named_parameter in module.named_parameters(recurse=recurse):
+        yield named_parameter
+
+    if include_buffers:
+        for named_buffer in module.named_buffers(recurse=recurse):
+            yield named_buffer
+
+
+def find_tied_parameters(model: nn.Module, named_parameters=None, prefix="", result=None):
+    """
+    Find the tied parameters in a given model.
+
+    Args:
+        model (`torch.nn.Module`): The model to inspect.
+
+    <Tip warning={true}>
+
+    The signature has more arguments, but they are for the recursive part of this function and you should ignore them.
+
+    </Tip>
+
+    Example:
+
+
+    ```py
+    >>> from collections import OrderedDict
+    >>> import torch.nn as nn
+
+    >>> model = nn.Sequential(OrderedDict([("linear1", nn.Linear(4, 4)), ("linear2", nn.Linear(4, 4))]))
+    >>> model.linear2.weight = test_model.linear1.weight
+    >>> find_tied_parameters(test_model)
+    {'linear1.weight': 'linear2.weight'}
+    ```
+
+    Returns:
+        Dict[str, str]: A dictionary mapping tied parameter names to the name of the parameter they are tied to.
+    """
+    # Initialize result and named_parameters before recursing.
+    if result is None:
+        result = {}
+    if named_parameters is None:
+        named_parameters = {n: p for n, p in model.named_parameters()}
+    else:
+        # A tied parameter will not be in the full `named_parameters` seen above but will be in the `named_parameters`
+        # of the submodule it belongs to. So while recursing we track the names that are not in the initial
+        # `named_parameters`.
+        for name, parameter in model.named_parameters():
+            full_name = name if prefix == "" else f"{prefix}.{name}"
+            if full_name not in named_parameters:
+                # When we find one, it has to be one of the existing parameters.
+                for new_name, new_param in named_parameters.items():
+                    if new_param is parameter:
+                        result[new_name] = full_name
+
+    # Once we have treated direct parameters, we move to the child modules.
+    for name, child in model.named_children():
+        child_name = name if prefix == "" else f"{prefix}.{name}"
+        find_tied_parameters(child, named_parameters, prefix=child_name, result=result)
+
+    return result
+
+
+def compute_module_sizes(model: nn.Module):
+    """
+    Compute the size of each submodule of a given model.
+    """
+    module_sizes = defaultdict(int)
+    for name, tensor in named_module_tensors(model, recurse=True):
+        size = tensor.numel() * dtype_byte_size(tensor.dtype)
+        name_parts = name.split(".")
+        for idx in range(len(name_parts) + 1):
+            module_sizes[".".join(name_parts[:idx])] += size
+
+    return module_sizes
+
+
+def get_max_layer_size(
+    modules: List[Tuple[str, torch.nn.Module]], module_sizes: Dict[str, int], no_split_module_classes: List[str]
+):
+    """
+    Utility function that will scan a list of named modules and return the maximum size used by one full layer. The
+    definition of a layer being:
+    - a module with no direct children (just parameters and buffers)
+    - a module whose class name is in the list `no_split_module_classes`
+
+    Args:
+        modules (`List[Tuple[str, torch.nn.Module]]`):
+            The list of named modules where we want to determine the maximum layer size.
+        module_sizes (`Dict[str, int]`):
+            A dictionary mapping each layer name to its size (as generated by `compute_module_sizes`).
+        no_split_module_classes (`List[str]`):
+            A list of class names for layers we don't want to be split.
+
+    Returns:
+        `Tuple[int, List[str]]`: The maximum size of a layer with the list of layer names realizing that maximum size.
+    """
+    max_size = 0
+    layer_names = []
+    modules_to_treat = modules.copy()
+    while len(modules_to_treat) > 0:
+        module_name, module = modules_to_treat.pop(0)
+        modules_children = list(module.named_children())
+        if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
+            # No splitting this one so we compare to the max_size
+            size = module_sizes[module_name]
+            if size > max_size:
+                max_size = size
+                layer_names = [module_name]
+            elif size == max_size:
+                layer_names.append(module_name)
+        else:
+            modules_to_treat = [(f"{module_name}.{n}", v) for n, v in modules_children] + modules_to_treat
+    return max_size, layer_names
+
+
+def get_max_memory(max_memory=None, buffer="1500MB"):
+    """
+    Get the maximum memory available if nothing is passed, converts string to int otherwise.
+    """
+    import psutil
+
+    if max_memory is None:
+        if not torch.cuda.is_available():
+            max_memory = {}
+        else:
+            # Make sure CUDA is initialized on each GPU to have the right memory info.
+            for i in range(torch.cuda.device_count()):
+                _ = torch.tensor([0], device=i)
+            max_memory = {i: mem - convert_file_size_to_int(buffer) for i, mem in enumerate(torch.cuda.mem_get_info())}
+        max_memory["cpu"] = psutil.virtual_memory().available
+        return max_memory
+
+    for key in max_memory:
+        if isinstance(max_memory[key], str):
+            max_memory[key] = convert_file_size_to_int(max_memory[key])
+    return max_memory
+
+
+def infer_auto_device_map(model, max_memory=None, no_split_module_classes=None):
+    """
+    Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
+    such that:
+    - we don't exceed the memory available of any of the GPU.
+    - if offload to the CPU is needed, there is always room left on GPU 0 to put back the layer offloaded on CPU that
+      has the largest size.
+    - if offload to the CPU is needed,we don't exceed the RAM available on the CPU.
+    - if offload to the disk is needed, there is always room left on the CPU to put back the layer offloaded on disk
+      that has the largest size.
+
+    <Tip>
+
+    All computation is done analyzing sizes and dtypes of the model parameters. As a result, the model can be on the
+    meta device (as it would if initialized within the `init_empty_weights` context manager).
+
+    </Tip>
+
+    Args:
+        model (`torch.nn.Module`): The model to analyze.
+        max_memory (`Dict`, *optional*):
+            A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
+        no_split_module_classes (`List[str]`, *optional*):
+            A list of layer class names that should never be split across device (for instance any layer that has a
+            residual connection).
+    """
+    max_memory = get_max_memory(max_memory)
+    if no_split_module_classes is None:
+        no_split_module_classes = []
+    elif not isinstance(no_split_module_classes, (list, tuple)):
+        no_split_module_classes = [no_split_module_classes]
+
+    devices = list(max_memory.keys()) + ["disk"]
+    # "cpu" should be the last key in devices.
+    main_devices = [devices[0], "cpu"]
+
+    module_sizes = compute_module_sizes(model)
+    tied_parameters = find_tied_parameters(model)
+
+    module_map = {}
+    current_device = 0
+    current_memory_used = 0
+    # Direct submodules and parameters
+    modules_to_treat = list(model.named_parameters(recurse=False)) + list(model.named_children())
+
+    max_layer_size, max_layer_names = get_max_layer_size(modules_to_treat, module_sizes, no_split_module_classes)
+
+    while len(modules_to_treat) > 0:
+        name, module = modules_to_treat.pop(0)
+        # Max size in the remaining layers may have changed
+        max_layer_names = [n for n in max_layer_names if not n.startswith(name)]
+        if len(max_layer_names) == 0:
+            max_layer_size, max_layer_names = get_max_layer_size(
+                [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
+                module_sizes,
+                no_split_module_classes,
+            )
+        # Assess size
+        module_size = module_sizes[name]
+        tied_params = [v for k, v in tied_parameters.items() if name in k]
+        tied_param = tied_params[0] if len(tied_params) == 1 else None
+
+        device = devices[current_device]
+        current_max_size = max_memory[device] if device != "disk" else None
+        if devices[current_device] in main_devices:
+            current_max_size = current_max_size - max_layer_size
+        if current_max_size is not None and current_memory_used + module_size > current_max_size:
+            # Split or not split?
+            modules_children = list(module.named_children())
+            if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
+                current_device += 1
+                modules_to_treat = [(name, module)] + modules_to_treat
+                current_memory_used = 0
+            else:
+                modules_children = list(module.named_parameters(recurse=False)) + modules_children
+                modules_to_treat = [(f"{name}.{n}", v) for n, v in modules_children] + modules_to_treat
+                max_layer_size, max_layer_names = get_max_layer_size(
+                    [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
+                    module_sizes,
+                    no_split_module_classes,
+                )
+
+        elif tied_param is not None:
+            tied_module_size = module_size
+            tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if n in tied_param][0]
+            tied_module_name, tied_module = modules_to_treat[tied_module_index]
+            tied_module_size += module_sizes[tied_module_name] - module_sizes[tied_param]
+            if current_max_size is not None and current_memory_used + tied_module_size > current_max_size:
+                # Split or not split?
+                tied_module_children = list(tied_module.named_children())
+                if len(tied_module_children) == 0 or tied_module.__class__.__name__ in no_split_module_classes:
+                    current_device += 1
+                    modules_to_treat = [(name, module)] + modules_to_treat
+                    current_memory_used = 0
+                else:
+                    tied_module_children = list(tied_module.named_parameters(recurse=False)) + tied_module_children
+                    tied_module_children = [(f"{tied_module_name}.{n}", v) for n, v in tied_module_children]
+                    modules_to_treat = (
+                        [(name, module)]
+                        + modules_to_treat[:tied_module_index]
+                        + tied_module_children
+                        + modules_to_treat[tied_module_index + 1 :]
+                    )
+                    max_layer_size, max_layer_names = get_max_layer_size(
+                        [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
+                        module_sizes,
+                        no_split_module_classes,
+                    )
+            else:
+                current_memory_used += tied_module_size
+                module_map[name] = devices[current_device]
+                modules_to_treat.pop(tied_module_index)
+                module_map[tied_module_name] = devices[current_device]
+        else:
+            current_memory_used += module_size
+            module_map[name] = devices[current_device]
+
+    return module_map
+
+
+def load_sharded_checkpoint_in_model(model, checkpoint_folder, device_map=None, offload_folder=None):
+    if offload_folder is None and device_map is not None and "disk" in device_map.values():
+        raise ValueError(
+            "At least one of the model submodule will be offloaded to disk, please pass along an `offload_folder`."
+        )
+
+    index_filename = os.path.join(checkpoint_folder, WEIGHTS_INDEX_NAME)
+    with open(index_filename, "r") as f:
+        index = json.loads(f.read())
+
+    checkpoint_files = sorted(list(set(index["weight_map"].values())))
+    checkpoint_files = [os.path.join(checkpoint_folder, f) for f in checkpoint_files]
+
+    # Logic for missing/unexepected keys goes here.
+
+    offload_index = {}
+    for checkpoint_file in checkpoint_files:
+        checkpoint = torch.load(checkpoint_file)
+        if device_map is None:
+            model.load_state_dict(checkpoint, strict=False)
+        else:
+            for param_name, param in checkpoint.items():
+                module_name = param_name
+                while len(module_name) > 0 and module_name not in device_map:
+                    module_name = ".".join(module_name.split(".")[:-1])
+                if module_name == "":
+                    # TODO: group all errors and raise at the end.
+                    raise ValueError(f"{param_name} doesn't have any device set.")
+                param_device = device_map[module_name]
+
+                if param_device == "disk":
+                    set_module_tensor_to_device(model, param_name, "meta")
+                    tensor_file = os.path.join(offload_folder, f"{param_name}.dat")
+                    array = param.numpy()
+                    offload_index[param_name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
+                    file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
+                    file_array[:] = array[:]
+                    file_array.flush()
+                else:
+                    set_module_tensor_to_device(model, param_name, param_device, value=param)
+
+        # Force Python to clean up.
+        del checkpoint
+        gc.collect()
+
+    if len(offload_index) > 0:
+        offload_index_file = os.path.join(offload_folder, "index.json")
+        if os.path.isfile(offload_index_file):
+            with open(offload_index_file, "r", encoding="utf-8") as f:
+                current_offload_index = json.load(f)
+        else:
+            current_offload_index = {}
+        current_offload_index.update(offload_index)
+
+        with open(offload_index_file, "w", encoding="utf-8") as f:
+            json.dump(current_offload_index, f, indent=2)
