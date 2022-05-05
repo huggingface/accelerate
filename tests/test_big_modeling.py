@@ -20,7 +20,7 @@ import torch.nn as nn
 
 from accelerate.big_modeling import cpu_offload, disk_offload, dispatch_model, init_empty_weights
 from accelerate.hooks import remove_hook_from_submodules
-from accelerate.offload import offload_state_dict
+from accelerate.utils import offload_state_dict
 from accelerate.test_utils import require_cuda, require_multi_gpu, slow
 from transformers import AutoModelForCausalLM, AutoTokenizer
 

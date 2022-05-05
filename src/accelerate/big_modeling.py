@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 
 from .hooks import AlignDevicesHook, add_hook_to_module, attach_align_device_hook, attach_align_device_hook_on_blocks
-from .offload import OffloadedWeightsLoader, extract_submodules_state_dict, offload_state_dict
+from .utils import OffloadedWeightsLoader, extract_submodules_state_dict, offload_state_dict
 
 
 @contextmanager

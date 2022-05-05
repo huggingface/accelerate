@@ -19,7 +19,7 @@ from tempfile import TemporaryDirectory
 import torch
 import torch.nn as nn
 
-from accelerate.offload import OffloadedWeightsLoader, offload_state_dict
+from accelerate.utils import OffloadedWeightsLoader, offload_state_dict
 
 
 class ModelForTest(nn.Module):
