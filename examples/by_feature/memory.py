@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from accelerate import Accelerator, DistributedType
 
 # New Code #
-from accelerate.utils.memory import find_executable_batch_size
+from accelerate.utils import find_executable_batch_size
 from datasets import load_dataset, load_metric
 from transformers import (
     AdamW,
