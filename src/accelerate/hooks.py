@@ -18,7 +18,7 @@ from typing import Dict, Mapping, Optional, Union
 import torch
 import torch.nn as nn
 
-from .utils import PrefixedDataset, find_device, named_module_tensors, set_module_tensor_to_device, send_to_device
+from .utils import PrefixedDataset, find_device, named_module_tensors, send_to_device, set_module_tensor_to_device
 
 
 class ModelHook:
