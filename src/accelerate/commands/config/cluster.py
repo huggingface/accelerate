@@ -133,7 +133,7 @@ def get_cluster_input():
         main_training_function = "main"
 
     num_processes = _ask_field(
-        "How many devices should be used for (potentially) distributed training? [1:]",
+        "How many devices should be used for (potentially) distributed training? [1]:",
         lambda x: int(x),
         default=1,
         error_message="Please enter an integer.",
