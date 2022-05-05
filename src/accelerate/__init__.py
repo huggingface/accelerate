@@ -12,5 +12,6 @@ from .utils import (
     DistributedType,
     GradScalerKwargs,
     InitProcessGroupKwargs,
+    find_executable_batch_size,
     synchronize_rng_states,
 )
