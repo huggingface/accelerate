@@ -5,7 +5,13 @@
 __version__ = "0.8.0.dev0"
 
 from .accelerator import Accelerator
-from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs
 from .launchers import debug_launcher, notebook_launcher
-from .state import DistributedType
-from .utils import DeepSpeedPlugin, synchronize_rng_states
+from .utils import (
+    DeepSpeedPlugin,
+    DistributedDataParallelKwargs,
+    DistributedType,
+    GradScalerKwargs,
+    InitProcessGroupKwargs,
+    find_executable_batch_size,
+    synchronize_rng_states,
+)

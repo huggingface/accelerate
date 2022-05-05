@@ -14,9 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from accelerate.state import ComputeEnvironment, DistributedType
-
-from ...utils import is_deepspeed_available
+from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available
 from .config_args import ClusterConfig
 from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
 

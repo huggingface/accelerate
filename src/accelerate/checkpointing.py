@@ -21,17 +21,25 @@ import numpy as np
 import torch
 from torch.cuda.amp import GradScaler
 
-from .state import is_tpu_available
-from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, SCHEDULER_NAME, get_pretty_name, save
+from .utils import (
+    MODEL_NAME,
+    OPTIMIZER_NAME,
+    RNG_STATE_NAME,
+    SCALER_NAME,
+    SCHEDULER_NAME,
+    get_pretty_name,
+    is_tpu_available,
+    save,
+)
 
 
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
 
-import logging
+from .logging import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def save_accelerator_state(

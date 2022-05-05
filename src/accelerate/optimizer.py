@@ -19,8 +19,8 @@ import torch
 
 from packaging import version
 
-from .state import AcceleratorState, DistributedType, is_tpu_available
-from .utils import honor_type
+from .state import AcceleratorState
+from .utils import DistributedType, honor_type, is_tpu_available
 
 
 if is_tpu_available():

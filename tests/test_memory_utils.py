@@ -14,7 +14,7 @@
 
 import unittest
 
-from accelerate.memory_utils import find_executable_batch_size
+from accelerate.utils.memory import find_executable_batch_size
 
 
 def raise_fake_out_of_memory():

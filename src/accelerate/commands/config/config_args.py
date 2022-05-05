@@ -21,7 +21,8 @@ from enum import Enum
 from typing import Optional, Union
 
 import yaml
-from accelerate.state import ComputeEnvironment, DistributedType, SageMakerDistributedType
+
+from ...utils import ComputeEnvironment, DistributedType, SageMakerDistributedType
 
 
 hf_cache_home = os.path.expanduser(
