@@ -134,7 +134,7 @@ def get_cluster_input():
 
     if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
         prefix = str(DistributedType.MULTI_GPU).split(".")[0].replace("MULTI_", "")
-        prefix += f"'s"
+        prefix += "'s"
         num_processes = _ask_field(
             f"How many {prefix} should be used for distributed training? [1]:",
             lambda x: int(x),
