@@ -12,18 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all
-
-
-import warnings
-
-
-warnings.warn(
-    "memory_utils has been reorganized to utils.memory. Import `find_executable_batchsize` from the main `__init__`: "
-    "`from accelerate import find_executable_batch_size` to avoid this warning.",
-    FutureWarning,
-)
-
-from .utils.memory import find_executable_batch_size
+SCALER_NAME = "scaler.pt"
+MODEL_NAME = "pytorch_model"
+RNG_STATE_NAME = "random_states"
+OPTIMIZER_NAME = "optimizer"
+SCHEDULER_NAME = "scheduler"

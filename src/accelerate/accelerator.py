@@ -25,15 +25,19 @@ from packaging import version
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
-from .kwargs_handlers import DistributedDataParallelKwargs, GradScalerKwargs, InitProcessGroupKwargs, KwargsHandler
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, DistributedType, is_deepspeed_available
+from .state import AcceleratorState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     DeepSpeedPlugin,
+    DistributedDataParallelKwargs,
+    DistributedType,
     FullyShardedDataParallelPlugin,
+    GradScalerKwargs,
+    InitProcessGroupKwargs,
+    KwargsHandler,
     LoggerType,
     PrecisionType,
     RNGType,
@@ -41,6 +45,7 @@ from .utils import (
     extract_model_from_parallel,
     gather,
     get_pretty_name,
+    is_deepspeed_available,
     pad_across_processes,
     reduce,
     save,
@@ -51,7 +56,7 @@ from .utils import (
 if is_deepspeed_available():
     import deepspeed
 
-    from .deepspeed_utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
+    from .utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
 
 logger = get_logger(__name__)
 

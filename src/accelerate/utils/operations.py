@@ -1,4 +1,4 @@
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,172 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import functools
-import importlib
-import os
-import random
-import typing
-from collections.abc import Mapping
-from contextlib import contextmanager
-from dataclasses import dataclass, field
-from enum import Enum, EnumMeta
-from functools import update_wrapper
-from typing import Any, Callable, Iterable, List, Optional, Union
+"""
+A set of basic tensor ops compatible with tpu, gpu, and multigpu
+"""
 
-import numpy as np
+
+from functools import update_wrapper
+from typing import Any, Mapping
+
 import torch
 from torch.distributed import ReduceOp
 
 from packaging import version
 
-from .state import AcceleratorState, DistributedType, is_deepspeed_available, is_tpu_available
+from ..state import AcceleratorState
+from .dataclasses import DistributedType, TensorInformation
+from .imports import is_tpu_available
 
 
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
-def is_tensorflow_available():
-    return importlib.util.find_spec("tensorflow") is not None
+def is_torch_tensor(tensor):
+    return isinstance(tensor, torch.Tensor)
 
 
-def is_tensorboard_available():
-    return importlib.util.find_spec("tensorboard") is not None or importlib.util.find_spec("tensorboardX") is not None
-
-
-def is_wandb_available():
-    return importlib.util.find_spec("wandb") is not None
-
-
-def is_comet_ml_available():
-    return importlib.util.find_spec("comet_ml") is not None
-
-
-def is_boto3_available():
-    return importlib.util.find_spec("boto3") is not None
-
-
-def is_sagemaker_available():
-    return importlib.util.find_spec("sagemaker") is not None
-
-
-if is_deepspeed_available():
-    from deepspeed import DeepSpeedEngine
-
-SCALER_NAME = "scaler.pt"
-MODEL_NAME = "pytorch_model"
-RNG_STATE_NAME = "random_states"
-OPTIMIZER_NAME = "optimizer"
-SCHEDULER_NAME = "scheduler"
-
-
-class EnumWithContains(EnumMeta):
-    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
-
-    def __contains__(cls, item):
-        try:
-            cls(item)
-        except ValueError:
-            return False
-        return True
-
-
-class BaseEnum(Enum, metaclass=EnumWithContains):
-    "An enum class that can get the value of an item with `str(Enum.key)`"
-
-    def __str__(self):
-        return self.value
-
-    @classmethod
-    def list(cls):
-        "Method to list all the possible items in `cls`"
-        return list(map(lambda item: str(item), cls))
-
-
-class LoggerType(BaseEnum):
-    ALL = "all"
-    TENSORBOARD = "tensorboard"
-    WANDB = "wandb"
-    COMETML = "comet_ml"
-
-
-class PrecisionType(BaseEnum):
-    NO = "no"
-    FP16 = "fp16"
-    BF16 = "bf16"
-
-
-class RNGType(BaseEnum):
-    TORCH = "torch"
-    CUDA = "cuda"
-    XLA = "xla"
-    GENERATOR = "generator"
-
-
-@dataclass
-class TensorInformation:
-    shape: torch.Size
-    dtype: torch.dtype
-
-
-def set_seed(seed: int, device_specific: bool = False):
-    """
-    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch`.
-
-    Args:
-        seed (`int`): The seed to set.
-        device_specific (`bool`, *optional*, defaults to `False`):
-            Whether to differ the seed on each device slightly with `self.process_index`.
-    """
-    if device_specific:
-        seed += AcceleratorState().process_index
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    # ^^ safe to call this function even if cuda is not available
-    if is_tpu_available():
-        xm.set_rng_state(seed)
-
-
-def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optional[torch.Generator] = None):
-    # Get the proper rng state
-    if rng_type == RNGType.TORCH:
-        rng_state = torch.get_rng_state()
-    elif rng_type == RNGType.CUDA:
-        rng_state = torch.cuda.get_rng_state()
-    elif rng_type == RNGType.XLA:
-        assert is_tpu_available(), "Can't synchronize XLA seeds on an environment without TPUs."
-        rng_state = torch.tensor(xm.get_rng_state())
-    elif rng_type == RNGType.GENERATOR:
-        assert generator is not None, "Need a generator to synchronize its seed."
-        rng_state = generator.get_state()
-
-    # Broadcast the rng state from device 0 to other devices
-    state = AcceleratorState()
-    if state.distributed_type == DistributedType.TPU:
-        rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
-    elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
-        rng_state = rng_state.to(state.device)
-        torch.distributed.broadcast(rng_state, 0)
-        rng_state = rng_state.cpu()
-    elif state.distributed_type == DistributedType.MULTI_CPU:
-        torch.distributed.broadcast(rng_state, 0)
-
-    # Set the broadcast rng state
-    if rng_type == RNGType.TORCH:
-        torch.set_rng_state(rng_state)
-    elif rng_type == RNGType.CUDA:
-        torch.cuda.set_rng_state(rng_state)
-    elif rng_type == RNGType.XLA:
-        xm.set_rng_state(rng_state.item())
-    elif rng_type == RNGType.GENERATOR:
-        generator.set_state(rng_state)
-
-
-def synchronize_rng_states(rng_types: List[Union[str, RNGType]], generator: Optional[torch.Generator] = None):
-    for rng_type in rng_types:
-        synchronize_rng_state(RNGType(rng_type), generator=generator)
+def is_tensor_information(tensor_info):
+    return isinstance(tensor_info, TensorInformation)
 
 
 def honor_type(obj, generator):
@@ -189,14 +51,6 @@ def honor_type(obj, generator):
     except TypeError:
         # Some objects may not be able to instantiate from a generator directly
         return type(obj)(*list(generator))
-
-
-def is_torch_tensor(tensor):
-    return isinstance(tensor, torch.Tensor)
-
-
-def is_tensor_information(tensor_info):
-    return isinstance(tensor_info, TensorInformation)
 
 
 def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_other_type=False, **kwargs):
@@ -305,73 +159,24 @@ def initialize_tensors(data_structure):
     return recursively_apply(_initialize_tensor, data_structure, test_type=is_tensor_information)
 
 
-def convert_to_fp32(tensor):
+def find_batch_size(data):
     """
-    Recursively converts the elements nested list/tuple/dictionary of tensors in FP16/BF16 precision to FP32.
+    Recursively finds the batch size in a nested list/tuple/dictionary of lists of tensors.
 
     Args:
-        tensor (nested list/tuple/dictionary of `torch.Tensor`):
-            The data to convert from FP16/BF16 to FP32.
+        data (nested list/tuple/dictionary of `torch.Tensor`): The data from which to find the batch size.
 
     Returns:
-        The same data structure as `tensor` with all tensors that were in FP16/BF16 precision converted to FP32.
+        `int`: The batch size.
     """
-
-    def _convert_to_fp32(tensor):
-        return tensor.float()
-
-    def _is_fp16_bf16_tensor(tensor):
-        return hasattr(tensor, "dtype") and (
-            tensor.dtype == torch.float16
-            or (version.parse(torch.__version__) >= version.parse("1.10") and tensor.dtype == torch.bfloat16)
-        )
-
-    return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
-
-
-class ConvertOutputsToFp32:
-    """
-    Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
-    precision will be convert back to FP32.
-
-    Use a class instead of a decorator because otherwise, the prepared model can no longer be pickled (issue #273).
-
-    Args:
-        model_forward (`Callable`):
-            The function which outputs we want to treat.
-
-    Returns:
-        The same function as `model_forward` but with converted outputs.
-    """
-
-    def __init__(self, model_forward):
-        self.model_forward = model_forward
-        update_wrapper(self, model_forward)
-
-    def __call__(self, *args, **kwargs):
-        return convert_to_fp32(self.model_forward(*args, **kwargs))
-
-
-convert_outputs_to_fp32 = ConvertOutputsToFp32
-
-
-def extract_model_from_parallel(model):
-    """
-    Extract a model from its distributed containers.
-
-    Args:
-        model (`torch.nn.Module`): The model to extract.
-
-    Returns:
-        `torch.nn.Module`: The extracted model.
-    """
-    options = (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)
-    if is_deepspeed_available():
-        options += (DeepSpeedEngine,)
-
-    while isinstance(model, options):
-        model = model.module
-    return model
+    if isinstance(data, (tuple, list)):
+        return find_batch_size(data[0])
+    elif isinstance(data, Mapping):
+        for k in data.keys():
+            return find_batch_size(data[k])
+    elif not isinstance(data, torch.Tensor):
+        raise TypeError(f"Can only find the batch size of tensors but got {type(data)}.")
+    return data.shape[0]
 
 
 def _tpu_gather(tensor, name="gather tensor"):
@@ -536,26 +341,6 @@ def slice_tensors(data, tensor_slice):
     return recursively_apply(_slice_tensor, data, tensor_slice)
 
 
-def find_batch_size(data):
-    """
-    Recursively finds the batch size in a nested list/tuple/dictionary of lists of tensors.
-
-    Args:
-        data (nested list/tuple/dictionary of `torch.Tensor`): The data from which to find the batch size.
-
-    Returns:
-        `int`: The batch size.
-    """
-    if isinstance(data, (tuple, list)):
-        return find_batch_size(data[0])
-    elif isinstance(data, Mapping):
-        for k in data.keys():
-            return find_batch_size(data[k])
-    elif not isinstance(data, torch.Tensor):
-        raise TypeError(f"Can only find the batch size of tensors but got {type(data)}.")
-    return data.shape[0]
-
-
 def concatenate(data, dim=0):
     """
     Recursively concatenate the tensors in a nested list/tuple/dictionary of lists of tensors with the same shape.
@@ -657,198 +442,51 @@ def reduce(tensor, reduction="mean"):
     return recursively_apply(_reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction)
 
 
-def wait_for_everyone():
+def convert_to_fp32(tensor):
     """
-    Introduces a blocking point in the script, making sure all processes have reached this point before continuing.
-
-    <Tip warning={true}>
-
-    Make sure all processes will reach this instruction otherwise one of your processes will hang forever.
-
-    </Tip>
-    """
-    if (
-        AcceleratorState().distributed_type == DistributedType.MULTI_GPU
-        or AcceleratorState().distributed_type == DistributedType.MULTI_CPU
-        or AcceleratorState().distributed_type == DistributedType.DEEPSPEED
-    ):
-        torch.distributed.barrier()
-    elif AcceleratorState().distributed_type == DistributedType.TPU:
-        xm.rendezvous("accelerate.utils.wait_for_everyone")
-
-
-def save(obj, f):
-    """
-    Save the data to disk. Use in place of `torch.save()`.
+    Recursively converts the elements nested list/tuple/dictionary of tensors in FP16/BF16 precision to FP32.
 
     Args:
-        obj: The data to save
-        f: The file (or file-like object) to use to save the data
+        tensor (nested list/tuple/dictionary of `torch.Tensor`):
+            The data to convert from FP16/BF16 to FP32.
+
+    Returns:
+        The same data structure as `tensor` with all tensors that were in FP16/BF16 precision converted to FP32.
     """
-    if AcceleratorState().distributed_type == DistributedType.TPU:
-        xm.save(obj, f)
-    elif AcceleratorState().local_process_index == 0:
-        torch.save(obj, f)
+
+    def _convert_to_fp32(tensor):
+        return tensor.float()
+
+    def _is_fp16_bf16_tensor(tensor):
+        return hasattr(tensor, "dtype") and (
+            tensor.dtype == torch.float16
+            or (version.parse(torch.__version__) >= version.parse("1.10") and tensor.dtype == torch.bfloat16)
+        )
+
+    return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
 
 
-class PrepareForLaunch:
+class ConvertOutputsToFp32:
     """
-    Prepare a function that will launched in a distributed setup.
+    Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
+    precision will be convert back to FP32.
+
+    Use a class instead of a decorator because otherwise, the prepared model can no longer be pickled (issue #273).
 
     Args:
-        launcher (`Callable`):
-            The function to launch.
-        distributed_type ([`~state.DistributedType`]):
-            The distributed type to prepare for.
-        debug (`bool`, *optional*, defaults to `False`):
-            Whether or not this is a debug launch.
+        model_forward (`Callable`):
+            The function which outputs we want to treat.
+
+    Returns:
+        The same function as `model_forward` but with converted outputs.
     """
 
-    def __init__(self, launcher, distributed_type="NO", debug=False):
-        self.launcher = launcher
-        self.distributed_type = DistributedType(distributed_type)
-        self.debug = debug
+    def __init__(self, model_forward):
+        self.model_forward = model_forward
+        update_wrapper(self, model_forward)
 
-    def __call__(self, index, *args):
-        if self.debug:
-            world_size = int(os.environ.get("WORLD_SIZE"))
-            rdv_file = os.environ.get("ACCELERATE_DEBUG_RDV_FILE")
-            torch.distributed.init_process_group(
-                "gloo",
-                rank=index,
-                store=torch.distributed.FileStore(rdv_file, world_size),
-                world_size=world_size,
-            )
-        elif self.distributed_type == DistributedType.MULTI_GPU or self.distributed_type == DistributedType.MULTI_CPU:
-            # Prepare the environment for torch.distributed
-            os.environ["LOCAL_RANK"] = str(index)
-            os.environ["RANK"] = str(index)
-
-        self.launcher(*args)
+    def __call__(self, *args, **kwargs):
+        return convert_to_fp32(self.model_forward(*args, **kwargs))
 
 
-@dataclass
-class DeepSpeedPlugin:
-
-    gradient_accumulation_steps: int = field(
-        default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
-    )
-    zero_stage: int = field(
-        default=None,
-        metadata={"help": "Possible options are 0,1,2,3; Default will be taken from environment variable"},
-    )
-    is_train_batch_min: str = field(
-        default=True,
-        metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
-    )
-
-    auto_opt_mapping: bool = field(
-        default=True,
-        metadata={"help": "whether to map torch.adam to deepspeed optimizer version of adam based on config"},
-    )
-
-    offload_optimizer_device: bool = field(default=None, metadata={"help": "Possible options are none|cpu|nvme"})
-
-    def __post_init__(self):
-
-        if self.gradient_accumulation_steps is None:
-            self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
-
-        if self.zero_stage is None:
-            self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
-
-        if self.offload_optimizer_device is None:
-            self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
-
-        self.deepspeed_config = {
-            "train_batch_size": None,
-            "gradient_accumulation_steps": self.gradient_accumulation_steps,
-            "zero_optimization": {
-                "stage": self.zero_stage,
-                "offload_optimizer": {
-                    "device": self.offload_optimizer_device,
-                },
-            },
-            "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
-            "zero_allow_untested_optimizer": True,
-        }
-
-
-@dataclass
-class FullyShardedDataParallelPlugin:
-    """
-    This plugin is used to enable fully sharded data parallelism.
-    """
-
-    sharding_strategy: "typing.Any" = field(
-        default=None,
-        metadata={"help": "Possible options are [1] FULL_SHARD, [2] SHARD_GRAD_OP"},
-    )
-    backward_prefetch: "typing.Any" = field(
-        default=None,
-        metadata={"help": "Possible options are [1] BACKWARD_PRE, [2] BACKWARD_POST"},
-    )
-    auto_wrap_policy: "typing.Any" = field(
-        default=None,
-        metadata={"help": "A callable specifying a policy to recursively wrap layers with FSDP"},
-    )
-    cpu_offload: Optional[Callable] = field(
-        default=None,
-        metadata={"help": "Decides Whether to offload parameters and gradients to CPU."},
-    )
-    min_num_params: int = field(
-        default=None, metadata={"help": "FSDP's minimum number of parameters for Default Auto Wrapping."}
-    )
-    ignored_modules: Optional[Iterable[torch.nn.Module]] = field(
-        default=None,
-        metadata={"help": "A list of modules to ignore for FSDP."},
-    )
-
-    def __post_init__(self):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, ShardingStrategy
-        from torch.distributed.fsdp.wrap import default_auto_wrap_policy
-
-        if self.sharding_strategy is None:
-            self.sharding_strategy = ShardingStrategy(int(os.environ.get("FSDP_SHARDING_STRATEGY", 1)))
-
-        if self.cpu_offload is None:
-            if os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true":
-                self.cpu_offload = CPUOffload(offload_params=True)
-            else:
-                self.cpu_offload = CPUOffload(offload_params=False)
-
-        if self.min_num_params is None:
-            self.min_num_params = int(os.environ.get("FSDP_MIN_NUM_PARAMS", 0))
-
-        if self.auto_wrap_policy is None:
-            if self.min_num_params > 0:
-                self.auto_wrap_policy = functools.partial(default_auto_wrap_policy, min_num_params=self.min_num_params)
-
-
-@contextmanager
-def patch_environment(**kwargs):
-    """
-    A context manager that will add each keyword argument passed to `os.environ` and remove them when exiting.
-
-    Will convert the values in `kwargs` to strings and upper-case all the keys.
-    """
-    for key, value in kwargs.items():
-        os.environ[key.upper()] = str(value)
-
-    yield
-
-    for key in kwargs:
-        del os.environ[key.upper()]
-
-
-def get_pretty_name(obj):
-    """
-    Gets a pretty name from `obj`.
-    """
-    if not hasattr(obj, "__qualname__") and not hasattr(obj, "__name__"):
-        obj = getattr(obj, "__class__", obj)
-    if hasattr(obj, "__qualname__"):
-        return obj.__qualname__
-    if hasattr(obj, "__name__"):
-        return obj.__name__
-    return str(obj)
+convert_outputs_to_fp32 = ConvertOutputsToFp32

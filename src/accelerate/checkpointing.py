@@ -21,8 +21,16 @@ import numpy as np
 import torch
 from torch.cuda.amp import GradScaler
 
-from .state import is_tpu_available
-from .utils import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, SCHEDULER_NAME, get_pretty_name, save
+from .utils import (
+    MODEL_NAME,
+    OPTIMIZER_NAME,
+    RNG_STATE_NAME,
+    SCALER_NAME,
+    SCHEDULER_NAME,
+    get_pretty_name,
+    is_tpu_available,
+    save,
+)
 
 
 if is_tpu_available():

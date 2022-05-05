@@ -21,8 +21,8 @@ from dataclasses import dataclass
 import torch
 
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
-from accelerate.kwargs_handlers import KwargsHandler
 from accelerate.test_utils import execute_subprocess_async, require_cuda, require_multi_gpu
+from accelerate.utils import KwargsHandler
 
 
 @dataclass

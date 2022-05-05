@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from accelerate.state import ComputeEnvironment, DistributedType, SageMakerDistributedType
+from ...utils.dataclasses import ComputeEnvironment, DistributedType, SageMakerDistributedType
 
 
 def _ask_field(input_text, convert_value=None, default=None, error_message=None):
