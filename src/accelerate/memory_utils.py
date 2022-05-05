@@ -21,8 +21,9 @@ import warnings
 
 
 warnings.warn(
-    "memory_utils has been reorganized to utils.memory. Import `find_executable_batchsize` from the main `__init__`: `from accelerate import find_executable_batch_size` to avoid this",
+    "memory_utils has been reorganized to utils.memory. Import `find_executable_batchsize` from the main `__init__`: "
+    "`from accelerate import find_executable_batch_size` to avoid this warning.",
     FutureWarning,
 )
 
-from accelerate import memory_utils
+from .utils.memory import find_executable_batch_size
