@@ -465,17 +465,20 @@ class Accelerator:
         elif self.distributed_type == DistributedType.FSDP:
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
-            fsdp_plugin = self.state.fsdp_plugin
-            model = FSDP(
-                model,
-                sharding_strategy=fsdp_plugin.sharding_strategy,
-                cpu_offload=fsdp_plugin.cpu_offload,
-                auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
-                backward_prefetch=fsdp_plugin.backward_prefetch,
-                ignored_modules=fsdp_plugin.ignored_modules,
-            )
-            if not fsdp_plugin.cpu_offload.offload_params:
-                model.to(self.device)
+            # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
+            # don't wrap it again
+            if type(model) != FSDP:
+                fsdp_plugin = self.state.fsdp_plugin
+                model = FSDP(
+                    model,
+                    sharding_strategy=fsdp_plugin.sharding_strategy,
+                    cpu_offload=fsdp_plugin.cpu_offload,
+                    auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
+                    backward_prefetch=fsdp_plugin.backward_prefetch,
+                    ignored_modules=fsdp_plugin.ignored_modules,
+                )
+                if not fsdp_plugin.cpu_offload.offload_params:
+                    model.to(self.device)
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)

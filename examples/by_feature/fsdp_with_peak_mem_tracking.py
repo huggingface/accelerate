@@ -251,12 +251,13 @@ def training_function(config, args):
             )
         )
         # Logging the peak memory usage of the GPU to the tracker
-        accelerator.log(
-            {
-                "train_total_peak_memory": tracemalloc.peaked + b2mb(tracemalloc.begin),
-            },
-            step=epoch,
-        )
+        if args.with_tracking:
+            accelerator.log(
+                {
+                    "train_total_peak_memory": tracemalloc.peaked + b2mb(tracemalloc.begin),
+                },
+                step=epoch,
+            )
 
         # New Code #
         # context manager to track the peak memory usage during the evaluation
@@ -302,12 +303,13 @@ def training_function(config, args):
             "Total Peak Memory consumed during the eval (max): {}".format(tracemalloc.peaked + b2mb(tracemalloc.begin))
         )
         # Logging the peak memory usage of the GPU to the tracker
-        accelerator.log(
-            {
-                "eval_total_peak_memory": tracemalloc.peaked + b2mb(tracemalloc.begin),
-            },
-            step=epoch,
-        )
+        if args.with_tracking:
+            accelerator.log(
+                {
+                    "eval_total_peak_memory": tracemalloc.peaked + b2mb(tracemalloc.begin),
+                },
+                step=epoch,
+            )
 
     if args.with_tracking:
         accelerator.end_training()
