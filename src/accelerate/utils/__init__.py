@@ -30,6 +30,18 @@ from .imports import (
     is_tpu_available,
     is_wandb_available,
 )
+from .modeling import (
+    compute_module_sizes,
+    convert_file_size_to_int,
+    dtype_byte_size,
+    find_tied_parameters,
+    get_max_layer_size,
+    get_max_memory,
+    load_sharded_checkpoint_in_model,
+    named_module_tensors,
+    set_module_tensor_to_device,
+)
+from .offload import OffloadedWeightsLoader, PrefixedDataset, extract_submodules_state_dict, offload_state_dict
 from .operations import (
     broadcast,
     broadcast_object_list,
@@ -37,6 +49,7 @@ from .operations import (
     convert_outputs_to_fp32,
     convert_to_fp32,
     find_batch_size,
+    find_device,
     gather,
     gather_object,
     get_data_structure,

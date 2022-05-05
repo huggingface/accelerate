@@ -17,13 +17,13 @@ import unittest
 import torch
 import torch.nn as nn
 
-from accelerate.modeling_utils import (
+from accelerate.test_utils import require_cuda, require_multi_gpu
+from accelerate.utils.modeling import (
     compute_module_sizes,
     find_tied_parameters,
     named_module_tensors,
     set_module_tensor_to_device,
 )
-from accelerate.test_utils import require_cuda, require_multi_gpu
 
 
 class ModelForTest(nn.Module):

@@ -14,5 +14,7 @@ from .utils import (
     GradScalerKwargs,
     InitProcessGroupKwargs,
     find_executable_batch_size,
+    infer_auto_device_map,
+    load_sharded_checkpoint_in_model,
     synchronize_rng_states,
 )
