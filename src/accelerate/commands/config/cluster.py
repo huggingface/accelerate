@@ -133,13 +133,20 @@ def get_cluster_input():
         main_training_function = "main"
 
     if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
-        machine_type = str(distributed_type).split(".")[0].replace("MULTI_", "")
+        machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
         if machine_type == "TPU":
             machine_type += " cores"
         else:
-            machine_type += "'s"
+            machine_type += "(s)"
         num_processes = _ask_field(
             f"How many {machine_type} should be used for distributed training? [1]:",
+            lambda x: int(x),
+            default=1,
+            error_message="Please enter an integer.",
+        )
+    elif distributed_type in [DistributedType.FSDP, DistributedType.DEEPSPEED]:
+        num_processes = _ask_field(
+            "How many GPU(s) should be used for distributed training? [1]:",
             lambda x: int(x),
             default=1,
             error_message="Please enter an integer.",
