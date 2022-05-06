@@ -133,7 +133,7 @@ def get_cluster_input():
         main_training_function = "main"
 
     if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
-        machine_type = str(distributed_type).split(".")[0].replace("MULTI_", "")
+        machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
         if machine_type == "TPU":
             machine_type += " cores"
         else:
