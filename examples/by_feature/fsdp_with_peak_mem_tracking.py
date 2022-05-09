@@ -263,6 +263,7 @@ def training_function(config, args):
         # context manager to track the peak memory usage during the evaluation
         with TorchTracemalloc() as tracemalloc:
             model.eval()
+            samples_seen = 0
             for step, batch in enumerate(eval_dataloader):
                 # We could avoid this line since we set the accelerator with `device_placement=True`.
                 batch.to(accelerator.device)
@@ -271,6 +272,12 @@ def training_function(config, args):
                 predictions = outputs.logits.argmax(dim=-1)
                 # It is slightly faster to call this once, than multiple times
                 predictions, references = accelerator.gather((predictions, batch["labels"]))
+                if accelerator.num_processes > 1:
+                    if step == len(eval_dataloader):
+                        predictions = predictions[: len(eval_dataloader) - samples_seen]
+                        references = predictions[: len(eval_dataloader) - samples_seen]
+                    else:
+                        samples_seen += references.shape[0]
                 metric.add_batch(
                     predictions=predictions,
                     references=references,

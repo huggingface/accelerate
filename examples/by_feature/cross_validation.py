@@ -209,6 +209,7 @@ def training_function(config, args):
                     optimizer.zero_grad()
 
             model.eval()
+            samples_seen = 0
             for step, batch in enumerate(eval_dataloader):
                 # We could avoid this line since we set the accelerator with `device_placement=True`.
                 batch.to(accelerator.device)
@@ -216,6 +217,12 @@ def training_function(config, args):
                     outputs = model(**batch)
                 predictions = outputs.logits.argmax(dim=-1)
                 predictions, references = accelerator.gather((predictions, batch["labels"]))
+                if accelerator.num_processes > 1:
+                    if step == len(eval_dataloader):
+                        predictions = predictions[: len(eval_dataloader) - samples_seen]
+                        references = references[: len(eval_dataloader) - samples_seen]
+                    else:
+                        samples_seen += references.shape[0]
                 metric.add_batch(
                     predictions=predictions,
                     references=references,
