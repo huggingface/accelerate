@@ -396,7 +396,42 @@ def infer_auto_device_map(model, max_memory=None, no_split_module_classes=None):
     return module_map
 
 
-def load_sharded_checkpoint_in_model(model, checkpoint_folder, device_map=None, offload_folder=None):
+def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, torch.device]]):
+    """
+    Checks a device map covers everything in a given model.
+
+    Args:
+        model (`torch.nn.Module`): The model to check the device map against.
+        device_map (`Dict[str, Union[int, str, torch.device]]`): The device map to check.
+    """
+    all_model_tensors = [name for name, _ in model.state_dict().items()]
+    for module_name in device_map.keys():
+        all_model_tensors = [name for name in all_model_tensors if not name.startswith(module_name)]
+    if len(all_model_tensors) > 0:
+        non_covered_params = ", ".join(all_model_tensors)
+        raise ValueError(
+            f"The device_map provided does not give any device for the following parameters: {non_covered_params}"
+        )
+
+
+def load_sharded_checkpoint_in_model(
+    model: nn.Module,
+    checkpoint_folder: Union[str, os.PathLike],
+    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
+    offload_folder: Optional[Union[str, os.PathLike]] = None,
+):
+    """
+    Loads a sharded checkpoint inside a model, potentially sending weights to a given device as they are loaded.
+
+    Args:
+        model (`torch.nn.Module`): The model in which we want to load a checkpoint.
+        checkpoint_folder (`str` or `os.PathLike`): The folder in which the checkpoint is.
+        device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
+            A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
+            name, once a given module name is inside, every submodule of it will be sent to the same device.
+        offload_folder (`str` or `os.PathLike`, *optional*):
+            If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
+    """
     if offload_folder is None and device_map is not None and "disk" in device_map.values():
         raise ValueError(
             "At least one of the model submodule will be offloaded to disk, please pass along an `offload_folder`."

@@ -19,6 +19,7 @@ import torch.nn as nn
 
 from accelerate.test_utils import require_cuda, require_multi_gpu
 from accelerate.utils.modeling import (
+    check_device_map,
     compute_module_sizes,
     find_tied_parameters,
     named_module_tensors,
@@ -181,3 +182,11 @@ class ModelingUtilsTester(unittest.TestCase):
 
         module_sizes = compute_module_sizes(model)
         self.assertDictEqual(module_sizes, expected_sizes)
+
+    def test_check_device_map(self):
+        model = ModelForTest()
+        check_device_map(model, {"": 0})
+        with self.assertRaises(ValueError):
+            check_device_map(model, {"linear1": 0, "linear2": 1})
+
+        check_device_map(model, {"linear1": 0, "linear2": 1, "batchnorm": 1})

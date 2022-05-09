@@ -31,6 +31,7 @@ from .imports import (
     is_wandb_available,
 )
 from .modeling import (
+    check_device_map,
     compute_module_sizes,
     convert_file_size_to_int,
     dtype_byte_size,

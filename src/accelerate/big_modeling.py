@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 
 from .hooks import AlignDevicesHook, add_hook_to_module, attach_align_device_hook, attach_align_device_hook_on_blocks
-from .utils import OffloadedWeightsLoader, extract_submodules_state_dict, offload_state_dict
+from .utils import OffloadedWeightsLoader, check_device_map, extract_submodules_state_dict, offload_state_dict
 
 
 @contextmanager
@@ -165,6 +165,9 @@ def dispatch_model(
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to offload the buffers with the model parameters.
     """
+    # Error early if the device map is incomplete.
+    check_device_map(model, device_map)
+
     if main_device is None:
         main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]
 
