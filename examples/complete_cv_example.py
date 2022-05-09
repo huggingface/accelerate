@@ -232,7 +232,7 @@ def training_function(config, args):
                     accelerator.save_state(output_dir)
         model.eval()
         accurate = 0
-        num_elems = 0
+        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
@@ -240,11 +240,19 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(inputs)
             predictions = outputs.argmax(dim=-1)
-            accurate_preds = accelerator.gather(predictions) == accelerator.gather(batch["label"])
-            num_elems += accurate_preds.shape[0]
+            predictions, references = accelerator.gather((predictions, batch["label"]))
+            if accelerator.num_processes > 1:
+                if step == len(eval_dataloader):
+                    predictions = predictions[: len(eval_dataloader) - samples_seen]
+                    references = references[: len(eval_dataloader) - samples_seen]
+                else:
+                    samples_seen += references.shape[0]
+            else:
+                samples_seen += references.shape[0]
+            accurate_preds = predictions == references
             accurate += accurate_preds.long().sum()
 
-        eval_metric = accurate.item() / num_elems
+        eval_metric = accurate.item() / samples_seen
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}: {100 * eval_metric:.2f}")
         if args.with_tracking:
