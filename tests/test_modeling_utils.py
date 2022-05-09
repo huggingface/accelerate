@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
+import tempfile
 import unittest
 
 import torch
@@ -19,9 +22,11 @@ import torch.nn as nn
 
 from accelerate.test_utils import require_cuda, require_multi_gpu
 from accelerate.utils.modeling import (
+    WEIGHTS_INDEX_NAME,
     check_device_map,
     compute_module_sizes,
     find_tied_parameters,
+    load_sharded_checkpoint_in_model,
     named_module_tensors,
     set_module_tensor_to_device,
 )
@@ -190,3 +195,55 @@ class ModelingUtilsTester(unittest.TestCase):
             check_device_map(model, {"linear1": 0, "linear2": 1})
 
         check_device_map(model, {"linear1": 0, "linear2": 1, "batchnorm": 1})
+
+    def shard_test_model(self, model, tmp_dir):
+        module_index = {
+            "linear1": "checkpoint_part1.bin",
+            "batchnorm": "checkpoint_part2.bin",
+            "linear2": "checkpoint_part3.bin",
+        }
+        index = {}
+        for name, _ in model.state_dict().items():
+            module = name.split(".")[0]
+            index[name] = module_index[module]
+
+        with open(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME), "w") as f:
+            json.dump({"weight_map": index}, f)
+
+        for module, fname in module_index.items():
+            state_dict = {k: v for k, v in model.state_dict().items() if k.startswith(module)}
+            full_fname = os.path.join(tmp_dir, fname)
+            torch.save(state_dict, full_fname)
+
+    def test_load_sharded_checkpoint_in_model(self):
+        model = ModelForTest()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.shard_test_model(model, tmp_dir)
+            load_sharded_checkpoint_in_model(model, tmp_dir)
+
+    @require_cuda
+    def test_load_sharded_checkpoint_in_model_one_gpu(self):
+        model = ModelForTest()
+        device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.shard_test_model(model, tmp_dir)
+            load_sharded_checkpoint_in_model(model, tmp_dir, device_map=device_map)
+
+        self.assertEqual(model.linear1.weight.device, torch.device(0))
+        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
+        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+
+    @require_multi_gpu
+    def test_load_sharded_checkpoint_in_model_two_gpu(self):
+        model = ModelForTest()
+        device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.shard_test_model(model, tmp_dir)
+            load_sharded_checkpoint_in_model(model, tmp_dir, device_map=device_map)
+
+        self.assertEqual(model.linear1.weight.device, torch.device(0))
+        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
+        self.assertEqual(model.linear2.weight.device, torch.device(1))
