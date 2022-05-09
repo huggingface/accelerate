@@ -253,7 +253,7 @@ def get_max_layer_size(
     return max_size, layer_names
 
 
-def get_max_memory(max_memory=None, buffer="1500MB"):
+def get_max_memory(max_memory=None):
     """
     Get the maximum memory available if nothing is passed, converts string to int otherwise.
     """
@@ -266,7 +266,7 @@ def get_max_memory(max_memory=None, buffer="1500MB"):
             # Make sure CUDA is initialized on each GPU to have the right memory info.
             for i in range(torch.cuda.device_count()):
                 _ = torch.tensor([0], device=i)
-            max_memory = {i: mem - convert_file_size_to_int(buffer) for i, mem in enumerate(torch.cuda.mem_get_info())}
+            max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
         max_memory["cpu"] = psutil.virtual_memory().available
         return max_memory
 
