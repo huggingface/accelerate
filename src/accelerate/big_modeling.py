@@ -215,7 +215,7 @@ def dispatch_model(
     return model
 
 
-def load_checkpoint_and_dispatch_model(
+def load_checkpoint_and_dispatch(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
     device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,

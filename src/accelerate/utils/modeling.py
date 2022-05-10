@@ -431,6 +431,13 @@ def load_checkpoint_in_model(
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
     loaded.
 
+    <Tip warning={true}>
+
+    Once loaded across devices, you still need to call [`dispatch_model`] on your model to make it able to run. To
+    group the checkpoint loading and dispatch in one single call, use [`load_checkpoint_and_dispatch`].
+
+    </Tip>
+
     Args:
         model (`torch.nn.Module`): The model in which we want to load a checkpoint.
         checkpoint (`str` or `os.PathLike`):

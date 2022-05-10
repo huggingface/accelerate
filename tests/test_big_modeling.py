@@ -12,13 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 from tempfile import TemporaryDirectory
 
 import torch
 import torch.nn as nn
 
-from accelerate.big_modeling import cpu_offload, disk_offload, dispatch_model, init_empty_weights
+from accelerate.big_modeling import (
+    cpu_offload,
+    disk_offload,
+    dispatch_model,
+    init_empty_weights,
+    load_checkpoint_and_dispatch,
+)
 from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import require_cuda, require_multi_gpu, slow
 from accelerate.utils import offload_state_dict
@@ -36,7 +43,7 @@ class ModelForTest(nn.Module):
         return self.linear2(self.batchnorm(self.linear1(x)))
 
 
-class BiggerModelForTest(nn.Sequential):
+class BiggerModelForTest(nn.Module):
     def __init__(self):
         super().__init__()
         self.linear1 = nn.Linear(3, 4)
@@ -221,3 +228,49 @@ class BigModelingTester(unittest.TestCase):
                 tokenizer.decode(outputs[0].tolist()),
                 "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
             )
+
+    @require_cuda
+    def test_load_checkpoint_and_dispatch(self):
+        model = ModelForTest()
+        device_map = {"linear1": "cpu", "batchnorm": "cpu", "linear2": 0}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            new_model = ModelForTest()
+            new_model = load_checkpoint_and_dispatch(new_model, checkpoint, device_map=device_map)
+
+        # CPU-offloaded weights are on the meta device while waiting for the forward pass.
+        self.assertEqual(new_model.linear1.weight.device, torch.device("meta"))
+        self.assertEqual(new_model.linear2.weight.device, torch.device(0))
+
+        output = new_model(x)
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_multi_gpu
+    def test_load_checkpoint_and_dispatch_multi_gpu(self):
+        model = BiggerModelForTest()
+        device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            new_model = BiggerModelForTest()
+            new_model = load_checkpoint_and_dispatch(new_model, checkpoint, device_map=device_map)
+
+        # CPU-offloaded weights are on the meta device while waiting for the forward pass.
+        self.assertEqual(new_model.linear1.weight.device, torch.device("meta"))
+        self.assertEqual(new_model.linear2.weight.device, torch.device("meta"))
+        self.assertEqual(new_model.linear3.weight.device, torch.device(0))
+        self.assertEqual(new_model.linear4.weight.device, torch.device(1))
+
+        output = new_model(x)
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
