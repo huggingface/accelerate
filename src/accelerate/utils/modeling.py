@@ -146,7 +146,7 @@ def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurs
             yield named_buffer
 
 
-def find_tied_parameters(model: nn.Module, named_parameters=None, prefix="", result=None):
+def find_tied_parameters(model: nn.Module, **kwargs):
     """
     Find the tied parameters in a given model.
 
@@ -155,7 +155,8 @@ def find_tied_parameters(model: nn.Module, named_parameters=None, prefix="", res
 
     <Tip warning={true}>
 
-    The signature has more arguments, but they are for the recursive part of this function and you should ignore them.
+    The signature accepts keyword arguments, but they are for the recursive part of this function and you should ignore
+    them.
 
     </Tip>
 
@@ -176,8 +177,10 @@ def find_tied_parameters(model: nn.Module, named_parameters=None, prefix="", res
         Dict[str, str]: A dictionary mapping tied parameter names to the name of the parameter they are tied to.
     """
     # Initialize result and named_parameters before recursing.
-    if result is None:
-        result = {}
+    named_parameters = kwargs.get("named_parameters", None)
+    prefix = kwargs.get("prefix", "")
+    result = kwargs.get("result", {})
+
     if named_parameters is None:
         named_parameters = {n: p for n, p in model.named_parameters()}
     else:
@@ -195,7 +198,7 @@ def find_tied_parameters(model: nn.Module, named_parameters=None, prefix="", res
     # Once we have treated direct parameters, we move to the child modules.
     for name, child in model.named_children():
         child_name = name if prefix == "" else f"{prefix}.{name}"
-        find_tied_parameters(child, named_parameters, prefix=child_name, result=result)
+        find_tied_parameters(child, named_parameters=named_parameters, prefix=child_name, result=result)
 
     return result
 
@@ -253,7 +256,7 @@ def get_max_layer_size(
     return max_size, layer_names
 
 
-def get_max_memory(max_memory=None):
+def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None):
     """
     Get the maximum memory available if nothing is passed, converts string to int otherwise.
     """
@@ -276,7 +279,11 @@ def get_max_memory(max_memory=None):
     return max_memory
 
 
-def infer_auto_device_map(model, max_memory=None, no_split_module_classes=None):
+def infer_auto_device_map(
+    model: nn.Module,
+    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[List[str]] = None,
+):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
     such that:
