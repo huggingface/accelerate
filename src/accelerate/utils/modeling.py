@@ -414,18 +414,23 @@ def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, tor
         )
 
 
-def load_sharded_checkpoint_in_model(
+def load_checkpoint_in_model(
     model: nn.Module,
-    checkpoint_folder: Union[str, os.PathLike],
+    checkpoint: Union[str, os.PathLike],
     device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
 ):
     """
-    Loads a sharded checkpoint inside a model, potentially sending weights to a given device as they are loaded.
+    Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
+    loaded.
 
     Args:
         model (`torch.nn.Module`): The model in which we want to load a checkpoint.
-        checkpoint_folder (`str` or `os.PathLike`): The folder in which the checkpoint is.
+        checkpoint (`str` or `os.PathLike`):
+            The folder checkpoint to load. It can be:
+            - a path to a file containing a whole model state dict
+            - a path to a `.json` file containing the index to a sharded checkpoint
+            - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint.
         device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
             A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
             name, once a given module name is inside, every submodule of it will be sent to the same device.
@@ -437,12 +442,36 @@ def load_sharded_checkpoint_in_model(
             "At least one of the model submodule will be offloaded to disk, please pass along an `offload_folder`."
         )
 
-    index_filename = os.path.join(checkpoint_folder, WEIGHTS_INDEX_NAME)
-    with open(index_filename, "r") as f:
-        index = json.loads(f.read())
+    checkpoint_files = None
+    index_filename = None
+    if os.path.isfile(checkpoint):
+        if str(checkpoint).endswith(".json"):
+            index_filename = checkpoint
+        else:
+            checkpoint_files = [checkpoint]
+    elif os.path.isdir(checkpoint):
+        potential_index = [f for f in os.listdir(checkpoint) if f.endswith(".index.json")]
+        if len(potential_index) == 0:
+            raise ValueError(f"{checkpoint} is not a folder containing a `.index.json` file.")
+        elif len(potential_index) == 1:
+            index_filename = os.path.join(checkpoint, potential_index[0])
+        else:
+            raise ValueError(f"{checkpoint} containing mote than one `.index.json` file, delete the irrelevant ones.")
+    else:
+        raise ValueError(
+            "`checkpoint` should be the path to a file containing a whole state dict, or the index of a sharded "
+            f"checkpoint, or a folder containing a sharded checkpoint, but got {checkpoint}."
+        )
 
-    checkpoint_files = sorted(list(set(index["weight_map"].values())))
-    checkpoint_files = [os.path.join(checkpoint_folder, f) for f in checkpoint_files]
+    if index_filename is not None:
+        checkpoint_folder = os.path.split(index_filename)[0]
+        with open(index_filename, "r") as f:
+            index = json.loads(f.read())
+
+        if "weight_map" in index:
+            index = index["weight_map"]
+        checkpoint_files = sorted(list(set(index.values())))
+        checkpoint_files = [os.path.join(checkpoint_folder, f) for f in checkpoint_files]
 
     # Logic for missing/unexepected keys goes here.
 

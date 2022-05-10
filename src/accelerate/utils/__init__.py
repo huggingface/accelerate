@@ -39,7 +39,7 @@ from .modeling import (
     get_max_layer_size,
     get_max_memory,
     infer_auto_device_map,
-    load_sharded_checkpoint_in_model,
+    load_checkpoint_in_model,
     named_module_tensors,
     set_module_tensor_to_device,
 )

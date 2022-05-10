@@ -22,11 +22,10 @@ import torch.nn as nn
 
 from accelerate.test_utils import require_cuda, require_multi_gpu
 from accelerate.utils.modeling import (
-    WEIGHTS_INDEX_NAME,
     check_device_map,
     compute_module_sizes,
     find_tied_parameters,
-    load_sharded_checkpoint_in_model,
+    load_checkpoint_in_model,
     named_module_tensors,
     set_module_tensor_to_device,
 )
@@ -207,42 +206,100 @@ class ModelingUtilsTester(unittest.TestCase):
             module = name.split(".")[0]
             index[name] = module_index[module]
 
-        with open(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME), "w") as f:
-            json.dump({"weight_map": index}, f)
+        with open(os.path.join(tmp_dir, "weight_map.index.json"), "w") as f:
+            json.dump(index, f)
 
         for module, fname in module_index.items():
             state_dict = {k: v for k, v in model.state_dict().items() if k.startswith(module)}
             full_fname = os.path.join(tmp_dir, fname)
             torch.save(state_dict, full_fname)
 
-    def test_load_sharded_checkpoint_in_model(self):
+    def test_load_checkpoint_in_model(self):
+        # Check with whole checkpoint
         model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), fname)
+            load_checkpoint_in_model(model, fname)
 
+        # Check with sharded index
+        model = ModelForTest()
         with tempfile.TemporaryDirectory() as tmp_dir:
             self.shard_test_model(model, tmp_dir)
-            load_sharded_checkpoint_in_model(model, tmp_dir)
+            index_file = os.path.join(tmp_dir, "weight_map.index.json")
+            load_checkpoint_in_model(model, index_file)
+
+        # Check with sharded checkpoint
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.shard_test_model(model, tmp_dir)
+            load_checkpoint_in_model(model, tmp_dir)
 
     @require_cuda
-    def test_load_sharded_checkpoint_in_model_one_gpu(self):
-        model = ModelForTest()
+    def test_load_checkpoint_in_model_one_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
 
+        # Check with whole checkpoint
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), fname)
+            load_checkpoint_in_model(model, fname, device_map=device_map)
+        self.assertEqual(model.linear1.weight.device, torch.device(0))
+        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
+        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+
+        # Check with sharded index
+        model = ModelForTest()
         with tempfile.TemporaryDirectory() as tmp_dir:
             self.shard_test_model(model, tmp_dir)
-            load_sharded_checkpoint_in_model(model, tmp_dir, device_map=device_map)
+            index_file = os.path.join(tmp_dir, "weight_map.index.json")
+            load_checkpoint_in_model(model, index_file, device_map=device_map)
+
+        self.assertEqual(model.linear1.weight.device, torch.device(0))
+        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
+        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+
+        # Check with sharded checkpoint folder
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.shard_test_model(model, tmp_dir)
+            load_checkpoint_in_model(model, tmp_dir, device_map=device_map)
 
         self.assertEqual(model.linear1.weight.device, torch.device(0))
         self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
         self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
 
     @require_multi_gpu
-    def test_load_sharded_checkpoint_in_model_two_gpu(self):
-        model = ModelForTest()
+    def test_load_checkpoint_in_model_two_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
 
+        # Check with whole checkpoint
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), fname)
+            load_checkpoint_in_model(model, fname, device_map=device_map)
+        self.assertEqual(model.linear1.weight.device, torch.device(0))
+        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
+        self.assertEqual(model.linear2.weight.device, torch.device(1))
+
+        # Check with sharded index
+        model = ModelForTest()
         with tempfile.TemporaryDirectory() as tmp_dir:
             self.shard_test_model(model, tmp_dir)
-            load_sharded_checkpoint_in_model(model, tmp_dir, device_map=device_map)
+            index_file = os.path.join(tmp_dir, "weight_map.index.json")
+            load_checkpoint_in_model(model, index_file, device_map=device_map)
+
+        self.assertEqual(model.linear1.weight.device, torch.device(0))
+        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
+        self.assertEqual(model.linear2.weight.device, torch.device(1))
+
+        # Check with sharded checkpoint
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.shard_test_model(model, tmp_dir)
+            load_checkpoint_in_model(model, tmp_dir, device_map=device_map)
 
         self.assertEqual(model.linear1.weight.device, torch.device(0))
         self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
