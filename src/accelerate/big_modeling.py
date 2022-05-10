@@ -81,7 +81,7 @@ def cpu_offload(
     state dict and put on the execution device passed as they are needed, then offloaded again.
 
     Args:
-        model (`torch.nn.Module`): 
+        model (`torch.nn.Module`):
             The model to offload.
         execution_device (`torch.device`, *optional*):
             The device on which the forward pass of the model will be executed (should be a GPU). Will default to the
@@ -152,11 +152,11 @@ def dispatch_model(
     the CPU or even the disk.
 
     Args:
-        model (`torch.nn.Module`): 
+        model (`torch.nn.Module`):
             The model to dispatch.
         device_map (`Dict[str, Union[str, int, torch.device]]`):
-            A dictionary mapping module names in the models `state_dict` to the device they should go to. Note that `"disk"` is accepted even if
-            it's not a proper value for `torch.device`.
+            A dictionary mapping module names in the models `state_dict` to the device they should go to. Note that
+            `"disk"` is accepted even if it's not a proper value for `torch.device`.
         main_device (`str`, `int` or `torch.device`, *optional*):
             The main execution device. Will default to the first device in the `device_map` different from `"cpu"` or
             `"disk"`.
