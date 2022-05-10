@@ -279,6 +279,27 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     return max_memory
 
 
+def clean_device_map(device_map: Dict[str, Union[int, str, torch.device]], module_name: str = ""):
+    """
+    Cleans a device_map by grouping all submodules that go on the same device together.
+    """
+    # Get the value of the current module and if there is only one split across several keys, regroup it.
+    values = [v for k, v in device_map.items() if k.startswith(module_name)]
+    if len(set(values)) == 1 and len(values) > 1:
+        for k in [k for k in device_map if k.startswith(module_name)]:
+            del device_map[k]
+        device_map[module_name] = values[0]
+
+    # Recurse over the children
+    children_modules = [k for k in device_map.keys() if k.startswith(module_name) and len(k) > len(module_name)]
+    idx = len(module_name.split(".")) + 1 if len(module_name) > 0 else 1
+    children_modules = set(".".join(k.split(".")[:idx]) for k in children_modules)
+    for child in children_modules:
+        clean_device_map(device_map, module_name=child)
+
+    return device_map
+
+
 def infer_auto_device_map(
     model: nn.Module,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
@@ -309,6 +330,7 @@ def infer_auto_device_map(
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
     """
+    # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
     if no_split_module_classes is None:
         no_split_module_classes = []
@@ -316,23 +338,25 @@ def infer_auto_device_map(
         no_split_module_classes = [no_split_module_classes]
 
     devices = list(max_memory.keys()) + ["disk"]
-    # "cpu" should be the last key in devices.
+    # Devices that need to keep space for a potential offloaded layer.
     main_devices = [devices[0], "cpu"]
 
     module_sizes = compute_module_sizes(model)
     tied_parameters = find_tied_parameters(model)
 
-    module_map = {}
+    device_map = {}
     current_device = 0
     current_memory_used = 0
+
     # Direct submodules and parameters
     modules_to_treat = list(model.named_parameters(recurse=False)) + list(model.named_children())
-
+    # Initialize maximum largest layer, to know which space to keep in memory
     max_layer_size, max_layer_names = get_max_layer_size(modules_to_treat, module_sizes, no_split_module_classes)
 
+    # Ready ? This is going to be a bit messy.
     while len(modules_to_treat) > 0:
         name, module = modules_to_treat.pop(0)
-        # Max size in the remaining layers may have changed
+        # Max size in the remaining layers may have changed since we took one, so we maybe update it.
         max_layer_names = [n for n in max_layer_names if not n.startswith(name)]
         if len(max_layer_names) == 0:
             max_layer_size, max_layer_names = get_max_layer_size(
@@ -340,32 +364,40 @@ def infer_auto_device_map(
                 module_sizes,
                 no_split_module_classes,
             )
-        # Assess size
+        # Assess size needed
         module_size = module_sizes[name]
         tied_params = [v for k, v in tied_parameters.items() if name in k]
+        # We ignore parameters that are tied when they're tied to > 1 one
         tied_param = tied_params[0] if len(tied_params) == 1 else None
 
         device = devices[current_device]
         current_max_size = max_memory[device] if device != "disk" else None
+        # Reduce max size available by the largest layer.
         if devices[current_device] in main_devices:
             current_max_size = current_max_size - max_layer_size
+        # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
             modules_children = list(module.named_children())
             if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
+                # -> no split, we go to the next device
                 current_device += 1
                 modules_to_treat = [(name, module)] + modules_to_treat
                 current_memory_used = 0
             else:
+                # -> split, we replace the module studied by its children + parameters
                 modules_children = list(module.named_parameters(recurse=False)) + modules_children
                 modules_to_treat = [(f"{name}.{n}", v) for n, v in modules_children] + modules_to_treat
+                # Update the max layer size.
                 max_layer_size, max_layer_names = get_max_layer_size(
                     [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
                     module_sizes,
                     no_split_module_classes,
                 )
 
+        # Case 2, it fits! We're not entirely out of the wood though, because we may have some tied parameters.
         elif tied_param is not None:
+            # Determine the sized occupied by this module + the module containing the tied parameter
             tied_module_size = module_size
             tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if n in tied_param][0]
             tied_module_name, tied_module = modules_to_treat[tied_module_index]
@@ -374,10 +406,12 @@ def infer_auto_device_map(
                 # Split or not split?
                 tied_module_children = list(tied_module.named_children())
                 if len(tied_module_children) == 0 or tied_module.__class__.__name__ in no_split_module_classes:
+                    # If the tied module is not split, we go to the next device
                     current_device += 1
                     modules_to_treat = [(name, module)] + modules_to_treat
                     current_memory_used = 0
                 else:
+                    # Otherwise, we replace the tied module by its children.
                     tied_module_children = list(tied_module.named_parameters(recurse=False)) + tied_module_children
                     tied_module_children = [(f"{tied_module_name}.{n}", v) for n, v in tied_module_children]
                     modules_to_treat = (
@@ -386,21 +420,23 @@ def infer_auto_device_map(
                         + tied_module_children
                         + modules_to_treat[tied_module_index + 1 :]
                     )
+                    # Update the max layer size.
                     max_layer_size, max_layer_names = get_max_layer_size(
                         [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
                         module_sizes,
                         no_split_module_classes,
                     )
             else:
+                # We really really fit!
                 current_memory_used += tied_module_size
-                module_map[name] = devices[current_device]
+                device_map[name] = devices[current_device]
                 modules_to_treat.pop(tied_module_index)
-                module_map[tied_module_name] = devices[current_device]
+                device_map[tied_module_name] = devices[current_device]
         else:
             current_memory_used += module_size
-            module_map[name] = devices[current_device]
+            device_map[name] = devices[current_device]
 
-    return module_map
+    return clean_device_map(device_map)
 
 
 def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, torch.device]]):

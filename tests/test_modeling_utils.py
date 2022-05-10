@@ -23,8 +23,10 @@ import torch.nn as nn
 from accelerate.test_utils import require_cuda, require_multi_gpu
 from accelerate.utils.modeling import (
     check_device_map,
+    clean_device_map,
     compute_module_sizes,
     find_tied_parameters,
+    infer_auto_device_map,
     load_checkpoint_in_model,
     named_module_tensors,
     set_module_tensor_to_device,
@@ -304,3 +306,55 @@ class ModelingUtilsTester(unittest.TestCase):
         self.assertEqual(model.linear1.weight.device, torch.device(0))
         self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
         self.assertEqual(model.linear2.weight.device, torch.device(1))
+
+    def test_clean_device_map(self):
+        # Regroup everything if all is on the same device
+        self.assertDictEqual(clean_device_map({"a": 0, "b": 0, "c": 0}), {"": 0})
+        # Regroups children of level 1 on the same device
+        self.assertDictEqual(
+            clean_device_map({"a.x": 0, "a.y": 0, "b.x": 1, "b.y": 1, "c": 1}), {"a": 0, "b": 1, "c": 1}
+        )
+        # Regroups children of level 2 on the same device
+        self.assertDictEqual(
+            clean_device_map({"a.x": 0, "a.y": 0, "b.x.0": 1, "b.x.1": 1, "b.y.0": 2, "b.y.1": 2, "c": 2}),
+            {"a": 0, "b.x": 1, "b.y": 2, "c": 2},
+        )
+
+    def test_infer_auto_device_map(self):
+        model = ModelForTest()
+        # model has size 236: linear1 64, batchnorm 72, linear2 100
+
+        device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 200})
+        # only linear1 fits on device 0 as we keep memory available for the maximum layer in case of offload
+        self.assertDictEqual(device_map, {"linear1": 0, "batchnorm": 1, "linear2": 1})
+
+        device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 172, 2: 200})
+        # On device 1, we don't care about keeping size available for the max layer, so even if there is just the
+        # size available for batchnorm + linear2, they fit here.
+        self.assertDictEqual(device_map, {"linear1": 0, "batchnorm": 1, "linear2": 1})
+
+        model.linear1.weight = model.linear2.weight
+        device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 200})
+        # By tying weights, the whole model fits on device 0
+        self.assertDictEqual(device_map, {"": 0})
+
+        # When splitting a bigger model, the split is done at the layer level
+        model = nn.Sequential(ModelForTest(), ModelForTest(), ModelForTest())
+        device_map = infer_auto_device_map(model, max_memory={0: 500, 1: 500})
+        self.assertDictEqual(device_map, {"0": 0, "1.linear1": 0, "1.batchnorm": 0, "1.linear2": 1, "2": 1})
+
+        # With no_split_module_classes, it's done at that module level
+        model = nn.Sequential(ModelForTest(), ModelForTest(), ModelForTest())
+        device_map = infer_auto_device_map(
+            model, max_memory={0: 500, 1: 500}, no_split_module_classes=["ModelForTest"]
+        )
+        self.assertDictEqual(device_map, {"0": 0, "1": 1, "2": 1})
+
+        # Now if we have weights tied inside submodules, tied weights are on the same device.
+        model = nn.Sequential(ModelForTest(), ModelForTest(), ModelForTest())
+        layer0 = getattr(model, "0")
+        layer2 = getattr(model, "2")
+        layer0.linear2.weight = layer2.linear2.weight
+        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
+        expected = {"0": 0, "2.linear2": 0, "1": 1, "2.linear1": 1, "2.batchnorm": 1}
+        self.assertDictEqual(device_map, expected)
