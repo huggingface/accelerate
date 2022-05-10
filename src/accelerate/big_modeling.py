@@ -14,13 +14,20 @@
 
 import os
 from contextlib import contextmanager
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
 
 from .hooks import AlignDevicesHook, add_hook_to_module, attach_align_device_hook, attach_align_device_hook_on_blocks
-from .utils import OffloadedWeightsLoader, check_device_map, extract_submodules_state_dict, offload_state_dict
+from .utils import (
+    OffloadedWeightsLoader,
+    check_device_map,
+    extract_submodules_state_dict,
+    infer_auto_device_map,
+    load_checkpoint_in_model,
+    offload_state_dict,
+)
 
 
 @contextmanager
@@ -206,3 +213,48 @@ def dispatch_model(
         weights_map=weights_map,
     )
     return model
+
+
+def load_checkpoint_and_dispatch_model(
+    model: nn.Module,
+    checkpoint: Union[str, os.PathLike],
+    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
+    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[List[str]] = None,
+    offload_folder: Optional[Union[str, os.PathLike]] = None,
+    offload_buffers: bool = False,
+):
+    """
+    Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
+    loaded and adds the various hooks that will make this model run properly (even if split across devices).
+
+    Args:
+        model (`torch.nn.Module`): The model in which we want to load a checkpoint.
+        checkpoint (`str` or `os.PathLike`):
+            The folder checkpoint to load. It can be:
+            - a path to a file containing a whole model state dict
+            - a path to a `.json` file containing the index to a sharded checkpoint
+            - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint.
+        device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
+            A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
+            name, once a given module name is inside, every submodule of it will be sent to the same device.
+
+            To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`.
+        max_memory (`Dict`, *optional*):
+            A dictionary device identifier to maximum memory. Will default to the maximum memory available for each GPU
+            and the available CPU RAM if unset.
+        no_split_module_classes (`List[str]`, *optional*):
+            A list of layer class names that should never be split across device (for instance any layer that has a
+            residual connection).
+        offload_folder (`str` or `os.PathLike`, *optional*):
+            If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
+        offload_buffers (`bool`, *optional*, defaults to `False`):
+            In the layers that are offloaded on the CPU or the hard drive, whether or not to offload the buffers as
+            well as the parameters.
+    """
+    if device_map == "auto":
+        device_map = infer_auto_device_map(
+            model, max_memory=max_memory, no_split_module_classes=no_split_module_classes
+        )
+    load_checkpoint_in_model(model, checkpoint, device_map=device_map, offload_folder=offload_folder)
+    return dispatch_model(model, device_map=device_map, offload_dir=offload_folder, offload_buffers=offload_buffers)
