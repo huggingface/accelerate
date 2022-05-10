@@ -177,20 +177,12 @@ def training_function(config, args):
             # First we check if it's a distributed system
             if accelerator.num_processes > 1:
                 # Then see if we're on the last batch of our eval dataloader
-                if step == len(eval_dataloader):
+                if step == len(eval_dataloader) - 1:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
                     references = references[: len(eval_dataloader.dataset) - samples_seen]
                 else:
                     # Otherwise we add the number of samples seen
-                    samples_seen += references.shape[0]
-            predictions, references = accelerator.gather((predictions, batch["labels"]))
-            # If we are in a multiprocess environment, the last batch has duplicates
-            if accelerator.num_processes > 1:
-                if step == len(eval_dataloader):
-                    predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
-                    references = references[: len(eval_dataloader.dataset) - samples_seen]
-                else:
                     samples_seen += references.shape[0]
             metric.add_batch(
                 predictions=predictions,

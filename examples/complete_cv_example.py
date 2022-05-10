@@ -242,7 +242,7 @@ def training_function(config, args):
             predictions = outputs.argmax(dim=-1)
             predictions, references = accelerator.gather((predictions, batch["label"]))
             if accelerator.num_processes > 1:
-                if step == len(eval_dataloader):
+                if step == len(eval_dataloader) - 1:
                     predictions = predictions[: len(eval_dataloader) - samples_seen]
                     references = references[: len(eval_dataloader) - samples_seen]
                 else:
