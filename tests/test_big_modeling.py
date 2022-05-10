@@ -104,7 +104,11 @@ class BigModelingTester(unittest.TestCase):
 
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         cpu_offload(gpt2, execution_device=0)
-        _ = gpt2.generate(inputs["input_ids"])
+        outputs = gpt2.generate(inputs["input_ids"])
+        self.assertEqual(
+            tokenizer.decode(outputs[0].tolist()),
+            "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+        )
 
     def test_disk_offload(self):
         model = ModelForTest()
@@ -135,7 +139,11 @@ class BigModelingTester(unittest.TestCase):
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         with TemporaryDirectory() as tmp_dir:
             disk_offload(gpt2, tmp_dir, execution_device=0)
-            _ = gpt2.generate(inputs["input_ids"])
+            outputs = gpt2.generate(inputs["input_ids"])
+            self.assertEqual(
+                tokenizer.decode(outputs[0].tolist()),
+                "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+            )
 
     @require_cuda
     def test_dispatch_model(self):
@@ -181,15 +189,22 @@ class BigModelingTester(unittest.TestCase):
             device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
 
         gpt2 = dispatch_model(gpt2, device_map)
-        _ = gpt2.generate(inputs["input_ids"])
+        outputs = gpt2.generate(inputs["input_ids"])
+        self.assertEqual(
+            tokenizer.decode(outputs[0].tolist()),
+            "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+        )
 
         # Dispatch with a bit of CPU offload
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         for i in range(4):
             device_map[f"transformer.h.{i}"] = "cpu"
         gpt2 = dispatch_model(gpt2, device_map)
-        _ = gpt2.generate(inputs["input_ids"])
-
+        outputs = gpt2.generate(inputs["input_ids"])
+        self.assertEqual(
+            tokenizer.decode(outputs[0].tolist()),
+            "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+        )
         # Dispatch with a bit of CPU and disk offload
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         for i in range(2):
@@ -201,4 +216,8 @@ class BigModelingTester(unittest.TestCase):
             }
             offload_state_dict(tmp_dir, state_dict)
             gpt2 = dispatch_model(gpt2, device_map, offload_dir=tmp_dir)
-            _ = gpt2.generate(inputs["input_ids"])
+            outputs = gpt2.generate(inputs["input_ids"])
+            self.assertEqual(
+                tokenizer.decode(outputs[0].tolist()),
+                "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+            )
