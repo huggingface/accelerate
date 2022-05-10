@@ -186,7 +186,7 @@ class AlignDevicesHook(ModelHook):
             Whether or not the weights should be offloaded after the forward pass.
         io_same_device (`bool`, *optional*, defaults to `False`):
             Whether or not the output should be placed on the same device as the input was.
-        weights_map (`Dict[str, torch.Tensor]`, *optional*):
+        weights_map (`Mapping[str, torch.Tensor]`, *optional*):
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to include the associated module's buffers when offloading.
@@ -196,12 +196,12 @@ class AlignDevicesHook(ModelHook):
 
     def __init__(
         self,
-        execution_device=None,
-        offload=False,
-        io_same_device=False,
-        weights_map=None,
-        offload_buffers=False,
-        place_submodules=False,
+        execution_device: Optional[Union[int, str, torch.device]] = None,
+        offload: bool = False,
+        io_same_device: bool = False,
+        weights_map: Optional[Mapping] = None,
+        offload_buffers: bool = False,
+        place_submodules: bool = False,
     ):
         self.execution_device = execution_device
         self.offload = offload
@@ -279,7 +279,7 @@ def attach_align_device_hook(
             The device on which inputs and model weights should be placed before the forward pass.
         offload (`bool`, *optional*, defauts to `False`):
             Whether or not the weights should be offloaded after the forward pass.
-        weights_map (`Dict[str, torch.Tensor]`, *optional*):
+        weights_map (`Mapping[str, torch.Tensor]`, *optional*):
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to include the associated module's buffers when offloading.
@@ -347,7 +347,7 @@ def attach_align_device_hook_on_blocks(
         offload (`bool`, *optional*, defauts to `False`):
             Whether or not the weights should be offloaded after the forward pass. It can be one boolean for the whole
             module, or a dictionary mapping module name to boolean.
-        weights_map (`Dict[str, torch.Tensor]`, *optional*):
+        weights_map (`Mapping[str, torch.Tensor]`, *optional*):
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to include the associated module's buffers when offloading.

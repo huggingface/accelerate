@@ -15,7 +15,7 @@
 import json
 import os
 from collections.abc import Mapping
-from typing import Dict, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
@@ -59,11 +59,11 @@ class PrefixedDataset(Mapping):
     Will access keys in a given dataset by adding a prefix.
 
     Args:
-        dataset (`Collection`): Any map with string keys.
+        dataset (`Mapping`): Any map with string keys.
         prefix (`str`): A prefix to add when trying to access any element in the underlying dataset.
     """
 
-    def __init__(self, dataset, prefix):
+    def __init__(self, dataset: Mapping, prefix: str):
         self.dataset = dataset
         self.prefix = prefix
 
@@ -91,7 +91,12 @@ class OffloadedWeightsLoader(Mapping):
             in `save_folder`.
     """
 
-    def __init__(self, state_dict=None, save_folder=None, index=None):
+    def __init__(
+        self,
+        state_dict: Dict[str, torch.Tensor] = None,
+        save_folder: Optional[Union[str, os.PathLike]] = None,
+        index: Mapping = None,
+    ):
         if state_dict is None and save_folder is None:
             raise ValueError("Need either a `state_dict` or a `save_folder` containint offloaded weights.")
 
@@ -104,7 +109,7 @@ class OffloadedWeightsLoader(Mapping):
         self.all_keys = list(self.state_dict.keys())
         self.all_keys.extend([key for key in self.index if key not in self.all_keys])
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str):
         # State dict gets priority
         if key in self.state_dict:
             return self.state_dict[key]
@@ -124,7 +129,7 @@ class OffloadedWeightsLoader(Mapping):
         return len(self.all_keys)
 
 
-def extract_submodules_state_dict(state_dict, submodule_names):
+def extract_submodules_state_dict(state_dict: Dict[str, torch.Tensor], submodule_names: List[str]):
     """
     Extract the sub state-dict corresponding to a list of given submodules.
 

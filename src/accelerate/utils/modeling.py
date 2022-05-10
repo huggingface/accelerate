@@ -61,7 +61,7 @@ def convert_file_size_to_int(size: Union[int, str]):
     raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
-def dtype_byte_size(dtype):
+def dtype_byte_size(dtype: torch.dtype):
     """
     Returns the size (in bytes) occupied by one parameter of type `dtype`.
 
