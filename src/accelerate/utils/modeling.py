@@ -110,7 +110,7 @@ def set_module_tensor_to_device(
     is_buffer = tensor_name in module._buffers
     old_value = getattr(module, tensor_name)
 
-    if old_value.device == torch.device("meta") and device != torch.device("meta") and value is None:
+    if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
     with torch.no_grad():
@@ -203,13 +203,21 @@ def find_tied_parameters(model: nn.Module, **kwargs):
     return result
 
 
-def compute_module_sizes(model: nn.Module):
+def compute_module_sizes(model: nn.Module, dtype: Optional[Union[str, torch.device]] = None):
     """
     Compute the size of each submodule of a given model.
     """
+    if isinstance(dtype, str):
+        # We accept "torch.float16" or just "float16"
+        dtype = dtype.replace("torch.", "")
+        dtype = getattr(torch, dtype)
+    dtype_size = dtype_byte_size(dtype)
     module_sizes = defaultdict(int)
     for name, tensor in named_module_tensors(model, recurse=True):
-        size = tensor.numel() * dtype_byte_size(tensor.dtype)
+        if dtype is None:
+            size = tensor.numel() * dtype_byte_size(tensor.dtype)
+        else:
+            size = tensor.numel() * min(dtype_size, dtype_byte_size(tensor.dtype))
         name_parts = name.split(".")
         for idx in range(len(name_parts) + 1):
             module_sizes[".".join(name_parts[:idx])] += size
@@ -305,6 +313,7 @@ def infer_auto_device_map(
     model: nn.Module,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
     no_split_module_classes: Optional[List[str]] = None,
+    dtype: Optional[Union[str, torch.dtype]] = None,
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
@@ -330,6 +339,8 @@ def infer_auto_device_map(
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
+        dtype (`str` or `torch.dtype`, *optional*):
+            If provided, the weights will be converted to that type when loaded.
     """
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
@@ -346,7 +357,7 @@ def infer_auto_device_map(
     # Devices that need to keep space for a potential offloaded layer.
     main_devices = [gpus[0], "cpu"] if len(gpus) > 0 else ["cpu"]
 
-    module_sizes = compute_module_sizes(model)
+    module_sizes = compute_module_sizes(model, dtype=dtype)
     tied_parameters = find_tied_parameters(model)
 
     device_map = {}
@@ -467,6 +478,7 @@ def load_checkpoint_in_model(
     checkpoint: Union[str, os.PathLike],
     device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
+    dtype: Optional[Union[str, torch.dtype]] = None,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -491,11 +503,20 @@ def load_checkpoint_in_model(
             name, once a given module name is inside, every submodule of it will be sent to the same device.
         offload_folder (`str` or `os.PathLike`, *optional*):
             If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
+        dtype (`str` or `torch.dtype`, *optional*):
+            If provided, the weights will be converted to that type when loaded.
     """
     if offload_folder is None and device_map is not None and "disk" in device_map.values():
         raise ValueError(
             "At least one of the model submodule will be offloaded to disk, please pass along an `offload_folder`."
         )
+    elif offload_folder is not None and device_map is not None and "disk" in device_map.values():
+        os.makedirs(offload_folder, exist_ok=True)
+
+    if isinstance(dtype, str):
+        # We accept "torch.float16" or just "float16"
+        dtype = dtype.replace("torch.", "")
+        dtype = getattr(torch, dtype)
 
     checkpoint_files = None
     index_filename = None
@@ -538,6 +559,8 @@ def load_checkpoint_in_model(
         else:
             for param_name, param in checkpoint.items():
                 module_name = param_name
+                if dtype is not None:
+                    param = param.to(dtype)
                 while len(module_name) > 0 and module_name not in device_map:
                     module_name = ".".join(module_name.split(".")[:-1])
                 if module_name == "" and "" not in device_map:
