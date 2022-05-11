@@ -284,9 +284,10 @@ def clean_device_map(device_map: Dict[str, Union[int, str, torch.device]], modul
     Cleans a device_map by grouping all submodules that go on the same device together.
     """
     # Get the value of the current module and if there is only one split across several keys, regroup it.
-    values = [v for k, v in device_map.items() if k.startswith(module_name)]
+    prefix = "" if module_name == "" else f"{module_name}."
+    values = [v for k, v in device_map.items() if k.startswith(prefix)]
     if len(set(values)) == 1 and len(values) > 1:
-        for k in [k for k in device_map if k.startswith(module_name)]:
+        for k in [k for k in device_map if k.startswith(prefix)]:
             del device_map[k]
         device_map[module_name] = values[0]
 
