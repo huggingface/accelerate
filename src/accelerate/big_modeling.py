@@ -50,6 +50,13 @@ def init_empty_weights(include_buffers: bool = False):
     with init_empty_weights():
         tst = nn.Sequential(*[nn.Linear(10000, 10000) for _ in range(1000)])
     ```
+
+    <Tip warning={true}>
+
+    Any model created under this context manager has no weights. As such you can't do something like
+    `model.to(some_device)` with it. To load weights inside your empty model, see [`load_checkpoint_and_dispatch`].
+
+    </Tip>
     """
     old_register_parameter = nn.Module.register_parameter
     if include_buffers:
