@@ -99,7 +99,7 @@ def cpu_offload(
             The state dict of the model that will be kept on CPU.
     """
     if execution_device is None:
-        execution_device = next(iter(model.parameter())).device
+        execution_device = next(iter(model.parameters())).device
     if state_dict is None:
         state_dict = {n: p.to("cpu") for n, p in model.state_dict().items()}
     attach_align_device_hook(
@@ -133,7 +133,7 @@ def disk_offload(
     if not os.path.isdir(offload_dir) or not os.path.isfile(os.path.join(offload_dir, "index.json")):
         offload_state_dict(offload_dir, model.state_dict())
     if execution_device is None:
-        execution_device = next(iter(model.parameter())).device
+        execution_device = next(iter(model.parameters())).device
     weights_map = OffloadedWeightsLoader(save_folder=offload_dir)
     attach_align_device_hook(
         model,
@@ -218,7 +218,7 @@ def dispatch_model(
 def load_checkpoint_and_dispatch(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
-    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
+    device_map: Optional[Union[str, Dict[str, Union[int, str, torch.device]]]] = None,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
     no_split_module_classes: Optional[List[str]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,

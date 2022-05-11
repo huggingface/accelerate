@@ -210,7 +210,7 @@ class AlignDevicesHook(ModelHook):
         self.offload_buffers = offload_buffers
         self.place_submodules = place_submodules
 
-        # Will contain the input device when `output_on_same_device=True`.
+        # Will contain the input device when `io_same_device=True`.
         self.input_device = None
         self.param_original_devices = {}
         self.buffer_original_devices = {}
@@ -354,7 +354,7 @@ def attach_align_device_hook_on_blocks(
         module_name (`str`, *optional*, defaults to `""`):
             The name of the module.
     """
-    # If one device and one offload, we've go one hook.
+    # If one device and one offload, we've got one hook.
     if not isinstance(execution_device, Mapping) and not isinstance(offload, dict):
         if not offload:
             hook = AlignDevicesHook(execution_device=execution_device, io_same_device=True, place_submodules=True)
