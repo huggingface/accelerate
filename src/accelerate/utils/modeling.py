@@ -211,7 +211,8 @@ def compute_module_sizes(model: nn.Module, dtype: Optional[Union[str, torch.devi
         # We accept "torch.float16" or just "float16"
         dtype = dtype.replace("torch.", "")
         dtype = getattr(torch, dtype)
-    dtype_size = dtype_byte_size(dtype)
+    if dtype is not None:
+        dtype_size = dtype_byte_size(dtype)
     module_sizes = defaultdict(int)
     for name, tensor in named_module_tensors(model, recurse=True):
         if dtype is None:
