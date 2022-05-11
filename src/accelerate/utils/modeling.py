@@ -337,9 +337,13 @@ def infer_auto_device_map(
     elif not isinstance(no_split_module_classes, (list, tuple)):
         no_split_module_classes = [no_split_module_classes]
 
-    devices = list(max_memory.keys()) + ["disk"]
+    devices = list(max_memory.keys())
+    gpus = [device for device in devices if device != "cpu"]
+    if "disk" not in devices:
+        devices.append("disk")
+
     # Devices that need to keep space for a potential offloaded layer.
-    main_devices = [devices[0], "cpu"]
+    main_devices = [gpus[0], "cpu"] if len(gpus) > 0 else ["cpu"]
 
     module_sizes = compute_module_sizes(model)
     tied_parameters = find_tied_parameters(model)
@@ -535,7 +539,7 @@ def load_checkpoint_in_model(
                 module_name = param_name
                 while len(module_name) > 0 and module_name not in device_map:
                     module_name = ".".join(module_name.split(".")[:-1])
-                if module_name == "":
+                if module_name == "" and "" not in device_map:
                     # TODO: group all errors and raise at the end.
                     raise ValueError(f"{param_name} doesn't have any device set.")
                 param_device = device_map[module_name]

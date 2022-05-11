@@ -212,6 +212,7 @@ def dispatch_model(
         offload_buffers=offload_buffers,
         weights_map=weights_map,
     )
+    model.hf_device_map = device_map
     return model
 
 
@@ -257,4 +258,6 @@ def load_checkpoint_and_dispatch(
             model, max_memory=max_memory, no_split_module_classes=no_split_module_classes
         )
     load_checkpoint_in_model(model, checkpoint, device_map=device_map, offload_folder=offload_folder)
+    if device_map is None:
+        return model
     return dispatch_model(model, device_map=device_map, offload_dir=offload_folder, offload_buffers=offload_buffers)
