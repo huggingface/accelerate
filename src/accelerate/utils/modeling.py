@@ -621,4 +621,4 @@ def load_checkpoint_in_model(
             shape = tuple(metadata["shape"])
             weight = np.memmap(tensor_file, dtype=metadata["dtype"], mode="r", shape=shape)
             set_module_tensor_to_device(model, param_name, "cpu", value=torch.tensor(weight))
-    shutil.rmtree(state_dict_folder)
+        shutil.rmtree(state_dict_folder)
