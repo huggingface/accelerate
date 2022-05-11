@@ -8,9 +8,9 @@ from .accelerator import Accelerator
 from .launchers import debug_launcher, notebook_launcher
 from .utils import (
     DeepSpeedPlugin,
-    FullyShardedDataParallelPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
+    FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
     find_executable_batch_size,
