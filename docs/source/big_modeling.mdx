@@ -111,7 +111,9 @@ and load the checkpoint we just downloaded with:
 ```py
 from accelerate import load_checkpoint_and_dispatch
 
-model = load_checkpoint_and_dispatch(model, "sharded-gpt-j-6B", device_map="auto", no_split_module_classes=["GPTJBlock"])
+model = load_checkpoint_and_dispatch(
+    model, "sharded-gpt-j-6B", device_map="auto", no_split_module_classes=["GPTJBlock"]
+)
 ```
 
 By passing `device_map="auto"`, we tell Accelerate to determine automatically where to put each layer of the model depending on the available resources:
