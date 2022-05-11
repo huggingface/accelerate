@@ -16,6 +16,8 @@ import gc
 import json
 import os
 import re
+import shutil
+import tempfile
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -480,6 +482,7 @@ def load_checkpoint_in_model(
     device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
+    offload_state_dict: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -506,6 +509,9 @@ def load_checkpoint_in_model(
             If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
+        offload_state_dict (`bool`, *optional*, defaults to `False`):
+            If `True`, will temporarily offload the CPU state dict on the hard drive to avoig getting out of CPU RAM if
+            the weight of the CPU state dict + the biggest shard does not fit.
     """
     if offload_folder is None and device_map is not None and "disk" in device_map.values():
         raise ValueError(
@@ -553,6 +559,10 @@ def load_checkpoint_in_model(
     # Logic for missing/unexepected keys goes here.
 
     offload_index = {}
+    if offload_state_dict:
+        state_dict_folder = tempfile.mkdtemp()
+        state_dict_index = {}
+
     for checkpoint_file in checkpoint_files:
         checkpoint = torch.load(checkpoint_file)
         if device_map is None:
@@ -577,6 +587,14 @@ def load_checkpoint_in_model(
                     file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
                     file_array[:] = array[:]
                     file_array.flush()
+                elif param_device == "cpu" and offload_state_dict:
+                    set_module_tensor_to_device(model, param_name, "meta")
+                    tensor_file = os.path.join(state_dict_folder, f"{param_name}.dat")
+                    array = param.numpy()
+                    state_dict_index[param_name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
+                    file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
+                    file_array[:] = array[:]
+                    file_array.flush()
                 else:
                     set_module_tensor_to_device(model, param_name, param_device, value=param)
 
@@ -595,3 +613,12 @@ def load_checkpoint_in_model(
 
         with open(offload_index_file, "w", encoding="utf-8") as f:
             json.dump(current_offload_index, f, indent=2)
+
+    # Load back offloaded state dict on CPU
+    if offload_state_dict and len(state_dict_index) > 0:
+        for param_name, metadata in state_dict_index.items():
+            tensor_file = os.path.join(state_dict_folder, f"{param_name}.dat")
+            shape = tuple(metadata["shape"])
+            weight = np.memmap(tensor_file, dtype=metadata["dtype"], mode="r", shape=shape)
+            set_module_tensor_to_device(model, param_name, "cpu", value=torch.tensor(weight))
+    shutil.rmtree(state_dict_folder)

@@ -232,6 +232,7 @@ def load_checkpoint_and_dispatch(
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     offload_buffers: bool = False,
     dtype: Optional[Union[str, torch.dtype]] = None,
+    offload_state_dict: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -262,12 +263,22 @@ def load_checkpoint_and_dispatch(
             well as the parameters.
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
+        offload_state_dict (`bool`, *optional*, defaults to `False`):
+            If `True`, will temporarily offload the CPU state dict on the hard drive to avoig getting out of CPU RAM if
+            the weight of the CPU state dict + the biggest shard does not fit.
     """
     if device_map == "auto":
         device_map = infer_auto_device_map(
             model, max_memory=max_memory, no_split_module_classes=no_split_module_classes, dtype=dtype
         )
-    load_checkpoint_in_model(model, checkpoint, device_map=device_map, offload_folder=offload_folder, dtype=dtype)
+    load_checkpoint_in_model(
+        model,
+        checkpoint,
+        device_map=device_map,
+        offload_folder=offload_folder,
+        dtype=dtype,
+        offload_state_dict=offload_state_dict,
+    )
     if device_map is None:
         return model
     return dispatch_model(model, device_map=device_map, offload_dir=offload_folder, offload_buffers=offload_buffers)
