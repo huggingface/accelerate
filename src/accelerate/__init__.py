@@ -10,6 +10,7 @@ from .utils import (
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
+    FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
     find_executable_batch_size,

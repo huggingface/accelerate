@@ -163,15 +163,18 @@ class Accelerator:
             assert isinstance(
                 deepspeed_plugin, DeepSpeedPlugin
             ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
+            os.environ["USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
+
+        if fsdp_plugin is None:  # init from env variables
+            fsdp_plugin = FullyShardedDataParallelPlugin() if os.environ.get("USE_FSDP", "false") == "true" else None
+        else:
+            if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
+                raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
+            os.environ["USE_FSDP"] = "true"  # use FSDP if plugin is provided
 
         if os.environ.get("USE_FSDP", "false") == "true":
             if version.parse(torch.__version__) < version.parse("1.12.0.dev20220418+cu113"):
                 raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
-            if fsdp_plugin is None:  # init from env variables
-                fsdp_plugin = FullyShardedDataParallelPlugin()
-            else:
-                if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
-                    raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
 
         # Kwargs handlers
         self.ddp_handler = None
