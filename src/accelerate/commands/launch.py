@@ -33,6 +33,8 @@ from accelerate.utils import (
     PrepareForLaunch,
     is_sagemaker_available,
 )
+from accelerate.utils.versions import torch_version
+from packaging import version
 
 
 def launch_command_parser(subparsers=None):
@@ -132,6 +134,12 @@ def launch_command_parser(subparsers=None):
         help="Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.",
     )
     parser.add_argument(
+        "--num_cpu_threads_per_process",
+        type=int,
+        default=1,
+        help="The number of CPU threads per process. Can be tuned for optimal performance.",
+    )
+    parser.add_argument(
         "--aws_access_key_id",
         type=str,
         default=None,
@@ -211,7 +219,12 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
-    cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
+    if torch_version >= version.parse("1.10.0"):
+        cmd = ["torchrun"]
+    elif torch_version >= version.parse("1.9.0"):
+        cmd = [sys.executable, "-m", "torch.distributed.run"]
+    else:
+        cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
     if args.num_machines > 1:
         cmd.extend(
             [
@@ -259,6 +272,7 @@ def multi_gpu_launcher(args):
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.min_num_params)
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.sharding_strategy)
+    current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
     if process.returncode != 0:
