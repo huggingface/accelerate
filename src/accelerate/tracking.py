@@ -136,8 +136,9 @@ class TensorBoardTracker(GeneralTracker):
         Logs `values` to the current run.
 
         Args:
-            values (Dictionary `str` to `str`, `float`, or `int`):
-                Values to be logged as key-value pairs. The values need to have type `str`, `float`, or `int`.
+            values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int`
+                or `dict` of `str` to `float`/`int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
@@ -146,6 +147,8 @@ class TensorBoardTracker(GeneralTracker):
                 self.writer.add_scalar(k, v, global_step=step)
             elif isinstance(v, str):
                 self.writer.add_text(k, v, global_step=step)
+            elif isinstance(v, dict):
+                self.writer.add_scalars(k, v, global_step=step)
         self.writer.flush()
         logger.info("Successfully logged to TensorBoard")
 
@@ -170,7 +173,7 @@ class WandBTracker(GeneralTracker):
 
     def __init__(self, run_name: str):
         self.run_name = run_name
-        self.run = wandb.init(self.run_name)
+        self.run = wandb.init(project=self.run_name)
         logger.info(f"Initialized WandB project {self.run_name}")
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -193,8 +196,9 @@ class WandBTracker(GeneralTracker):
         Logs `values` to the current run.
 
         Args:
-            values (Dictionary `str` to `str`, `float`, or `int`):
-                Values to be logged as key-value pairs. The values need to have type `str`, `float`, or `int`.
+            values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int`
+                or `dict` of `str` to `float`/`int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
@@ -247,14 +251,21 @@ class CometMLTracker(GeneralTracker):
         Logs `values` to the current run.
 
         Args:
-            values (Dictionary `str` to `str`, `float`, or `int`):
-                Values to be logged as key-value pairs. The values need to have type `str`, `float`, or `int`.
+            values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int`
+                or `dict` of `str` to `float`/`int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
         if step is not None:
             self.writer.set_step(step)
-        self.writer.log_others(values)
+        for k, v in values.items():
+            if isinstance(v, (int, float)):
+                self.writer.log_metric(k, v, step=step)
+            elif isinstance(v, str):
+                self.writer.log_others(k, v, step=step)
+            elif isinstance(v, dict):
+                self.writer.log_metrics(v, step=step)
         logger.info("Successfully logged to CometML")
 
     def finish(self):
