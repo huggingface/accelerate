@@ -216,9 +216,9 @@ def multi_gpu_launcher(args):
     if _torch_version >= version.parse("1.10.0"):
         launch_cmd = ["torchrun"]
     elif _torch_version >= version.parse("1.9.0"):
-        launch_cmd = ["torch.distributed.run"]
+        launch_cmd = [sys.executable, "-m", "torch.distributed.run"]
     else:
-        launch_cmd = ["torch.distributed.launch", "--use_env"]
+        launch_cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
     cmd = [sys.executable, "-m"] + launch_cmd
     if args.num_machines > 1:
         cmd.extend(
