@@ -137,8 +137,8 @@ class TensorBoardTracker(GeneralTracker):
 
         Args:
             values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
-                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int`
-                or `dict` of `str` to `float`/`int`.
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int` or `dict` of
+                `str` to `float`/`int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
@@ -197,8 +197,8 @@ class WandBTracker(GeneralTracker):
 
         Args:
             values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
-                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int`
-                or `dict` of `str` to `float`/`int`.
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int` or `dict` of
+                `str` to `float`/`int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
@@ -252,8 +252,8 @@ class CometMLTracker(GeneralTracker):
 
         Args:
             values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
-                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int`
-                or `dict` of `str` to `float`/`int`.
+                Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int` or `dict` of
+                `str` to `float`/`int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
