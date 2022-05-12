@@ -149,9 +149,10 @@ class ExampleDifferenceTests(unittest.TestCase):
             " " * 16 + "{\n\n",
             " " * 18 + '"accuracy": eval_metric["accuracy"],\n\n',
             " " * 18 + '"f1": eval_metric["f1"],\n\n',
-            " " * 18 + '"train_loss": total_loss,\n\n',
+            " " * 18 + '"train_loss": total_loss.item(),\n\n',
             " " * 18 + '"epoch": epoch,\n\n',
             " " * 16 + "}\n",
+            " " * 16 + "step=epoch,\n",
             " " * 8,
         ]
         self.one_complete_example("complete_cv_example.py", True, cv_path, special_strings)

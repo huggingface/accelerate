@@ -203,6 +203,9 @@ class CometMLTest(unittest.TestCase):
             if "log_other" in j.keys():
                 if j["log_other"]["key"] == key:
                     return j["log_other"]["val"]
+            if "metric" in j.keys():
+                if j["metric"]["metricName"] == key:
+                    return j["metric"]["metricValue"]
 
     def test_init_trackers(self):
         with tempfile.TemporaryDirectory() as d:

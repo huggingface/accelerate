@@ -246,7 +246,7 @@ def training_function(config, args):
                 {
                     "accuracy": eval_metric["accuracy"],
                     "f1": eval_metric["f1"],
-                    "train_loss": total_loss.item() if type(total_loss) == torch.Tensor else total_loss,
+                    "train_loss": total_loss.item(),
                     "epoch": epoch,
                 },
                 step=epoch,
