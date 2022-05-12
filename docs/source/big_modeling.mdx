@@ -29,6 +29,12 @@ In plain English, those steps are:
 
 While this works very well for regularly sized models, this workflow has some clear limitation when we deal with a huge model: in step 1, we load a full version of the model in RAM, and spend some time randomly initializing the weights (which will be discarded in step 3). In step 2, we load another full version of the model in RAM, with the pretrained weights. If you're loading a model with 6 billions parameters, this needs you will need 24GB of RAM for each copy of the model, so 48GB in total (half of it to load the model in FP16).
 
+<Tip warning={true}>
+
+This API is quite new and still in its experimental stage. While we strive to provide a stable API, it's possible some small parts of the public API will change in the future.
+
+</Tip>
+
 ## Instantiating an empty model
 
 The first tool Accelerate introduces to help with big models is a context manager [`init_empty_weights`] that helps you initialize a model without using any RAM, so that step 1 can be done on models of any size. Here is how it works:
@@ -190,6 +196,24 @@ Behind the scenes, Accelerate added hooks to the model, so that:
 - for the weights offloaded on the hard drive, they are loaded in RAM then put on a GPU just before the forward pass, and cleaned up just after
 
 This way, you model can run for inference even if it doesn't fit on one of the GPUs or the CPU RAM!
+
+<Tip warning={true}>
+
+This only supports inference of your model, not training. Most of the computation happens behind `torch.no_grad()` context managers to avoid spending some GPU memory with intermediate activations.
+
+</Tip>
+
+## Limits and further development
+
+We are aware of the current limitations in the API:
+
+- While this could theoretically work just one CPU with potential disk offload, you need at least one GPU to run this API. This will be fixed in further development.
+- [`infer_auto_device_map`] (or `device_map="auto"` in [`load_checkpoint_and_dispatch`]) tries to maximize GPU and CPU RAM it sees available when you execute it. While PyTorch is very good at managing GPU RAM efficiently (and giving it back when not needed), it's not entirely true with Python and CPU RAM. Therefore, an automatically computed device map might be too intense on the CPU. Move a few modules to the disk device if you get crashes due to lack of RAM.
+- [`infer_auto_device_map`] (or `device_map="auto"` in [`load_checkpoint_and_dispatch`]) attributes devices sequentially (to avoid moving things back and forth) so if your first layer is bigger than the size of the GPU you have, it will end up with everything on the CPU/Disk.
+- [`load_checkpoint_and_dispatch`] and [`load_checkpoint_in_model`] do not perform any check on the correctness of your state dict compared to your model at the moment (this will be fixed in a future version), so you may get some weird errors if trying to load a checkpoint with mismatched or missing keys.
+- The model parallelism used when your model is split on several GPUs is naive and not optimized, meaning that only one GPU works at a given time and the other sits idle.
+- When weights are offloaded on the CPU/hard drive, there is no pre-fetching (yet, we will work on this for future versions) which means the weights are put on the GPU when they are needed and not before.
+- Hard-drive offloading might be very slow if the hardware you run on does not have fast communication between disk and CPU (like NVMes).
 
 ## API doc
 

@@ -207,8 +207,9 @@ def dispatch_model(
         name: main_device if device in ["cpu", "disk"] else device for name, device in device_map.items()
     }
     offload = {name: device in ["cpu", "disk"] for name, device in device_map.items()}
-    if state_dict is not None or offload_dir is not None:
-        weights_map = OffloadedWeightsLoader(state_dict=state_dict, save_folder=offload_dir)
+    save_folder = offload_dir if len(disk_modules) > 0 else None
+    if state_dict is not None or save_folder is not None:
+        weights_map = OffloadedWeightsLoader(state_dict=state_dict, save_folder=save_folder)
     else:
         weights_map = None
 
