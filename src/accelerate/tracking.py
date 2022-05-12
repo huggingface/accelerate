@@ -263,7 +263,7 @@ class CometMLTracker(GeneralTracker):
             if isinstance(v, (int, float)):
                 self.writer.log_metric(k, v, step=step)
             elif isinstance(v, str):
-                self.writer.log_others(v)
+                self.writer.log_other(k, v)
             elif isinstance(v, dict):
                 self.writer.log_metrics(v, step=step)
         logger.info("Successfully logged to CometML")
