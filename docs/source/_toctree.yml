@@ -7,6 +7,8 @@
     title: Installation
   title: Get started
 - sections:
+  - local: big_modeling
+    title: Handling big models
   - local: sagemaker
     title: Amazon SageMaker
   title: Guides

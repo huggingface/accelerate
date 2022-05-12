@@ -20,7 +20,7 @@ from collections import UserDict, namedtuple
 import torch
 
 from accelerate.test_utils.training import RegressionModel
-from accelerate.utils import convert_outputs_to_fp32, patch_environment, send_to_device
+from accelerate.utils import convert_outputs_to_fp32, find_device, patch_environment, send_to_device
 
 
 TestNamedTuple = namedtuple("TestNamedTuple", "a b c")
@@ -78,3 +78,8 @@ class UtilsTester(unittest.TestCase):
         model = RegressionModel()
         model.forward = convert_outputs_to_fp32(model.forward)
         _ = pickle.dumps(model)
+
+    def test_find_device(self):
+        self.assertEqual(find_device([1, "a", torch.tensor([1, 2, 3])]), torch.device("cpu"))
+        self.assertEqual(find_device({"a": 1, "b": torch.tensor([1, 2, 3])}), torch.device("cpu"))
+        self.assertIsNone(find_device([1, "a"]))
