@@ -22,4 +22,4 @@ if sys.version_info < (3, 8):
 else:
     import importlib.metadata as importlib_metadata
 
-_torch_version = parse(importlib_metadata.version("torch"))
+torch_version = parse(importlib_metadata.version("torch"))

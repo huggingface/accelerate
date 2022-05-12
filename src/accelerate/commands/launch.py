@@ -33,7 +33,7 @@ from accelerate.utils import (
     PrepareForLaunch,
     is_sagemaker_available,
 )
-from accelerate.utils.versions import _torch_version
+from accelerate.utils.versions import torch_version
 from packaging import version
 
 
@@ -219,9 +219,9 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
-    if _torch_version >= version.parse("1.10.0"):
+    if torch_version >= version.parse("1.10.0"):
         cmd = ["torchrun"]
-    elif _torch_version >= version.parse("1.9.0"):
+    elif torch_version >= version.parse("1.9.0"):
         cmd = [sys.executable, "-m", "torch.distributed.run"]
     else:
         cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
