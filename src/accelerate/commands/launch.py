@@ -273,7 +273,7 @@ def multi_gpu_launcher(args):
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.min_num_params)
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.sharding_strategy)
-    current_env["OMP_NUM_THREADS"] = args.num_cpu_threads_per_process
+    current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
     if process.returncode != 0:
