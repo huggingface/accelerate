@@ -81,10 +81,11 @@ def training_function(config, args):
 
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
-        run = os.path.split(__file__)[-1].split(".")[0]
-        if args.logging_dir:
-            run = os.path.join(args.logging_dir, run)
-        accelerator.init_trackers(run, config)
+        if accelerator.is_main_process:
+            run = os.path.split(__file__)[-1].split(".")[0]
+            if args.logging_dir:
+                run = os.path.join(args.logging_dir, run)
+            accelerator.init_trackers(run, config)
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")
@@ -245,9 +246,10 @@ def training_function(config, args):
                 {
                     "accuracy": eval_metric["accuracy"],
                     "f1": eval_metric["f1"],
-                    "train_loss": total_loss,
+                    "train_loss": total_loss.item(),
                     "epoch": epoch,
-                }
+                },
+                step=epoch,
             )
 
         if checkpointing_steps == "epoch":
