@@ -80,7 +80,7 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
     else:
         if num_processes is None:
             raise ValueError(
-                "You have to specify the number of GPUs you would like to use, add `num_process=...` to your call."
+                "You have to specify the number of GPUs you would like to use, add `num_processes=...` to your call."
             )
 
         if num_processes > 1:
