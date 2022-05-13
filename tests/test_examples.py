@@ -151,7 +151,7 @@ class ExampleDifferenceTests(unittest.TestCase):
             " " * 18 + '"f1": eval_metric["f1"],\n\n',
             " " * 18 + '"train_loss": total_loss.item(),\n\n',
             " " * 18 + '"epoch": epoch,\n\n',
-            " " * 16 + "}\n",
+            " " * 16 + "},\n\n",
             " " * 16 + "step=epoch,\n",
             " " * 8,
         ]
