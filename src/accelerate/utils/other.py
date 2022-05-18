@@ -122,11 +122,9 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
     Args:
         mixed_precision (`str`, *optional*, defaults to "no"):
             Mixed Precision to use. Should be one of "no", "fp16", or "bf16"
-        save_location (`str`, *optional*):
+        save_location (`str`, *optional*, defaults to "~/.cache/huggingface/accelerate/default_config.yaml"):
             Optional custom save location. Should be passed to `--config_file` when using `accelerate launch`.
     """
-    if save_location is None:
-        save_location = default_json_config_file
     path = Path(save_location)
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
