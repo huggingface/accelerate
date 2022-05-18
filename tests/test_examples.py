@@ -152,10 +152,13 @@ class FeatureExamplesTests(TempDirTestCase):
         --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
         """.split()
         dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
-        output = subprocess.check_output(self._launch_args + testargs).decode("utf-8")
-        self.assertNotIn(f"epoch 0: {dummy_results}", output)
-        self.assertNotIn(f"epoch 1: {dummy_results}", output)
-        self.assertIn(f"epoch 2: {dummy_results}", output)
+        with mock.patch("accelerate.Accelerator.print") as mocked_print:
+            output = subprocess.run(self._launch_args + testargs, check=True)
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 0:", dummy_results)
+            with self.assertRaises(AssertionError):
+                mocked_print.assert_any_call("epoch 1:", dummy_results)
+            mocked_print.assert_any_call("epoch 2:", dummy_results)
 
     def test_load_states_by_steps(self):
         testargs = f"""
