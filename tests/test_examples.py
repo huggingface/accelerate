@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -160,11 +161,15 @@ class FeatureExamplesTests(TempDirTestCase):
 
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
-        cls.configPath = os.path.join(cls.tmpdir, "default_config.yml")
+        cls._tmpdir = tempfile.mkdtemp()
+        cls.configPath = os.path.join(cls._tmpdir, "default_config.yml")
 
         write_basic_config(save_location=cls.configPath)
         cls._launch_args = ["accelerate", "launch", "--config_file", cls.configPath]
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls._tmpdir)
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_epoch(self):
