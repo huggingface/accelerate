@@ -124,7 +124,7 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
             Mixed Precision to use. Should be one of "no", "fp16", or "bf16"
         save_location (`str`, *optional*, defaults to `default_json_config_file`):
             Optional custom save location. Should be passed to `--config_file` when using `accelerate launch`. Default
-            location is inside the huggingface cache folder as default_config.yaml, can be overriden by setting the 
+            location is inside the huggingface cache folder as default_config.yaml, can be overriden by setting the
             `HF_HOME` environmental variable.
     """
     path = Path(save_location)
