@@ -151,7 +151,7 @@ class FeatureExamplesTests(TempDirTestCase):
         examples/by_feature/checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
         """.split()
-        output = subprocess.run(self._launch_args + testargs, check=True).decode("utf-8")
+        output = subprocess.run(self._launch_args + testargs, text=True, capture_output=True)
         self.assertNotIn("epoch 0:", output)
         self.assertNotIn("epoch 1:", output)
         self.assertIn("epoch 2:", output)
@@ -161,7 +161,7 @@ class FeatureExamplesTests(TempDirTestCase):
         examples/by_feature/checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "step_4")}
         """.split()
-        output = subprocess.run(self._launch_args + testargs, check=True).decode("utf-8")
+        output = subprocess.run(self._launch_args + testargs, text=True, capture_output=True)
         self.assertNotIn("epoch 0:", output)
         self.assertIn("epoch 1:", output)
         self.assertIn("epoch 2:", output)
