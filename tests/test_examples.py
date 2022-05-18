@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -21,6 +22,7 @@ from unittest import mock
 from torch.utils.data import DataLoader
 
 from accelerate import DistributedType
+from accelerate.utils import write_basic_config
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import TempDirTestCase, slow
 from datasets import load_dataset
@@ -29,12 +31,6 @@ from transformers import AutoTokenizer
 
 SRC_DIRS = [os.path.abspath(os.path.join("examples", "by_feature"))]
 sys.path.extend(SRC_DIRS)
-
-if SRC_DIRS is not None:
-    import checkpointing
-    import cross_validation
-    import multi_process_metrics
-    import tracking
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
 # Should mock `{script_name}.get_dataloaders` via:
@@ -162,16 +158,23 @@ class ExampleDifferenceTests(unittest.TestCase):
 class FeatureExamplesTests(TempDirTestCase):
     clear_on_setup = False
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.configPath = os.path.join(cls.tmpdir, "default_config.yml")
+
+        write_basic_config(save_location=cls.configPath)
+        cls._launch_args = ["accelerate", "launch", "--config_file", cls.configPath]
+
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_epoch(self):
         testargs = f"""
-        checkpointing.py
+        examples/by_feature/checkpointing.py
         --checkpointing_steps epoch
         --output_dir {self.tmpdir}
         """.split()
-        with mock.patch.object(sys, "argv", testargs):
-            checkpointing.main()
-            self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
+        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_steps(self):
