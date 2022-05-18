@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from msilib.schema import Feature
 import os
 import shutil
 import subprocess
@@ -161,7 +162,7 @@ class FeatureExamplesTests(TempDirTestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.setUp()
+        super(FeatureExamplesTests, cls).setUpClass()
         cls._tmpdir = tempfile.mkdtemp()
         cls.configPath = os.path.join(cls._tmpdir, "default_config.yml")
 
@@ -170,7 +171,7 @@ class FeatureExamplesTests(TempDirTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls().tearDown()
+        super(FeatureExamplesTests, cls).tearDownClass()
         shutil.rmtree(cls._tmpdir)
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
