@@ -151,7 +151,6 @@ class FeatureExamplesTests(TempDirTestCase):
         _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
 
-    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_steps(self):
         testargs = f"""
         examples/by_feature/checkpointing.py
@@ -161,7 +160,6 @@ class FeatureExamplesTests(TempDirTestCase):
         _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_4")))
 
-    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_load_states_by_epoch(self):
         testargs = f"""
         examples/by_feature/checkpointing.py
@@ -176,7 +174,6 @@ class FeatureExamplesTests(TempDirTestCase):
                 mocked_print.assert_any_call("epoch 1:", dummy_results)
             mocked_print.assert_any_call("epoch 2:", dummy_results)
 
-    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_load_states_by_steps(self):
         testargs = f"""
         examples/by_feature/checkpointing.py
@@ -201,12 +198,10 @@ class FeatureExamplesTests(TempDirTestCase):
             call = mocked_print.mock_calls[-1]
             self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
 
-    @mock.patch("multi_process_metrics.get_dataloaders", mocked_dataloaders)
     def test_multi_process_metrics(self):
         testargs = ["examples/by_feature/multi_process_metrics.py"]
         _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
 
-    @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
     def test_tracking(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             testargs = f"""
