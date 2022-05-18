@@ -33,8 +33,8 @@ from ..utils import gather, is_comet_ml_available, is_tensorflow_available, is_t
 
 def write_basic_config(mixed_precision="no"):
     """
-    Creates and saves a basic cluster config to be used on a local machine with potentially multiple GPUs.
-    Will also set CPU if it is a CPU-only machine.
+    Creates and saves a basic cluster config to be used on a local machine with potentially multiple GPUs. Will also
+    set CPU if it is a CPU-only machine.
 
     Args:
         mixed_precision (`str`, *optional*, defaults to "no"):
