@@ -46,43 +46,6 @@ if SRC_DIRS is not None:
 EXCLUDE_EXAMPLES = ["cross_validation.py", "multi_process_metrics.py", "memory.py", "fsdp_with_peak_mem_tracking.py"]
 
 
-def mocked_dataloaders(accelerator, batch_size: int = 16):
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    data_files = {"train": "tests/test_samples/MRPC/train.csv", "validation": "tests/test_samples/MRPC/dev.csv"}
-    datasets = load_dataset("csv", data_files=data_files)
-    label_list = datasets["train"].unique("label")
-
-    label_to_id = {v: i for i, v in enumerate(label_list)}
-
-    def tokenize_function(examples):
-        # max_length=None => use the model max length (it's actually the default)
-        outputs = tokenizer(
-            examples["sentence1"], examples["sentence2"], truncation=True, max_length=None, padding="max_length"
-        )
-        if "label" in examples:
-            outputs["labels"] = [label_to_id[l] for l in examples["label"]]
-        return outputs
-
-    # Apply the method we just defined to all the examples in all the splits of the dataset
-    tokenized_datasets = datasets.map(
-        tokenize_function,
-        batched=True,
-        remove_columns=["sentence1", "sentence2", "label"],
-    )
-
-    def collate_fn(examples):
-        # On TPU it's best to pad everything to the same length or training will be very slow.
-        if accelerator.distributed_type == DistributedType.TPU:
-            return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
-        return tokenizer.pad(examples, padding="longest", return_tensors="pt")
-
-    # Instantiate dataloaders.
-    train_dataloader = DataLoader(tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=2)
-    eval_dataloader = DataLoader(tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=1)
-
-    return train_dataloader, eval_dataloader
-
-
 class ExampleDifferenceTests(unittest.TestCase):
     """
     This TestCase checks that all of the `complete_*` scripts contain all of the
@@ -179,7 +142,6 @@ class FeatureExamplesTests(TempDirTestCase):
         super(FeatureExamplesTests, cls).tearDownClass()
         shutil.rmtree(cls._tmpdir)
 
-    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_epoch(self):
         testargs = f"""
         examples/by_feature/checkpointing.py

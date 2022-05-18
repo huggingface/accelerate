@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from accelerate.utils.dataclasses import DistributedType
+from transformers import AutoTokenizer
+from datasets import load_dataset
+from torch.utils.data import DataLoader
 import numpy as np
 import torch
 
@@ -43,3 +47,39 @@ class RegressionModel(torch.nn.Module):
             print(f"Model dtype: {self.a.dtype}, {self.b.dtype}. Input dtype: {x.dtype}")
             self.first_batch = False
         return x * self.a + self.b
+
+def mocked_dataloaders(accelerator, batch_size: int = 16):
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    data_files = {"train": "tests/test_samples/MRPC/train.csv", "validation": "tests/test_samples/MRPC/dev.csv"}
+    datasets = load_dataset("csv", data_files=data_files)
+    label_list = datasets["train"].unique("label")
+
+    label_to_id = {v: i for i, v in enumerate(label_list)}
+
+    def tokenize_function(examples):
+        # max_length=None => use the model max length (it's actually the default)
+        outputs = tokenizer(
+            examples["sentence1"], examples["sentence2"], truncation=True, max_length=None, padding="max_length"
+        )
+        if "label" in examples:
+            outputs["labels"] = [label_to_id[l] for l in examples["label"]]
+        return outputs
+
+    # Apply the method we just defined to all the examples in all the splits of the dataset
+    tokenized_datasets = datasets.map(
+        tokenize_function,
+        batched=True,
+        remove_columns=["sentence1", "sentence2", "label"],
+    )
+
+    def collate_fn(examples):
+        # On TPU it's best to pad everything to the same length or training will be very slow.
+        if accelerator.distributed_type == DistributedType.TPU:
+            return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
+        return tokenizer.pad(examples, padding="longest", return_tensors="pt")
+
+    # Instantiate dataloaders.
+    train_dataloader = DataLoader(tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=2)
+    eval_dataloader = DataLoader(tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=1)
+
+    return train_dataloader, eval_dataloader

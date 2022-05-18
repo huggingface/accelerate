@@ -102,7 +102,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
     return train_dataloader, eval_dataloader
 
 if os.environ["IN_TEST_ENV"] == '1':
-    from ...tests.test_examples import mocked_dataloaders
+    from accelerate.test_utils.training import mocked_dataloaders
     get_dataloaders = mocked_dataloaders
 
 
