@@ -180,31 +180,28 @@ class FeatureExamplesTests(TempDirTestCase):
         --checkpointing_steps epoch
         --output_dir {self.tmpdir}
         """.split()
-        print(self._launch_args + testargs)
         _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_steps(self):
         testargs = f"""
-        checkpointing.py
+        examples/by_feature/checkpointing.py
         --checkpointing_steps 2
         --output_dir {self.tmpdir}
         """.split()
-        with mock.patch.object(sys, "argv", testargs):
-            checkpointing.main()
-            self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_4")))
+        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_4")))
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_load_states_by_epoch(self):
         testargs = f"""
-        checkpointing.py
+        examples/by_feature/checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
         """.split()
         dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
         with mock.patch("accelerate.Accelerator.print") as mocked_print:
-            with mock.patch.object(sys, "argv", testargs):
-                checkpointing.main()
+            _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
             with self.assertRaises(AssertionError):
                 mocked_print.assert_any_call("epoch 0:", dummy_results)
             with self.assertRaises(AssertionError):
@@ -214,13 +211,12 @@ class FeatureExamplesTests(TempDirTestCase):
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_load_states_by_steps(self):
         testargs = f"""
-        checkpointing.py
+        examples/by_feature/checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "step_4")}
         """.split()
         dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
         with mock.patch("accelerate.Accelerator.print") as mocked_print:
-            with mock.patch.object(sys, "argv", testargs):
-                checkpointing.main()
+            _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
             with self.assertRaises(AssertionError):
                 mocked_print.assert_any_call("epoch 0:", dummy_results)
             mocked_print.assert_any_call("epoch 1:", dummy_results)
@@ -229,29 +225,26 @@ class FeatureExamplesTests(TempDirTestCase):
     @slow
     def test_cross_validation(self):
         testargs = """
-        cross_validation.py
+        examples/by_feature/cross_validation.py
         --num_folds 2
         """.split()
-        with mock.patch.object(sys, "argv", testargs):
-            with mock.patch("accelerate.Accelerator.print") as mocked_print:
-                cross_validation.main()
-                call = mocked_print.mock_calls[-1]
-                self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
+        with mock.patch("accelerate.Accelerator.print") as mocked_print:
+            _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+            call = mocked_print.mock_calls[-1]
+            self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
 
     @mock.patch("multi_process_metrics.get_dataloaders", mocked_dataloaders)
     def test_multi_process_metrics(self):
-        testargs = ["multi_process_metrics.py"]
-        with mock.patch.object(sys, "argv", testargs):
-            multi_process_metrics.main()
+        testargs = ["examples/by_feature/multi_process_metrics.py"]
+        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
 
     @mock.patch("tracking.get_dataloaders", mocked_dataloaders)
     def test_tracking(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             testargs = f"""
-            tracking.py
+            examples/by_feature/tracking.py
             --with_tracking
             --logging_dir {tmpdir}
             """.split()
-            with mock.patch.object(sys, "argv", testargs):
-                tracking.main()
-                self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
+            _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+            self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
