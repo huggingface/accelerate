@@ -157,7 +157,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --checkpointing_steps 2
         --output_dir {self.tmpdir}
         """.split()
-        with mock.patch.dict(os.environ, {"IN_TEST_ENV":1}, clear=True):
+        with mock.patch.dict(os.environ, {"IN_TEST_ENV":"1"}, clear=True):
             _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE, env=os.environ)
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_4")))
 
