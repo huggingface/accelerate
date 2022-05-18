@@ -152,7 +152,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
         """.split()
         dummy_results = {"accuracy": mock.ANY, "f1": mock.ANY}
-        output = subprocess.check_output(self._launch_args + testargs)
+        output = subprocess.check_output(self._launch_args + testargs).decode("utf-8")
         self.assertNotIn(f"epoch 0: {dummy_results}", output)
         self.assertNotIn(f"epoch 1: {dummy_results}", output)
         self.assertIn(f"epoch 2: {dummy_results}", output)
