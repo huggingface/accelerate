@@ -881,7 +881,7 @@ class Accelerator:
                 is_zero_3 = self.state.deepspeed_plugin.zero_stage == 3
 
         if is_zero_3:
-            state_dict = model._zero3_consolidated_fp16_state_dict()
+            state_dict = model._zero3_consolidated_16bit_state_dict()
         else:
             model = self.unwrap_model(model)
             state_dict = model.state_dict()
