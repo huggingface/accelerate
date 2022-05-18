@@ -161,7 +161,7 @@ class FeatureExamplesTests(TempDirTestCase):
 
     @classmethod
     def setUpClass(cls):
-        super(cls).setUp()
+        cls.setUp()
         cls._tmpdir = tempfile.mkdtemp()
         cls.configPath = os.path.join(cls._tmpdir, "default_config.yml")
 
@@ -170,7 +170,7 @@ class FeatureExamplesTests(TempDirTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        super(cls).tearDown()
+        cls().tearDown()
         shutil.rmtree(cls._tmpdir)
 
     @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
