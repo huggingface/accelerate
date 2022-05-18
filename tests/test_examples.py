@@ -173,6 +173,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --checkpointing_steps epoch
         --output_dir {self.tmpdir}
         """.split()
+        print(self._launch_args + testargs)
         _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
 
