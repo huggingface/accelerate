@@ -173,14 +173,13 @@ class FeatureExamplesTests(TempDirTestCase):
         super(FeatureExamplesTests, cls).tearDownClass()
         shutil.rmtree(cls._tmpdir)
 
-    @mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
+    #@mock.patch("checkpointing.get_dataloaders", mocked_dataloaders)
     def test_checkpointing_by_epoch(self):
         testargs = f"""
         examples/by_feature/checkpointing.py
         --checkpointing_steps epoch
         --output_dir {self.tmpdir}
         """.split()
-        print(self._launch_args + testargs)
         _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
 
