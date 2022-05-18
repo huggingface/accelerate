@@ -114,7 +114,7 @@ def get_pretty_name(obj):
     return str(obj)
 
 
-def write_basic_config(mixed_precision="no"):
+def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file):
     """
     Creates and saves a basic cluster config to be used on a local machine with potentially multiple GPUs. Will also
     set CPU if it is a CPU-only machine.
@@ -122,12 +122,16 @@ def write_basic_config(mixed_precision="no"):
     Args:
         mixed_precision (`str`, *optional*, defaults to "no"):
             Mixed Precision to use. Should be one of "no", "fp16", or "bf16"
+        save_location (`str`, *optional*):
+            Optional custom save location. Should be passed to `--config_file` when using `accelerate launch`.
     """
-    path = Path(default_json_config_file)
+    if save_location is None:
+        save_location = default_json_config_file
+    path = Path(save_location)
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         print(
-            "User configuration already setup, will not override existing configuration. Run `accelerate config` manually."
+            f"Configuration already exists at {save_location}, will not override. Run `accelerate config` manually or pass a different `save_location`."
         )
         return
     mixed_precision = mixed_precision.lower()
