@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import os
 
 import torch
 from torch.utils.data import DataLoader
@@ -102,6 +103,13 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
     )
 
     return train_dataloader, eval_dataloader
+
+
+# For testing only
+if os.environ.get("USE_MOCKED_DATALOADERS", None) == "1":
+    from accelerate.test_utils.training import mocked_dataloaders
+
+    get_dataloaders = mocked_dataloaders  # noqa: F811
 
 
 def training_function(config, args):

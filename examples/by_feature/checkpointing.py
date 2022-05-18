@@ -55,6 +55,7 @@ from transformers import (
 MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
+
 def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
     """
     Creates a set of `DataLoader`s for the `glue` dataset,
@@ -101,9 +102,12 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
     return train_dataloader, eval_dataloader
 
-if os.environ.get("IN_TEST_ENV", None) == '1':
+
+# For testing only
+if os.environ.get("USE_MOCKED_DATALOADERS", None) == "1":
     from accelerate.test_utils.training import mocked_dataloaders
-    get_dataloaders = mocked_dataloaders
+
+    get_dataloaders = mocked_dataloaders  # noqa: F811
 
 
 def training_function(config, args):

@@ -74,6 +74,13 @@ class TorchTracemalloc:
         # print(f"delta used/peak {self.used:4d}/{self.peaked:4d}")
 
 
+# For testing only
+if os.environ.get("USE_MOCKED_DATALOADERS", None) == "1":
+    from accelerate.test_utils.training import mocked_dataloaders
+
+    get_dataloaders = mocked_dataloaders  # noqa: F811
+
+
 def training_function(config, args):
     # Initialize accelerator
     if args.with_tracking:

@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from accelerate.utils.dataclasses import DistributedType
-from transformers import AutoTokenizer
-from datasets import load_dataset
-from torch.utils.data import DataLoader
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+
+from accelerate.utils.dataclasses import DistributedType
+from datasets import load_dataset
+from transformers import AutoTokenizer
 
 
 class RegressionDataset:
@@ -47,6 +48,7 @@ class RegressionModel(torch.nn.Module):
             print(f"Model dtype: {self.a.dtype}, {self.b.dtype}. Input dtype: {x.dtype}")
             self.first_batch = False
         return x * self.a + self.b
+
 
 def mocked_dataloaders(accelerator, batch_size: int = 16):
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")

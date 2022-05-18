@@ -15,29 +15,14 @@
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 from unittest import mock
 
-from torch.utils.data import DataLoader
-
-from accelerate import DistributedType
-from accelerate.utils import write_basic_config
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import TempDirTestCase, slow
-from datasets import load_dataset
-from transformers import AutoTokenizer
+from accelerate.utils import write_basic_config
 
-
-SRC_DIRS = [os.path.abspath(os.path.join("examples", "by_feature"))]
-sys.path.extend(SRC_DIRS)
-
-if SRC_DIRS is not None:
-    import checkpointing
-    import cross_validation
-    import multi_process_metrics
-    import tracking
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
 # Should mock `{script_name}.get_dataloaders` via:
@@ -125,6 +110,7 @@ class ExampleDifferenceTests(unittest.TestCase):
         self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)
 
 
+@mock.patch.dict(os.environ, {"USE_MOCKED_DATALOADERS": "1"})
 class FeatureExamplesTests(TempDirTestCase):
     clear_on_setup = False
 
@@ -157,8 +143,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --checkpointing_steps 2
         --output_dir {self.tmpdir}
         """.split()
-        with mock.patch.dict(os.environ, {"IN_TEST_ENV":"1"}):
-            _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE, env=os.environ)
+        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE, env=os.environ)
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_4")))
 
     def test_load_states_by_epoch(self):
@@ -194,10 +179,11 @@ class FeatureExamplesTests(TempDirTestCase):
         examples/by_feature/cross_validation.py
         --num_folds 2
         """.split()
-        with mock.patch("accelerate.Accelerator.print") as mocked_print:
-            _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
-            call = mocked_print.mock_calls[-1]
-            self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
+        with mock.patch.dict(os.environ, {"USE_MOCKED_DATALOADERS": "0"}):
+            with mock.patch("accelerate.Accelerator.print") as mocked_print:
+                _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+                call = mocked_print.mock_calls[-1]
+                self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
 
     def test_multi_process_metrics(self):
         testargs = ["examples/by_feature/multi_process_metrics.py"]
