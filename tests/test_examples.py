@@ -33,6 +33,12 @@ from transformers import AutoTokenizer
 SRC_DIRS = [os.path.abspath(os.path.join("examples", "by_feature"))]
 sys.path.extend(SRC_DIRS)
 
+if SRC_DIRS is not None:
+    import checkpointing
+    import cross_validation
+    import multi_process_metrics
+    import tracking
+
 # DataLoaders built from `test_samples/MRPC` for quick testing
 # Should mock `{script_name}.get_dataloaders` via:
 # @mock.patch("{script_name}.get_dataloaders", mocked_dataloaders)
