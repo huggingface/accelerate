@@ -157,7 +157,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --checkpointing_steps 2
         --output_dir {self.tmpdir}
         """.split()
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE, env={"IN_TEST_ENV":"1"})
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_4")))
 
     def test_load_states_by_epoch(self):
