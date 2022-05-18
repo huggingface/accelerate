@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ast
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -173,10 +175,9 @@ class FeatureExamplesTests(TempDirTestCase):
         --num_folds 2
         """.split()
         with mock.patch.dict(os.environ, {"USE_MOCKED_DATALOADERS": "0"}):
-            with mock.patch("accelerate.Accelerator.print") as mocked_print:
-                _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
-                call = mocked_print.mock_calls[-1]
-                self.assertGreaterEqual(call.args[1]["accuracy"], 0.75)
+            output = subprocess.run(self._launch_args + testargs, text=True, capture_output=True).stdout
+            results = ast.literal_eval(re.search('({.+})', output).group(-1))
+            self.assertGreaterEqual(results["accuracy"], 0.75)
 
     def test_multi_process_metrics(self):
         testargs = ["examples/by_feature/multi_process_metrics.py"]
