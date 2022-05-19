@@ -19,10 +19,9 @@ ENV PATH="${VIRTUAL_ENV}/bin:$PATH"
 
 WORKDIR /workspace
 COPY . accelerate/
-# Install specific CPU torch wheel to save on space
-RUN python3 -m pip install --no-cache-dir \
-    jupyter \
-    torch --extra-index-url https://download.pytorch.org/whl/cu112
+# Install specific GPU torch wheel to save on space
+RUN python3 -m pip install --no-cache-dir light-the-torch jupyter
+RUN ltt install torch --install-cmd 'python3 -m pip install {packages}'
     
 RUN cd accelerate/ && \
     python3 -m pip install --no-cache-dir .
