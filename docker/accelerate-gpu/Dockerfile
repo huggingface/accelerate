@@ -22,7 +22,7 @@ COPY . accelerate/
 # Install specific CPU torch wheel to save on space
 RUN python3 -m pip install --no-cache-dir \
     jupyter \
-    torch --extra-index-url https://download.pytorch.org/whl/cuda112
+    torch --extra-index-url https://download.pytorch.org/whl/cu112
     
 RUN cd accelerate/ && \
     python3 -m pip install --no-cache-dir .
