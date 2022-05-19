@@ -11,7 +11,7 @@ WORKDIR /workspace
 COPY . accelerate/
 
 RUN python3 -m pip install --no-cache-dir light-the-torch
-RUN python3 -m ltt install --no-cache-dir torch
+RUN ltt install torch --install-cmd 'python3 -m pip install {packages}'
 
 RUN cd accelerate/ && \
     python3 -m pip install --no-cache-dir .
