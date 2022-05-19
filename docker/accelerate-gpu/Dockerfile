@@ -4,8 +4,8 @@
 FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 as compile-image
 
 ARG DEBIAN_FRONTEND=noninteractive
-RUN apt update
-RUN apt-get install -y --no-install-recommends \
+RUN apt update && \
+    apt-get install -y --no-install-recommends \
     python3-dev \
     python3-pip \
     python3.8-venv \
@@ -20,10 +20,9 @@ ENV PATH="${VIRTUAL_ENV}/bin:$PATH"
 WORKDIR /workspace
 COPY . accelerate/
 # Install specific GPU torch wheel to save on space
-RUN python3 -m pip install --no-cache-dir light-the-torch jupyter
-RUN ltt install torch --install-cmd 'python3 -m pip install {packages}'
-    
-RUN cd accelerate/ && \
+RUN python3 -m pip install --no-cache-dir light-the-torch jupyter && \
+    ltt install torch --install-cmd 'python3 -m pip install {packages}' && \
+    cd accelerate/ && \
     python3 -m pip install --no-cache-dir .
 
 # Stage 2
