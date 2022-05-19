@@ -17,6 +17,7 @@ from typing import List, Optional, Union
 
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 from packaging import version
 
@@ -326,12 +327,15 @@ class DataLoaderDispatcher(DataLoader):
     """
 
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
+        shuffle = dataset._shuffle_enabled if isinstance(dataset, ShufflerIterDataPipe) else False
         super().__init__(dataset, **kwargs)
         self.split_batches = split_batches
         if version.parse(torch.__version__) < version.parse("1.8.0"):
             raise ImportError(
                 "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
+        if shuffle:
+            torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
 
     def __iter__(self):
         state = AcceleratorState()
