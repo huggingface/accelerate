@@ -886,9 +886,10 @@ class Accelerator:
             model = self.unwrap_model(model)
             state_dict = model.state_dict()
 
-        for k in state_dict:
-            if state_dict[k].dtype == torch.float16:
-                state_dict[k] = state_dict[k].float()
+        if state_dict is not None:
+            for k in state_dict:
+                if state_dict[k].dtype == torch.float16:
+                    state_dict[k] = state_dict[k].float()
 
         return state_dict
 
