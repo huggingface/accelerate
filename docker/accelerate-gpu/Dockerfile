@@ -8,6 +8,7 @@ RUN apt update
 RUN apt-get install -y --no-install-recommends \
     python3-dev \
     python3-pip \
+    python3.8-venv \
     python3-setuptools
 
 # Setup virtual environment for Docker
@@ -21,7 +22,7 @@ COPY . accelerate/
 # Install specific CPU torch wheel to save on space
 RUN python3 -m pip install --no-cache-dir \
     jupyter \
-    torch --extra-index-url https://download.pytorch.org/whl/cpu
+    torch --extra-index-url https://download.pytorch.org/whl/cuda112
     
 RUN cd accelerate/ && \
     python3 -m pip install --no-cache-dir .
