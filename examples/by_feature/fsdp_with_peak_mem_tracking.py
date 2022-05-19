@@ -75,7 +75,7 @@ class TorchTracemalloc:
 
 
 # For testing only
-if os.environ.get("USE_MOCKED_DATALOADERS", None) == "1":
+if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
     from accelerate.test_utils.training import mocked_dataloaders
 
     get_dataloaders = mocked_dataloaders  # noqa: F811

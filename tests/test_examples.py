@@ -112,7 +112,7 @@ class ExampleDifferenceTests(unittest.TestCase):
         self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)
 
 
-@mock.patch.dict(os.environ, {"USE_MOCKED_DATALOADERS": "1"})
+@mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "1"})
 class FeatureExamplesTests(TempDirTestCase):
     clear_on_setup = False
 
@@ -178,7 +178,7 @@ class FeatureExamplesTests(TempDirTestCase):
         examples/by_feature/cross_validation.py
         --num_folds 2
         """.split()
-        with mock.patch.dict(os.environ, {"USE_MOCKED_DATALOADERS": "0"}):
+        with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
             output = subprocess.run(
                 self._launch_args + testargs, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).stdout
