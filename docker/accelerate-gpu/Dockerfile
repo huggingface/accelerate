@@ -6,7 +6,7 @@ FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 as compile-image
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt update
 RUN apt-get install -y --no-install-recommends \
-    python3.6-dev \
+    python3-dev \
     python3-pip \
     python3-setuptools
 
