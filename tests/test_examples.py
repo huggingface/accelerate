@@ -118,7 +118,7 @@ class FeatureExamplesTests(TempDirTestCase):
 
     @classmethod
     def setUpClass(cls):
-        super(FeatureExamplesTests, cls).setUpClass()
+        super().setUpClass()
         cls._tmpdir = tempfile.mkdtemp()
         cls.configPath = os.path.join(cls._tmpdir, "default_config.yml")
 
@@ -127,7 +127,7 @@ class FeatureExamplesTests(TempDirTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        super(FeatureExamplesTests, cls).tearDownClass()
+        super().tearDownClass()
         shutil.rmtree(cls._tmpdir)
 
     def test_checkpointing_by_epoch(self):
