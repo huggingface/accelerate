@@ -103,6 +103,13 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
     return train_dataloader, eval_dataloader
 
 
+# For testing only
+if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
+    from accelerate.test_utils.training import mocked_dataloaders
+
+    get_dataloaders = mocked_dataloaders  # noqa: F811
+
+
 def training_function(config, args):
     # Initialize accelerator
     accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
