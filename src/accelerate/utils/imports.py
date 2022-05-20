@@ -57,8 +57,9 @@ def is_deepspeed_available():
     # AND checking it has an author field in the metadata that is HuggingFace.
     if package_exists:
         try:
-            _ = importlib_metadata.version("deepspeed")
             _deepspeed_metadata = importlib_metadata.metadata("deepspeed")
+            if _deepspeed_metadata.get("version", None) is None:
+                return False
             if _deepspeed_metadata.get("author", "") != "DeepSpeed Team":
                 return False
             return True
