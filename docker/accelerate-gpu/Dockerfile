@@ -7,7 +7,7 @@ ENV PYTHON_VERSION=3.6
 RUN chsh -s /bin/bash
 SHELL ["/bin/bash", "-c"]
 # Install anaconda
-RUN apt-get update \
+RUN apt-get update && \
     apt-get install -y wget bzip2 ca-certificates curl git && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists*
