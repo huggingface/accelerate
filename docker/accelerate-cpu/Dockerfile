@@ -17,14 +17,14 @@ RUN python3 -m venv ${VIRTUAL_ENV}
 ENV PATH="${VIRTUAL_ENV}/bin:$PATH"
 
 WORKDIR /workspace
-COPY . accelerate/
 # Install specific CPU torch wheel to save on space
 RUN python3 -m pip install --no-cache-dir \
     jupyter \
     torch --extra-index-url https://download.pytorch.org/whl/cpu
     
-RUN cd accelerate/ && \
-    python3 -m pip install --no-cache-dir .
+RUN git clone https://github.com/huggingface/accelerate && \
+    cd accelerate/ && \
+    python3 -m pip install --no-cache-dir .[dev]
 
 # Stage 2
 FROM python:3.6-slim AS build-image

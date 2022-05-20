@@ -2,33 +2,40 @@
 # Uses multi-staged approach to reduce size
 # Stage 1
 FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 as compile-image
+ENV PYTHON_VERSION=3.6
 
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt update && \
-    apt-get install -y --no-install-recommends \
-    python3-dev \
-    python3-pip \
-    python3.8-venv \
-    python3-setuptools
+RUN chsh -s /bin/bash
+SHELL ["/bin/bash", "-c"]
+# Install anaconda
+RUN apt-get update \
+    apt-get install -y wget bzip2 ca-certificates curl git && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists*
 
-# Setup virtual environment for Docker
-ENV VIRTUAL_ENV=/opt/venv
-RUN python3 -m venv ${VIRTUAL_ENV}
-# Make sure we use the virtualenv
-ENV PATH="${VIRTUAL_ENV}/bin:$PATH"
+# Install miniconda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+    /bin/bash ~/miniconda.sh -b -p /opt/conda && \
+    rm ~/miniconda.sh && \
+    /opt/conda/bin/conda clean -tipsy && \
+    ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
+    echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
 
-WORKDIR /workspace
-COPY . accelerate/
-# Install specific GPU torch wheel to save on space
-RUN python3 -m pip install --no-cache-dir light-the-torch jupyter && \
-    ltt install torch --install-cmd 'python3 -m pip install {packages}' && \
+# Set path to conda
+ENV PATH="/opt/conda/bin:$PATH"
+
+# Setup conda venv
+RUN conda create --name accelerate python=${PYTHON_VERSION} ipython pytorch jupyter pip && \
+    conda activate accelerate && \
+    git clone https://github.com/huggingface/accelerate && \
     cd accelerate/ && \
-    python3 -m pip install --no-cache-dir .
+    python3 -m pip install --no-cache-dir .[dev]
 
 # Stage 2
 FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS build-image
-COPY --from=compile-image /opt/venv /opt/venv
+COPY --from=compile-image /opt/conda /opt/conda
+COPY --from=compile-image /root/.bashrc /root/.bashrc
+RUN echo "conda activate accelerate" >> ~/.bashrc
 
 # Make sure we use the virtualenv
-ENV PATH="/opt/venv/bin:$PATH"
-CMD ["/bin/bash"]
+ENV PATH="/opt/conda/bin:$PATH"
+RUN ["source", "~/.bashrc"]
