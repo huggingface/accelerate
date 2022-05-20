@@ -1,42 +1,35 @@
-# Builds GPU Docker image of PyTorch
+# Builds GPU docker image of PyTorch
 # Uses multi-staged approach to reduce size
 # Stage 1
-FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 as compile-image
-ENV PYTHON_VERSION=3.6
-
-RUN chsh -s /bin/bash
-SHELL ["/bin/bash", "-c"]
+# Use base conda image to reduce time
+FROM continuumio/miniconda3:latest AS compile-image
+# Specify py version
+ENV PYTHON_VERSION=3.6 
 # Install apt libs
 RUN apt-get update && \
-    apt-get install -y wget bzip2 ca-certificates curl git && \
+    apt-get install -y curl git wget && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists*
 
-# Install miniconda
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
-    mkdir /root/.conda && \
-    /bin/bash Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda && \
-    ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
-    find /opt/conda/ -follow -type f -name "*.a" -delete \
-    find /opt/conda/ -follow -type f -name "*.js.map" -delete && \
-    /opt/conda/bin/conda clean -afy && \
-    rm -f Miniconda3-latest-Linux-x86_64.sh
-
-# Set path to conda
-ENV PATH="/opt/conda/bin:$PATH"
-
-# Setup conda venv
-RUN conda create --name accelerate python=${PYTHON_VERSION} ipython pytorch jupyter pip -c pytorch
+# Create our conda env
+RUN conda create --name accelerate python=${PYTHON_VERSION} ipython jupyter pip
+# We don't install pytorch here yet since CUDA isn't available
+# instead we use the direct torch wheel
 ENV PATH /opt/conda/envs/accelerate/bin:$PATH
+# Activate our bash shell
+RUN chsh -s /bin/bash
+SHELL ["/bin/bash", "-c"]
+# Activate the conda env and install torch + accelerate
 RUN source activate accelerate && \
-    git clone https://github.com/huggingface/accelerate && \
-    cd accelerate/ && \
-    python3 -m pip install --no-cache-dir .[dev]
+    python3 -m pip install --no-cache-dir \
+    torch --extra-index-url https://download.pytorch.org/whl/cu113 \
+    git+https://github.com/huggingface/accelerate#egg=accelerate[dev]
 
 # Stage 2
 FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS build-image
 COPY --from=compile-image /opt/conda /opt/conda
 ENV PATH /opt/conda/bin:$PATH
-RUN echo "conda activate accelerate" >> ~/.bashrc
-# Activate the venv
+
+RUN echo "source activate accelerate" >> /.bashrc
+# Activate the virtualenv
 CMD ["/bin/bash"]
