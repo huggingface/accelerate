@@ -19,6 +19,7 @@ ENV PATH="${VIRTUAL_ENV}/bin:$PATH"
 
 WORKDIR /workspace
 # Install specific CPU torch wheel to save on space
+RUN python3 -m pip install --upgrade --no-cache-dir pip
 RUN python3 -m pip install --no-cache-dir \
     jupyter \
     torch --extra-index-url https://download.pytorch.org/whl/cpu
