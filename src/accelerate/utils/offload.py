@@ -54,6 +54,34 @@ def offload_state_dict(save_dir: Union[str, os.PathLike], state_dict: Dict[str, 
         json.dump(current_index, f, indent=2)
 
 
+def offload_weight(weight, weight_name, offload_folder, index=None):
+    array = weight.numpy()
+    tensor_file = os.path.join(offload_folder, f"{weight_name}.dat")
+    if index is not None:
+        index[weight_name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
+    file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
+    file_array[:] = array[:]
+    file_array.flush()
+    return index
+
+
+def save_offload_index(index, offload_folder):
+    if index is None or len(index) == 0:
+        # Nothing to save
+        return
+
+    offload_index_file = os.path.join(offload_folder, "index.json")
+    if os.path.isfile(offload_index_file):
+        with open(offload_index_file, "r", encoding="utf-8") as f:
+            current_index = json.load(f)
+    else:
+        current_index = {}
+    current_index.update(index)
+
+    with open(offload_index_file, "w", encoding="utf-8") as f:
+        json.dump(current_index, f, indent=2)
+
+
 class PrefixedDataset(Mapping):
     """
     Will access keys in a given dataset by adding a prefix.
