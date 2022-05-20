@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import importlib
+import sys
+
+
+# The package importlib_metadata is in a different place, depending on the Python version.
+if sys.version_info < (3, 8):
+    import importlib_metadata
+else:
+    import importlib.metadata as importlib_metadata
 
 
 try:
@@ -45,7 +52,15 @@ def is_tpu_available():
 
 
 def is_deepspeed_available():
-    return importlib.util.find_spec("deepspeed") is not None
+    package_exists = importlib.util.find_spec("deepspeed") is not None
+    # Check we're not importing a "deepspeed" directory somewhere but the actual library by trying to grab the version
+    # AND checking it has an author field in the metadata that is HuggingFace.
+    if package_exists:
+        try:
+            _ = importlib_metadata.metadata("deepspeed")
+            return True
+        except importlib_metadata.PackageNotFoundError:
+            return False
 
 
 def is_tensorflow_available():
