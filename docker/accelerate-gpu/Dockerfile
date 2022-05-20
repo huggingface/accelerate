@@ -39,4 +39,4 @@ COPY --from=compile-image /opt/conda /opt/conda
 ENV PATH /opt/conda/bin:$PATH
 RUN echo "conda activate accelerate" >> ~/.bashrc
 # Activate the venv
-CMD ["source", "~/.bashrc"]
+CMD ["/bin/bash"]
