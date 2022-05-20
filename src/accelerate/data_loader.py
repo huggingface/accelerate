@@ -327,7 +327,7 @@ class DataLoaderDispatcher(DataLoader):
 
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
         shuffle = False
-        if version.parse(torch.__version__) > version.parse("1.11.0"):
+        if version.parse(torch.__version__) >= version.parse("1.11.0"):
             from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
             # We need to save the shuffling state of the DataPipe
