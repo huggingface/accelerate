@@ -8,6 +8,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt update
 RUN apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     gcc
 
 # Setup virtual environment for Docker
