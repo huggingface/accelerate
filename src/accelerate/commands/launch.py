@@ -324,7 +324,7 @@ def deepspeed_launcher(args):
     current_env["USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
     current_env["GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
-    current_env["DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device)
+    current_env["DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
