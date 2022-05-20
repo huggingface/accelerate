@@ -280,7 +280,7 @@ def training_function(config, args):
                 predictions, references = accelerator.gather(
                     (predictions, batch["labels"])
                 )  # If we are in a multiprocess environment, the last batch has duplicates
-                if accelerator.num_processes > 1:
+                if accelerator.use_distributed:
                     if step == len(eval_dataloader) - 1:
                         predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
                         references = references[: len(eval_dataloader.dataset) - samples_seen]
