@@ -17,7 +17,6 @@ from typing import List, Optional, Union
 
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
-from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 from packaging import version
 
@@ -327,7 +326,13 @@ class DataLoaderDispatcher(DataLoader):
     """
 
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
-        shuffle = dataset._shuffle_enabled if isinstance(dataset, ShufflerIterDataPipe) else False
+        shuffle = False
+        if version.parse(torch.__version__) > version.parse("1.11.0"):
+            from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
+
+            # We need to save the shuffling state of the DataPipe
+            if isinstance(dataset, ShufflerIterDataPipe):
+                shuffle = dataset._shuffle_enabled
         super().__init__(dataset, **kwargs)
         self.split_batches = split_batches
         if version.parse(torch.__version__) < version.parse("1.8.0"):
