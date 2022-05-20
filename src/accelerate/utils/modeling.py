@@ -25,6 +25,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from .offload import offload_weight, save_offload_index
+
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
@@ -312,6 +314,18 @@ def clean_device_map(device_map: Dict[str, Union[int, str, torch.device]], modul
     return device_map
 
 
+def load_offloaded_weights(model, index, offload_folder):
+    if index is None or len(index) == 0:
+        # Nothing to do
+        return
+
+    for param_name, metadata in index.items():
+        tensor_file = os.path.join(offload_folder, f"{param_name}.dat")
+        shape = tuple(metadata["shape"])
+        weight = np.memmap(tensor_file, dtype=metadata["dtype"], mode="r", shape=shape)
+        set_module_tensor_to_device(model, param_name, "cpu", value=torch.tensor(weight))
+
+
 def infer_auto_device_map(
     model: nn.Module,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
@@ -581,20 +595,10 @@ def load_checkpoint_in_model(
 
                 if param_device == "disk":
                     set_module_tensor_to_device(model, param_name, "meta")
-                    tensor_file = os.path.join(offload_folder, f"{param_name}.dat")
-                    array = param.numpy()
-                    offload_index[param_name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
-                    file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
-                    file_array[:] = array[:]
-                    file_array.flush()
+                    offload_weight(param, param_name, offload_folder, index=offload_index)
                 elif param_device == "cpu" and offload_state_dict:
                     set_module_tensor_to_device(model, param_name, "meta")
-                    tensor_file = os.path.join(state_dict_folder, f"{param_name}.dat")
-                    array = param.numpy()
-                    state_dict_index[param_name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
-                    file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
-                    file_array[:] = array[:]
-                    file_array.flush()
+                    offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
                 else:
                     set_module_tensor_to_device(model, param_name, param_device, value=param)
 
@@ -602,23 +606,9 @@ def load_checkpoint_in_model(
         del checkpoint
         gc.collect()
 
-    if len(offload_index) > 0:
-        offload_index_file = os.path.join(offload_folder, "index.json")
-        if os.path.isfile(offload_index_file):
-            with open(offload_index_file, "r", encoding="utf-8") as f:
-                current_offload_index = json.load(f)
-        else:
-            current_offload_index = {}
-        current_offload_index.update(offload_index)
-
-        with open(offload_index_file, "w", encoding="utf-8") as f:
-            json.dump(current_offload_index, f, indent=2)
+    save_offload_index(offload_index, offload_folder)
 
     # Load back offloaded state dict on CPU
-    if offload_state_dict and len(state_dict_index) > 0:
-        for param_name, metadata in state_dict_index.items():
-            tensor_file = os.path.join(state_dict_folder, f"{param_name}.dat")
-            shape = tuple(metadata["shape"])
-            weight = np.memmap(tensor_file, dtype=metadata["dtype"], mode="r", shape=shape)
-            set_module_tensor_to_device(model, param_name, "cpu", value=torch.tensor(weight))
+    if offload_state_dict:
+        load_offloaded_weights(model, state_dict_index, state_dict_folder)
         shutil.rmtree(state_dict_folder)

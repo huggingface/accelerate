@@ -40,10 +40,18 @@ from .modeling import (
     get_max_memory,
     infer_auto_device_map,
     load_checkpoint_in_model,
+    load_offloaded_weights,
     named_module_tensors,
     set_module_tensor_to_device,
 )
-from .offload import OffloadedWeightsLoader, PrefixedDataset, extract_submodules_state_dict, offload_state_dict
+from .offload import (
+    OffloadedWeightsLoader,
+    PrefixedDataset,
+    extract_submodules_state_dict,
+    offload_state_dict,
+    offload_weight,
+    save_offload_index,
+)
 from .operations import (
     broadcast,
     broadcast_object_list,
