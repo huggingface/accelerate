@@ -22,12 +22,9 @@ WORKDIR /workspace
 RUN python3 -m pip install --upgrade --no-cache-dir pip
 RUN python3 -m pip install --no-cache-dir \
     jupyter \
-    torch --extra-index-url https://download.pytorch.org/whl/cpu
+    torch --extra-index-url https://download.pytorch.org/whl/cpu \
+    git+https://github.com/huggingface/accelerate#egg=accelerate[dev]
     
-RUN git clone https://github.com/huggingface/accelerate && \
-    cd accelerate/ && \
-    python3 -m pip install --no-cache-dir .[dev]
-
 # Stage 2
 FROM python:3.6-slim AS build-image
 COPY --from=compile-image /opt/venv /opt/venv
