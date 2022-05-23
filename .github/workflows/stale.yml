@@ -21,7 +21,7 @@ jobs:
     
     - name: Install requirements
       run: |
-        pip install ghapi
+        pip install PyGithub
     - name: Close stale issues
       run: |
         python utils/stale.py
