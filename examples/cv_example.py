@@ -73,7 +73,7 @@ class PetsDataset(Dataset):
 
 def training_function(config, args):
     # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mix_precision)
+    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
 
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
