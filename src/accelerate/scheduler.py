@@ -62,7 +62,7 @@ class AcceleratedScheduler:
             num_processes = AcceleratorState().num_processes
             for _ in range(num_processes):
                 # Special case when using OneCycle and `drop_last` was not used
-                if getattr(self.scheduler, "total_steps", 0) < self.scheduler.last_epoch:
+                if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch :
                     self.scheduler.step(*args, **kwargs)
 
     # Passthroughs
