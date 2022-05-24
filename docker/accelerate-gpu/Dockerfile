@@ -16,6 +16,7 @@ RUN conda create --name accelerate python=${PYTHON_VERSION} ipython jupyter pip
 # We don't install pytorch here yet since CUDA isn't available
 # instead we use the direct torch wheel
 ENV PATH /opt/conda/envs/accelerate/bin:$PATH
+ENV PATH /home/user/.local/bin$:PATH
 # Activate our bash shell
 RUN chsh -s /bin/bash
 SHELL ["/bin/bash", "-c"]
@@ -31,6 +32,7 @@ RUN source activate accelerate && \
 # Stage 2
 FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS build-image
 COPY --from=compile-image /opt/conda /opt/conda
+COPY --from=compile-image /home/user /home/user
 ENV PATH /opt/conda/bin:$PATH
 
 RUN echo "source activate accelerate" >> /.bashrc
