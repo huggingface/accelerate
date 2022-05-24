@@ -1,7 +1,7 @@
 name: Build Docker images (scheduled)
 
 on:
-  workflow_dispatch:
+  repository_dispatch:
   schedule:
     - cron: "0 1 * * *"
 
