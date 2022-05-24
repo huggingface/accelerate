@@ -3,7 +3,7 @@ name: Stale Bot
 on:
   schedule:
     - cron: "0 15 * * *"
-  repository_dispatch:
+  workflow_dispatch:
 
 jobs:
   close_stale_issues:
