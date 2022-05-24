@@ -28,7 +28,6 @@ RUN source activate accelerate && \
 # Stage 2
 FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS build-image
 COPY --from=compile-image /opt/conda /opt/conda
-COPY --from=compile-image /home/user /home/user
 ENV PATH /opt/conda/bin:$PATH
 
 RUN echo "source activate accelerate" >> /.bashrc
