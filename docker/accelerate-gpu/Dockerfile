@@ -19,10 +19,6 @@ ENV PATH /opt/conda/envs/accelerate/bin:$PATH
 # Activate our bash shell
 RUN chsh -s /bin/bash
 SHELL ["/bin/bash", "-c"]
-# Activate usergroup
-RUN useradd -ms /bin/bash user
-USER user
-ENV PATH /home/user/.local/bin$:PATH
 # Activate the conda env and install torch + accelerate
 RUN source activate accelerate && \
     python3 -m pip install --no-cache-dir \
