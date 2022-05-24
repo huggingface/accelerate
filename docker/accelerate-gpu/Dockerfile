@@ -31,5 +31,8 @@ COPY --from=compile-image /opt/conda /opt/conda
 ENV PATH /opt/conda/bin:$PATH
 
 RUN echo "source activate accelerate" >> /.bashrc
+
+RUN useradd -ms /bin/bash user
+USER user
 # Activate the virtualenv
 CMD ["/bin/bash"]
