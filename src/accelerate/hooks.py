@@ -260,6 +260,24 @@ class AlignDevicesHook(ModelHook):
                     set_module_tensor_to_device(module, name, device, value=self.weights_map.get(name, None))
 
 
+def attach_execution_device_hook(module: torch.nn.Module, execution_device: Union[int, str, torch.device]):
+    """
+    Recursively attaches `AlignDevicesHook` to all submodules of a given model to make sure they have the right
+    execution device
+
+    Args:
+        module (`torch.nn.Module`):
+            The module where we want to attach the hooks.
+        execution_device (`int`, `str` or `torch.device`):
+            The device on which inputs and model weights should be placed before the forward pass.
+    """
+    if not hasattr(module, "_hf_hook") and len(module.state_dict()) > 0:
+        add_hook_to_module(module, AlignDevicesHook(execution_device))
+
+    for child in module.children():
+        attach_execution_device_hook(child, execution_device)
+
+
 def attach_align_device_hook(
     module: torch.nn.Module,
     execution_device: Optional[torch.device] = None,
@@ -383,6 +401,7 @@ def attach_align_device_hook_on_blocks(
             place_submodules=True,
         )
         add_hook_to_module(module, hook)
+        attach_execution_device_hook(module, execution_device[module_name])
     elif module_name in execution_device:
         attach_align_device_hook(
             module,
@@ -395,6 +414,7 @@ def attach_align_device_hook_on_blocks(
         if not hasattr(module, "_hf_hook"):
             hook = AlignDevicesHook(execution_device=execution_device[module_name], io_same_device=(module_name == ""))
             add_hook_to_module(module, hook)
+        attach_execution_device_hook(module, execution_device[module_name])
     elif module_name == "":
         hook = AlignDevicesHook(io_same_device=True)
         add_hook_to_module(module, hook)
