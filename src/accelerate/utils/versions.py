@@ -29,13 +29,14 @@ torch_version = parse(importlib_metadata.version("torch"))
 
 
 def compare_versions(library_or_version: Union[str, Version], operation: str, requirement_version: str):
-    """Compares `library_or_version` to `requirement_version` with an `operation`
+    """
+    Compares a library version to some requirement using a given operation.
 
     Args:
-        library_or_version (`str`, `packaging.version.Version]`):
-            A library name or Version to check
+        library_or_version (`str` or `packaging.version.Version`):
+            A library name or a version to check.
         operation (`str`):
-            A string representation of an operator, such as ">" or "<="
+            A string representation of an operator, such as `">"` or `"<="`.
         requirement_version (`str`):
             The version to compare the library version against
     """
@@ -48,11 +49,12 @@ def compare_versions(library_or_version: Union[str, Version], operation: str, re
 
 
 def is_torch_version(operation: str, version: str):
-    """Compares the current PyTorch version to `version` with an `operation`
+    """
+    Compares the current PyTorch version to a given reference with an operation.
 
     Args:
         operation (`str`):
-            A string representation of an operator, such as ">" or "<="
+            A string representation of an operator, such as `">"` or `"<="`
         version (`str`):
             A string version of PyTorch
     """
