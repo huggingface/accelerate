@@ -17,6 +17,7 @@ jobs:
     defaults:
       run:
         working-directory: accelerate/
+        shell: bash
     steps:
       - name: Print working directory
         run: |
@@ -43,6 +44,7 @@ jobs:
     defaults:
       run:
         working-directory: accelerate/
+        shell: bash
     steps:
       - name: Print working directory
         run: |
