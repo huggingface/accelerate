@@ -38,7 +38,5 @@ RUN apt-get update && \
 
 RUN echo "source activate accelerate" >> /.bashrc
 
-RUN useradd -ms /bin/bash user
-USER user
 # Activate the virtualenv
 CMD ["/bin/bash"]
