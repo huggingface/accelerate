@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Run source
         run: |
-          source ~/.profile
+          source activate accelerate
       - name: Print working directory
         run: |
           echo "$PWD"
@@ -51,7 +51,7 @@ jobs:
     steps:
       - name: Run source
         run: |
-          source ~/.profile
+          source activate accelerate
       - name: Print working directory
         run: |
           echo "$PWD"
