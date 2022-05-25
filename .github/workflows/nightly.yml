@@ -15,18 +15,16 @@ jobs:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
     steps:
-      - name: Clone and install
-        run: |
-          cd accelerate
-          git pull && git checkout ${{ github.sha }}
       # - name: Are GPUs recognized by PyTorch
       #   run: |
       #     utils/print_env_pt.py
       - name: Run test on GPUs
+        working-directory: /accelerate
         run: |
           CUDA_VISIBLE_DEVICES="0" make test
 
       - name: Run examples on GPUs
+        working-directory: /accelerate
         run: |
           CUDA_VISIBLE_DEVICES="0" make test_examples
 
@@ -36,17 +34,15 @@ jobs:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
     steps:
-      - name: Clone and install
-        run: |
-          cd accelerate
-          git pull && git checkout ${{ github.sha }}
       # - name: Are GPUs recognized by PyTorch
       #   run: |
       #     utils/print_env_pt.py
       - name: Run test on GPUs
+        working-directory: /accelerate
         run: |
           CUDA_VISIBLE_DEVICES="0,1" make test
 
       - name: Run examples on GPUs
+        working-directory: /accelerate
         run: |
           CUDA_VISIBLE_DEVICES="0,1" make test_examples
