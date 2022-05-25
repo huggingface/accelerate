@@ -21,8 +21,7 @@ from accelerate import Accelerator
 from accelerate.data_loader import prepare_data_loader
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
-from accelerate.utils import DistributedType, gather, set_seed, synchronize_rng_states
-from packaging import version
+from accelerate.utils import DistributedType, gather, is_torch_version, set_seed, synchronize_rng_states
 
 
 def init_state_check():
@@ -40,7 +39,7 @@ def rng_sync_check():
     if state.distributed_type == DistributedType.MULTI_GPU:
         synchronize_rng_states(["cuda"])
         assert are_the_same_tensors(torch.cuda.get_rng_state()), "RNG states improperly synchronized on GPU."
-    if version.parse(torch.__version__) >= version.parse("1.6.0"):
+    if is_torch_version(">=", "1.6.0"):
         generator = torch.Generator()
         synchronize_rng_states(["generator"], generator=generator)
         assert are_the_same_tensors(generator.get_state()), "RNG states improperly synchronized in generator."

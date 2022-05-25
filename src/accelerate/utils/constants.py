@@ -12,8 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import operator as op
+
+
 SCALER_NAME = "scaler.pt"
 MODEL_NAME = "pytorch_model"
 RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer"
 SCHEDULER_NAME = "scheduler"
+
+STR_OPERATION_TO_FUNC = {">": op.gt, ">=": op.ge, "==": op.eq, "!=": op.ne, "<=": op.le, "<": op.lt}
