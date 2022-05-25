@@ -18,7 +18,7 @@ jobs:
       - name: Clone and install
         run: |
           cd accelerate
-          git checkout ${{ github.sha }}
+          git pull && git checkout ${{ github.sha }}
       # - name: Are GPUs recognized by PyTorch
       #   run: |
       #     utils/print_env_pt.py
@@ -39,7 +39,7 @@ jobs:
       - name: Clone and install
         run: |
           cd accelerate
-          git checkout ${{ github.sha }}
+          git pull && git checkout ${{ github.sha }}
       # - name: Are GPUs recognized by PyTorch
       #   run: |
       #     utils/print_env_pt.py
