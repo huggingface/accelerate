@@ -19,6 +19,9 @@ jobs:
         working-directory: accelerate/
         shell: bash
     steps:
+      - name: Run source
+        run: |
+          source ~/.profile
       - name: Print working directory
         run: |
           echo "$PWD"
@@ -46,6 +49,9 @@ jobs:
         working-directory: accelerate/
         shell: bash
     steps:
+      - name: Run source
+        run: |
+          source ~/.profile
       - name: Print working directory
         run: |
           echo "$PWD"
