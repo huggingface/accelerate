@@ -1,0 +1,55 @@
+name: Self-hosted runner (scheduled)
+
+on:
+  workflow_dispatch:
+  pull_request:
+  schedule:
+    - cron: "0 2 * * *"
+
+env:
+  RUN_SLOW: yes
+
+jobs:
+  run_all_tests_single_gpu:
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    strategy:
+      matrix:
+        test_suite: [test, test_examples]
+    steps:
+      - name: Clone and install
+        run: |
+          git clone https://github.com/huggingface/accelerate
+          cd accelerate
+          git checkout ${{ github.sha }}
+          pip install -e . --no-deps
+      - name: Are GPUs recognized by PyTorch
+        run: |
+          utils/print_env_pt.py
+      - name: Run test on GPUs
+        run: |
+          CUDA_VISIBLE_DEVICES="0" make ${{ matrix.test_suite }}
+
+  run_all_tests_multi_gpu:
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    strategy:
+      matrix:
+        test_suite: [test, test_examples]
+    steps:
+      - name: Clone and install
+        run: |
+          git clone https://github.com/huggingface/accelerate
+          cd accelerate
+          git checkout ${{ github.sha }}
+          pip install -e . --no-deps
+      - name: Are GPUs recognized by PyTorch
+        run: |
+          utils/print_env_pt.py
+      - name: Run test on GPUs
+        run: |
+          CUDA_VISIBLE_DEVICES="0,1" make ${{ matrix.test_suite }}
