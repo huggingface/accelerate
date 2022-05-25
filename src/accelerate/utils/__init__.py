@@ -73,11 +73,10 @@ from .operations import (
     send_to_device,
     slice_tensors,
 )
-
+from .versions import compare_versions, is_torch_version
 
 if is_deepspeed_available():
     from .deepspeed import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
-
 from .launch import PrepareForLaunch
 from .memory import find_executable_batch_size
 from .other import (
@@ -89,4 +88,3 @@ from .other import (
     write_basic_config,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
-from .versions import compare_versions, is_torch_version
