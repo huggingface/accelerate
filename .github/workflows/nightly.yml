@@ -17,6 +17,7 @@ jobs:
     steps:
       - name: Clone and install
         run: |
+          sudo apt -y update; sudo apt install -y git
           git clone https://github.com/huggingface/accelerate
           cd accelerate
           git checkout ${{ github.sha }}
@@ -40,6 +41,7 @@ jobs:
     steps:
       - name: Clone and install
         run: |
+          sudo apt -y update; sudo apt install -y git
           git clone https://github.com/huggingface/accelerate
           cd accelerate
           git checkout ${{ github.sha }}
