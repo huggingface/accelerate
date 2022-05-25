@@ -47,7 +47,7 @@ def compare_versions(library_or_version: Union[str, Version], operation: str, re
     return operation(library_or_version, parse(requirement_version))
 
 
-def check_torch_version(operation: str, version: str):
+def is_torch_version(operation: str, version: str):
     """Compares the current PyTorch version to `version` with an `operation`
 
     Args:

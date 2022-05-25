@@ -89,4 +89,4 @@ from .other import (
     write_basic_config,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
-from .versions import check_torch_version, compare_versions
+from .versions import is_torch_version, compare_versions

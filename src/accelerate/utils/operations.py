@@ -26,7 +26,7 @@ from torch.distributed import ReduceOp
 from ..state import AcceleratorState
 from .dataclasses import DistributedType, TensorInformation
 from .imports import is_tpu_available
-from .versions import check_torch_version
+from .versions import is_torch_version
 
 
 if is_tpu_available():
@@ -458,7 +458,7 @@ def convert_to_fp32(tensor):
 
     def _is_fp16_bf16_tensor(tensor):
         return hasattr(tensor, "dtype") and (
-            tensor.dtype == torch.float16 or (check_torch_version(">=", "1.10") and tensor.dtype == torch.bfloat16)
+            tensor.dtype == torch.float16 or (is_torch_version(">=", "1.10") and tensor.dtype == torch.bfloat16)
         )
 
     return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
