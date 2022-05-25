@@ -36,7 +36,7 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists*
 
-RUN echo "source activate accelerate" >> /.bashrc
+RUN echo "source activate accelerate" >> ~/.bashrc
 
 # Activate the virtualenv
 CMD ["/bin/bash"]
