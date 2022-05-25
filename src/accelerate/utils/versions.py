@@ -56,4 +56,4 @@ def check_torch_version(operation: str, version: str):
         version (`str`):
             A string version of PyTorch
     """
-    return check_torch_version(torch_version, operation, version)
+    return compare_versions(torch_version, operation, version)
