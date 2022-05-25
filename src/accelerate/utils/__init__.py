@@ -73,6 +73,7 @@ from .operations import (
     send_to_device,
     slice_tensors,
 )
+from .versions import compare_versions, is_torch_version
 
 
 if is_deepspeed_available():

@@ -17,10 +17,8 @@ import warnings
 
 import torch
 
-from packaging import version
-
 from .state import AcceleratorState
-from .utils import DistributedType, honor_type, is_tpu_available
+from .utils import DistributedType, honor_type, is_torch_version, is_tpu_available
 
 
 if is_tpu_available():
@@ -103,7 +101,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         return self.optimizer.state_dict()
 
     def zero_grad(self, set_to_none=None):
-        if version.parse(torch.__version__) < version.parse("1.7.0"):
+        if is_torch_version("<", "1.7.0"):
             if set_to_none is not None:
                 raise ValueError(
                     "`set_to_none` for Optimizer.zero_grad` was introduced in PyTorch 1.7.0 and can't be used for "

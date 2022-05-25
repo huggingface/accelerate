@@ -21,44 +21,13 @@ import numpy as np
 import torch
 
 
-def offload_state_dict(save_dir: Union[str, os.PathLike], state_dict: Dict[str, torch.Tensor]):
-    """
-    Offload a state dict in a given folder.
-
-    Args:
-        save_dir (`str` or `os.PathLike`): The directory in which to offload the state dict.
-        state_dict (`Dict[str, torch.Tensor]`): The dictionary of tensors to offload.
-    """
-    os.makedirs(save_dir, exist_ok=True)
-    index = {}
-    for name, parameter in state_dict.items():
-        tensor_file = os.path.join(save_dir, f"{name}.dat")
-        array = parameter.numpy()
-        index[name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
-        if array.ndim == 0:
-            array = array[None]
-        file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
-        file_array[:] = array[:]
-        file_array.flush()
-
-    # Update index
-    index_file = os.path.join(save_dir, "index.json")
-    if os.path.isfile(index_file):
-        with open(index_file, "r", encoding="utf-8") as f:
-            current_index = json.load(f)
-    else:
-        current_index = {}
-    current_index.update(index)
-
-    with open(index_file, "w", encoding="utf-8") as f:
-        json.dump(current_index, f, indent=2)
-
-
 def offload_weight(weight, weight_name, offload_folder, index=None):
     array = weight.numpy()
     tensor_file = os.path.join(offload_folder, f"{weight_name}.dat")
     if index is not None:
         index[weight_name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
+    if array.ndim == 0:
+        array = array[None]
     file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
     file_array[:] = array[:]
     file_array.flush()
@@ -80,6 +49,23 @@ def save_offload_index(index, offload_folder):
 
     with open(offload_index_file, "w", encoding="utf-8") as f:
         json.dump(current_index, f, indent=2)
+
+
+def offload_state_dict(save_dir: Union[str, os.PathLike], state_dict: Dict[str, torch.Tensor]):
+    """
+    Offload a state dict in a given folder.
+
+    Args:
+        save_dir (`str` or `os.PathLike`): The directory in which to offload the state dict.
+        state_dict (`Dict[str, torch.Tensor]`): The dictionary of tensors to offload.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    index = {}
+    for name, parameter in state_dict.items():
+        index = offload_weight(parameter, name, save_dir, index=index)
+
+    # Update index
+    save_offload_index(index, save_dir)
 
 
 class PrefixedDataset(Mapping):
