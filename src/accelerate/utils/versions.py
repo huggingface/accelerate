@@ -13,8 +13,11 @@
 # limitations under the License.
 
 import sys
+from typing import Union
 
-from packaging.version import parse
+from packaging.version import Version, parse
+
+from .constants import STR_OPERATION_TO_FUNC
 
 
 if sys.version_info < (3, 8):
@@ -24,4 +27,33 @@ else:
 
 torch_version = parse(importlib_metadata.version("torch"))
 
-def check_version(library, requirement, operation)
+
+def compare_versions(library_or_version: Union[str, Version], operation: str, requirement_version: str):
+    """Compares `library_or_version` to `requirement_version` with an `operation`
+
+    Args:
+        library_or_version (`str`, `packaging.version.Version]`):
+            A library name or Version to check
+        operation (`str`):
+            A string representation of an operator, such as ">" or "<="
+        requirement_version (`str`):
+            The version to compare the library version against
+    """
+    if operation not in STR_OPERATION_TO_FUNC.keys():
+        raise ValueError(f"`operation` must be one of {list(STR_OPERATION_TO_FUNC.keys())}, received {operation}")
+    operation = STR_OPERATION_TO_FUNC[operation]
+    if isinstance(library_or_version, str):
+        library_or_version = parse(importlib_metadata.version(library_or_version))
+    return operation(library_or_version, parse(requirement_version))
+
+
+def check_torch_version(operation: str, version: str):
+    """Compares the current PyTorch version to `version` with an `operation`
+
+    Args:
+        operation (`str`):
+            A string representation of an operator, such as ">" or "<="
+        version (`str`):
+            A string version of PyTorch
+    """
+    return check_torch_version(torch_version, operation, version)

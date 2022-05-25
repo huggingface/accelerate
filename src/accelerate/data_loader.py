@@ -18,13 +18,12 @@ from typing import List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
-from packaging import version
-
 from .state import AcceleratorState, DistributedType, is_tpu_available
 from .utils import (
     RNGType,
     broadcast,
     broadcast_object_list,
+    check_torch_version,
     concatenate,
     find_batch_size,
     get_data_structure,
@@ -61,7 +60,7 @@ _PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {
 }
 
 for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
-    if version.parse(torch.__version__) >= version.parse(v):
+    if check_torch_version(">=", v):
         _PYTORCH_DATALOADER_KWARGS.update(additional_kwargs)
 
 
@@ -327,7 +326,7 @@ class DataLoaderDispatcher(DataLoader):
 
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
         shuffle = False
-        if version.parse(torch.__version__) >= version.parse("1.11.0"):
+        if check_torch_version(">=", "1.11.0"):
             from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
             # We need to save the shuffling state of the DataPipe
@@ -335,7 +334,7 @@ class DataLoaderDispatcher(DataLoader):
                 shuffle = dataset._shuffle_enabled
         super().__init__(dataset, **kwargs)
         self.split_batches = split_batches
-        if version.parse(torch.__version__) < version.parse("1.8.0"):
+        if check_torch_version("<", "1.8.0"):
             raise ImportError(
                 "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
@@ -487,7 +486,7 @@ def prepare_data_loader(
 
     </Tip>"""
     if dispatch_batches is None:
-        if version.parse(torch.__version__) < version.parse("1.8.0") or not put_on_device:
+        if check_torch_version("<", "1.8.0") or not put_on_device:
             dispatch_batches = False
         else:
             dispatch_batches = isinstance(dataloader.dataset, IterableDataset)
