@@ -27,8 +27,6 @@ RUN python3 -m pip install --no-cache-dir \
 # Stage 2
 FROM python:3.6-slim AS build-image
 COPY --from=compile-image /opt/venv /opt/venv
-RUN useradd -ms /bin/bash user
-USER user
 
 # Make sure we use the virtualenv
 ENV PATH="/opt/venv/bin:$PATH"
