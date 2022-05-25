@@ -15,9 +15,12 @@ jobs:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
     steps:
-      - name: Clone and install
+      - name: Print working directory
         run: |
-          cd accelerate
+          echo "$PWD"
+      # - name: Clone and install
+      #   run: |
+      #     cd accelerate
       # - name: Are GPUs recognized by PyTorch
       #   run: |
       #     utils/print_env_pt.py
@@ -35,9 +38,12 @@ jobs:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
     steps:
-      - name: Clone and install
+      - name: Print working directory
         run: |
-          cd accelerate
+          echo "$PWD"
+      # - name: Clone and install
+      #   run: |
+      #     cd accelerate
       # - name: Are GPUs recognized by PyTorch
       #   run: |
       #     utils/print_env_pt.py
