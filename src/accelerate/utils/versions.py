@@ -23,3 +23,5 @@ else:
     import importlib.metadata as importlib_metadata
 
 torch_version = parse(importlib_metadata.version("torch"))
+
+def check_version(library, requirement, operation)
