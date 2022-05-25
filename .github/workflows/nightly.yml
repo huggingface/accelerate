@@ -17,8 +17,6 @@ jobs:
     steps:
       - name: Clone and install
         run: |
-          git clone https://github.com/huggingface/accelerate
-          cd accelerate
           git checkout ${{ github.sha }}
           pip install -e . --no-deps
       # - name: Are GPUs recognized by PyTorch
@@ -40,10 +38,8 @@ jobs:
     steps:
       - name: Clone and install
         run: |
-          git clone https://github.com/huggingface/accelerate
           cd accelerate
           git checkout ${{ github.sha }}
-          pip install -e . --no-deps
       # - name: Are GPUs recognized by PyTorch
       #   run: |
       #     utils/print_env_pt.py
