@@ -63,8 +63,10 @@ jobs:
       #     utils/print_env_pt.py
       - name: Run test on GPUs
         run: |
+          source activate accelerate
           CUDA_VISIBLE_DEVICES="0,1" make test
 
       - name: Run examples on GPUs
         run: |
+          source activate accelerate
           CUDA_VISIBLE_DEVICES="0,1" make test_examples
