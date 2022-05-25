@@ -21,9 +21,9 @@ jobs:
           cd accelerate
           git checkout ${{ github.sha }}
           pip install -e . --no-deps
-      - name: Are GPUs recognized by PyTorch
-        run: |
-          utils/print_env_pt.py
+      # - name: Are GPUs recognized by PyTorch
+      #   run: |
+      #     utils/print_env_pt.py
       - name: Run test on GPUs
         run: |
           CUDA_VISIBLE_DEVICES="0" make test
@@ -44,9 +44,9 @@ jobs:
           cd accelerate
           git checkout ${{ github.sha }}
           pip install -e . --no-deps
-      - name: Are GPUs recognized by PyTorch
-        run: |
-          utils/print_env_pt.py
+      # - name: Are GPUs recognized by PyTorch
+      #   run: |
+      #     utils/print_env_pt.py
       - name: Run test on GPUs
         run: |
           CUDA_VISIBLE_DEVICES="0,1" make test
