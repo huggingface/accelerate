@@ -18,7 +18,7 @@ import warnings
 import torch
 
 from .state import AcceleratorState
-from .utils import DistributedType, is_torch_version, honor_type, is_tpu_available
+from .utils import DistributedType, honor_type, is_torch_version, is_tpu_available
 
 
 if is_tpu_available():
