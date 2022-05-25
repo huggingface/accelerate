@@ -2,7 +2,6 @@ name: Self-hosted runner (scheduled)
 
 on:
   workflow_dispatch:
-  pull_request:
   schedule:
     - cron: "0 2 * * *"
 
@@ -15,9 +14,6 @@ jobs:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
-    strategy:
-      matrix:
-        test_suite: [test, test_examples]
     steps:
       - name: Clone and install
         run: |
@@ -30,16 +26,17 @@ jobs:
           utils/print_env_pt.py
       - name: Run test on GPUs
         run: |
-          CUDA_VISIBLE_DEVICES="0" make ${{ matrix.test_suite }}
+          CUDA_VISIBLE_DEVICES="0" make test
+
+      - name: Run examples on GPUs
+        run: |
+          CUDA_VISIBLE_DEVICES="0" make test_examples
 
   run_all_tests_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
-    strategy:
-      matrix:
-        test_suite: [test, test_examples]
     steps:
       - name: Clone and install
         run: |
@@ -52,4 +49,8 @@ jobs:
           utils/print_env_pt.py
       - name: Run test on GPUs
         run: |
-          CUDA_VISIBLE_DEVICES="0,1" make ${{ matrix.test_suite }}
+          CUDA_VISIBLE_DEVICES="0,1" make test
+
+      - name: Run examples on GPUs
+        run: |
+          CUDA_VISIBLE_DEVICES="0,1" make test_examples
