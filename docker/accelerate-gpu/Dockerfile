@@ -30,6 +30,12 @@ FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS build-image
 COPY --from=compile-image /opt/conda /opt/conda
 ENV PATH /opt/conda/bin:$PATH
 
+# Install apt libs
+RUN apt-get update && \
+    apt-get install -y curl git wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists*
+
 RUN echo "source activate accelerate" >> /.bashrc
 
 RUN useradd -ms /bin/bash user
