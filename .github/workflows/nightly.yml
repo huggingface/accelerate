@@ -47,7 +47,7 @@ jobs:
       - name: Run test on GPUs
         run: |
           source activate accelerate
-          make test_gpu
+          make test_cuda
 
       - name: Run examples on GPUs
         run: |
