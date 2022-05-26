@@ -22,7 +22,8 @@ jobs:
         run: |
           source activate accelerate
           git fetch && git checkout ${{ github.sha }}
-          pip install -e .
+          pip install -e . --no-deps
+          pip install tensorflow -U
       - name: Run test on GPUs
         run: |
           source activate accelerate
@@ -46,7 +47,8 @@ jobs:
         run: |
           source activate accelerate
           git fetch && git checkout ${{ github.sha }}
-          pip install -e .
+          pip install -e . --no-deps
+          pip install tensorflow -U
       - name: Run test on GPUs
         run: |
           source activate accelerate
