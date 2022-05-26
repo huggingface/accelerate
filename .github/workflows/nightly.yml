@@ -25,7 +25,7 @@ jobs:
       - name: Run test on GPUs
         run: |
           source activate accelerate
-          CUDA_VISIBLE_DEVICES="0" make test_gpu
+          CUDA_VISIBLE_DEVICES="0" make test_cuda
       - name: Run examples on GPUs
         run: |
           source activate accelerate
