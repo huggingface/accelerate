@@ -25,7 +25,8 @@ extras["test"] = [
     "datasets",
     "transformers",
     "scipy",
-    "sklearn"
+    "sklearn",
+    "psutil"
 ]
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorflow"]
 extras["dev"] = extras["quality"] + extras["test"]
