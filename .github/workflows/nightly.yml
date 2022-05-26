@@ -19,16 +19,10 @@ jobs:
         working-directory: accelerate/
         shell: bash
     steps:
-      # - name: Clone and install
-      #   run: |
-      #     cd accelerate
-      # - name: Are GPUs recognized by PyTorch
-      #   run: |
-      #     utils/print_env_pt.py
       - name: Run test on GPUs
         run: |
           source activate accelerate
-          CUDA_VISIBLE_DEVICES="0" make test
+          CUDA_VISIBLE_DEVICES="0" make test_gpu
 
       - name: Run examples on GPUs
         run: |
@@ -45,22 +39,10 @@ jobs:
         working-directory: accelerate/
         shell: bash
     steps:
-      - name: Run source
-        run: |
-          source activate accelerate
-      - name: Print working directory
-        run: |
-          echo "$PWD"
-      # - name: Clone and install
-      #   run: |
-      #     cd accelerate
-      # - name: Are GPUs recognized by PyTorch
-      #   run: |
-      #     utils/print_env_pt.py
       - name: Run test on GPUs
         run: |
           source activate accelerate
-          make test
+          make test_gpu
 
       - name: Run examples on GPUs
         run: |
