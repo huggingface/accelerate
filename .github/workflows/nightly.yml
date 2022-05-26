@@ -21,9 +21,10 @@ jobs:
         working-directory: accelerate/
         shell: bash
     steps:
-      - name: Update clone
+      - name: Update clone & pip install
         run: |
           git fetch && git checkout ${{ github.sha }}
+          pip install -e . --no-deps
       - name: Run test on GPUs
         run: |
           source activate accelerate
@@ -46,6 +47,7 @@ jobs:
       - name: Update clone
         run: |
           git fetch && git checkout ${{ github.sha }}
+          pip install -e . --no-deps
       - name: Run test on GPUs
         run: |
           source activate accelerate
