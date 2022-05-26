@@ -19,14 +19,13 @@ jobs:
         working-directory: accelerate/
         shell: bash
     steps:
-      - name: Print current user
+      - name: Update clone
         run: |
-          echo "$USER"
+          git fetch && git checkout ${{ github.sha }}
       - name: Run test on GPUs
         run: |
           source activate accelerate
           CUDA_VISIBLE_DEVICES="0" make test_gpu
-
       - name: Run examples on GPUs
         run: |
           source activate accelerate
@@ -42,6 +41,9 @@ jobs:
         working-directory: accelerate/
         shell: bash
     steps:
+      - name: Update clone
+        run: |
+          git fetch && git checkout ${{ github.sha }}
       - name: Run test on GPUs
         run: |
           source activate accelerate
