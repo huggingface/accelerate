@@ -301,7 +301,7 @@ def training_function(config, args):
                     {
                         "accuracy": eval_metric["accuracy"],
                         "f1": eval_metric["f1"],
-                        "train_loss": total_loss.item(),
+                        "train_loss": total_loss.item() / len(train_dataloader),
                     },
                     step=epoch,
                 )
