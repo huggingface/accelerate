@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: "0 2 * * *"
 
+env:
+  RUN_SLOW: yes
+
 jobs:
   run_all_tests_single_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
