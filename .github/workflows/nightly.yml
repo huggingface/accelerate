@@ -5,9 +5,6 @@ on:
   schedule:
     - cron: "0 2 * * *"
 
-env:
-  RUN_SLOW: yes
-
 jobs:
   run_all_tests_single_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
@@ -25,7 +22,7 @@ jobs:
         run: |
           source activate accelerate
           git fetch && git checkout ${{ github.sha }}
-          pip install -e . --no-deps
+          pip install -e .
       - name: Run test on GPUs
         run: |
           source activate accelerate
@@ -49,7 +46,7 @@ jobs:
         run: |
           source activate accelerate
           git fetch && git checkout ${{ github.sha }}
-          pip install -e . --no-deps
+          pip install -e .
       - name: Run test on GPUs
         run: |
           source activate accelerate
