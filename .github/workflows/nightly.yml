@@ -19,6 +19,9 @@ jobs:
         working-directory: accelerate/
         shell: bash
     steps:
+      - name: Print current user
+        run: |
+          echo "$USER"
       - name: Run test on GPUs
         run: |
           source activate accelerate
