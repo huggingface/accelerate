@@ -56,13 +56,6 @@ def slow(test_case):
     return unittest.skipUnless(_run_slow_tests, "test is slow")(test_case)
 
 
-def require_cpu(test_case):
-    """
-    Decorator marking a test that requires a CPU only. These tests are skipped when there is a GPU available.
-    """
-    return unittest.skipUnless(not torch.cuda.is_available(), "test requires no GPUs")(test_case)
-
-
 def require_cuda(test_case):
     """
     Decorator marking a test that requires CUDA. These tests are skipped when there are no GPU available.
