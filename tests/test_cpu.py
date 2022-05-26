@@ -18,6 +18,6 @@ from accelerate import debug_launcher
 from accelerate.test_utils import test_script
 
 
-class MultiTPUTester(unittest.TestCase):
+class MultiCPUTester(unittest.TestCase):
     def test_cpu(self):
         debug_launcher(test_script.main)
