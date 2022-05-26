@@ -23,6 +23,7 @@ jobs:
     steps:
       - name: Update clone & pip install
         run: |
+          source activate accelerate
           git fetch && git checkout ${{ github.sha }}
           pip install -e . --no-deps
       - name: Run test on GPUs
@@ -46,6 +47,7 @@ jobs:
     steps:
       - name: Update clone
         run: |
+          source activate accelerate
           git fetch && git checkout ${{ github.sha }}
           pip install -e . --no-deps
       - name: Run test on GPUs
