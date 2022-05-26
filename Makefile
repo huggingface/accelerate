@@ -28,8 +28,8 @@ test_cpu:
 	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py
 
 test_cuda:
-	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/test_scheduler.py --ignore=./tests/test_cpu.py
 	python -m pytest -s -v ./tests/test_cpu.py ./tests/test_scheduler.py
+	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/test_scheduler.py --ignore=./tests/test_cpu.py
 
 test_examples:
 	python -m pytest -s -v ./tests/test_examples.py
