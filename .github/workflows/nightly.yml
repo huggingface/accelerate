@@ -21,6 +21,7 @@ jobs:
     steps:
       - name: Update clone
         run: |
+          git config --global --add safe.directory .
           git fetch && git checkout ${{ github.sha }}
       - name: Run test on GPUs
         run: |
@@ -43,6 +44,7 @@ jobs:
     steps:
       - name: Update clone
         run: |
+          git config --global --add safe.directory .
           git fetch && git checkout ${{ github.sha }}
       - name: Run test on GPUs
         run: |
