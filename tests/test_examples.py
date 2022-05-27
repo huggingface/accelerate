@@ -22,7 +22,7 @@ import unittest
 from unittest import mock
 
 from accelerate.test_utils.examples import compare_against_test
-from accelerate.test_utils.testing import TempDirTestCase, slow, require_non_multi_gpu, require_multi_gpu
+from accelerate.test_utils.testing import TempDirTestCase, require_multi_gpu, require_non_multi_gpu, slow
 from accelerate.utils import write_basic_config
 
 
