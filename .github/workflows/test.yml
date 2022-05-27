@@ -14,7 +14,7 @@ jobs:
     - name: Install Python dependencies
       run: pip install setuptools==59.5.0; pip install -e .[test,test_trackers]
     - name: Run Tests
-      run: make test
+      run: make test_cpu
       
   test_examples:
     runs-on: ubuntu-latest

@@ -55,7 +55,7 @@ setup(
         ]
     },
     python_requires=">=3.6.0",
-    install_requires=["torch>=1.4.0", "pyyaml", "numpy>=1.17"],
+    install_requires=["numpy>=1.17", "packaging>=20.0", "pyyaml", "torch>=1.4.0"],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",

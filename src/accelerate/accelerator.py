@@ -21,8 +21,6 @@ from typing import List, Optional, Union
 
 import torch
 
-from packaging import version
-
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
 from .logging import get_logger
@@ -49,6 +47,7 @@ from .utils import (
     get_pretty_name,
     is_deepspeed_available,
     is_transformers_available,
+    is_torch_version,
     pad_across_processes,
     reduce,
     save,
@@ -191,7 +190,7 @@ class Accelerator:
             os.environ["USE_FSDP"] = "true"  # use FSDP if plugin is provided
 
         if os.environ.get("USE_FSDP", "false") == "true":
-            if version.parse(torch.__version__) < version.parse("1.12.0.dev20220418+cu113"):
+            if is_torch_version("<", "1.12.0.dev20220418+cu113"):
                 raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
 
         # Kwargs handlers
@@ -230,7 +229,7 @@ class Accelerator:
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
-        if dispatch_batches is True and version.parse(torch.__version__) < version.parse("1.8.0"):
+        if dispatch_batches is True and is_torch_version("<", "1.8.0"):
             raise ImportError(
                 "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
@@ -240,15 +239,15 @@ class Accelerator:
         self.scaler = None
         self.native_amp = False
         if self.state.mixed_precision == "fp16":
-            self.native_amp = version.parse(torch.__version__) >= version.parse("1.6")
-            if version.parse(torch.__version__) < version.parse("1.6"):
+            self.native_amp = is_torch_version(">=", "1.6")
+            if not self.native_amp:
                 raise ValueError("fp16 mixed precision requires PyTorch >= 1.6")
 
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = torch.cuda.amp.GradScaler(**kwargs)
         elif self.state.mixed_precision == "bf16":
-            self.native_amp = version.parse(torch.__version__) >= version.parse("1.10")
-            if mixed_precision == "bf16" and version.parse(torch.__version__) < version.parse("1.10"):
+            self.native_amp = is_torch_version(">=", "1.10")
+            if mixed_precision == "bf16" and not self.native_amp:
                 raise ValueError("bf16 mixed precision requires PyTorch >= 1.10")
 
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
@@ -263,7 +262,7 @@ class Accelerator:
         # RNG Types
         self.rng_types = rng_types
         if self.rng_types is None:
-            self.rng_types = ["torch"] if version.parse(torch.__version__) <= version.parse("1.5.1") else ["generator"]
+            self.rng_types = ["torch"] if is_torch_version("<=", "1.5.1") else ["generator"]
 
     @property
     def distributed_type(self):
@@ -504,7 +503,7 @@ class Accelerator:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
-            if self.mixed_precision == "fp16" and version.parse(torch.__version__) >= version.parse("1.10"):
+            if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
             elif self.mixed_precision == "bf16":
                 model.forward = torch.cuda.amp.autocast(dtype=torch.bfloat16)(model.forward)
@@ -979,7 +978,7 @@ class Accelerator:
         different will happen otherwise.
         """
         if self.native_amp:
-            if self.mixed_precision == "fp16" and version.parse(torch.__version__) >= version.parse("1.10"):
+            if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
             elif self.mixed_precision == "bf16":
                 autocast_context = torch.cuda.amp.autocast(dtype=torch.bfloat16)

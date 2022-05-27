@@ -19,10 +19,8 @@ import warnings
 
 import torch
 
-from packaging import version
-
 from .state import AcceleratorState
-from .utils import PrecisionType, PrepareForLaunch, patch_environment
+from .utils import PrecisionType, PrepareForLaunch, is_torch_version, patch_environment
 
 
 def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mixed_precision="no", use_port="29500"):
@@ -85,7 +83,7 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
 
         if num_processes > 1:
             # Multi-GPU launch
-            if version.parse(torch.__version__) < version.parse("1.5.0"):
+            if is_torch_version("<", "1.5.0"):
                 raise ImportError(
                     "Using `notebook_launcher` for distributed training on GPUs require torch >= 1.5.0, got "
                     f"{torch.__version__}."
@@ -156,7 +154,7 @@ def debug_launcher(function, args=(), num_processes=2):
         num_processes (`int`, *optional*, defaults to 2):
             The number of processes to use for training.
     """
-    if version.parse(torch.__version__) < version.parse("1.5.0"):
+    if is_torch_version("<", "1.5.0"):
         raise ImportError(
             "Using `debug_launcher` for distributed training on GPUs require torch >= 1.5.0, got "
             f"{torch.__version__}."

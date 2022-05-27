@@ -100,13 +100,13 @@ class ExampleDifferenceTests(unittest.TestCase):
         cv_path = os.path.abspath(os.path.join("examples", "cv_example.py"))
         special_strings = [
             " " * 16 + "{\n\n",
-            " " * 18 + '"accuracy": eval_metric["accuracy"],\n\n',
-            " " * 18 + '"f1": eval_metric["f1"],\n\n',
-            " " * 18 + '"train_loss": total_loss.item(),\n\n',
-            " " * 18 + '"epoch": epoch,\n\n',
+            " " * 20 + '"accuracy": eval_metric["accuracy"],\n\n',
+            " " * 20 + '"f1": eval_metric["f1"],\n\n',
+            " " * 20 + '"train_loss": total_loss.item() / len(train_dataloader),\n\n',
+            " " * 20 + '"epoch": epoch,\n\n',
             " " * 16 + "},\n\n",
             " " * 16 + "step=epoch,\n",
-            " " * 8,
+            " " * 12,
         ]
         self.one_complete_example("complete_cv_example.py", True, cv_path, special_strings)
         self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)

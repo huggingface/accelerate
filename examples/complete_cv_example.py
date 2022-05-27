@@ -258,7 +258,12 @@ def training_function(config, args):
         accelerator.print(f"epoch {epoch}: {100 * eval_metric:.2f}")
         if args.with_tracking:
             accelerator.log(
-                {"accuracy": 100 * eval_metric, "total_loss": total_loss, "epoch": epoch}, step=overall_step
+                {
+                    "accuracy": 100 * eval_metric,
+                    "train_loss": total_loss.item() / len(train_dataloader),
+                    "epoch": epoch,
+                },
+                step=overall_step,
             )
         if checkpointing_steps == "epoch":
             output_dir = f"epoch_{epoch}"

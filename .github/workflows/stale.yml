@@ -3,6 +3,7 @@ name: Stale Bot
 on:
   schedule:
     - cron: "0 15 * * *"
+  workflow_dispatch:
 
 jobs:
   close_stale_issues:
@@ -12,7 +13,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-    - uses: actions/@checkoutv2
+    - uses: actions/checkout@v2
     
     - name: Setup Python
       uses: actions/setup-python@v1
