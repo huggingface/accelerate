@@ -272,6 +272,8 @@ class DeepSpeedPlugin:
 
             if self.zero3_init_flag is None:
                 self.zero3_init_flag = os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true"
+            elif self.zero3_init_flag and self.zero_stage != 3:
+                raise ValueError("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3.")
 
             self.deepspeed_config = {
                 "train_batch_size": None,
