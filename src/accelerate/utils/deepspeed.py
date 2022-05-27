@@ -22,9 +22,15 @@ class DeepSpeedEngineWrapper:
         self.engine = engine
 
     def backward(self, loss):
-        # runs backpropagation
+        # runs backpropagation and handles mixed precision
         self.engine.backward(loss)
-        # weight update
+
+        # gradient accumulation check
+        # gradient clipping
+        # optimizer step
+        # zero grad
+        # checking overflow
+        # lr_scheduler step
         self.engine.step()
 
 
