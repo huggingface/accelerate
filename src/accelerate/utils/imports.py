@@ -63,6 +63,10 @@ def is_deepspeed_available():
             return False
 
 
+def is_transformers_available():
+    return importlib.util.find_spec("transformers") is not None
+
+
 def is_tensorflow_available():
     return importlib.util.find_spec("tensorflow") is not None
 

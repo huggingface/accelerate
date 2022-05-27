@@ -108,9 +108,17 @@ class AcceleratorState:
                 mixed_precision = (
                     parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
                 )
-                if mixed_precision == "fp16":
+                if (
+                    mixed_precision == "fp16"
+                    and "fp16" not in deepspeed_plugin.deepspeed_config
+                    and "bf16" not in deepspeed_plugin.deepspeed_config
+                ):
                     deepspeed_plugin.deepspeed_config.update({"fp16": {"enabled": True}})
-                elif mixed_precision == "bf16":
+                elif (
+                    mixed_precision == "bf16"
+                    and "fp16" not in deepspeed_plugin.deepspeed_config
+                    and "bf16" not in deepspeed_plugin.deepspeed_config
+                ):
                     deepspeed_plugin.deepspeed_config.update({"bfloat16": {"enabled": True}})
                 self.deepspeed_plugin = deepspeed_plugin
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:

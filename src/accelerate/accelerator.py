@@ -34,6 +34,8 @@ from .utils import (
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
+    DummyOptim,
+    DummyScheduler,
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -46,6 +48,7 @@ from .utils import (
     gather,
     get_pretty_name,
     is_deepspeed_available,
+    is_transformers_available,
     pad_across_processes,
     reduce,
     save,
@@ -56,7 +59,7 @@ from .utils import (
 if is_deepspeed_available():
     import deepspeed
 
-    from .utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
+    from .utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper, DeepSpeedSchedulerWrapper
 
 logger = get_logger(__name__)
 
@@ -164,6 +167,21 @@ class Accelerator:
                 deepspeed_plugin, DeepSpeedPlugin
             ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
             os.environ["USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
+        if deepspeed_plugin:
+            if os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true" or deepspeed_plugin.zero3_init_flag:
+                if not is_transformers_available():
+                    raise Exception(
+                        "When `zero3_init_flag` is set, it requires Transformers to be installed.\
+                        Please run `pip3 install transformers`."
+                    )
+                from transformers.deepspeed import HfDeepSpeedConfig
+
+                dschf = HfDeepSpeedConfig(deepspeed_plugin.deepspeed_config)  # keep this object alive
+                if dschf.is_zero3():
+                    logger.info(
+                        "Handling Deepspeed ZeRO-3 param gathering and automatically splitting"
+                        "the model onto multiple gpus during from_pretrained call"
+                    )
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = FullyShardedDataParallelPlugin() if os.environ.get("USE_FSDP", "false") == "true" else None
@@ -500,7 +518,14 @@ class Accelerator:
         deepspeed_plugin = self.state.deepspeed_plugin
         self.deepspeed_config = deepspeed_plugin.deepspeed_config
 
+        result = [
+            self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
+            for obj in args
+        ]
+
         batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
+        if self.split_batches:
+            batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
         if len(batch_sizes) == 0:
             raise ValueError(
                 "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
@@ -517,56 +542,82 @@ class Accelerator:
             batch_size_per_device * deepspeed_plugin.gradient_accumulation_steps * self.num_processes
         )
 
-        result = [
-            self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
-            for obj in args
-        ]
-
         model = None
         optimizer = None
+        scheduler = None
         for obj in result:
             if isinstance(obj, torch.nn.Module):
                 model = obj
-            elif isinstance(obj, (torch.optim.Optimizer, dict)):
+            elif isinstance(obj, (torch.optim.Optimizer, DummyOptim)):
                 optimizer = obj
+            elif (isinstance(obj, (torch.optim.lr_scheduler._LRScheduler, DummyScheduler))) or (
+                type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
+            ):
+                scheduler = obj
 
-        if deepspeed_plugin.auto_opt_mapping:
-            is_adam = isinstance(optimizer, torch.optim.Adam)
-            is_adamw = isinstance(optimizer, torch.optim.AdamW)
-            if (is_adam or is_adamw) and deepspeed_plugin.offload_optimizer_device == "cpu":
-                defaults = optimizer.defaults
-                params = []
-                for group in optimizer.param_groups:
-                    params.extend(group["params"])
-
-                optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(
-                    params,
-                    lr=defaults["lr"],
-                    bias_correction=True,
-                    betas=defaults["betas"],
-                    eps=defaults["eps"],
-                    weight_decay=defaults["weight_decay"],
-                    amsgrad=defaults["amsgrad"],
-                    adamw_mode=is_adamw,
-                )
-
-        # useful when only eval_dataloader is given into `accelerator.prepare()`
-        if model is not None:
-            engine = DeepSpeedEngineWrapper(
-                args=None,
-                model=model,
-                optimizer=optimizer,
-                config_params=self.deepspeed_config,
-                dist_init_required=False,
+        if "optimizer" in self.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
+            raise ValueError(
+                "You cannot specify an optimizer in the config file and in the code at the same time.\
+                Please remove the optimizer from the config file or \
+                create `accelerate.utils.DummyOptim` in the code."
             )
+        elif "optimizer" not in self.deepspeed_config and isinstance(optimizer, (DummyOptim)):
+            raise ValueError("You cannot create a `DummyOptim` without specifying an optimizer in the config file.")
+
+        if isinstance(optimizer, (torch.optim.Optimizer)):
+            self.deepspeed_config["zero_allow_untested_optimizer"] = True
+
+        if "scheduler" in self.deepspeed_config and not isinstance(scheduler, (DummyScheduler)):
+            raise ValueError(
+                "You cannot specify a scheduler in the config file and in the code at the same time.\
+                Please remove the scheduler from the config file or \
+                create `accelerate.utils.DummyScheduler` in the code."
+            )
+        elif "scheduler" not in self.deepspeed_config and isinstance(scheduler, (DummyScheduler)):
+            raise ValueError("You cannot create a `DummyScheduler` without specifying a scheduler in the config file.")
+
+        if isinstance(optimizer, (DummyOptim)) and not isinstance(scheduler, (DummyScheduler)):
+            raise ValueError(
+                "You can only specify `accelerate.utils.DummyScheduler` in the code when using \
+                    `accelerate.utils.DummyOptim`."
+            )
+
+        if model is not None:
+            model_parameters = None
+            if isinstance(optimizer, (DummyOptim)):
+                model_parameters = optimizer.param_groups
+                kwargs = dict(model=model, model_parameters=model_parameters, config_params=self.deepspeed_config)
+            else:
+                kwargs = dict(model=model, optimizer=optimizer, config_params=self.deepspeed_config)
+                if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
+                    kwargs["lr_scheduler"] = scheduler
+
+            engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
+            engine = DeepSpeedEngineWrapper(engine)
+            optimizer = DeepSpeedOptimizerWrapper(optimizer)
+            if lr_scheduler is None:
+                scheduler = AcceleratedScheduler(
+                    scheduler,
+                    optimizer,
+                    step_with_optimizer=self.step_scheduler_with_optimizer,
+                    split_batches=self.split_batches,
+                )
+            else:
+                scheduler = DeepSpeedSchedulerWrapper(lr_scheduler)
+
             for i in range(len(result)):
                 if isinstance(result[i], torch.nn.Module):
                     result[i] = engine
-                elif isinstance(result[i], torch.optim.Optimizer):
-                    result[i] = DeepSpeedOptimizerWrapper(engine.optimizer, engine)
+                elif isinstance(result[i], (torch.optim.Optimizer, DummyOptim)):
+                    result[i] = optimizer
+                elif (isinstance(result[i], (torch.optim.lr_scheduler._LRScheduler, DummyScheduler))) or (
+                    type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
+                ):
+                    result[i] = scheduler
             self.deepspeed_engine = engine  # pointing for deepspeed_engine.backward()
             self._models.append(engine)
-            self._optimizers.append(engine.optimizer)
+            self._optimizers.append(optimizer)
+            self._schedulers.append(scheduler)
             assert (
                 len(self._models) == 1
             ), "You can't use same `Accelerator()` instance with 2 models when using DeepSpeed"
@@ -574,7 +625,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.DEEPSPEED:
             assert hasattr(
                 self, "deepspeed_engine"
-            ), "You need to pass the model along the optimizer when using Deepspeed."
+            ), "You need to pass the model along with the optimizer when using Deepspeed."
 
         return tuple(result)
 
@@ -649,6 +700,8 @@ class Accelerator:
                 if parameters == [p for p in model.parameters()]:
                     model.clip_grad_norm_(max_norm, norm_type)
                     return
+        elif self.distributed_type == DistributedType.DEEPSPEED:
+            return
         self.unscale_gradients()
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
@@ -656,6 +709,8 @@ class Accelerator:
         """
         Should be used in place of `torch.nn.utils.clip_grad_value_`.
         """
+        if self.distributed_type in [DistributedType.DEEPSPEED, DistributedType.FSDP]:
+            return
         self.unscale_gradients()
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 

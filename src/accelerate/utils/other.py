@@ -154,3 +154,29 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
     if not path.exists():
         config = ClusterConfig(**config)
         config.to_json_file(path)
+
+
+class DummyOptim:
+    """
+    Dummy optimizer presents model parameters or param groups, this is primarily used to follow conventional training
+    loop when optimizer config is specified in the deepspeed config file.
+    """
+
+    def __init__(self, params=None, param_groups=None):
+        self.param_groups = []
+        if params is None and param_groups is None:
+            raise ValueError("Either params or param_groups should be specified")
+        if param_groups is None:
+            self.param_groups.append({"params": params})
+        else:
+            self.param_groups = param_groups
+
+
+class DummyScheduler:
+    """
+    Dummy scheduler presents model parameters or param groups, this is primarily used to follow conventional training
+    loop when scheduler config is specified in the deepspeed config file.
+    """
+
+    def __init__(self):
+        pass

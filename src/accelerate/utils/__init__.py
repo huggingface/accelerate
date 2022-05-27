@@ -28,6 +28,7 @@ from .imports import (
     is_tensorboard_available,
     is_tensorflow_available,
     is_tpu_available,
+    is_transformers_available,
     is_wandb_available,
 )
 from .modeling import (
@@ -76,11 +77,13 @@ from .operations import (
 
 
 if is_deepspeed_available():
-    from .deepspeed import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
+    from .deepspeed import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper, DeepSpeedSchedulerWrapper
 
 from .launch import PrepareForLaunch
 from .memory import find_executable_batch_size
 from .other import (
+    DummyOptim,
+    DummyScheduler,
     extract_model_from_parallel,
     get_pretty_name,
     patch_environment,

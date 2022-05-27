@@ -19,6 +19,8 @@ General namespace and dataclass related classes
 import copy
 import enum
 import functools
+import io
+import json
 import os
 import typing
 from dataclasses import dataclass, field
@@ -209,9 +211,18 @@ class TensorInformation:
 @dataclass
 class DeepSpeedPlugin:
 
+    config_file: str = field(default=None, metadata={"help": "Path to the DeepSpeed config file."})
+    zero3_init_flag: bool = field(
+        default=False,
+        metadata={
+            "help": "Flag to indicate whether to enable `deepspeed.zero.Init` for constructing massive models.\
+        Only applicable with ZeRO Stage-3."
+        },
+    )
     gradient_accumulation_steps: int = field(
         default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
     )
+    gradient_clipping: float = field(default=None, metadata={"help": "Enable gradient clipping with value"})
     zero_stage: int = field(
         default=None,
         metadata={"help": "Possible options are 0,1,2,3; Default will be taken from environment variable"},
@@ -220,37 +231,64 @@ class DeepSpeedPlugin:
         default=True,
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
     )
-
-    auto_opt_mapping: bool = field(
-        default=True,
-        metadata={"help": "whether to map torch.adam to deepspeed optimizer version of adam based on config"},
+    offload_optimizer_device: bool = field(
+        default=None,
+        metadata={
+            "help": "Possible options are none|cpu|nvme.\
+        Only applicable with ZeRO Stages 2 and 3."
+        },
+    )
+    offload_param_device: bool = field(
+        default=None,
+        metadata={
+            "help": "Possible options are none|cpu|nvme.\
+        Only applicable with ZeRO Stage 3."
+        },
     )
 
-    offload_optimizer_device: bool = field(default=None, metadata={"help": "Possible options are none|cpu|nvme"})
-
     def __post_init__(self):
+        if self.config_file is None:
+            self.config_file = os.environ.get("DEEPSPEED_CONFIG_FILE", "none")
+        if self.config_file != "none":
+            with io.open(self.config_file, "r", encoding="utf-8") as f:
+                self.deepspeed_config = json.load(f)
+        else:
+            if self.gradient_accumulation_steps is None:
+                self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
 
-        if self.gradient_accumulation_steps is None:
-            self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
+            if self.gradient_clipping is None:
+                gradient_clipping = os.environ.get("GRADIENT_CLIPPING", "none")
+                if gradient_clipping != "none":
+                    self.gradient_clipping = float(gradient_clipping)
 
-        if self.zero_stage is None:
-            self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
+            if self.zero_stage is None:
+                self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
 
-        if self.offload_optimizer_device is None:
-            self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
+            if self.offload_optimizer_device is None:
+                self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
 
-        self.deepspeed_config = {
-            "train_batch_size": None,
-            "gradient_accumulation_steps": self.gradient_accumulation_steps,
-            "zero_optimization": {
-                "stage": self.zero_stage,
-                "offload_optimizer": {
-                    "device": self.offload_optimizer_device,
+            if self.offload_param_device is None:
+                self.offload_param_device = os.environ.get("DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
+
+            if self.zero3_init_flag is None:
+                self.zero3_init_flag = os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true"
+
+            self.deepspeed_config = {
+                "train_batch_size": None,
+                "gradient_accumulation_steps": self.gradient_accumulation_steps,
+                "zero_optimization": {
+                    "stage": self.zero_stage,
+                    "offload_optimizer": {
+                        "device": self.offload_optimizer_device,
+                    },
+                    "offload_param": {
+                        "device": self.offload_param_device,
+                    },
                 },
-            },
-            "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
-            "zero_allow_untested_optimizer": True,
-        }
+            }
+            if gradient_clipping:
+                self.deepspeed_config["gradient_clipping"] = gradient_clipping
+        self.deepspeed_config["steps_per_print"] = (float("inf"),)  # this will stop deepspeed from logging @ stdout
 
 
 @dataclass

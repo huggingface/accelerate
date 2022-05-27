@@ -59,6 +59,49 @@ def launch_command_parser(subparsers=None):
         help="Whether to use deepspeed.",
     )
     parser.add_argument(
+        "--config_file",
+        default=None,
+        type=str,
+        help="DeepSpeed's config file (useful only when `use_deepspeed` flag is passed).",
+    )
+    parser.add_argument(
+        "--zero_stage",
+        default=None,
+        type=int,
+        help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed).",
+    )
+    parser.add_argument(
+        "--offload_optimizer_device",
+        default=None,
+        type=str,
+        help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed).",
+    )
+    parser.add_argument(
+        "--offload_param_device",
+        default=None,
+        type=str,
+        help="Decides where (none|cpu|nvme) to offload parameters (useful only when `use_deepspeed` flag is passed).",
+    )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        default=None,
+        type=int,
+        help="No of gradient_accumulation_steps used in your training script (useful only when `use_deepspeed` flag is passed).",
+    )
+    parser.add_argument(
+        "--gradient_clipping",
+        default=None,
+        type=float,
+        help="gradient clipping value used in your training script (useful only when `use_deepspeed` flag is passed).",
+    )
+    parser.add_argument(
+        "--zero3_init_flag",
+        default="false",
+        type=str,
+        help="Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models.\
+        Only applicable with DeepSpeed ZeRO Stage-3.",
+    )
+    parser.add_argument(
         "--use_fsdp",
         default=False,
         action="store_true",
@@ -158,24 +201,6 @@ def launch_command_parser(subparsers=None):
             "The full path to the script to be launched in parallel, followed by all the arguments for the training "
             "script."
         ),
-    )
-    parser.add_argument(
-        "--zero_stage",
-        default=None,
-        type=int,
-        help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed).",
-    )
-    parser.add_argument(
-        "--offload_optimizer_device",
-        default=None,
-        type=str,
-        help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed).",
-    )
-    parser.add_argument(
-        "--gradient_accumulation_steps",
-        default=None,
-        type=int,
-        help="No of gradient_accumulation_steps used in your training script (useful only when `use_deepspeed` flag is passed).",
     )
 
     # Other arguments of the training scripts
@@ -324,7 +349,11 @@ def deepspeed_launcher(args):
     current_env["USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
     current_env["GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
+    current_env["GRADIENT_CLIPPING"] = str(args.gradient_clipping)
     current_env["DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
+    current_env["DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
+    current_env["DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
+    current_env["DEEPSPEED_CONFIG_FILE"] = str(args.config_file).lower()
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
