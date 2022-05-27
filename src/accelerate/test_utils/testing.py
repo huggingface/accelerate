@@ -80,7 +80,8 @@ def require_multi_gpu(test_case):
 
 def require_non_multi_gpu(test_case):
     """
-    Decorator marking a test requires to be ran on the CPU or a single GPU. These tests are skipped when there is more than one GPU.
+    Decorator marking a test requires to be ran on the CPU or a single GPU. These tests are skipped when there is more
+    than one GPU.
     """
     return unittest.skipUnless(
         not torch.cuda.is_available() or torch.cuda.device_count() < 2, "test requires a single GPU or on CPU"
