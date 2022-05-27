@@ -27,7 +27,7 @@ extras["test"] = [
     "scipy",
     "sklearn"
 ]
-extras["test_trackers"] = ["wandb", "comet-ml", "tensorflow"]
+extras["test_trackers"] = ["wandb", "comet-ml", "tensorflow>=2.6.2", "tensorboard"]
 extras["dev"] = extras["quality"] + extras["test"]
 
 extras["sagemaker"] = [
@@ -55,7 +55,7 @@ setup(
         ]
     },
     python_requires=">=3.6.0",
-    install_requires=["numpy>=1.17", "packaging>=20.0", "pyyaml", "torch>=1.4.0"],
+    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.4.0"],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
