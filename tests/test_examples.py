@@ -22,7 +22,7 @@ import unittest
 from unittest import mock
 
 from accelerate.test_utils.examples import compare_against_test
-from accelerate.test_utils.testing import TempDirTestCase, slow
+from accelerate.test_utils.testing import TempDirTestCase, require_multi_gpu, require_non_multi_gpu, slow
 from accelerate.utils import write_basic_config
 
 
@@ -160,7 +160,21 @@ class FeatureExamplesTests(TempDirTestCase):
         self.assertNotIn("epoch 1:", output)
         self.assertIn("epoch 2:", output)
 
+    @require_non_multi_gpu
     def test_load_states_by_steps(self):
+        testargs = f"""
+        examples/by_feature/checkpointing.py
+        --resume_from_checkpoint {os.path.join(self.tmpdir, "step_5")}
+        """.split()
+        output = subprocess.run(
+            self._launch_args + testargs, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        ).stdout
+        self.assertNotIn("epoch 0:", output)
+        self.assertIn("epoch 1:", output)
+        self.assertIn("epoch 2:", output)
+
+    @require_multi_gpu
+    def test_load_states_by_steps_multi_gpu(self):
         testargs = f"""
         examples/by_feature/checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "step_5")}
