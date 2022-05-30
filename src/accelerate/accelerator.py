@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import gc
-import math
 import os
 import sys
 import warnings
