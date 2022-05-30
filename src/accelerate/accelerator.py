@@ -32,8 +32,6 @@ from .utils import (
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
-    DummyOptim,
-    DummyScheduler,
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -58,7 +56,13 @@ from .utils import (
 if is_deepspeed_available():
     import deepspeed
 
-    from .utils import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper, DeepSpeedSchedulerWrapper
+    from .utils import (
+        DeepSpeedEngineWrapper,
+        DeepSpeedOptimizerWrapper,
+        DeepSpeedSchedulerWrapper,
+        DummyOptim,
+        DummyScheduler,
+    )
 
 logger = get_logger(__name__)
 
