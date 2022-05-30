@@ -252,6 +252,8 @@ class DeepSpeedPlugin:
         if self.config_file != "none":
             with io.open(self.config_file, "r", encoding="utf-8") as f:
                 self.deepspeed_config = json.load(f)
+            if "gradient_accumulation_steps" not in self.deepspeed_config:
+                self.deepspeed_config["gradient_accumulation_steps"] = 1
         else:
             if self.gradient_accumulation_steps is None:
                 self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
@@ -289,8 +291,62 @@ class DeepSpeedPlugin:
                 },
             }
             if gradient_clipping:
-                self.deepspeed_config["gradient_clipping"] = gradient_clipping
-        self.deepspeed_config["steps_per_print"] = (float("inf"),)  # this will stop deepspeed from logging @ stdout
+                self.deepspeed_config["gradient_clipping"] = self.gradient_clipping
+        self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
+
+    def find_config_node(self, ds_key_long):
+        config = self.deepspeed_config
+
+        # find the config node of interest if it exists
+        nodes = ds_key_long.split(".")
+        ds_key = nodes.pop()
+        for node in nodes:
+            config = config.get(node)
+            if config is None:
+                return None, ds_key
+
+        return config, ds_key
+
+    def fill_match(self, ds_key_long, mismatches, must_match=True, **kwargs):
+        config, ds_key = self.find_config_node(ds_key_long)
+        if config is None:
+            return
+
+        if config.get(ds_key) == "auto":
+            if ds_key_long in kwargs:
+                config[ds_key] = kwargs[ds_key_long]
+                return
+            else:
+                raise ValueError(
+                    f"{ds_key_long} not found in arguments.\
+                    Please specify {ds_key_long} in the DeepSpeed config file or {ds_key_long} as an argument."
+                )
+
+        if not must_match:
+            return
+
+        ds_val = config.get(ds_key)
+        if ds_val is not None and ds_key_long in kwargs:
+            if ds_val != kwargs[ds_key_long]:
+                mismatches.append(f"- ds {ds_key_long}={ds_val} vs arg {ds_key}={kwargs[ds_key_long]}")
+
+    def deepspeed_config_process(self, prefix="", config=None, **kwargs):
+        """Process the DeepSpeed config with the values from the kwargs."""
+
+        mismatches = []
+        if config is None:
+            config = self.deepspeed_config
+        for key, value in config.items():
+            if isinstance(value, dict):
+                self.deepspeed_config_process(prefix=prefix + key + ".", config=value, **kwargs)
+            elif isinstance(value, str):
+                self.fill_match(prefix + key, mismatches, value, **kwargs)
+        if len(mismatches) > 0:
+            mismatches = "\n".join(mismatches)
+            raise ValueError(
+                "Please correct the following DeepSpeed config values that mismatch kwargs "
+                f" values:\n{mismatches}\nThe easiest method is to set these DeepSpeed config values to 'auto'."
+            )
 
 
 @dataclass

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import math
 import os
 import sys
 import warnings
@@ -522,24 +523,25 @@ class Accelerator:
             for obj in args
         ]
 
-        batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
-        if self.split_batches:
-            batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
-        if len(batch_sizes) == 0:
-            raise ValueError(
-                "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
-            )
+        if deepspeed_plugin.config_file == "none":
+            batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
+            if self.split_batches:
+                batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
+            if len(batch_sizes) == 0:
+                raise ValueError(
+                    "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
+                )
 
-        batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
-        if len(batch_sizes) > 1:
-            logger.info(
-                f"Since you passed both train and evaluation dataloader, `is_train_batch_min` (here \
-                {deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
-            )
+            batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
+            if len(batch_sizes) > 1:
+                logger.info(
+                    f"Since you passed both train and evaluation dataloader, `is_train_batch_min` (here \
+                    {deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
+                )
 
-        self.deepspeed_config["train_batch_size"] = (
-            batch_size_per_device * deepspeed_plugin.gradient_accumulation_steps * self.num_processes
-        )
+            self.deepspeed_config["train_batch_size"] = (
+                batch_size_per_device * self.deepspeed_config["gradient_accumulation_steps"] * self.num_processes
+            )
 
         model = None
         optimizer = None
@@ -592,7 +594,6 @@ class Accelerator:
                     kwargs["lr_scheduler"] = scheduler
 
             engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
-            engine = DeepSpeedEngineWrapper(engine)
             optimizer = DeepSpeedOptimizerWrapper(optimizer)
             if lr_scheduler is None:
                 scheduler = AcceleratedScheduler(
@@ -602,7 +603,7 @@ class Accelerator:
                     split_batches=self.split_batches,
                 )
             else:
-                scheduler = DeepSpeedSchedulerWrapper(lr_scheduler)
+                scheduler = DeepSpeedSchedulerWrapper(lr_scheduler, optimizer)
 
             for i in range(len(result)):
                 if isinstance(result[i], torch.nn.Module):
@@ -613,7 +614,9 @@ class Accelerator:
                     type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
                 ):
                     result[i] = scheduler
-            self.deepspeed_engine = engine  # pointing for deepspeed_engine.backward()
+            self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(
+                engine
+            )  # pointing for deepspeed_engine_wrapped.backward()
             self._models.append(engine)
             self._optimizers.append(optimizer)
             self._schedulers.append(scheduler)
@@ -623,7 +626,7 @@ class Accelerator:
 
         if self.distributed_type == DistributedType.DEEPSPEED:
             assert hasattr(
-                self, "deepspeed_engine"
+                self, "deepspeed_engine_wrapped"
             ), "You need to pass the model along with the optimizer when using Deepspeed."
 
         return tuple(result)
@@ -663,7 +666,7 @@ class Accelerator:
         Use `accelerator.backward(loss)` in lieu of `loss.backward()`.
         """
         if self.distributed_type == DistributedType.DEEPSPEED:
-            self.deepspeed_engine.backward(loss, **kwargs)
+            self.deepspeed_engine_wrapped.backward(loss, **kwargs)
         elif self.scaler is not None:
             self.scaler.scale(loss).backward(**kwargs)
         else:
@@ -892,7 +895,7 @@ class Accelerator:
         self._schedulers = []
         self._optimizers = []
         self._models = []
-        self.deepspeed_engine = None
+        self.deepspeed_engine_wrapped = None
         gc.collect()
         torch.cuda.empty_cache()
 

@@ -78,13 +78,17 @@ from .versions import compare_versions, is_torch_version
 
 
 if is_deepspeed_available():
-    from .deepspeed import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper, DeepSpeedSchedulerWrapper
+    from .deepspeed import (
+        DeepSpeedEngineWrapper,
+        DeepSpeedOptimizerWrapper,
+        DeepSpeedSchedulerWrapper,
+        DummyOptim,
+        DummyScheduler,
+    )
 
 from .launch import PrepareForLaunch
 from .memory import find_executable_batch_size
 from .other import (
-    DummyOptim,
-    DummyScheduler,
     extract_model_from_parallel,
     get_pretty_name,
     patch_environment,

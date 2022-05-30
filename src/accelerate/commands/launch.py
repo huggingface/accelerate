@@ -58,7 +58,7 @@ def launch_command_parser(subparsers=None):
         help="Whether to use deepspeed.",
     )
     parser.add_argument(
-        "--config_file",
+        "--deepspeed_config_file",
         default=None,
         type=str,
         help="DeepSpeed's config file (useful only when `use_deepspeed` flag is passed).",
@@ -352,7 +352,7 @@ def deepspeed_launcher(args):
     current_env["DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
     current_env["DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
     current_env["DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
-    current_env["DEEPSPEED_CONFIG_FILE"] = str(args.config_file).lower()
+    current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file).lower()
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()

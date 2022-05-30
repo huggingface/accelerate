@@ -84,7 +84,7 @@ def get_cluster_input():
                 error_message="Please enter yes or no.",
             )
             if use_deepspeed_config:
-                deepspeed_config["config_path"] = _ask_field(
+                deepspeed_config["deepspeed_config_file"] = _ask_field(
                     "Please enter filepath of the DeepSpeed json config file: ",
                     lambda x: str(x),
                     default="none",
