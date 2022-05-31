@@ -24,7 +24,11 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
+          pip install tensorflow -U 
           pip install -e . --no-deps
+
+# Note: tensorflow upgrade is needed until dropped py 3.6 support
+
       - name: Run test on GPUs
         run: |
           source activate accelerate
@@ -51,7 +55,11 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
+          pip install tensorflow -U
           pip install -e . --no-deps
+
+        # Note: tensorflow upgrade is needed until dropped py 3.6 support
+
       - name: Run test on GPUs
         run: |
           source activate accelerate
