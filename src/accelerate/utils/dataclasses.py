@@ -26,6 +26,7 @@ import typing
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Callable, Iterable, Optional
+import warnings
 
 import torch
 
@@ -212,13 +213,6 @@ class TensorInformation:
 class DeepSpeedPlugin:
 
     config_file: str = field(default=None, metadata={"help": "Path to the DeepSpeed config file."})
-    zero3_init_flag: bool = field(
-        default=False,
-        metadata={
-            "help": "Flag to indicate whether to enable `deepspeed.zero.Init` for constructing massive models.\
-        Only applicable with ZeRO Stage-3."
-        },
-    )
     gradient_accumulation_steps: int = field(
         default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
     )
@@ -245,6 +239,20 @@ class DeepSpeedPlugin:
         Only applicable with ZeRO Stage 3."
         },
     )
+    zero3_init_flag: bool = field(
+        default=None,
+        metadata={
+            "help": "Flag to indicate whether to enable `deepspeed.zero.Init` for constructing massive models.\
+        Only applicable with ZeRO Stage-3."
+        },
+    )
+    zero3_save_16bit_model: bool = field(
+        default=None,
+        metadata={
+            "help": "Flag to indicate whether to save 16-bit model.\
+        Only applicable with ZeRO Stage-3."
+        },
+    )
 
     def __post_init__(self):
         if self.config_file is None:
@@ -254,6 +262,8 @@ class DeepSpeedPlugin:
                 self.deepspeed_config = json.load(f)
             if "gradient_accumulation_steps" not in self.deepspeed_config:
                 self.deepspeed_config["gradient_accumulation_steps"] = 1
+            if "zero_optimization" not in self.deepspeed_config:
+                raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config file.")
         else:
             if self.gradient_accumulation_steps is None:
                 self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
@@ -272,10 +282,8 @@ class DeepSpeedPlugin:
             if self.offload_param_device is None:
                 self.offload_param_device = os.environ.get("DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
 
-            if self.zero3_init_flag is None:
-                self.zero3_init_flag = os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true"
-            elif self.zero3_init_flag and self.zero_stage != 3:
-                raise ValueError("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3.")
+            if self.zero3_save_16bit_model is None:
+                self.zero3_save_16bit_model = os.environ.get("DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
 
             self.deepspeed_config = {
                 "train_batch_size": None,
@@ -288,11 +296,17 @@ class DeepSpeedPlugin:
                     "offload_param": {
                         "device": self.offload_param_device,
                     },
+                    "stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
                 },
             }
-            if gradient_clipping:
+            if self.gradient_clipping:
                 self.deepspeed_config["gradient_clipping"] = self.gradient_clipping
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
+        if self.zero3_init_flag is None:
+            self.zero3_init_flag = os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true"
+        if self.zero3_init_flag and self.deepspeed_config["zero_optimization"]["stage"] != 3:
+            warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
+            self.zero3_init_flag = False
 
     def find_config_node(self, ds_key_long):
         config = self.deepspeed_config

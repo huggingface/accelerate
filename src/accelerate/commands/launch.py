@@ -31,6 +31,7 @@ from accelerate.utils import (
     DistributedType,
     PrecisionType,
     PrepareForLaunch,
+    is_deepspeed_available,
     is_sagemaker_available,
 )
 from accelerate.utils.versions import is_torch_version
@@ -95,9 +96,16 @@ def launch_command_parser(subparsers=None):
     )
     parser.add_argument(
         "--zero3_init_flag",
-        default="false",
+        default=None,
         type=str,
         help="Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models.\
+        Only applicable with DeepSpeed ZeRO Stage-3.",
+    )
+    parser.add_argument(
+        "--zero3_save_16bit_model",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3.\
         Only applicable with DeepSpeed ZeRO Stage-3.",
     )
     parser.add_argument(
@@ -304,6 +312,8 @@ def multi_gpu_launcher(args):
 
 
 def deepspeed_launcher(args):
+    if not is_deepspeed_available():
+        raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
     cmd = ["deepspeed", "--no_local_rank"]
     if args.num_machines > 1:
         cmd.extend(
@@ -352,6 +362,7 @@ def deepspeed_launcher(args):
     current_env["DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
     current_env["DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
     current_env["DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
+    current_env["DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
     current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file).lower()
 
     process = subprocess.Popen(cmd, env=current_env)

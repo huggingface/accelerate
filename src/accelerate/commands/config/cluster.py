@@ -107,20 +107,6 @@ def get_cluster_input():
                         lambda x: str(x),
                         default="none",
                     )
-
-                if deepspeed_config["zero_stage"] == 3:
-                    deepspeed_config["zero3_init_flag"] = _ask_field(
-                        "Do you want to enable `deepspeed.zero.Init` for constructing massive models? [yes/NO]: ",
-                        _convert_yes_no_to_bool,
-                        default=False,
-                        error_message="Please enter yes or no.",
-                    )
-                    if deepspeed_config["zero3_init_flag"]:
-                        if not is_transformers_available():
-                            raise Exception(
-                                "When `zero3_init_flag` is set, it requires Transformers to be installed.\
-                                Please run `pip3 install transformers`."
-                            )
                 deepspeed_config["gradient_accumulation_steps"] = _ask_field(
                     "How many gradient accumulation steps you're passing in your script? [1]: ",
                     lambda x: int(x),
@@ -137,6 +123,25 @@ def get_cluster_input():
                         "What is the gradient clipping value? [1.0]: ",
                         lambda x: float(x),
                         default=1.0,
+                    )
+                if deepspeed_config["zero_stage"] == 3:
+                    deepspeed_config["zero3_save_16bit_model"] = _ask_field(
+                        "Do you want to save 16-bit model weights when using ZeRO Stage-3? [yes/NO]: ",
+                        _convert_yes_no_to_bool,
+                        default=False,
+                        error_message="Please enter yes or no.",
+                    )
+            deepspeed_config["zero3_init_flag"] = _ask_field(
+                "Do you want to enable `deepspeed.zero.Init` when using ZeRO Stage-3 for constructing massive models? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            if deepspeed_config["zero3_init_flag"]:
+                if not is_transformers_available():
+                    raise Exception(
+                        "When `zero3_init_flag` is set, it requires Transformers to be installed.\
+                            Please run `pip3 install transformers`."
                     )
 
     fsdp_config = {}

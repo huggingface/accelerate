@@ -39,6 +39,7 @@ from .utils import (
     LoggerType,
     PrecisionType,
     RNGType,
+    compare_versions,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
@@ -171,6 +172,12 @@ class Accelerator:
             ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
             os.environ["USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
         if deepspeed_plugin:
+            if not is_deepspeed_available():
+                raise ImportError(
+                    "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source."
+                )
+            if compare_versions("deepspeed", "<", "0.6.4"):
+                raise ImportError("DeepSpeed version must be >= 0.6.4. Please update DeepSpeed.")
             if os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true" or deepspeed_plugin.zero3_init_flag:
                 if not is_transformers_available():
                     raise Exception(
@@ -936,12 +943,19 @@ class Accelerator:
 
     def get_state_dict(self, model):
         is_zero_3 = False
-        if is_deepspeed_available():
-            if isinstance(model, DeepSpeedEngineWrapper) and self.distributed_type == DistributedType.DEEPSPEED:
-                is_zero_3 = self.state.deepspeed_plugin.zero_stage == 3
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            is_zero_3 = self.deepspeed_config["zero_optimization"]["stage"] == 3
 
         if is_zero_3:
-            state_dict = model._zero3_consolidated_16bit_state_dict()
+            if model.zero_gather_16bit_weights_on_model_save():
+                state_dict = model._zero3_consolidated_16bit_state_dict()
+            else:
+                raise ValueError(
+                    "Cannot get 16bit model weights because `stage3_gather_16bit_weights_on_model_save` in DeepSpeed config is False\
+                    To save the model weights in 16bit, set `stage3_gather_16bit_weights_on_model_save` to True in DeepSpeed config file or\
+                    set `zero3_save_16bit_model` to True when using `accelerate config`.\
+                    To save the full checkpoint, run `model.save_checkpoint(save_dir)` and use `zero_to_fp32.py` to recover weights."
+                )
         else:
             model = self.unwrap_model(model)
             state_dict = model.state_dict()
