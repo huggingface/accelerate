@@ -14,7 +14,6 @@ jobs:
     - name: Install Python dependencies
       run: |
         pip install --upgrade pip
-        pip install git+https://github.com/huggingface/evaluate.git
         pip install -e .[test,test_trackers]
     - name: Run Tests
       run: make test
@@ -30,7 +29,6 @@ jobs:
     - name: Install Python dependencies
       run: |
         pip install --upgrade pip
-        pip install git+https://github.com/huggingface/evaluate.git
         pip install -e .[test] tensorboard
     - name: Run Tests
       run: make test_examples
