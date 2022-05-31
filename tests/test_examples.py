@@ -21,10 +21,11 @@ import tempfile
 import unittest
 from unittest import mock
 
+import torch
+
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import TempDirTestCase, slow
 from accelerate.utils import write_basic_config
-from accelerate.state import AcceleratorState
 
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
