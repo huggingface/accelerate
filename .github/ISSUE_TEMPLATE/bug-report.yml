@@ -3,3 +3,7 @@ description: Submit a bug report to help us improve Accelerate
 labels: [ "bug" ]
 body:
   - type: textarea
+    id: system-info
+    attributes:
+      label: System Info
+      description: Please share your accelerate configuration with us. You can run the command `accelerate env` and copy-paste its outputs below
