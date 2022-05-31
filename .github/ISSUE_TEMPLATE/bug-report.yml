@@ -27,7 +27,7 @@ body:
       label: Tasks
       description: "The tasks I am working on are:"
       options:
-        - label: "An officially supported `no_trainer` script in the `examples` folder of the `transformers` repo (such as `run_no_trainer_glue.py`)"
+        - label: "One of the scripts in the examples/ folder of Accelerate or an officially supported `no_trainer` script in the `examples` folder of the `transformers` repo (such as `run_no_trainer_glue.py`)"
         - label: "My own task or dataset (give details below)"
   
   - type: textarea
