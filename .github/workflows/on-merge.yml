@@ -1,16 +1,16 @@
-name: Self-hosted runner (scheduled)
+name: Self-hosted runner (push to "main")
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 2 * * *"
+  push:
+    branches:
+      - "main"
 
 jobs:
   run_all_tests_single_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     env:
       CUDA_VISIBLE_DEVICES: "0"
-      ALL_SLOW: "yes"
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
@@ -25,7 +25,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install tensorflow -U 
-          pip install -e . --no-deps
+          pip install -e . -U
 
 # Note: tensorflow upgrade is needed until dropped py 3.6 support
 
@@ -40,9 +40,6 @@ jobs:
 
   run_all_tests_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
-    env:
-      ALL_SLOW: "yes"
-      CUDA_VISIBLE_DEVICES: "0,1"
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
@@ -57,7 +54,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install tensorflow -U
-          pip install -e . --no-deps
+          pip install -e . -U
 
         # Note: tensorflow upgrade is needed until dropped py 3.6 support
 
