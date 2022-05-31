@@ -29,6 +29,6 @@ jobs:
     - name: Install Python dependencies
       run: |
         pip install --upgrade pip
-        pip install -e .[test] tensorboard
+        pip install -e .[test] protobuf<=3.20.1 tensorboard
     - name: Run Tests
       run: make test_examples
