@@ -28,7 +28,7 @@ extras["test"] = [
     "scipy",
     "sklearn"
 ]
-extras["test_trackers"] = ["wandb", "comet-ml", "tensorflow>=2.8.0", "tensorboard"]
+extras["test_trackers"] = ["wandb", "comet-ml", "tensorflow>=2.6.2", "tensorboard"]
 extras["dev"] = extras["quality"] + extras["test"]
 
 extras["sagemaker"] = [
