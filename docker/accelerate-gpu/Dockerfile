@@ -23,7 +23,7 @@ SHELL ["/bin/bash", "-c"]
 RUN source activate accelerate && \
     python3 -m pip install --no-cache-dir \
     torch --extra-index-url https://download.pytorch.org/whl/cu113 \
-    git+https://github.com/huggingface/accelerate#egg=accelerate[dev]
+    git+https://github.com/huggingface/accelerate#egg=accelerate[dev,test_trackers]
 
 # Stage 2
 FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS build-image
