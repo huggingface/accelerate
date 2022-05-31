@@ -25,7 +25,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install tensorflow -U 
-          pip install -e . --no-deps
+          pip install -e . -U
 
 # Note: tensorflow upgrade is needed until dropped py 3.6 support
 
@@ -54,7 +54,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install tensorflow -U
-          pip install -e . --no-deps
+          pip install -e . -U
 
         # Note: tensorflow upgrade is needed until dropped py 3.6 support
 
