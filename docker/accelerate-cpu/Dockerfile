@@ -21,7 +21,7 @@ WORKDIR /workspace
 RUN python3 -m pip install --upgrade --no-cache-dir pip
 RUN python3 -m pip install --no-cache-dir \
     jupyter \
-    git+https://github.com/huggingface/accelerate@nightly-runner#egg=accelerate[dev,test_trackers] \
+    git+https://github.com/huggingface/accelerate@nightly-runner#egg=accelerate[test,test_trackers] \
     --extra-index-url https://download.pytorch.org/whl/cpu
     
 # Stage 2
