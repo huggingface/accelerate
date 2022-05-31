@@ -169,11 +169,10 @@ class FeatureExamplesTests(TempDirTestCase):
         output = subprocess.run(
             self._launch_args + testargs, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         ).stdout
-        num_processes = AcceleratorState().num_processes
-        # if torch.cuda.is_available():
-        #     num_processes = torch.cuda.device_count()
-        # else:
-        #     num_processes = 1
+        if torch.cuda.is_available():
+            num_processes = torch.cuda.device_count()
+        else:
+            num_processes = 1
         if num_processes > 1:
             self.assertNotIn("epoch 0:", output)
             self.assertNotIn("epoch 1:", output)
