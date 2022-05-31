@@ -17,7 +17,6 @@ import os
 import re
 import shutil
 import subprocess
-import torch
 import tempfile
 import unittest
 from unittest import mock
@@ -25,6 +24,7 @@ from unittest import mock
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import TempDirTestCase, slow
 from accelerate.utils import write_basic_config
+from accelerate.state import AcceleratorState
 
 
 # DataLoaders built from `test_samples/MRPC` for quick testing
@@ -169,10 +169,11 @@ class FeatureExamplesTests(TempDirTestCase):
         output = subprocess.run(
             self._launch_args + testargs, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         ).stdout
-        if torch.cuda.is_available():
-            num_processes = torch.cuda.device_count()
-        else:
-            num_processes = 1
+        num_processes = AcceleratorState().num_processes
+        # if torch.cuda.is_available():
+        #     num_processes = torch.cuda.device_count()
+        # else:
+        #     num_processes = 1
         if num_processes > 1:
             self.assertNotIn("epoch 0:", output)
             self.assertNotIn("epoch 1:", output)
