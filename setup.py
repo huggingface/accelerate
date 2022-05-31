@@ -19,10 +19,10 @@ extras = {}
 extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3"]
 extras["docs"] = []
 extras["test"] = [
+    "psutil", 
     "pytest",
     "pytest-xdist",
     "pytest-subtests",
-    "datasets",
     "transformers",
     "scipy",
     "sklearn"
@@ -55,7 +55,7 @@ setup(
         ]
     },
     python_requires=">=3.6.0",
-    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.4.0"],
+    install_requires=["numpy>=1.17", "packaging>=20.0", "pyyaml", "torch>=1.4.0"],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
