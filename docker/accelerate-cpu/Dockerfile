@@ -1,7 +1,7 @@
 # Builds CPU-only Docker image of PyTorch
 # Uses multi-staged approach to reduce size
 # Stage 1
-FROM python:3.7-slim as compile-image
+FROM python:3.6-slim as compile-image
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -21,17 +21,14 @@ WORKDIR /workspace
 RUN python3 -m pip install --upgrade --no-cache-dir pip
 RUN python3 -m pip install --no-cache-dir \
     jupyter \
-    git+https://github.com/huggingface/accelerate@nightly-runner#egg=accelerate[test,test_trackers] \
+    git+https://github.com/huggingface/accelerate#egg=accelerate[test,test_trackers] \
     --extra-index-url https://download.pytorch.org/whl/cpu
     
 # Stage 2
-FROM python:3.7-slim AS build-image
+FROM python:3.6-slim AS build-image
 COPY --from=compile-image /opt/venv /opt/venv
-# Install apt libs
-RUN apt-get update && \
-    apt-get install -y curl git wget && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists*
+RUN useradd -ms /bin/bash user
+USER user
 
 # Make sure we use the virtualenv
 ENV PATH="/opt/venv/bin:$PATH"
