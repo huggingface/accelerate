@@ -24,6 +24,7 @@ extras["test"] = [
     "pytest-xdist",
     "pytest-subtests",
     "datasets",
+    "evaluate",
     "transformers",
     "scipy",
     "sklearn"

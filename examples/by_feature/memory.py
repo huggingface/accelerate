@@ -17,11 +17,11 @@ import os
 import torch
 from torch.utils.data import DataLoader
 
-from accelerate import Accelerator, DistributedType
-
 # New Code #
+import evaluate
+from accelerate import Accelerator, DistributedType
 from accelerate.utils import find_executable_batch_size
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from transformers import (
     AdamW,
     AutoModelForSequenceClassification,
@@ -121,7 +121,7 @@ def training_function(config, args):
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
 
-    metric = load_metric("glue", "mrpc")
+    metric = evaluate.load("glue", "mrpc")
 
     # If the batch size is too big we use gradient accumulation
     gradient_accumulation_steps = 1

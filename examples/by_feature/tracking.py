@@ -18,8 +18,9 @@ import os
 import torch
 from torch.utils.data import DataLoader
 
+import evaluate
 from accelerate import Accelerator, DistributedType
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from transformers import (
     AdamW,
     AutoModelForSequenceClassification,
@@ -132,7 +133,7 @@ def training_function(config, args):
     set_seed(seed)
 
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
-    metric = load_metric("glue", "mrpc")
+    metric = evaluate.load("glue", "mrpc")
 
     # If the batch size is too big we use gradient accumulation
     gradient_accumulation_steps = 1
