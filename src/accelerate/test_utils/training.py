@@ -17,8 +17,6 @@ import torch
 from torch.utils.data import DataLoader
 
 from accelerate.utils.dataclasses import DistributedType
-from datasets import load_dataset
-from transformers import AutoTokenizer
 
 
 class RegressionDataset:
@@ -51,6 +49,9 @@ class RegressionModel(torch.nn.Module):
 
 
 def mocked_dataloaders(accelerator, batch_size: int = 16):
+    from datasets import load_dataset
+    from transformers import AutoTokenizer
+
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     data_files = {"train": "tests/test_samples/MRPC/train.csv", "validation": "tests/test_samples/MRPC/dev.csv"}
     datasets = load_dataset("csv", data_files=data_files)
