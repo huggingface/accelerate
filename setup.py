@@ -19,7 +19,7 @@ extras = {}
 extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3"]
 extras["docs"] = []
 extras["test"] = [
-    "psutil", 
+    "psutil",
     "pytest",
     "pytest-xdist",
     "pytest-subtests",
