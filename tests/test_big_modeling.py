@@ -94,14 +94,18 @@ class BigModelingTester(unittest.TestCase):
 
         cpu_offload(model, execution_device=device)
         output = model(x)
-        self.assertTrue(torch.allclose(expected, output.cpu()), msg=f"Expected: {expected}\nActual: {output.cpu()}")
+        self.assertTrue(
+            torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
+        )
 
         # Clean up for next test.
         remove_hook_from_submodules(model)
 
         cpu_offload(model, execution_device=device, offload_buffers=True)
         output = model(x)
-        self.assertTrue(torch.allclose(expected, output.cpu()), msg=f"Expected: {expected}\nActual: {output.cpu()}")
+        self.assertTrue(
+            torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
+        )
 
     @slow
     @require_cuda
@@ -128,7 +132,7 @@ class BigModelingTester(unittest.TestCase):
             disk_offload(model, tmp_dir, execution_device=device)
             output = model(x)
             self.assertTrue(
-                torch.allclose(expected, output.cpu()), msg=f"Expected: {expected}\nActual: {output.cpu()}"
+                torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
             )
 
             # Clean up for next test.
@@ -138,7 +142,7 @@ class BigModelingTester(unittest.TestCase):
             disk_offload(model, tmp_dir, execution_device=device, offload_buffers=True)
             output = model(x)
             self.assertTrue(
-                torch.allclose(expected, output.cpu()), msg=f"Expected: {expected}\nActual: {output.cpu()}"
+                torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
             )
 
     @slow
