@@ -25,8 +25,6 @@ from .imports import (
     is_comet_ml_available,
     is_deepspeed_available,
     is_sagemaker_available,
-    is_tensorboard_available,
-    is_tensorflow_available,
     is_tpu_available,
     is_wandb_available,
 )
