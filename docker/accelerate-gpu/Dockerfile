@@ -22,7 +22,7 @@ SHELL ["/bin/bash", "-c"]
 # Activate the conda env and install torch + accelerate
 RUN source activate accelerate && \
     python3 -m pip install --no-cache-dir \
-    git+https://github.com/huggingface/accelerate#egg=accelerate[test,test_trackers] \
+    git+https://github.com/huggingface/accelerate@py37#egg=accelerate[test,test_trackers] \
     --extra-index-url https://download.pytorch.org/whl/cu113
 
 # Stage 2
