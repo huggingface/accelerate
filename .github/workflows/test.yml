@@ -41,4 +41,4 @@ jobs:
     
     - name: Run Tests
       run: |
-        make ${{ matrxi.test-kind }}
+        make ${{ matrix.test-kind }}
