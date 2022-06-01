@@ -26,7 +26,13 @@ from unittest import mock
 
 # We use TF to parse the logs
 from accelerate import Accelerator
-from accelerate.test_utils.testing import MockingTestCase, TempDirTestCase, require_comet_ml, require_tensorboard, require_wandb
+from accelerate.test_utils.testing import (
+    MockingTestCase,
+    TempDirTestCase,
+    require_comet_ml,
+    require_tensorboard,
+    require_wandb,
+)
 from accelerate.tracking import CometMLTracker, GeneralTracker
 from accelerate.utils import is_comet_ml_available
 
@@ -35,6 +41,7 @@ if is_comet_ml_available():
     from comet_ml import OfflineExperiment
 
 logger = logging.getLogger(__name__)
+
 
 @require_tensorboard
 class TensorBoardTrackingTest(unittest.TestCase):
