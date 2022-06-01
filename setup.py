@@ -29,6 +29,7 @@ extras["test"] = [
     "scipy",
     "sklearn",
     "parameterized",
+    "deepspeed",
 ]
 extras["tensorboard"] = ["protobuf<=3.20.1", "tensorflow>=2.6.2", "tensorboard"]
 extras["test_trackers"] = extras["tensorboard"] + ["wandb", "comet-ml"]
