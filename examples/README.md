@@ -23,7 +23,7 @@ The [nlp_example.py](./nlp_example.py) script is a simple example to train a Ber
 Prior to running it you should install 🤗 Dataset and 🤗 Transformers:
 
 ```bash
-pip install datasets transformers
+pip install datasets evaluate transformers
 ```
 
 The same script can be run in any of the following configurations:

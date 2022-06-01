@@ -18,8 +18,9 @@ import os
 import torch
 from torch.utils.data import DataLoader
 
+import evaluate
 from accelerate import Accelerator, DistributedType
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from transformers import (
     AdamW,
     AutoModelForSequenceClassification,
@@ -89,7 +90,7 @@ def training_function(config, args):
 
     tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     datasets = load_dataset("glue", "mrpc")
-    metric = load_metric("glue", "mrpc")
+    metric = evaluate.load("glue", "mrpc")
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
