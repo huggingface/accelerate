@@ -36,8 +36,32 @@ if is_comet_ml_available():
 
 logger = logging.getLogger(__name__)
 
-
+@require_tensorboard
 class TensorBoardTrackingTest(unittest.TestCase):
+    def test_init_trackers(self):
+        project_name = "test_project_with_config"
+        with tempfile.TemporaryDirectory() as dirpath:
+            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
+            config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
+            accelerator.init_trackers(project_name, config)
+            accelerator.end_training()
+            for child in Path(f"{dirpath}/{project_name}").glob("*/**"):
+                log = list(filter(lambda x: x.is_file(), child.iterdir()))[0]
+            self.assertNotEqual(str(log), "")
+
+    def test_log(self):
+        project_name = "test_project_with_log"
+        with tempfile.TemporaryDirectory() as dirpath:
+            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
+            accelerator.init_trackers(project_name)
+            values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
+            accelerator.log(values, step=0)
+            accelerator.end_training()
+            # Logged values are stored in the outermost-tfevents file and can be read in as a TFRecord
+            # Names are randomly generated each time
+            log = list(filter(lambda x: x.is_file(), Path(f"{dirpath}/{project_name}").iterdir()))[0]
+            self.assertNotEqual(str(log), "")
+
     def test_logging_dir(self):
         with self.assertRaisesRegex(ValueError, "Logging with `tensorboard` requires a `logging_dir`"):
             _ = Accelerator(log_with="tensorboard")

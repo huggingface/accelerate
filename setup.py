@@ -30,7 +30,7 @@ extras["test"] = [
     "sklearn"
 ]
 
-extras["test_trackers"] = ["wandb", "comet-ml"]
+extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]
 extras["dev"] = extras["quality"] + extras["test"]
 
 extras["sagemaker"] = [
