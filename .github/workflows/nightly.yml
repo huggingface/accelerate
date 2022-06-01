@@ -24,7 +24,7 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }} 
-          pip install -e . --no-deps
+          pip install -e .
 
       - name: Run test on GPUs
         run: |
@@ -53,7 +53,7 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
-          pip install -e . --no-deps
+          pip install -e .
 
       - name: Run test on GPUs
         run: |
