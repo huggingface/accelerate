@@ -1,34 +1,44 @@
 name: Run Tests
 
-on: [pull_request]
+on: [pull_request, workflow_dispatch]
+
+env:
+  HF_HOME: ~/hf_cache
 
 jobs:
-  test:
+  run-tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-kind: [
+          test,
+          test_example_differences,
+          test_checkpoint_step,
+          test_checkpoint_epoch,
+          test_rest
+        ]
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python 3.7
-      uses: actions/setup-python@v2
+    - uses: actions/checkout@v3
+    - name: Set up python 3.7
+      id: setup_python
+      uses: actions/setup-python@v3
       with:
         python-version: 3.7
-    - name: Install Python dependencies
-      run: |
-        pip install --upgrade pip
-        pip install -e .[test,test_trackers]
-    - name: Run Tests
-      run: make test
-      
-  test_examples:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python 3.7
-      uses: actions/setup-python@v2
+    
+    - name: Activate python cache
+      id: python_cache
+      uses: actions/cache@v3
       with:
-        python-version: 3.7
-    - name: Install Python dependencies
+        path: |
+          ${{ env.pythonLocation }}
+          ${{ env.HF_HOME }}
+        key: ${{ env.pythonLocation }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
+    
+    - name: Install the library
       run: |
         pip install --upgrade pip
-        pip install -e .[test,tensorboard]
+        pip install -e .[test,test_trackers,tensorboard]
+    
     - name: Run Tests
-      run: make test_examples
+      run: |
+        make ${{ matrxi.test-kind }}

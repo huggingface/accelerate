@@ -29,3 +29,16 @@ test:
 
 test_examples:
 	python -m pytest -s -v ./tests/test_examples.py
+
+# Broken down example tests for the CI runners
+test_example_differences:
+	python -m pytest -s -v ./tests/test_examples.py::ExampleDifferenceTests
+
+test_checkpoint_epoch:
+	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_epoch"
+
+test_checkpoint_step:
+	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_step"
+
+test_rest:
+	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch"
