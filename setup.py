@@ -29,8 +29,8 @@ extras["test"] = [
     "scipy",
     "sklearn"
 ]
-extras["tensorboard"] = ["protobuf<=3.20.1", "tensorflow>=2.6.2", "tensorboard"]
-extras["test_trackers"] = extras["tensorboard"] + ["wandb", "comet-ml"]
+
+extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]
 extras["dev"] = extras["quality"] + extras["test"]
 
 extras["sagemaker"] = [
@@ -57,7 +57,7 @@ setup(
             "accelerate-launch=accelerate.commands.launch:main",
         ]
     },
-    python_requires=">=3.6.0",
+    python_requires=">=3.7.0",
     install_requires=["numpy>=1.17", "packaging>=20.0", "pyyaml", "torch>=1.4.0"],
     extras_require=extras,
     classifiers=[
@@ -68,7 +68,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],

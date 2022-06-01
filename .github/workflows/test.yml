@@ -4,6 +4,7 @@ on: [pull_request]
 
 env:
   HF_HOME: ~/hf_cache
+  TESTING_MOCKED_DATALOADERS: "1"
 
 jobs:
   run-tests:
@@ -35,7 +36,7 @@ jobs:
     - name: Install the library
       run: |
         pip install --upgrade pip
-        pip install -e .[test,test_trackers,tensorboard]
+        pip install -e .[test,test_trackers]
     
     - name: Run Tests
       run: |
