@@ -63,6 +63,10 @@ def is_deepspeed_available():
             return False
 
 
+def is_tensorboard_available():
+    return importlib.util.find_spec("tensorboard") is not None or importlib.util.find_spec("tensorboardX") is not None
+
+
 def is_wandb_available():
     return importlib.util.find_spec("wandb") is not None
 
