@@ -1,6 +1,6 @@
 name: Run Tests
 
-on: [pull_request, workflow_dispatch]
+on: [pull_request]
 
 env:
   HF_HOME: ~/hf_cache
