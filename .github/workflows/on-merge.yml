@@ -6,6 +6,9 @@ on:
     branches:
       - "main"
 
+env:
+  TESTING_MOCKED_DATALOADERS: "1"
+
 jobs:
   run_all_tests_single_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
