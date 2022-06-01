@@ -1,0 +1,69 @@
+name: Self-hosted runner (push to "main")
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+
+jobs:
+  run_all_tests_single_gpu:
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    defaults:
+      run:
+        working-directory: accelerate/
+        shell: bash
+    steps:
+      - name: Update clone & pip install
+        run: |
+          source activate accelerate
+          git config --global --add safe.directory '*'
+          git fetch && git checkout ${{ github.sha }}
+          pip install tensorflow -U 
+          pip install -e . -U
+
+# Note: tensorflow upgrade is needed until dropped py 3.6 support
+
+      - name: Run test on GPUs
+        run: |
+          source activate accelerate
+          make test
+      - name: Run examples on GPUs
+        run: |
+          source activate accelerate
+          make test_examples
+
+  run_all_tests_multi_gpu:
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    defaults:
+      run:
+        working-directory: accelerate/
+        shell: bash
+    steps:
+      - name: Update clone
+        run: |
+          source activate accelerate
+          git config --global --add safe.directory '*'
+          git fetch && git checkout ${{ github.sha }}
+          pip install tensorflow -U
+          pip install -e . -U
+
+        # Note: tensorflow upgrade is needed until dropped py 3.6 support
+
+      - name: Run test on GPUs
+        run: |
+          source activate accelerate
+          make test
+
+      - name: Run examples on GPUs
+        run: |
+          source activate accelerate
+          make test_examples

@@ -15,9 +15,10 @@
 import unittest
 
 from accelerate import debug_launcher
-from accelerate.test_utils import test_script
+from accelerate.test_utils import require_cpu, test_script
 
 
+@require_cpu
 class MultiCPUTester(unittest.TestCase):
     def test_cpu(self):
         debug_launcher(test_script.main)

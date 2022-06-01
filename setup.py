@@ -19,16 +19,19 @@ extras = {}
 extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3"]
 extras["docs"] = []
 extras["test"] = [
+    "psutil",
     "pytest",
     "pytest-xdist",
     "pytest-subtests",
     "datasets",
+    "evaluate",
     "transformers",
     "scipy",
     "sklearn",
     "parameterized",
 ]
-extras["test_trackers"] = ["wandb", "comet-ml", "tensorflow"]
+extras["tensorboard"] = ["protobuf<=3.20.1", "tensorflow>=2.6.2", "tensorboard"]
+extras["test_trackers"] = extras["tensorboard"] + ["wandb", "comet-ml"]
 extras["dev"] = extras["quality"] + extras["test"]
 
 extras["sagemaker"] = [
