@@ -27,7 +27,7 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
-          pip install -e .[test,wandb, comet-ml]
+          pip install -e .[test,test_trackers]
           pip uninstall tensorflow -y
 
       - name: Run test on GPUs
@@ -56,7 +56,7 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
-          pip install -e .[test,wandb, comet-ml]
+          pip install -e .[test,test_trackers]
           pip uninstall tensorflow -y
 
       - name: Run test on GPUs
