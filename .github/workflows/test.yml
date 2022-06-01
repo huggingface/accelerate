@@ -12,6 +12,7 @@ jobs:
       matrix:
         test-kind: [
           test,
+          test_deepspeed,
           test_example_differences,
           test_checkpoint_step,
           test_checkpoint_epoch,
