@@ -26,7 +26,14 @@ from unittest import mock
 import torch
 
 from ..state import AcceleratorState
-from ..utils import gather, is_comet_ml_available, is_tensorflow_available, is_tpu_available, is_wandb_available
+from ..utils import (
+    gather,
+    is_comet_ml_available,
+    is_deepspeed_available,
+    is_tensorflow_available,
+    is_tpu_available,
+    is_wandb_available,
+)
 
 
 def parse_flag_from_env(key, default=False):
@@ -76,6 +83,13 @@ def require_multi_gpu(test_case):
     GPUs.
     """
     return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
+
+
+def require_deepspeed(test_case):
+    """
+    Decorator marking a test that requires DeepSpeed installed. These tests are skipped when DeepSpeed isn't installed
+    """
+    return unittest.skipUnless(is_deepspeed_available(), "test requires DeepSpeed")(test_case)
 
 
 def require_tensorflow(test_case):

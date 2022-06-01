@@ -98,15 +98,15 @@ def launch_command_parser(subparsers=None):
         "--zero3_init_flag",
         default=None,
         type=str,
-        help="Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models.\
-        Only applicable with DeepSpeed ZeRO Stage-3.",
+        help="Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models. "
+        "Only applicable with DeepSpeed ZeRO Stage-3.",
     )
     parser.add_argument(
         "--zero3_save_16bit_model",
         default=None,
         type=str,
-        help="Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3.\
-        Only applicable with DeepSpeed ZeRO Stage-3.",
+        help="Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3. "
+        "Only applicable with DeepSpeed ZeRO Stage-3.",
     )
     parser.add_argument(
         "--use_fsdp",

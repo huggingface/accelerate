@@ -140,8 +140,8 @@ def get_cluster_input():
             if deepspeed_config["zero3_init_flag"]:
                 if not is_transformers_available():
                     raise Exception(
-                        "When `zero3_init_flag` is set, it requires Transformers to be installed.\
-                            Please run `pip3 install transformers`."
+                        "When `zero3_init_flag` is set, it requires Transformers to be installed. "
+                        "Please run `pip3 install transformers`."
                     )
 
     fsdp_config = {}

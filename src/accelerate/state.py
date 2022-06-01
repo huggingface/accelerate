@@ -119,7 +119,7 @@ class AcceleratorState:
                     and "fp16" not in deepspeed_plugin.deepspeed_config
                     and "bf16" not in deepspeed_plugin.deepspeed_config
                 ):
-                    deepspeed_plugin.deepspeed_config.update({"bfloat16": {"enabled": True}})
+                    deepspeed_plugin.deepspeed_config.update({"bf16": {"enabled": True}})
                 self.deepspeed_plugin = deepspeed_plugin
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
@@ -197,10 +197,11 @@ class AcceleratorState:
             f"Process index: {self.process_index}\n"
             f"Local process index: {self.local_process_index}\n"
             f"Device: {self.device}\n"
-            f"Mixed precision type: {mixed_precision}\n"
         )
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
+        else:
+            f"Mixed precision type: {mixed_precision}\n"
         return repr
 
     # For backward compatibility

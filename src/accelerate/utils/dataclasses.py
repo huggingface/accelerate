@@ -227,31 +227,22 @@ class DeepSpeedPlugin:
     )
     offload_optimizer_device: bool = field(
         default=None,
-        metadata={
-            "help": "Possible options are none|cpu|nvme.\
-        Only applicable with ZeRO Stages 2 and 3."
-        },
+        metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3."},
     )
     offload_param_device: bool = field(
         default=None,
-        metadata={
-            "help": "Possible options are none|cpu|nvme.\
-        Only applicable with ZeRO Stage 3."
-        },
+        metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3."},
     )
     zero3_init_flag: bool = field(
         default=None,
         metadata={
-            "help": "Flag to indicate whether to enable `deepspeed.zero.Init` for constructing massive models.\
-        Only applicable with ZeRO Stage-3."
+            "help": "Flag to indicate whether to enable `deepspeed.zero.Init` for constructing massive models."
+            "Only applicable with ZeRO Stage-3."
         },
     )
     zero3_save_16bit_model: bool = field(
         default=None,
-        metadata={
-            "help": "Flag to indicate whether to save 16-bit model.\
-        Only applicable with ZeRO Stage-3."
-        },
+        metadata={"help": "Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3."},
     )
 
     def __post_init__(self):
@@ -332,8 +323,9 @@ class DeepSpeedPlugin:
                 return
             else:
                 raise ValueError(
-                    f"{ds_key_long} not found in arguments.\
-                    Please specify {ds_key_long} in the DeepSpeed config file or {ds_key_long} as an argument."
+                    f"`{ds_key_long}` not found in kwargs. "
+                    "Please specify `{ds_key_long}` without `auto`(set to correct value) in the DeepSpeed config file or "
+                    "pass it in kwargs."
                 )
 
         if not must_match:
@@ -344,22 +336,21 @@ class DeepSpeedPlugin:
             if ds_val != kwargs[ds_key_long]:
                 mismatches.append(f"- ds {ds_key_long}={ds_val} vs arg {ds_key}={kwargs[ds_key_long]}")
 
-    def deepspeed_config_process(self, prefix="", config=None, **kwargs):
+    def deepspeed_config_process(self, prefix="", mismatches=None, config=None, **kwargs):
         """Process the DeepSpeed config with the values from the kwargs."""
-
-        mismatches = []
+        mismatches = [] if mismatches is None else mismatches
         if config is None:
             config = self.deepspeed_config
         for key, value in config.items():
             if isinstance(value, dict):
-                self.deepspeed_config_process(prefix=prefix + key + ".", config=value, **kwargs)
-            elif isinstance(value, str):
-                self.fill_match(prefix + key, mismatches, value, **kwargs)
-        if len(mismatches) > 0:
-            mismatches = "\n".join(mismatches)
+                self.deepspeed_config_process(prefix=prefix + key + ".", mismatches=mismatches, config=value, **kwargs)
+            else:
+                self.fill_match(prefix + key, mismatches, **kwargs)
+        if len(mismatches) > 0 and prefix == "":
+            mismatches_msg = "\n".join(mismatches)
             raise ValueError(
                 "Please correct the following DeepSpeed config values that mismatch kwargs "
-                f" values:\n{mismatches}\nThe easiest method is to set these DeepSpeed config values to 'auto'."
+                f" values:\n{mismatches_msg}\nThe easiest method is to set these DeepSpeed config values to 'auto'."
             )
 
 

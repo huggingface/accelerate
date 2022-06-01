@@ -17,6 +17,7 @@ import os
 import sys
 import warnings
 from contextlib import contextmanager
+from copy import deepcopy
 from typing import List, Optional, Union
 
 import torch
@@ -181,17 +182,15 @@ class Accelerator:
             if os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true" or deepspeed_plugin.zero3_init_flag:
                 if not is_transformers_available():
                     raise Exception(
-                        "When `zero3_init_flag` is set, it requires Transformers to be installed.\
-                        Please run `pip3 install transformers`."
+                        "When `zero3_init_flag` is set, it requires Transformers to be installed. "
+                        "Please run `pip3 install transformers`."
                     )
                 from transformers.deepspeed import HfDeepSpeedConfig
 
-                dschf = HfDeepSpeedConfig(deepspeed_plugin.deepspeed_config)  # keep this object alive
-                if dschf.is_zero3():
-                    logger.info(
-                        "Handling Deepspeed ZeRO-3 param gathering and automatically splitting"
-                        "the model onto multiple gpus during from_pretrained call"
-                    )
+                ds_config = deepcopy(deepspeed_plugin.deepspeed_config)
+                del ds_config["train_batch_size"]
+                ds_config.update({"train_micro_batch_size_per_gpu": 1, "gradient_accumulation_steps": 1})
+                self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = FullyShardedDataParallelPlugin() if os.environ.get("USE_FSDP", "false") == "true" else None
@@ -545,8 +544,8 @@ class Accelerator:
             batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
             if len(batch_sizes) > 1:
                 logger.info(
-                    f"Since you passed both train and evaluation dataloader, `is_train_batch_min` (here \
-                    {deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
+                    "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
+                    f"{deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
                 )
 
             self.deepspeed_config["train_batch_size"] = (
@@ -568,9 +567,9 @@ class Accelerator:
 
         if "optimizer" in self.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
             raise ValueError(
-                "You cannot specify an optimizer in the config file and in the code at the same time.\
-                Please remove the optimizer from the config file or \
-                create `accelerate.utils.DummyOptim` in the code."
+                "You cannot specify an optimizer in the config file and in the code at the same time. "
+                "Please remove the optimizer from the config file or "
+                "create `accelerate.utils.DummyOptim` in the code."
             )
         elif "optimizer" not in self.deepspeed_config and isinstance(optimizer, (DummyOptim)):
             raise ValueError("You cannot create a `DummyOptim` without specifying an optimizer in the config file.")
@@ -580,17 +579,17 @@ class Accelerator:
 
         if "scheduler" in self.deepspeed_config and not isinstance(scheduler, (DummyScheduler)):
             raise ValueError(
-                "You cannot specify a scheduler in the config file and in the code at the same time.\
-                Please remove the scheduler from the config file or \
-                create `accelerate.utils.DummyScheduler` in the code."
+                "You cannot specify a scheduler in the config file and in the code at the same time. "
+                "Please remove the scheduler from the config file or "
+                "create `accelerate.utils.DummyScheduler` in the code."
             )
         elif "scheduler" not in self.deepspeed_config and isinstance(scheduler, (DummyScheduler)):
             raise ValueError("You cannot create a `DummyScheduler` without specifying a scheduler in the config file.")
 
         if isinstance(optimizer, (DummyOptim)) and not isinstance(scheduler, (DummyScheduler)):
             raise ValueError(
-                "You can only specify `accelerate.utils.DummyScheduler` in the code when using \
-                    `accelerate.utils.DummyOptim`."
+                "You can only specify `accelerate.utils.DummyScheduler` in the code when using "
+                "`accelerate.utils.DummyOptim`."
             )
 
         if model is not None:
@@ -951,10 +950,10 @@ class Accelerator:
                 state_dict = model._zero3_consolidated_16bit_state_dict()
             else:
                 raise ValueError(
-                    "Cannot get 16bit model weights because `stage3_gather_16bit_weights_on_model_save` in DeepSpeed config is False\
-                    To save the model weights in 16bit, set `stage3_gather_16bit_weights_on_model_save` to True in DeepSpeed config file or\
-                    set `zero3_save_16bit_model` to True when using `accelerate config`.\
-                    To save the full checkpoint, run `model.save_checkpoint(save_dir)` and use `zero_to_fp32.py` to recover weights."
+                    "Cannot get 16bit model weights because `stage3_gather_16bit_weights_on_model_save` in DeepSpeed config is False. "
+                    "To save the model weights in 16bit, set `stage3_gather_16bit_weights_on_model_save` to True in DeepSpeed config file or "
+                    "set `zero3_save_16bit_model` to True when using `accelerate config`. "
+                    "To save the full checkpoint, run `model.save_checkpoint(save_dir)` and use `zero_to_fp32.py` to recover weights."
                 )
         else:
             model = self.unwrap_model(model)
