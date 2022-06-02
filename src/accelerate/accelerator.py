@@ -174,9 +174,7 @@ class Accelerator:
             os.environ["USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
         if deepspeed_plugin:
             if not is_deepspeed_available():
-                raise ImportError(
-                    "DeepSpeed is not installed => run `pip install deepspeed` or build it from source."
-                )
+                raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
             if compare_versions("deepspeed", "<", "0.6.4"):
                 raise ImportError("DeepSpeed version must be >= 0.6.4. Please update DeepSpeed.")
             if os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true" or deepspeed_plugin.zero3_init_flag:
