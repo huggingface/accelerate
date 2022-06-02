@@ -78,14 +78,14 @@ def get_cluster_input():
 
         if distributed_type == DistributedType.DEEPSPEED:
             use_deepspeed_config = _ask_field(
-                "Do you want to specify DeepSpeed json config filepath? [yes/NO]: ",
+                "Do you want to specify a json file to a DeepSpeed config? [yes/NO]: ",
                 _convert_yes_no_to_bool,
                 default=False,
                 error_message="Please enter yes or no.",
             )
             if use_deepspeed_config:
                 deepspeed_config["deepspeed_config_file"] = _ask_field(
-                    "Please enter filepath of the DeepSpeed json config file: ",
+                    "Please enter the path to the json DeepSpeed config file: ",
                     lambda x: str(x),
                     default="none",
                 )

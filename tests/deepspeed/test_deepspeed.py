@@ -108,10 +108,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
             config_zero3["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = False
 
-        self.ds_config_dict = dict(
-            zero2=config_zero2,
-            zero3=config_zero3,
-        )
+        self.ds_config_dict = dict(zero2=config_zero2, zero3=config_zero3)
 
         self.dist_env = dict(
             USE_DEEPSPEED="true",

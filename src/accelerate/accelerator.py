@@ -175,7 +175,7 @@ class Accelerator:
         if deepspeed_plugin:
             if not is_deepspeed_available():
                 raise ImportError(
-                    "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source."
+                    "DeepSpeed is not installed => run `pip install deepspeed` or build it from source."
                 )
             if compare_versions("deepspeed", "<", "0.6.4"):
                 raise ImportError("DeepSpeed version must be >= 0.6.4. Please update DeepSpeed.")
@@ -183,7 +183,7 @@ class Accelerator:
                 if not is_transformers_available():
                     raise Exception(
                         "When `zero3_init_flag` is set, it requires Transformers to be installed. "
-                        "Please run `pip3 install transformers`."
+                        "Please run `pip install transformers`."
                     )
                 from transformers.deepspeed import HfDeepSpeedConfig
 
