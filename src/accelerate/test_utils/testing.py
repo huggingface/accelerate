@@ -26,6 +26,7 @@ from unittest import mock
 import torch
 
 from ..state import AcceleratorState
+
 from ..utils import (
     gather,
     is_comet_ml_available,
@@ -99,12 +100,12 @@ def require_deepspeed(test_case):
     return unittest.skipUnless(is_deepspeed_available(), "test requires DeepSpeed")(test_case)
 
 
-def require_tensorflow(test_case):
+def require_tensorboard(test_case):
     """
-    Decorator marking a test that requires TensorFlow installed. These tests are skipped when TensorFlow isn't
+    Decorator marking a test that requires tensorboard installed. These tests are skipped when tensorboard isn't
     installed
     """
-    return unittest.skipUnless(is_tensorflow_available(), "test requires TensorFlow")(test_case)
+    return unittest.skipUnless(is_tensorboard_available(), "test requires Tensorboard")(test_case)
 
 
 def require_wandb(test_case):

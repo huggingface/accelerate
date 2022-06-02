@@ -5,12 +5,14 @@ on:
   schedule:
     - cron: "0 2 * * *"
 
+env:
+  RUN_SLOW: "yes"
+
 jobs:
   run_all_tests_single_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     env:
       CUDA_VISIBLE_DEVICES: "0"
-      ALL_SLOW: "yes"
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
@@ -23,11 +25,8 @@ jobs:
         run: |
           source activate accelerate
           git config --global --add safe.directory '*'
-          git fetch && git checkout ${{ github.sha }}
-          pip install tensorflow -U 
+          git fetch && git checkout ${{ github.sha }} 
           pip install -e . --no-deps
-
-# Note: tensorflow upgrade is needed until dropped py 3.6 support
 
       - name: Run test on GPUs
         run: |
@@ -41,7 +40,6 @@ jobs:
   run_all_tests_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     env:
-      ALL_SLOW: "yes"
       CUDA_VISIBLE_DEVICES: "0,1"
     container:
       image: huggingface/accelerate-gpu:latest
@@ -56,10 +54,7 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
-          pip install tensorflow -U
           pip install -e . --no-deps
-
-        # Note: tensorflow upgrade is needed until dropped py 3.6 support
 
       - name: Run test on GPUs
         run: |

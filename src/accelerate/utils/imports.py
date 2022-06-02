@@ -67,10 +67,6 @@ def is_transformers_available():
     return importlib.util.find_spec("transformers") is not None
 
 
-def is_tensorflow_available():
-    return importlib.util.find_spec("tensorflow") is not None
-
-
 def is_tensorboard_available():
     return importlib.util.find_spec("tensorboard") is not None or importlib.util.find_spec("tensorboardX") is not None
 
