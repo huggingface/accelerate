@@ -244,14 +244,6 @@ class DeepSpeedPlugin:
         default=None,
         metadata={"help": "Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3."},
     )
-    reinit: bool = field(
-        default=False,
-        metadata={
-            "help": "Flag to indicate whether to reinitialize the model. "
-            "This is useful to load ZeRO checkpoint for resuming training when one wants to "
-            "call `model.load_checkpoint()` just after `model.save_checkpoint()`."
-        },
-    )
 
     def __post_init__(self):
         if self.config_file is None:
@@ -332,7 +324,7 @@ class DeepSpeedPlugin:
             else:
                 raise ValueError(
                     f"`{ds_key_long}` not found in kwargs. "
-                    "Please specify `{ds_key_long}` without `auto`(set to correct value) in the DeepSpeed config file or "
+                    f"Please specify `{ds_key_long}` without `auto`(set to correct value) in the DeepSpeed config file or "
                     "pass it in kwargs."
                 )
 
