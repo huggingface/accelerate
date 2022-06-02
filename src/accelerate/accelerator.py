@@ -621,20 +621,25 @@ class Accelerator:
                     type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
                 ):
                     result[i] = scheduler
-            self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(
-                engine
-            )  # pointing for deepspeed_engine_wrapped.backward()
+            # pointing for deepspeed_engine_wrapped.backward()
+            self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
+            if deepspeed_plugin.reinit:
+                self._models = []
+                self._optimizers = []
+                self._schedulers = []
             self._models.append(engine)
             self._optimizers.append(optimizer)
             self._schedulers.append(scheduler)
-            assert (
-                len(self._models) == 1
-            ), "You can't use same `Accelerator()` instance with 2 models when using DeepSpeed"
+            if len(self._models) > 1:
+                raise AssertionError(
+                    "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
+                )
 
-        if self.distributed_type == DistributedType.DEEPSPEED:
-            assert hasattr(
-                self, "deepspeed_engine_wrapped"
-            ), "You need to pass the model along with the optimizer when using Deepspeed."
+        if not hasattr(self, "deepspeed_engine_wrapped"):
+            raise AttributeError(
+                "`deepspeed_engine_wrapped` attribute is unavailable. "
+                "You need to pass the model along with the optimizer when using Deepspeed."
+            )
 
         return tuple(result)
 
@@ -710,6 +715,7 @@ class Accelerator:
                     model.clip_grad_norm_(max_norm, norm_type)
                     return
         elif self.distributed_type == DistributedType.DEEPSPEED:
+            # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
             return
         self.unscale_gradients()
         torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
@@ -719,6 +725,7 @@ class Accelerator:
         Should be used in place of `torch.nn.utils.clip_grad_value_`.
         """
         if self.distributed_type in [DistributedType.DEEPSPEED, DistributedType.FSDP]:
+            logger.warn("DeepSpeed and FSDP  do not support `clip_grad_value_`. Use `clip_grad_norm_` instead.")
             return
         self.unscale_gradients()
         torch.nn.utils.clip_grad_value_(parameters, clip_value)

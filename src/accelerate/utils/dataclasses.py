@@ -244,6 +244,14 @@ class DeepSpeedPlugin:
         default=None,
         metadata={"help": "Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3."},
     )
+    reinit: bool = field(
+        default=False,
+        metadata={
+            "help": "Flag to indicate whether to reinitialize the model. "
+            "This is useful to load ZeRO checkpoint for resuming training when one wants to "
+            "call `model.load_checkpoint()` just after `model.save_checkpoint()`."
+        },
+    )
 
     def __post_init__(self):
         if self.config_file is None:

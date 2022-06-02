@@ -341,11 +341,12 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                     in str(cm.exception)
                 )
 
-                with self.assertRaises(AssertionError) as cm:
+                with self.assertRaises(AttributeError) as cm:
                     optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                         optimizer, train_dataloader, eval_dataloader, lr_scheduler
                     )
                 self.assertTrue(
+                    "`deepspeed_engine_wrapped` attribute is unavailable. "
                     "You need to pass the model along with the optimizer when using Deepspeed." in str(cm.exception)
                 )
 

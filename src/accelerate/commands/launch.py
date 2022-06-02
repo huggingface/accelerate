@@ -62,7 +62,7 @@ def launch_command_parser(subparsers=None):
         "--deepspeed_config_file",
         default=None,
         type=str,
-        help="DeepSpeed's config file (useful only when `use_deepspeed` flag is passed).",
+        help="DeepSpeed config file.",
     )
     parser.add_argument(
         "--zero_stage",

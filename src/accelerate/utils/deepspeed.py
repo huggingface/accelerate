@@ -25,6 +25,7 @@ class DeepSpeedEngineWrapper:
         # runs backpropagation and handles mixed precision
         self.engine.backward(loss)
 
+        # deepspeed `engine.step` performs following operations:
         # gradient accumulation check
         # gradient clipping
         # optimizer step
