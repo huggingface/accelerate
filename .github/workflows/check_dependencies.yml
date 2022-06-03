@@ -3,7 +3,6 @@ name: Check for dependency modification
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main]
   push:
     branches:
       - main
@@ -13,8 +12,32 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
+  check-for-setup:
+    runs-on: ubuntu-latest
+    name: Check if setup was changed
+    outputs:
+      changed: ${{ steps.was_changed.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v3
+        with: 
+          fetch-depth: "2"
+      
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v22.2
+      
+      - name: Was setup changed 
+        id: was_changed
+        run: |
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            if [ `basename "${file}"` = "setup.py" ]; then
+              echo ::set-output name=changed::"1"
+            fi
+          done
+
   write-message:
-    if: github.event.pull_request.merged == 'false'
+    needs: check-for-setup
+    if: (github.event_name == 'pull_request') && (needs.check-for-setup.outputs.changed == '1')
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -37,28 +60,9 @@ jobs:
       if: success() && steps.find_pr.outputs.number
       env: 
         PR_NUMBER: ${{ steps.find_pr.outputs.pr }}
-        REPO: ${{ github.event.repository.name }}
+        REPO: ${{ github.event.repository.full_name }}
 
   build-docker-containers:
-    if: github.event.pull_request.merged == 'true'
-    runs-on: ubuntu-latest
-    name: Check if setup was changed
-    steps:
-      - uses: actions/checkout@v3
-        with: 
-          fetch-depth: "2"
-      
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v22.2
-      
-      - name: Was setup changed 
-        run: |
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            if [ -f "setup.py" ]; then
-              export SETUP_MODIFIED=1
-            fi
-      
-      - name: Deploy
-        if: env.SETUP_MODIFIED == 1
-        uses: ./.github/workflows/build-docker-images.yml
+    needs: check-for-setup
+    if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
+    uses: ./.github/workflows/build-docker-images.yml

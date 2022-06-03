@@ -2,12 +2,10 @@ name: Self-hosted runner (push to "main")
 
 on:
   workflow_run:
-    workflows: ["Build Docker images (scheduled)"]
+    workflows: ["Check for dependency modification"]
+    branches: ["main"]
     types: [completed]
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
 
 env:
   TESTING_MOCKED_DATALOADERS: "1"

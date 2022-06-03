@@ -61,8 +61,8 @@ def write_comment(pull_request:PullRequest, diff:str):
         diff (`str`):
             The diff of the modified setup.py
     """
-    s = f'This PR modifies `setup.py`. New latest Docker images will be built and deployed once this has been merged:\n\n{diff}'
-    pull_request.create_comment(s)
+    s = f'This PR modifies `setup.py`. New latest Docker images will be built and deployed before running tests once this has been merged:\n\n{diff}'
+    pull_request.create_issue_comment(s)
 
 def update_diff(pull_request:PullRequest, diff:str):
     """Updates the diff of the setup.py in the existing comment
@@ -84,8 +84,9 @@ def update_diff(pull_request:PullRequest, diff:str):
 
 def main():
     g = Github(os.environ["GITHUB_TOKEN"])
+    print(os.environ["REPO"])
     repo = g.get_repo(os.environ["REPO"])
-    pr = repo.get_pr(os.environ["PR_NUMBER"])
+    pr = repo.get_pull(int(os.environ["PR_NUMBER"]))
     diff = get_setup_diff(pr)
     if diff is not None:
         if does_comment_exist(pr):
