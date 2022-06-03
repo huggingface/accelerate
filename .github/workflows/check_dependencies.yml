@@ -34,34 +34,7 @@ jobs:
               echo ::set-output name=changed::"1"
             fi
           done
-
-  write-message:
-    needs: check-for-setup
-    if: (github.event_name == 'pull_request') && (needs.check-for-setup.outputs.changed == '1')
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - uses: jwalton/gh-find-current-pr@v1
-      id: find_pr
-      with:
-        state: open
-
-    - name: Setup Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.7
-    
-    - name: Install PyGithub
-      run: |
-        pip install PyGithub
-
-    - run: |
-        python utils/check_setup.py
-      if: success() && steps.find_pr.outputs.number
-      env: 
-        PR_NUMBER: ${{ steps.find_pr.outputs.pr }}
-        REPO: ${{ github.event.repository.full_name }}
-
+          
   build-docker-containers:
     needs: check-for-setup
     if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
