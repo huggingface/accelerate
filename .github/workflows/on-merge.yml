@@ -1,6 +1,9 @@
 name: Self-hosted runner (push to "main")
 
 on:
+  workflow_run:
+    workflows: ["Build Docker images (scheduled)"]
+    types: [completed]
   workflow_dispatch:
   push:
     branches:
