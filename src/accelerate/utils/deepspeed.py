@@ -18,6 +18,13 @@ from ..optimizer import AcceleratedOptimizer
 
 
 class DeepSpeedEngineWrapper:
+    """
+    Internal wrapper for deepspeed.runtime.engine.DeepSpeedEngine. This is used to follow conventional training loop.
+
+    Args:
+        engine (deepspeed.runtime.engine.DeepSpeedEngine): deepspeed engine to wrap
+    """
+
     def __init__(self, engine):
         self.engine = engine
 

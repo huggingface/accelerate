@@ -525,7 +525,7 @@ def main():
         },
     ]
     # New Code #
-    # Creates Dummy Optimizer if it was spcified in the config file else creates Adam Optimizer
+    # Creates Dummy Optimizer if `optimizer` was spcified in the config file else creates Adam Optimizer
     if "optimizer" not in accelerator.state.deepspeed_plugin.deepspeed_config:
         optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
     else:
@@ -543,7 +543,7 @@ def main():
         args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # New Code #
-    # Creates Dummy Scheduler if it was spcified in the config file else creates `args.lr_scheduler_type` Scheduler
+    # Creates Dummy Scheduler if `scheduler` was spcified in the config file else creates `args.lr_scheduler_type` Scheduler
     if "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config:
         lr_scheduler = get_scheduler(
             name=args.lr_scheduler_type,

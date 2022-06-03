@@ -563,54 +563,72 @@ class Accelerator:
             ):
                 scheduler = obj
 
-        if "optimizer" in self.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
-            raise ValueError(
-                "You cannot specify an optimizer in the config file and in the code at the same time. "
-                "Please remove the optimizer from the config file or "
-                "create `accelerate.utils.DummyOptim` in the code."
-            )
-        elif "optimizer" not in self.deepspeed_config and isinstance(optimizer, (DummyOptim)):
-            raise ValueError("You cannot create a `DummyOptim` without specifying an optimizer in the config file.")
+        if optimizer is not None:
+            if "optimizer" in self.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
+                raise ValueError(
+                    "You cannot specify an optimizer in the config file and in the code at the same time. "
+                    "Please remove the optimizer from the config file or "
+                    "create `accelerate.utils.DummyOptim` in the code."
+                )
+            elif "optimizer" not in self.deepspeed_config and isinstance(optimizer, (DummyOptim)):
+                raise ValueError(
+                    "You cannot create a `DummyOptim` without specifying an optimizer in the config file."
+                )
 
-        if isinstance(optimizer, (torch.optim.Optimizer)):
-            self.deepspeed_config["zero_allow_untested_optimizer"] = True
+            if isinstance(optimizer, (torch.optim.Optimizer)):
+                self.deepspeed_config["zero_allow_untested_optimizer"] = True
 
-        if "scheduler" in self.deepspeed_config and not isinstance(scheduler, (DummyScheduler)):
-            raise ValueError(
-                "You cannot specify a scheduler in the config file and in the code at the same time. "
-                "Please remove the scheduler from the config file or "
-                "create `accelerate.utils.DummyScheduler` in the code."
-            )
-        elif "scheduler" not in self.deepspeed_config and isinstance(scheduler, (DummyScheduler)):
-            raise ValueError("You cannot create a `DummyScheduler` without specifying a scheduler in the config file.")
+        if scheduler is not None:
+            if "scheduler" in self.deepspeed_config and not isinstance(scheduler, (DummyScheduler)):
+                raise ValueError(
+                    "You cannot specify a scheduler in the config file and in the code at the same time. "
+                    "Please remove the scheduler from the config file or "
+                    "create `accelerate.utils.DummyScheduler` in the code."
+                )
+            elif "scheduler" not in self.deepspeed_config and isinstance(scheduler, (DummyScheduler)):
+                raise ValueError(
+                    "You cannot create a `DummyScheduler` without specifying a scheduler in the config file."
+                )
 
-        if isinstance(optimizer, (DummyOptim)) and not isinstance(scheduler, (DummyScheduler)):
-            raise ValueError(
-                "You can only specify `accelerate.utils.DummyScheduler` in the code when using "
-                "`accelerate.utils.DummyOptim`."
-            )
+        if optimizer is not None and scheduler is not None:
+            if isinstance(optimizer, (DummyOptim)) and not isinstance(scheduler, (DummyScheduler)):
+                raise ValueError(
+                    "You can only specify `accelerate.utils.DummyScheduler` in the code when using "
+                    "`accelerate.utils.DummyOptim`."
+                )
 
         if model is not None:
+            if (
+                deepspeed_plugin.zero3_init_flag
+                and deepspeed_plugin.config_file == "none"
+                and ("fp16" in deepspeed_plugin.deepspeed_config or "bf16" in deepspeed_plugin.deepspeed_config)
+            ):
+                model.half()
+            kwargs = dict(model=model, config_params=self.deepspeed_config)
             model_parameters = None
-            if isinstance(optimizer, (DummyOptim)):
-                model_parameters = optimizer.param_groups
-                kwargs = dict(model=model, model_parameters=model_parameters, config_params=self.deepspeed_config)
-            else:
-                kwargs = dict(model=model, optimizer=optimizer, config_params=self.deepspeed_config)
-                if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
-                    kwargs["lr_scheduler"] = scheduler
+            if optimizer is not None:
+                if isinstance(optimizer, (DummyOptim)):
+                    model_parameters = optimizer.param_groups
+                    kwargs["model_parameters"] = model_parameters
+                else:
+                    kwargs["optimizer"] = optimizer
+                    if scheduler is not None:
+                        if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
+                            kwargs["lr_scheduler"] = scheduler
 
             engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
-            optimizer = DeepSpeedOptimizerWrapper(optimizer)
-            if lr_scheduler is None:
-                scheduler = AcceleratedScheduler(
-                    scheduler,
-                    optimizer,
-                    step_with_optimizer=self.step_scheduler_with_optimizer,
-                    split_batches=self.split_batches,
-                )
-            else:
-                scheduler = DeepSpeedSchedulerWrapper(lr_scheduler, optimizer)
+            if optimizer is not None:
+                optimizer = DeepSpeedOptimizerWrapper(optimizer)
+            if scheduler is not None:
+                if lr_scheduler is None:
+                    scheduler = AcceleratedScheduler(
+                        scheduler,
+                        optimizer,
+                        step_with_optimizer=self.step_scheduler_with_optimizer,
+                        split_batches=self.split_batches,
+                    )
+                else:
+                    scheduler = DeepSpeedSchedulerWrapper(lr_scheduler, optimizer)
 
             for i in range(len(result)):
                 if isinstance(result[i], torch.nn.Module):
@@ -624,19 +642,14 @@ class Accelerator:
             # pointing for deepspeed_engine_wrapped.backward()
             self.deepspeed_engine_wrapped = DeepSpeedEngineWrapper(engine)
             self._models.append(engine)
-            self._optimizers.append(optimizer)
-            self._schedulers.append(scheduler)
+            if optimizer is not None:
+                self._optimizers.append(optimizer)
+            if scheduler is not None:
+                self._schedulers.append(scheduler)
             if len(self._models) > 1:
                 raise AssertionError(
                     "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
                 )
-
-        if not hasattr(self, "deepspeed_engine_wrapped"):
-            raise AttributeError(
-                "`deepspeed_engine_wrapped` attribute is unavailable. "
-                "You need to pass the model along with the optimizer when using Deepspeed."
-            )
-
         return tuple(result)
 
     def prepare_data_loader(self, data_loader):

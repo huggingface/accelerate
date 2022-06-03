@@ -211,6 +211,9 @@ class TensorInformation:
 
 @dataclass
 class DeepSpeedPlugin:
+    """
+    This plugin is used to integrate DeepSpeed.
+    """
 
     config_file: str = field(default=None, metadata={"help": "Path to the DeepSpeed config file."})
     gradient_accumulation_steps: int = field(
@@ -334,7 +337,7 @@ class DeepSpeedPlugin:
         ds_val = config.get(ds_key)
         if ds_val is not None and ds_key_long in kwargs:
             if ds_val != kwargs[ds_key_long]:
-                mismatches.append(f"- ds {ds_key_long}={ds_val} vs arg {ds_key}={kwargs[ds_key_long]}")
+                mismatches.append(f"- ds {ds_key_long}={ds_val} vs arg {ds_key_long}={kwargs[ds_key_long]}")
 
     def deepspeed_config_process(self, prefix="", mismatches=None, config=None, **kwargs):
         """Process the DeepSpeed config with the values from the kwargs."""
