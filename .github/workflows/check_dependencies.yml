@@ -1,0 +1,64 @@
+name: Check for dependency modification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  write-message:
+    if: github.event.pull_request.merged == 'false'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: jwalton/gh-find-current-pr@v1
+      id: find_pr
+      with:
+        state: open
+
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.7
+    
+    - name: Install PyGithub
+      run: |
+        pip install PyGithub
+
+    - run: |
+        python utils/check_setup.py
+      if: success() && steps.find_pr.outputs.number
+      env: 
+        PR_NUMBER: ${{ steps.find_pr.outputs.pr }}
+        REPO: ${{ github.event.repository.name }}
+
+  build-docker-containers:
+    if: github.event.pull_request.merged == 'true'
+    runs-on: ubuntu-latest
+    name: Check if setup was changed
+    steps:
+      - uses: actions/checkout@v3
+        with: 
+          fetch-depth: "2"
+      
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v22.2
+      
+      - name: Was setup changed 
+        run: |
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            if [ -f "setup.py" ]; then
+              export SETUP_MODIFIED=1
+            fi
+      
+      - name: Deploy
+        if: env.SETUP_MODIFIED == 1
+        uses: ./.github/workflows/build-docker-images.yml
