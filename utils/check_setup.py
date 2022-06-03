@@ -84,7 +84,6 @@ def update_diff(pull_request:PullRequest, diff:str):
 
 def main():
     g = Github(os.environ["GITHUB_TOKEN"])
-    print(os.environ["REPO"])
     repo = g.get_repo(os.environ["REPO"])
     pr = repo.get_pull(int(os.environ["PR_NUMBER"]))
     diff = get_setup_diff(pr)
