@@ -1,8 +1,6 @@
 name: Check for dependency modification
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   push:
     branches:
       - main
