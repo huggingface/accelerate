@@ -244,7 +244,7 @@ def parse_args():
 
 
 # New Code #
-def checkpoint_model(PATH, ckpt_id, model, epoch, last_global_step, **kwargs):
+def checkpoint_model(checkpoint_folder, ckpt_id, model, epoch, last_global_step, **kwargs):
     """Utility function for checkpointing model + optimizer dictionaries
     The main purpose for this is to be able to resume training from that instant again
     """
@@ -255,8 +255,8 @@ def checkpoint_model(PATH, ckpt_id, model, epoch, last_global_step, **kwargs):
     # Add extra kwargs too
     checkpoint_state_dict.update(kwargs)
 
-    success = model.save_checkpoint(PATH, ckpt_id, checkpoint_state_dict)
-    status_msg = "checkpointing: PATH={}, ckpt_id={}".format(PATH, ckpt_id)
+    success = model.save_checkpoint(checkpoint_folder, ckpt_id, checkpoint_state_dict)
+    status_msg = f"checkpointing: checkpoint_folder={checkpoint_folder}, ckpt_id={ckpt_id}"
     if success:
         logging.info(f"Success {status_msg}")
     else:

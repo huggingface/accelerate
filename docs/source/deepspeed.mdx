@@ -45,7 +45,7 @@ Inference:
 **Pre-Requisites**: Install DeepSpeed version >=0.6.5. Please refer to the [DeepSpeed Insallation details](https://github.com/microsoft/DeepSpeed#installation)
 for more information.
 
-We will first look at easy to use integration via `deepspeed_plugin`. 
+We will first look at easy to use integration via `accelerate config`. 
 Followed by more flexible and feature rich `deepspeed config file` integration. 
 
 ### Accelerate DeepSpeed Plugin
@@ -55,7 +55,7 @@ On your machine(s) just run:
 accelerate config
 ```
 
-and answer the questions asked. It will ask whether you want to use a config file for deepspeed to which you answer no and answer the following questions. 
+and answer the questions asked. It will ask whether you want to use a config file for DeepSpeed to which you should answer no. Then answer the following questions to generate a basic DeepSpeed config.
 This will generate a config file that will be used automatically to properly set the
 default options when doing
 
@@ -359,7 +359,7 @@ We will look at the changes needed in the code when using these.
    else:
        optimizer = DummyOptim(param_groups=optimizer_grouped_parameters)
 
-   # Creates Dummy Optimizer if `optimizer` was spcified in the config file else creates Adam Optimizer
+   # Creates Dummy Optimizer if `optimizer` was specified in the config file else creates Adam Optimizer
    if "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config:
        lr_scheduler = get_scheduler(
            name=args.lr_scheduler_type,
