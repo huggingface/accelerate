@@ -557,6 +557,8 @@ class Accelerator:
             "train_batch_size": batch_size_per_device
             * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
             * self.num_processes,
+            "gradient_clipping": 1.0,
+            "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
         }
 
         model = None
@@ -607,16 +609,16 @@ class Accelerator:
                 )
 
         if model is not None:
-            hidden_size = model.config.hidden_size
-            config_kwargs.update(
-                {
-                    "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
-                    "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
-                    "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
-                    "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
-                    "gradient_clipping": 1.0,
-                }
-            )
+            if hasattr(model, "config") and hasattr(model.config, "hidden_size"):
+                hidden_size = model.config.hidden_size
+                config_kwargs.update(
+                    {
+                        "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
+                        "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
+                        "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
+                    }
+                )
+
             if isinstance(optimizer, (DummyOptim)):
                 config_kwargs.update(
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
