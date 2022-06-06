@@ -12,12 +12,22 @@ specific language governing permissions and limitations under the License.
 
 # DeepSpeed 
 
-Training advanced deep learning models is challenging. 
-Beyond model design, model scientists also need to set up the state-of-the-art training techniques such as 
-distributed training, mixed precision, gradient accumulation, and checkpointing. 
-Yet still, scientists may not achieve the desired system performance and convergence rate.
-Large model sizes are even more challenging: a large model easily runs out of memory with pure data parallelism and it is difficult to use model parallelism. 
-[DeepSpeed](https://www.deepspeed.ai/) addresses these challenges to accelerate model development and training.
+[DeepSpeed](https://github.com/microsoft/DeepSpeed) implements everything described in the [ZeRO paper](https://arxiv.org/abs/1910.02054). Currently it provides full support for:
+
+1. Optimizer state partitioning (ZeRO stage 1)
+2. Gradient partitioning (ZeRO stage 2)
+3. Parameter partitioning (ZeRO stage 3)
+4. Custom mixed precision training handling
+5. A range of fast CUDA-extension-based optimizers
+6. ZeRO-Offload to CPU and Disk/NVMe
+
+ZeRO-Offload has its own dedicated paper: [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840). And NVMe-support is described in the paper [ZeRO-Infinity: Breaking the GPU
+Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857).
+
+DeepSpeed ZeRO-2 is primarily used only for training, as its features are of no use to inference.
+
+DeepSpeed ZeRO-3 can be used for inference as well, since it allows huge models to be loaded on multiple GPUs, which
+won't be possible on a single GPU.
 
 🤗 Accelerate integrates [DeepSpeed](https://github.com/microsoft/DeepSpeed) via 2 options:
 
@@ -31,7 +41,23 @@ Large model sizes are even more challenging: a large model easily runs out of me
 
 Training:
 
-1. DeepSpeed ZeRO training supports the full ZeRO stages 1, 2 and 3 with ZeRO-Infinity (CPU and NVME offload).
+1. DeepSpeed ZeRO training supports the full ZeRO stages 1, 2 and 3 as well as CPU/Disk offload of optimizer states, gradients and parameters. 
+Below is a short description of Data Parallelism using ZeRO - Zero Redundancy Optimizer along with diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
+![ZeRO Data Parallelism](./imgs/parallelism-zero.png)
+
+(Source: [link](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/))
+
+ a. **Stage 1** : Shards optimizer states across data parallel workers/GPUs
+
+ b. **Stage 2** : Shards optimizer states + gradients across data parallel workers/GPUs
+
+ c. **Stage 3**: Shards optimizer states + gradients + model parameters across data parallel workers/GPUs
+
+ d. **Optimizer Offload**: Offloads the gradients + optimizer states to CPU/Disk building on top of ZERO Stage 2
+
+ e. **Param Offload**: Offloads the model parameters to CPU/Disk building on top of ZERO Stage 3
+
+<u>Note</u>: With respect to Disk Offload, the disk should be an NVME for decent speed but it technically work on any Disk
 
 Inference:
 
@@ -63,7 +89,7 @@ default options when doing
 accelerate launch my_script.py --args_to_my_script
 ```
 
-For instance, here is how you would run the NLP example `examples/by_feature/deepspeed_with_config_support.py` (from the root of the repo) with DeepSpeed Plugin:
+For instance, here is how you would run the NLP example `examples/nlp_example.py` (from the root of the repo) with DeepSpeed Plugin:
 
 **ZeRO Stage-2 DeepSpeed Plugin Example**
 ```bash
@@ -88,19 +114,7 @@ use_cpu: false
 ```
 
 ```bash
-accelerate launch examples/by_feature/deepspeed_with_config_support.py \
---config_name "gpt2-large" \
---tokenizer_name "gpt2-large" \
---dataset_name "wikitext" \
---dataset_config_name "wikitext-2-raw-v1" \
---block_size 128 \
---output_dir "./clm/clm_deepspeed_stage2_accelerate" \
---learning_rate 5e-4 \
---per_device_train_batch_size 24 \
---per_device_eval_batch_size 24 \
---num_train_epochs 3 \
---with_tracking \
---report_to "wandb"\
+accelerate launch examples/nlp_example.py --mixed_precision fp16
 ```
 
 **ZeRO Stage-3 with CPU Offload DeepSpeed Plugin Example**
@@ -127,19 +141,7 @@ use_cpu: false
 ```
 
 ```bash
-accelerate launch examples/by_feature/deepspeed_with_config_support.py \
---config_name "gpt2-large" \
---tokenizer_name "gpt2-large" \
---dataset_name "wikitext" \
---dataset_config_name "wikitext-2-raw-v1" \
---block_size 128 \
---output_dir "./clm/clm_deepspeed_stage3_offload_accelerate" \
---learning_rate 5e-4 \
---per_device_train_batch_size 32 \
---per_device_eval_batch_size 32 \
---num_train_epochs 3 \
---with_tracking \
---report_to "wandb"\
+accelerate launch examples/nlp_example.py --mixed_precision fp16
 ```
 
 Currently, `Accelerate` supports following config through the CLI:
@@ -154,6 +156,7 @@ Currently, `Accelerate` supports following config through the CLI:
 `zero3_save_16bit_model`: Decides whether to save 16-bit model weights when using ZeRO Stage-3.
 `mixed_precision`: `no` for FP32 training, `fp16` for FP16 mixed-precision training and `bf16` for BF16 mixed-precision training. 
 ```
+To be able to tweak more options, you will need to use a DeepSpeed config file.
 
 ### DeepSpeed Config File
 On your machine(s) just run:
@@ -195,7 +198,7 @@ with the contents of `zero_stage2_config.json` being:
 ```json
 {
     "fp16": {
-        "enabled": "auto",
+        "enabled": true,
         "loss_scale": 0,
         "loss_scale_window": 1000,
         "initial_scale_power": 16,
@@ -229,7 +232,7 @@ with the contents of `zero_stage2_config.json` being:
         "reduce_bucket_size": "auto",
         "contiguous_gradients": true
     },
-    "gradient_accumulation_steps": "auto",
+    "gradient_accumulation_steps": 1,
     "gradient_clipping": "auto",
     "steps_per_print": 2000,
     "train_batch_size": "auto",
@@ -275,7 +278,7 @@ with the contents of `zero_stage3_offload_config.json` being:
 ```json
 {
     "fp16": {
-        "enabled": "auto",
+        "enabled": true,
         "loss_scale": 0,
         "loss_scale_window": 1000,
         "initial_scale_power": 16,
@@ -318,7 +321,7 @@ with the contents of `zero_stage3_offload_config.json` being:
         "stage3_max_reuse_distance": 1e9,
         "stage3_gather_16bit_weights_on_model_save": "auto"
     },
-    "gradient_accumulation_steps": "auto",
+    "gradient_accumulation_steps": 1,
     "gradient_clipping": "auto",
     "steps_per_print": 2000,
     "train_batch_size": "auto",
@@ -353,22 +356,30 @@ We will look at the changes needed in the code when using these.
    In this situation, those will be used and user has to use `accelerate.utils.DummyOptim` and `accelerate.utils.DummyScheduler` to replace the PyTorch/Custom optimizers and schedulers in their code.
    Below is the snippet from `examples/by_feature/deepspeed_with_config_support.py` showing this:
    ```python
-   # Creates Dummy Optimizer if `optimizer` was spcified in the config file else creates Adam Optimizer
-   if "optimizer" not in accelerator.state.deepspeed_plugin.deepspeed_config:
-       optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
-   else:
-       optimizer = DummyOptim(param_groups=optimizer_grouped_parameters)
+    # Creates Dummy Optimizer if `optimizer` was spcified in the config file else creates Adam Optimizer
+    optimizer_cls = (
+        torch.optim.AdamW
+        if accelerator.state.deepspeed_plugin is None
+        or "optimizer" not in accelerator.state.deepspeed_plugin.deepspeed_config
+        else DummyOptim
+    )
+    optimizer = optimizer_cls(optimizer_grouped_parameters, lr=args.learning_rate)
 
-   # Creates Dummy Optimizer if `optimizer` was specified in the config file else creates Adam Optimizer
-   if "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config:
-       lr_scheduler = get_scheduler(
-           name=args.lr_scheduler_type,
-           optimizer=optimizer,
-           num_warmup_steps=args.num_warmup_steps,
-           num_training_steps=args.max_train_steps,
-       )
-   else:
-       lr_scheduler = DummyScheduler()
+    # Creates Dummy Scheduler if `scheduler` was spcified in the config file else creates `args.lr_scheduler_type` Scheduler
+    if (
+        accelerator.state.deepspeed_plugin is None
+        or "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config
+    ):
+        lr_scheduler = get_scheduler(
+            name=args.lr_scheduler_type,
+            optimizer=optimizer,
+            num_warmup_steps=args.num_warmup_steps,
+            num_training_steps=args.max_train_steps,
+        )
+    else:
+        lr_scheduler = DummyScheduler(
+            optimizer, total_num_steps=args.max_train_steps, warmup_num_steps=args.num_warmup_steps
+        )
    ```
    b. Custom Optim + Custom Scheduler: The case when both `optimizer` and `scheduler` keys are absent in the DeepSpeed config file.
    In this situation, no code changes are needed from the user and this is the case when using integration via DeepSpeed Plugin.
@@ -380,54 +391,9 @@ We will look at the changes needed in the code when using these.
    d. DS Optim + Custom Scheduler: The case when only `optimizer` key is present in the DeepSpeed config file. 
    This will result in an error because one can only use DS Scheduler when using DS Optim.
 
-2. Notice the `auto` values in the above example DeepSpeed config files. 
-These have to specified by the user in the code by running `accelerator.state.deepspeed_plugin.deepspeed_config_process(**kwargs)`. 
-This allows user more flexibilty to fill these fields based on the code instead of hardcoding them. 
-Below is the snippet from `examples/by_feature/deepspeed_with_config_support.py` showing how to fill these: 
-```python
-# Processing all the fields with `auto` values in the DeepSpeed Config file
-if accelerator.state.deepspeed_plugin.config_file != "none":
-    kwargs = vars(args)
-    kwargs["fp16.enabled"] = True
-    kwargs["optimizer.params.lr"] = args.learning_rate
-    kwargs["optimizer.params.weight_decay"] = 0.0
-    kwargs["scheduler.params.warmup_min_lr"] = 0
-    kwargs["scheduler.params.warmup_max_lr"] = args.learning_rate
-    kwargs["scheduler.params.warmup_num_steps"] = args.num_warmup_steps
-    kwargs["scheduler.params.total_num_steps"] = (
-        math.ceil(args.max_train_steps // accelerator.num_processes)
-        if not accelerator.split_batches
-        else args.max_train_steps
-    )
-    kwargs["gradient_accumulation_steps"] = args.gradient_accumulation_steps
-    kwargs["train_micro_batch_size_per_gpu"] = (
-        args.per_device_train_batch_size // accelerator.num_processes
-        if accelerator.split_batches
-        else args.per_device_train_batch_size
-    )
-    kwargs["gradient_clipping"] = 1.0
-    kwargs["train_batch_size"] = (
-        args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
-    )
-    hidden_size = model.config.hidden_size
-    kwargs["zero_optimization.reduce_bucket_size"] = hidden_size * hidden_size
-    kwargs["zero_optimization.stage3_prefetch_bucket_size"] = 0.9 * hidden_size * hidden_size
-    kwargs["zero_optimization.stage3_param_persistence_threshold"] = 10 * hidden_size
-    kwargs["zero_optimization.stage3_gather_16bit_weights_on_model_save"] = True
-
-    accelerator.state.deepspeed_plugin.deepspeed_config_process(**kwargs)
-
-    # Prepare everything with our `accelerator`.
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
-    )
-```
-   a. Note that this needs to be done before call to `accelerator.prepare`.
-
-   b. If there are mismatches between the values given in the DeepSpeed config file and the values given in the code, an error will be thrown.
-
-   c. If there are fields with `auto` value whose value isn't provided to `accelerator.state.deepspeed_plugin.deepspeed_config_process`, an error will be thrown.
-   So, make sure to fill all the `auto` fields in the DeepSpeed config file before calling `accelerator.prepare`.
+2. Notice the `auto` values in the above example DeepSpeed config files. These are automatically handled by `prepare` method 
+based on model, dataloaders, dummy optimizer and dummy schedulers provided to `prepare` method. 
+Only the `auto` fields specified in above examples are handled by `prepare` method and the rest have to be explicitly specified by the user.
 
 ## Saving and loading
 

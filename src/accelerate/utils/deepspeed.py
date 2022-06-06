@@ -122,7 +122,7 @@ class DummyScheduler:
             Other arguments.
     """
 
-    def __init__(self, optimizer, total_num_steps=None, warmup_num_steps=None, **kwargs):
+    def __init__(self, optimizer, total_num_steps=None, warmup_num_steps=0, **kwargs):
         self.optimizer = optimizer
         self.total_num_steps = total_num_steps
         self.warmup_num_steps = warmup_num_steps

@@ -189,6 +189,13 @@ class Accelerator:
                 ds_config = deepcopy(deepspeed_plugin.deepspeed_config)
                 del ds_config["train_batch_size"]
                 ds_config.update({"train_micro_batch_size_per_gpu": 1, "gradient_accumulation_steps": 1})
+                mixed_precision = (
+                    os.environ.get("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+                )
+                if mixed_precision == "fp16":
+                    ds_config.update({"fp16": {"enabled": True}})
+                elif mixed_precision == "bf16":
+                    ds_config.update({"bf16": {"enabled": True}})
                 self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
         if fsdp_plugin is None:  # init from env variables
@@ -578,7 +585,7 @@ class Accelerator:
                 )
 
             if isinstance(optimizer, (torch.optim.Optimizer)):
-                self.deepspeed_config["zero_allow_untested_optimizer"] = True
+                deepspeed_plugin.deepspeed_config["zero_allow_untested_optimizer"] = True
 
         if scheduler is not None:
             if "scheduler" in deepspeed_plugin.deepspeed_config and not isinstance(scheduler, (DummyScheduler)):
@@ -606,7 +613,7 @@ class Accelerator:
                     "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
                     "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
                     "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
-                    "zero_optimization.stage3_gather_16bit_weights_on_model_save": True,
+                    "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
                     "gradient_clipping": 1.0,
                 }
             )
@@ -620,20 +627,16 @@ class Accelerator:
                         "scheduler.params.warmup_min_lr": 0,
                         "scheduler.params.warmup_max_lr": scheduler.optimizer.lr,
                         "scheduler.params.warmup_num_steps": scheduler.warmup_num_steps,
-                        "scheduler.params.total_num_steps": math.ceil(scheduler.total_num_steps / self.num_processes)
-                        if not self.split_batches
-                        else scheduler.total_num_steps,
                     }
                 )
+                if scheduler.total_num_steps is not None:
+                    config_kwargs["scheduler.params.total_num_steps"] = (
+                        math.ceil(scheduler.total_num_steps / self.num_processes)
+                        if not self.split_batches
+                        else scheduler.total_num_steps
+                    )
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
-
-            if (
-                deepspeed_plugin.zero3_init_flag
-                and deepspeed_plugin.config_file == "none"
-                and ("fp16" in self.deepspeed_config or "bf16" in self.deepspeed_config)
-            ):
-                model.half()
             kwargs = dict(model=model, config_params=self.deepspeed_config)
             if optimizer is not None:
                 if isinstance(optimizer, (DummyOptim)):

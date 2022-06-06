@@ -224,11 +224,11 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             )
 
         # Test `ValueError` is raised if some config file fields with `auto` value is missing in `kwargs`
-        deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"] = "auto"
+        deepspeed_plugin.deepspeed_config["optimizer"]["params"]["lr"] = "auto"
         with self.assertRaises(ValueError) as cm:
-            del kwargs["gradient_accumulation_steps"]
+            del kwargs["optimizer.params.lr"]
             deepspeed_plugin.deepspeed_config_process(**kwargs)
-        self.assertTrue("`gradient_accumulation_steps` not found in kwargs." in str(cm.exception))
+        self.assertTrue("`optimizer.params.lr` not found in kwargs." in str(cm.exception))
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
     def test_accelerate_state_deepspeed(self, dtype):
@@ -313,7 +313,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                     num_training_steps=1000,
                 )
                 dummy_optimizer = DummyOptim(params=model.parameters())
-                dummy_lr_scheduler = DummyScheduler()
+                dummy_lr_scheduler = DummyScheduler(dummy_optimizer)
 
                 with self.assertRaises(ValueError) as cm:
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
@@ -367,10 +367,10 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                     num_training_steps=1000,
                 )
                 dummy_optimizer = DummyOptim(params=model.parameters())
-                dummy_lr_scheduler = DummyScheduler()
+                dummy_lr_scheduler = DummyScheduler(dummy_optimizer)
                 kwargs["train_batch_size"] = (
                     kwargs["train_micro_batch_size_per_gpu"]
-                    * kwargs["gradient_accumulation_steps"]
+                    * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
                     * accelerator.num_processes
                 )
                 accelerator.state.deepspeed_plugin.deepspeed_config_process(**kwargs)
@@ -427,10 +427,10 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                     num_training_steps=1000,
                 )
                 dummy_optimizer = DummyOptim(params=model.parameters())
-                dummy_lr_scheduler = DummyScheduler()
+                dummy_lr_scheduler = DummyScheduler(dummy_optimizer)
                 kwargs["train_batch_size"] = (
                     kwargs["train_micro_batch_size_per_gpu"]
-                    * kwargs["gradient_accumulation_steps"]
+                    * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
                     * accelerator.num_processes
                 )
                 accelerator.state.deepspeed_plugin.deepspeed_config_process(**kwargs)
@@ -460,10 +460,10 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                     num_training_steps=1000,
                 )
                 dummy_optimizer = DummyOptim(params=model.parameters())
-                dummy_lr_scheduler = DummyScheduler()
+                dummy_lr_scheduler = DummyScheduler(dummy_optimizer)
                 kwargs["train_batch_size"] = (
                     kwargs["train_micro_batch_size_per_gpu"]
-                    * kwargs["gradient_accumulation_steps"]
+                    * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
                     * accelerator.num_processes
                 )
                 accelerator.state.deepspeed_plugin.deepspeed_config_process(**kwargs)
@@ -505,7 +505,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
             kwargs["train_batch_size"] = (
                 kwargs["train_micro_batch_size_per_gpu"]
-                * kwargs["gradient_accumulation_steps"]
+                * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
                 * accelerator.num_processes
             )
             accelerator.state.deepspeed_plugin.deepspeed_config_process(**kwargs)
@@ -516,7 +516,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             eval_dataloader = DataLoader(eval_set, batch_size=32, shuffle=False)
             model = AutoModelForCausalLM.from_pretrained("gpt2")
             dummy_optimizer = DummyOptim(params=model.parameters())
-            dummy_lr_scheduler = DummyScheduler()
+            dummy_lr_scheduler = DummyScheduler(dummy_optimizer)
 
             model, _, train_dataloader, eval_dataloader, _ = accelerator.prepare(
                 model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
@@ -530,3 +530,52 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                 "To save the full checkpoint, run `model.save_checkpoint(save_dir)` and use `zero_to_fp32.py` to recover weights."
             )
             self.assertTrue(msg in str(cm.exception))
+        accelerator.state.initialized = False
+
+    def test_autofill_dsconfig(self):
+        deepspeed_plugin = DeepSpeedPlugin(
+            config_file=self.ds_config_file[ZERO3],
+            zero3_init_flag=True,
+        )
+        del deepspeed_plugin.deepspeed_config["bf16"]
+        del deepspeed_plugin.deepspeed_config["fp16"]
+
+        with mockenv_context(**self.dist_env):
+            accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+            train_set = RegressionDataset(length=80)
+            eval_set = RegressionDataset(length=20)
+            train_dataloader = DataLoader(train_set, batch_size=16, shuffle=True)
+            eval_dataloader = DataLoader(eval_set, batch_size=32, shuffle=False)
+            model = AutoModelForCausalLM.from_pretrained("gpt2")
+            dummy_optimizer = DummyOptim(params=model.parameters(), lr=5e-5, weight_decay=1e-4)
+            dummy_lr_scheduler = DummyScheduler(dummy_optimizer, warmup_num_steps=10, total_num_steps=1000)
+            hidden_size = model.config.hidden_size
+            model, _, train_dataloader, eval_dataloader, _ = accelerator.prepare(
+                model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
+            )
+            self.assertEqual(accelerator.deepspeed_config["train_micro_batch_size_per_gpu"], 16)
+            self.assertEqual(accelerator.deepspeed_config["train_batch_size"], 16)
+
+            self.assertEqual(accelerator.deepspeed_config["optimizer"]["params"]["lr"], 5e-5)
+            self.assertEqual(accelerator.deepspeed_config["optimizer"]["params"]["weight_decay"], 1e-4)
+
+            self.assertEqual(accelerator.deepspeed_config["scheduler"]["params"]["warmup_min_lr"], 0.0)
+            self.assertEqual(accelerator.deepspeed_config["scheduler"]["params"]["warmup_max_lr"], 5e-5)
+            self.assertEqual(accelerator.deepspeed_config["scheduler"]["params"]["warmup_num_steps"], 10)
+
+            self.assertEqual(accelerator.deepspeed_config["gradient_clipping"], 1.0)
+            self.assertEqual(
+                accelerator.deepspeed_config["zero_optimization"]["reduce_bucket_size"], hidden_size * hidden_size
+            )
+            self.assertEqual(
+                accelerator.deepspeed_config["zero_optimization"]["stage3_prefetch_bucket_size"],
+                0.9 * hidden_size * hidden_size,
+            )
+            self.assertEqual(
+                accelerator.deepspeed_config["zero_optimization"]["stage3_param_persistence_threshold"],
+                10 * hidden_size,
+            )
+            self.assertFalse(
+                accelerator.deepspeed_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
+            )
+        accelerator.state.initialized = False
