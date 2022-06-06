@@ -3,7 +3,7 @@ name: Check for dependency modification
 on:
   push:
     branches:
-      - fix-secrets
+      - main
   workflow_dispatch:
 
 env:
