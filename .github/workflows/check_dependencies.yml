@@ -3,7 +3,7 @@ name: Check for dependency modification
 on:
   push:
     branches:
-      - main
+      - fix-secrets
   workflow_dispatch:
 
 env:
@@ -37,3 +37,4 @@ jobs:
     needs: check-for-setup
     if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
     uses: ./.github/workflows/build-docker-images.yml
+    secrets: inherit
