@@ -1,10 +1,11 @@
 name: Self-hosted runner (push to "main")
 
 on:
+  workflow_run:
+    workflows: ["Check for dependency modification"]
+    branches: ["main"]
+    types: [completed]
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
 
 env:
   TESTING_MOCKED_DATALOADERS: "1"
