@@ -89,27 +89,41 @@ class DummyOptim:
     loop when optimizer config is specified in the deepspeed config file.
 
     Args:
-        params (list of `torch.Tensor`):
-            List of model parameters.
-        param_groups (list of dict):
-            List of dictionaries with parameters and their groups.
+        lr (float):
+            Learning rate.
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups
+        weight_decay (float):
+            Weight decay.
+        **kwargs:
+            Other arguments.
     """
 
-    def __init__(self, params=None, param_groups=None):
-        self.param_groups = []
-        if params is None and param_groups is None:
-            raise ValueError("Either params or param_groups should be specified")
-        if param_groups is None:
-            self.param_groups.append({"params": params})
-        else:
-            self.param_groups = param_groups
+    def __init__(self, params, lr=0.001, weight_decay=0, **kwargs):
+        self.params = params
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.kwargs = kwargs
 
 
 class DummyScheduler:
     """
     Dummy scheduler presents model parameters or param groups, this is primarily used to follow conventional training
     loop when scheduler config is specified in the deepspeed config file.
+
+    Args:
+        optimizer (`torch.optim.optimizer.Optimizer`):
+            The optimizer to wrap.
+        total_num_steps (int):
+            Total number of steps.
+        warmup_num_steps (int):
+            Number of steps for warmup.
+        **kwargs:
+            Other arguments.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, optimizer, total_num_steps=None, warmup_num_steps=None, **kwargs):
+        self.optimizer = optimizer
+        self.total_num_steps = total_num_steps
+        self.warmup_num_steps = warmup_num_steps
+        self.kwargs = kwargs

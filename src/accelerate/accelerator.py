@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import math
 import os
 import sys
 import warnings
@@ -523,32 +524,33 @@ class Accelerator:
     def _prepare_deepspeed(self, *args):
 
         deepspeed_plugin = self.state.deepspeed_plugin
-        self.deepspeed_config = deepspeed_plugin.deepspeed_config
 
         result = [
             self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
             for obj in args
         ]
 
-        if deepspeed_plugin.config_file == "none":
-            batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
-            if self.split_batches:
-                batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
-            if len(batch_sizes) == 0:
-                raise ValueError(
-                    "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
-                )
-
-            batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
-            if len(batch_sizes) > 1:
-                logger.info(
-                    "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
-                    f"{deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
-                )
-
-            self.deepspeed_config["train_batch_size"] = (
-                batch_size_per_device * self.deepspeed_config["gradient_accumulation_steps"] * self.num_processes
+        batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
+        if self.split_batches:
+            batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
+        if len(batch_sizes) == 0:
+            raise ValueError(
+                "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
             )
+
+        batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
+        if len(batch_sizes) > 1:
+            logger.info(
+                "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
+                f"{deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
+            )
+
+        config_kwargs = {
+            "train_micro_batch_size_per_gpu": batch_size_per_device,
+            "train_batch_size": batch_size_per_device
+            * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
+            * self.num_processes,
+        }
 
         model = None
         optimizer = None
@@ -564,13 +566,13 @@ class Accelerator:
                 scheduler = obj
 
         if optimizer is not None:
-            if "optimizer" in self.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
+            if "optimizer" in deepspeed_plugin.deepspeed_config and not isinstance(optimizer, (DummyOptim)):
                 raise ValueError(
                     "You cannot specify an optimizer in the config file and in the code at the same time. "
                     "Please remove the optimizer from the config file or "
                     "create `accelerate.utils.DummyOptim` in the code."
                 )
-            elif "optimizer" not in self.deepspeed_config and isinstance(optimizer, (DummyOptim)):
+            elif "optimizer" not in deepspeed_plugin.deepspeed_config and isinstance(optimizer, (DummyOptim)):
                 raise ValueError(
                     "You cannot create a `DummyOptim` without specifying an optimizer in the config file."
                 )
@@ -579,13 +581,13 @@ class Accelerator:
                 self.deepspeed_config["zero_allow_untested_optimizer"] = True
 
         if scheduler is not None:
-            if "scheduler" in self.deepspeed_config and not isinstance(scheduler, (DummyScheduler)):
+            if "scheduler" in deepspeed_plugin.deepspeed_config and not isinstance(scheduler, (DummyScheduler)):
                 raise ValueError(
                     "You cannot specify a scheduler in the config file and in the code at the same time. "
                     "Please remove the scheduler from the config file or "
                     "create `accelerate.utils.DummyScheduler` in the code."
                 )
-            elif "scheduler" not in self.deepspeed_config and isinstance(scheduler, (DummyScheduler)):
+            elif "scheduler" not in deepspeed_plugin.deepspeed_config and isinstance(scheduler, (DummyScheduler)):
                 raise ValueError(
                     "You cannot create a `DummyScheduler` without specifying a scheduler in the config file."
                 )
@@ -598,18 +600,44 @@ class Accelerator:
                 )
 
         if model is not None:
+            hidden_size = model.config.hidden_size
+            config_kwargs.update(
+                {
+                    "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
+                    "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
+                    "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
+                    "zero_optimization.stage3_gather_16bit_weights_on_model_save": True,
+                    "gradient_clipping": 1.0,
+                }
+            )
+            if isinstance(optimizer, (DummyOptim)):
+                config_kwargs.update(
+                    {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
+                )
+            if isinstance(scheduler, (DummyScheduler)):
+                config_kwargs.update(
+                    {
+                        "scheduler.params.warmup_min_lr": 0,
+                        "scheduler.params.warmup_max_lr": scheduler.optimizer.lr,
+                        "scheduler.params.warmup_num_steps": scheduler.warmup_num_steps,
+                        "scheduler.params.total_num_steps": math.ceil(scheduler.total_num_steps / self.num_processes)
+                        if not self.split_batches
+                        else scheduler.total_num_steps,
+                    }
+                )
+            deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
+            self.deepspeed_config = deepspeed_plugin.deepspeed_config
+
             if (
                 deepspeed_plugin.zero3_init_flag
                 and deepspeed_plugin.config_file == "none"
-                and ("fp16" in deepspeed_plugin.deepspeed_config or "bf16" in deepspeed_plugin.deepspeed_config)
+                and ("fp16" in self.deepspeed_config or "bf16" in self.deepspeed_config)
             ):
                 model.half()
             kwargs = dict(model=model, config_params=self.deepspeed_config)
-            model_parameters = None
             if optimizer is not None:
                 if isinstance(optimizer, (DummyOptim)):
-                    model_parameters = optimizer.param_groups
-                    kwargs["model_parameters"] = model_parameters
+                    kwargs["model_parameters"] = optimizer.params
                 else:
                     kwargs["optimizer"] = optimizer
                     if scheduler is not None:

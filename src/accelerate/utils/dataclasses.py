@@ -256,6 +256,8 @@ class DeepSpeedPlugin:
                 self.deepspeed_config = json.load(f)
             if "gradient_accumulation_steps" not in self.deepspeed_config:
                 self.deepspeed_config["gradient_accumulation_steps"] = 1
+            elif self.deepspeed_config["gradient_accumulation_steps"] == "auto":
+                raise ValueError("gradient_accumulation_steps cannot be set to 'auto' in the DeepSpeed config file.")
             if "zero_optimization" not in self.deepspeed_config:
                 raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config file.")
         else:
@@ -280,7 +282,7 @@ class DeepSpeedPlugin:
                 self.zero3_save_16bit_model = os.environ.get("DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
 
             self.deepspeed_config = {
-                "train_batch_size": None,
+                "train_batch_size": "auto",
                 "gradient_accumulation_steps": self.gradient_accumulation_steps,
                 "zero_optimization": {
                     "stage": self.zero_stage,
@@ -339,16 +341,18 @@ class DeepSpeedPlugin:
             if ds_val != kwargs[ds_key_long]:
                 mismatches.append(f"- ds {ds_key_long}={ds_val} vs arg {ds_key_long}={kwargs[ds_key_long]}")
 
-    def deepspeed_config_process(self, prefix="", mismatches=None, config=None, **kwargs):
+    def deepspeed_config_process(self, prefix="", mismatches=None, config=None, must_match=True, **kwargs):
         """Process the DeepSpeed config with the values from the kwargs."""
         mismatches = [] if mismatches is None else mismatches
         if config is None:
             config = self.deepspeed_config
         for key, value in config.items():
             if isinstance(value, dict):
-                self.deepspeed_config_process(prefix=prefix + key + ".", mismatches=mismatches, config=value, **kwargs)
+                self.deepspeed_config_process(
+                    prefix=prefix + key + ".", mismatches=mismatches, config=value, must_match=must_match, **kwargs
+                )
             else:
-                self.fill_match(prefix + key, mismatches, **kwargs)
+                self.fill_match(prefix + key, mismatches, must_match=must_match, **kwargs)
         if len(mismatches) > 0 and prefix == "":
             mismatches_msg = "\n".join(mismatches)
             raise ValueError(

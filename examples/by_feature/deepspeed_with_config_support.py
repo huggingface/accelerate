@@ -526,16 +526,27 @@ def main():
     ]
     # New Code #
     # Creates Dummy Optimizer if `optimizer` was spcified in the config file else creates Adam Optimizer
-    if "optimizer" not in accelerator.state.deepspeed_plugin.deepspeed_config:
-        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
-    else:
-        optimizer = DummyOptim(param_groups=optimizer_grouped_parameters)
+    optimizer_cls = (
+        torch.optim.AdamW
+        if accelerator.state.deepspeed_plugin is None
+        or "optimizer" not in accelerator.state.deepspeed_plugin.deepspeed_config
+        else DummyOptim
+    )
+    optimizer = optimizer_cls(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
     if accelerator.distributed_type == DistributedType.TPU:
         model.tie_weights()
 
     # Scheduler and math around the number of training steps.
+
+    # New Code
+    # Get gradient accumulation steps from deepspeed config if available
+    if accelerator.state.deepspeed_plugin is not None:
+        args.gradient_accumulation_steps = accelerator.state.deepspeed_plugin.deepspeed_config[
+            "gradient_accumulation_steps"
+        ]
+
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
@@ -544,7 +555,10 @@ def main():
 
     # New Code #
     # Creates Dummy Scheduler if `scheduler` was spcified in the config file else creates `args.lr_scheduler_type` Scheduler
-    if "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config:
+    if (
+        accelerator.state.deepspeed_plugin is None
+        or "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config
+    ):
         lr_scheduler = get_scheduler(
             name=args.lr_scheduler_type,
             optimizer=optimizer,
@@ -552,40 +566,9 @@ def main():
             num_training_steps=args.max_train_steps,
         )
     else:
-        lr_scheduler = DummyScheduler()
-
-    # New Code #
-    # Processing all the fields with `auto` values in the DeepSpeed Config file
-    if accelerator.state.deepspeed_plugin.config_file != "none":
-        kwargs = vars(args)
-        kwargs["fp16.enabled"] = True
-        kwargs["optimizer.params.lr"] = args.learning_rate
-        kwargs["optimizer.params.weight_decay"] = 0.0
-        kwargs["scheduler.params.warmup_min_lr"] = 0
-        kwargs["scheduler.params.warmup_max_lr"] = args.learning_rate
-        kwargs["scheduler.params.warmup_num_steps"] = args.num_warmup_steps
-        kwargs["scheduler.params.total_num_steps"] = (
-            math.ceil(args.max_train_steps // accelerator.num_processes)
-            if not accelerator.split_batches
-            else args.max_train_steps
+        lr_scheduler = DummyScheduler(
+            optimizer, total_num_steps=args.max_train_steps, warmup_num_steps=args.num_warmup_steps
         )
-        kwargs["gradient_accumulation_steps"] = args.gradient_accumulation_steps
-        kwargs["train_micro_batch_size_per_gpu"] = (
-            args.per_device_train_batch_size // accelerator.num_processes
-            if accelerator.split_batches
-            else args.per_device_train_batch_size
-        )
-        kwargs["gradient_clipping"] = 1.0
-        kwargs["train_batch_size"] = (
-            args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
-        )
-        hidden_size = model.config.hidden_size
-        kwargs["zero_optimization.reduce_bucket_size"] = hidden_size * hidden_size
-        kwargs["zero_optimization.stage3_prefetch_bucket_size"] = 0.9 * hidden_size * hidden_size
-        kwargs["zero_optimization.stage3_param_persistence_threshold"] = 10 * hidden_size
-        kwargs["zero_optimization.stage3_gather_16bit_weights_on_model_save"] = True
-
-        accelerator.state.deepspeed_plugin.deepspeed_config_process(**kwargs)
 
     # Prepare everything with our `accelerator`.
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(

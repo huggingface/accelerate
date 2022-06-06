@@ -203,11 +203,14 @@ def get_cluster_input():
         num_processes = 1
 
     if distributed_type != DistributedType.TPU:
-        mixed_precision = _ask_field(
-            "Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: ",
-            lambda x: str(x).lower(),
-            default="no",
-        )
+        if distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config:
+            mixed_precision = "no"
+        else:
+            mixed_precision = _ask_field(
+                "Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: ",
+                lambda x: str(x).lower(),
+                default="no",
+            )
     else:
         mixed_precision = "no"
 
