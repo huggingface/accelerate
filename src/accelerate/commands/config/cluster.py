@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available
+from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available, is_transformers_available
 from .config_args import ClusterConfig
 from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
 
@@ -77,24 +77,72 @@ def get_cluster_input():
             ), "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
 
         if distributed_type == DistributedType.DEEPSPEED:
-            deepspeed_config["zero_stage"] = _ask_field(
-                "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2, 3)? [2]: ",
-                lambda x: int(x),
-                default=2,
+            use_deepspeed_config = _ask_field(
+                "Do you want to specify a json file to a DeepSpeed config? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
             )
-
-            if deepspeed_config["zero_stage"] >= 2:
-                deepspeed_config["offload_optimizer_device"] = _ask_field(
-                    "Where to offload optimizer states? [NONE/cpu/nvme]: ",
+            if use_deepspeed_config:
+                deepspeed_config["deepspeed_config_file"] = _ask_field(
+                    "Please enter the path to the json DeepSpeed config file: ",
                     lambda x: str(x),
                     default="none",
                 )
+            else:
+                deepspeed_config["zero_stage"] = _ask_field(
+                    "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2, 3)? [2]: ",
+                    lambda x: int(x),
+                    default=2,
+                )
 
-            deepspeed_config["gradient_accumulation_steps"] = _ask_field(
-                "How many gradient accumulation steps you're passing in your script? [1]: ",
-                lambda x: int(x),
-                default=1,
+                if deepspeed_config["zero_stage"] >= 2:
+                    deepspeed_config["offload_optimizer_device"] = _ask_field(
+                        "Where to offload optimizer states? [none/cpu/nvme]: ",
+                        lambda x: str(x),
+                        default="none",
+                    )
+                    deepspeed_config["offload_param_device"] = _ask_field(
+                        "Where to offload parameters? [none/cpu/nvme]: ",
+                        lambda x: str(x),
+                        default="none",
+                    )
+                deepspeed_config["gradient_accumulation_steps"] = _ask_field(
+                    "How many gradient accumulation steps you're passing in your script? [1]: ",
+                    lambda x: int(x),
+                    default=1,
+                )
+                use_gradient_clipping = _ask_field(
+                    "Do you want to use gradient clipping? [yes/NO]: ",
+                    _convert_yes_no_to_bool,
+                    default=False,
+                    error_message="Please enter yes or no.",
+                )
+                if use_gradient_clipping:
+                    deepspeed_config["gradient_clipping"] = _ask_field(
+                        "What is the gradient clipping value? [1.0]: ",
+                        lambda x: float(x),
+                        default=1.0,
+                    )
+                if deepspeed_config["zero_stage"] == 3:
+                    deepspeed_config["zero3_save_16bit_model"] = _ask_field(
+                        "Do you want to save 16-bit model weights when using ZeRO Stage-3? [yes/NO]: ",
+                        _convert_yes_no_to_bool,
+                        default=False,
+                        error_message="Please enter yes or no.",
+                    )
+            deepspeed_config["zero3_init_flag"] = _ask_field(
+                "Do you want to enable `deepspeed.zero.Init` when using ZeRO Stage-3 for constructing massive models? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
             )
+            if deepspeed_config["zero3_init_flag"]:
+                if not is_transformers_available():
+                    raise Exception(
+                        "When `zero3_init_flag` is set, it requires Transformers to be installed. "
+                        "Please run `pip3 install transformers`."
+                    )
 
     fsdp_config = {}
     if distributed_type in [DistributedType.MULTI_GPU]:
@@ -155,11 +203,14 @@ def get_cluster_input():
         num_processes = 1
 
     if distributed_type != DistributedType.TPU:
-        mixed_precision = _ask_field(
-            "Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: ",
-            lambda x: str(x).lower(),
-            default="no",
-        )
+        if distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config:
+            mixed_precision = "no"
+        else:
+            mixed_precision = _ask_field(
+                "Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: ",
+                lambda x: str(x).lower(),
+                default="no",
+            )
     else:
         mixed_precision = "no"
 

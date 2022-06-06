@@ -27,6 +27,9 @@ style:
 test:
 	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py
 
+test_deepspeed:
+	python -m pytest -s -v ./tests/deepspeed
+
 test_examples:
 	python -m pytest -s -v ./tests/test_examples.py
 

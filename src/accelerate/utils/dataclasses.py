@@ -19,8 +19,11 @@ General namespace and dataclass related classes
 import copy
 import enum
 import functools
+import io
+import json
 import os
 import typing
+import warnings
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Callable, Iterable, Optional
@@ -208,10 +211,15 @@ class TensorInformation:
 
 @dataclass
 class DeepSpeedPlugin:
+    """
+    This plugin is used to integrate DeepSpeed.
+    """
 
+    config_file: str = field(default=None, metadata={"help": "Path to the DeepSpeed config file."})
     gradient_accumulation_steps: int = field(
         default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
     )
+    gradient_clipping: float = field(default=None, metadata={"help": "Enable gradient clipping with value"})
     zero_stage: int = field(
         default=None,
         metadata={"help": "Possible options are 0,1,2,3; Default will be taken from environment variable"},
@@ -220,37 +228,137 @@ class DeepSpeedPlugin:
         default=True,
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
     )
-
-    auto_opt_mapping: bool = field(
-        default=True,
-        metadata={"help": "whether to map torch.adam to deepspeed optimizer version of adam based on config"},
+    offload_optimizer_device: bool = field(
+        default=None,
+        metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stages 2 and 3."},
+    )
+    offload_param_device: bool = field(
+        default=None,
+        metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3."},
+    )
+    zero3_init_flag: bool = field(
+        default=None,
+        metadata={
+            "help": "Flag to indicate whether to enable `deepspeed.zero.Init` for constructing massive models."
+            "Only applicable with ZeRO Stage-3."
+        },
+    )
+    zero3_save_16bit_model: bool = field(
+        default=None,
+        metadata={"help": "Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3."},
     )
 
-    offload_optimizer_device: bool = field(default=None, metadata={"help": "Possible options are none|cpu|nvme"})
-
     def __post_init__(self):
+        if self.config_file is None:
+            self.config_file = os.environ.get("DEEPSPEED_CONFIG_FILE", "none")
+        if self.config_file != "none":
+            with io.open(self.config_file, "r", encoding="utf-8") as f:
+                self.deepspeed_config = json.load(f)
+            if "gradient_accumulation_steps" not in self.deepspeed_config:
+                self.deepspeed_config["gradient_accumulation_steps"] = 1
+            elif self.deepspeed_config["gradient_accumulation_steps"] == "auto":
+                raise ValueError("gradient_accumulation_steps cannot be set to 'auto' in the DeepSpeed config file.")
+            if "zero_optimization" not in self.deepspeed_config:
+                raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config file.")
+        else:
+            if self.gradient_accumulation_steps is None:
+                self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
 
-        if self.gradient_accumulation_steps is None:
-            self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
+            if self.gradient_clipping is None:
+                gradient_clipping = os.environ.get("GRADIENT_CLIPPING", "none")
+                if gradient_clipping != "none":
+                    self.gradient_clipping = float(gradient_clipping)
 
-        if self.zero_stage is None:
-            self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
+            if self.zero_stage is None:
+                self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
 
-        if self.offload_optimizer_device is None:
-            self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
+            if self.offload_optimizer_device is None:
+                self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
 
-        self.deepspeed_config = {
-            "train_batch_size": None,
-            "gradient_accumulation_steps": self.gradient_accumulation_steps,
-            "zero_optimization": {
-                "stage": self.zero_stage,
-                "offload_optimizer": {
-                    "device": self.offload_optimizer_device,
+            if self.offload_param_device is None:
+                self.offload_param_device = os.environ.get("DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
+
+            if self.zero3_save_16bit_model is None:
+                self.zero3_save_16bit_model = os.environ.get("DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+
+            self.deepspeed_config = {
+                "train_batch_size": "auto",
+                "gradient_accumulation_steps": self.gradient_accumulation_steps,
+                "zero_optimization": {
+                    "stage": self.zero_stage,
+                    "offload_optimizer": {
+                        "device": self.offload_optimizer_device,
+                    },
+                    "offload_param": {
+                        "device": self.offload_param_device,
+                    },
+                    "stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
                 },
-            },
-            "steps_per_print": float("inf"),  # this will stop deepspeed from logging @ stdout
-            "zero_allow_untested_optimizer": True,
-        }
+            }
+            if self.gradient_clipping:
+                self.deepspeed_config["gradient_clipping"] = self.gradient_clipping
+        self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
+        if self.zero3_init_flag is None:
+            self.zero3_init_flag = os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true"
+        if self.zero3_init_flag and self.deepspeed_config["zero_optimization"]["stage"] != 3:
+            warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
+            self.zero3_init_flag = False
+
+    def find_config_node(self, ds_key_long):
+        config = self.deepspeed_config
+
+        # find the config node of interest if it exists
+        nodes = ds_key_long.split(".")
+        ds_key = nodes.pop()
+        for node in nodes:
+            config = config.get(node)
+            if config is None:
+                return None, ds_key
+
+        return config, ds_key
+
+    def fill_match(self, ds_key_long, mismatches, must_match=True, **kwargs):
+        config, ds_key = self.find_config_node(ds_key_long)
+        if config is None:
+            return
+
+        if config.get(ds_key) == "auto":
+            if ds_key_long in kwargs:
+                config[ds_key] = kwargs[ds_key_long]
+                return
+            else:
+                raise ValueError(
+                    f"`{ds_key_long}` not found in kwargs. "
+                    f"Please specify `{ds_key_long}` without `auto`(set to correct value) in the DeepSpeed config file or "
+                    "pass it in kwargs."
+                )
+
+        if not must_match:
+            return
+
+        ds_val = config.get(ds_key)
+        if ds_val is not None and ds_key_long in kwargs:
+            if ds_val != kwargs[ds_key_long]:
+                mismatches.append(f"- ds {ds_key_long}={ds_val} vs arg {ds_key_long}={kwargs[ds_key_long]}")
+
+    def deepspeed_config_process(self, prefix="", mismatches=None, config=None, must_match=True, **kwargs):
+        """Process the DeepSpeed config with the values from the kwargs."""
+        mismatches = [] if mismatches is None else mismatches
+        if config is None:
+            config = self.deepspeed_config
+        for key, value in config.items():
+            if isinstance(value, dict):
+                self.deepspeed_config_process(
+                    prefix=prefix + key + ".", mismatches=mismatches, config=value, must_match=must_match, **kwargs
+                )
+            else:
+                self.fill_match(prefix + key, mismatches, must_match=must_match, **kwargs)
+        if len(mismatches) > 0 and prefix == "":
+            mismatches_msg = "\n".join(mismatches)
+            raise ValueError(
+                "Please correct the following DeepSpeed config values that mismatch kwargs "
+                f" values:\n{mismatches_msg}\nThe easiest method is to set these DeepSpeed config values to 'auto'."
+            )
 
 
 @dataclass

@@ -27,6 +27,7 @@ from .imports import (
     is_sagemaker_available,
     is_tensorboard_available,
     is_tpu_available,
+    is_transformers_available,
     is_wandb_available,
 )
 from .modeling import (
@@ -76,7 +77,13 @@ from .versions import compare_versions, is_torch_version
 
 
 if is_deepspeed_available():
-    from .deepspeed import DeepSpeedEngineWrapper, DeepSpeedOptimizerWrapper
+    from .deepspeed import (
+        DeepSpeedEngineWrapper,
+        DeepSpeedOptimizerWrapper,
+        DeepSpeedSchedulerWrapper,
+        DummyOptim,
+        DummyScheduler,
+    )
 
 from .launch import PrepareForLaunch
 from .memory import find_executable_batch_size

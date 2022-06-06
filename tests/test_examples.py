@@ -32,7 +32,13 @@ from accelerate.utils import write_basic_config
 # Should mock `{script_name}.get_dataloaders` via:
 # @mock.patch("{script_name}.get_dataloaders", mocked_dataloaders)
 
-EXCLUDE_EXAMPLES = ["cross_validation.py", "multi_process_metrics.py", "memory.py", "fsdp_with_peak_mem_tracking.py"]
+EXCLUDE_EXAMPLES = [
+    "cross_validation.py",
+    "multi_process_metrics.py",
+    "memory.py",
+    "fsdp_with_peak_mem_tracking.py",
+    "deepspeed_with_config_support.py",
+]
 
 
 class ExampleDifferenceTests(unittest.TestCase):

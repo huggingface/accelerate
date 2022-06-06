@@ -29,4 +29,6 @@
     title: Fully Sharded Data Parallel
   - local: memory
     title: Memory Utilities
+  - local: deepspeed
+    title: DeepSpeed
   title: API Reference
