@@ -14,7 +14,7 @@
 
 from setuptools import setup
 from setuptools import find_packages
-# A comment
+
 extras = {}
 extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3"]
 extras["docs"] = []
