@@ -326,14 +326,15 @@ def sync_test():
     model = RegressionModel()
     dset = RegressionDataset()
     dl = DataLoader(dset, batch_size=16)
-    ddp_model, ddp_dl = accelerator.prepare(
+    ddp_model, dl = accelerator.prepare(
         deepcopy(model),
-        deepcopy(dl)
+        dl
     )
-    ddp_model
     model.to(device)
-    ddp_input, ddp_target = next(iter(ddp_dl)).values()
-    input, target = next(iter(dl)).values()
+    ddp_input, ddp_target = next(iter(dl)).values()
+
+    input = accelerator.gather((ddp_input))
+    print(input)
     input = input.to(accelerator.device)
     target = target.to(accelerator.device)
     
@@ -346,8 +347,6 @@ def sync_test():
     
     # Check two model parameters over num_iters iterations
     for iteration in range(2):
-        print(f'\nRegular:\nInput: {input}\nTarget: {target}')
-        print(f'\nDistributed:\nInput: {ddp_input}\nTarget: {ddp_target}')
         step_model(model, input, target, accelerator)
         if iteration % 2 == 0:
             # Accumulate grads locally
