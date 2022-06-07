@@ -330,7 +330,7 @@ def sync_test():
         deepcopy(model),
         deepcopy(dl)
     )
-    ddp_model.to(device)
+    ddp_model
     model.to(device)
     ddp_input, ddp_target = next(iter(ddp_dl)).values()
     input, target = next(iter(dl)).values()
@@ -339,12 +339,14 @@ def sync_test():
     
     # Ensure accumulate grads works with no_grad => no grads are accumulated
     with torch.no_grad():
-        with ddp_model.no_sync():
+        with accelerator.no_sync(ddp_model):
             ddp_model.train()
             ddp_model(ddp_input)
     
     # Check two model parameters over num_iters iterations
-    for iteration in range(3):
+    for iteration in range(2):
+        print(f'Regular:\nInput: {input}\nTarget: {target}')
+        print(f'Distributed:\nInput: {ddp_input}\nTarget: {ddp_target}')
         step_model(model, input, target, accelerator)
         if iteration % 2 == 0:
             # Accumulate grads locally
