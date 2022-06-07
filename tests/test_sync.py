@@ -44,10 +44,9 @@ class SyncTester(unittest.TestCase):
         accelerator = Accelerator()
         set_seed(42)
         modelA, modelB, dataloader = self.setup_training()
-        dataloader, modelA, modelB = accelerate.prepare(dataloader, modelA, modelB)
-        device = accelerator.device
-        modelA.to(device)
-        modelB.to(device)
+        dataloader, modelA, modelB = accelerator.prepare(dataloader, modelA, modelB)
+        modelA.to(accelerator.device)
+        modelB.to(accelerator.device)
         # Check two model parameters over three batches
         for iteration, (x, y) in enumerate(dataloader):
             self.step_model(accelerator, modelA, x, y)
@@ -71,7 +70,9 @@ class SyncTester(unittest.TestCase):
         accelerator = Accelerator()
         set_seed(42)
         modelA, modelB, dataloader = self.setup_training()
-        dataloader, modelA, modelB = accelerate.prepare(dataloader, modelA, modelB)
+        dataloader, modelA, modelB = accelerator.prepare(dataloader, modelA, modelB)
+        modelA.to(accelerator.device)
+        modelB.to(accelerator.device)
         # Check two model parameters over three batches
         for iteration, (x, y) in enumerate(dataloader):
             self.step_model(accelerator, modelA, x, y)
