@@ -27,8 +27,8 @@ class SyncTester(unittest.TestCase):
     @staticmethod
     def step_model(accelerator, model, input, target):
         model.train()
-        output = model(input)
-        loss = F.mse_loss(output, target)
+        output = model(input.to(accelerator.device))
+        loss = F.mse_loss(output, target.to(accelerator.device))
         accelerator.backward(loss)
 
     @staticmethod
@@ -45,6 +45,9 @@ class SyncTester(unittest.TestCase):
         set_seed(42)
         modelA, modelB, dataloader = self.setup_training()
         dataloader, modelA, modelB = accelerate.prepare(dataloader, modelA, modelB)
+        device = accelerator.device
+        modelA.to(device)
+        modelB.to(device)
         # Check two model parameters over three batches
         for iteration, (x, y) in enumerate(dataloader):
             self.step_model(accelerator, modelA, x, y)
