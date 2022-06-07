@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -313,45 +314,60 @@ def training_check():
     assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
 def sync_test():
-    def step_model(model, input, target, device):
+    def step_model(model, input, target, accelerator):
         model.train()
-        output = model(input.to(device))
-        loss = F.mse_loss(output, target.to(device))
-        return loss
+        output = model(input)
+        loss = F.mse_loss(output, target.to(output.device))
+        accelerator.backward(loss)
 
     accelerator = Accelerator()
     device = accelerator.device
     set_seed(42)
     model = RegressionModel()
-    model.to(device)
-    modelDDP = RegressionModel()
-    dataset = RegressionDataset(length=6)
-    dataloader = DataLoader(dataset, batch_size=2)
-    dataloader_ddp = DataLoader(dataset, batch_size=2)
-    modelDDP, dataloader_ddp = accelerator.prepare(
-        modelDDP, dataloader_ddp
+    dset = RegressionDataset()
+    dl = DataLoader(dset, bs=16)
+    ddp_model, ddp_dl = accelerator.prepare(
+        deepcopy(model),
+        deepcopy(dl)
     )
-    # Check two model parameters over three batches
-    for iteration, (batch, batch_ddp) in enumerate(zip(dataloader, dataloader_ddp)):
-        step_model(model, batch["x"], batch["y"], device).backward()
-        if iteration % 2 == 0:
-            # Accumulate locally
-            with accelerator.no_sync(modelDDP):
-                loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], device)
-                accelerator.backward(loss)
-        else:
-            # Sync
-            loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], device)
-            accelerator.backward(loss)
+    ddp_model.to(device)
+    model.to(device)
 
-        # Make sure they align
-        for i,j in zip(model.parameters(), modelDDP.parameters()):
-            if not i.requires_grad: 
+    ddp_iter = iter(ddp_dl)
+    dl_iter = iter(dl)
+
+    ddp_inp, _ = next(ddp_iter).values()
+    next(dl_iter)
+    
+    # Ensure accumulate grads works with no_grad => no grads are accumulated
+    with torch.no_grad():
+        with ddp_model.no_sync():
+            ddp_model.train()
+            ddp_model(ddp_inp)
+    
+    # Check two model parameters over num_iters iterations
+    for iteration in range(3):
+        ddp_input, ddp_target = next(ddp_iter).values()
+        input, target = next(dl_iter).values()
+        input = input.to(device)
+        target = target.to(device)
+
+        step_model(model, input, target, accelerator)
+        if iteration % 2 == 0:
+            # Accumulate grads locally
+            with accelerator.no_sync(ddp_model):
+                step_model(ddp_model, ddp_input, ddp_target, accelerator)
+        else:
+            # Sync grads
+            step_model(ddp_model, ddp_input, ddp_target, accelerator)
+        
+        for i, j in zip(model.parameters(), ddp_model.parameters()):
+            if not i.requires_grad:
                 continue
             if iteration % 2 == 0:
-                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == False, f'Iteration: {iteration} | Model grad: {i.grad} | ModelDDP grad: {j.grad} | !='
+                assert torch.allclose(i.grad, j.grad) == False
             else:
-                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == True, f'Iteration: {iteration} | Model grad: {i.grad} | ModelDDP grad: {j.grad} | =='
+                assert torch.allclose(i.grad, j.grad) == True
 
 
 def main():
