@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
@@ -310,6 +311,42 @@ def training_check():
     model = accelerator.unwrap_model(model).cpu()
     assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
     assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+
+def sync_test():
+    def step_model(accelerator, model, input, target):
+        model.train()
+        output = model(input.to(accelerator.device))
+        loss = F.mse_loss(output, target.to(accelerator.device))
+        accelerator.backward(loss)
+
+    accelerator = Accelerator()
+    set_seed(42)
+    modelA = RegressionModel()
+    modelB = RegressionModel()
+    dataset = RegressionDataset(length=6)
+    dataloader = DataLoader(dataset, batch_size=2)
+    modelA, modelB, dataloader = accelerator.prepare(
+        modelA, modelB, dataloader
+    )
+    # Check two model parameters over three batches
+    for iteration, batch in enumerate(dataloader):
+        step_model(accelerator, modelA, batch["x"], batch["y"])
+        if iteration % 2 == 0:
+            # Accumulate locally
+            with accelerator.no_sync(modelB):
+                step_model(accelerator, modelB, batch["x"], batch["y"])
+        else:
+            # Sync
+            step_model(accelerator, modelB, batch["x"], batch["y"])
+
+        # Make sure they align
+        for i,j in zip(modelA.parameters(), modelB.parameters()):
+            if not i.requires_grad: 
+                continue
+            if accelerator.num_processes > 1 and iteration % 2 != 0:
+                assert i.grad != j.grad
+            else:
+                assert i.grad == j.grad
 
 
 def main():
