@@ -369,7 +369,6 @@ class Accelerator:
                 PyTorch Module that was prepared with `Accelerator.prepare`
         """
         context = getattr(model, "no_sync", contextlib.nullcontext)
-        print(context)
         with context():
             yield
 

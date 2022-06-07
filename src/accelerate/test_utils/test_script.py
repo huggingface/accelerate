@@ -362,7 +362,7 @@ def sync_test():
             else:
                 assert torch.allclose(i.grad, j.grad) == True
 
-        torch.manual.seed(1337+iteration)
+        torch.manual_seed(1337+iteration)
         input = input[torch.randperm(16)]
 
 def main():
