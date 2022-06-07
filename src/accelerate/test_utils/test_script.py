@@ -344,15 +344,14 @@ def sync_test():
             loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], device)
             accelerator.backward(loss)
 
-        print(f"Iteration {iteration}")
         # Make sure they align
         for i,j in zip(model.parameters(), modelDDP.parameters()):
             if not i.requires_grad: 
                 continue
             if iteration % 2 == 0:
-                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == False, f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | !='
+                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == False, f'Iteration: {iteration} | Model grad: {i.grad} | ModelDDP grad: {j.grad} | !='
             else:
-                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == True, f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | =='
+                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == True, f'Iteration: {iteration} | Model grad: {i.grad} | ModelDDP grad: {j.grad} | =='
 
 
 def main():
