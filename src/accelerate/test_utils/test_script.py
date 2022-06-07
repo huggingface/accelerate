@@ -334,6 +334,7 @@ def sync_test():
     ddp_input, ddp_target = next(iter(dl)).values()
 
     input, target = accelerator.gather((ddp_input, ddp_target))
+    print(input.shape, target.shape)
     input = input.to(accelerator.device)
     target = target.to(accelerator.device)
     
