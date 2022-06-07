@@ -345,8 +345,8 @@ def sync_test():
     
     # Check two model parameters over num_iters iterations
     for iteration in range(2):
-        print(f'Regular:\nInput: {input}\nTarget: {target}')
-        print(f'Distributed:\nInput: {ddp_input}\nTarget: {ddp_target}')
+        print(f'\nRegular:\nInput: {input}\nTarget: {target}')
+        print(f'\nDistributed:\nInput: {ddp_input}\nTarget: {ddp_target}')
         step_model(model, input, target, accelerator)
         if iteration % 2 == 0:
             # Accumulate grads locally
