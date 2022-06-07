@@ -31,6 +31,7 @@ from accelerate.utils import (
     DistributedType,
     PrecisionType,
     PrepareForLaunch,
+    get_launch_prefix,
     is_deepspeed_available,
     is_sagemaker_available,
 )
@@ -251,12 +252,7 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
-    if is_torch_version(">=", "1.10.0"):
-        cmd = ["torchrun"]
-    elif is_torch_version(">=", "1.9.0"):
-        cmd = [sys.executable, "-m", "torch.distributed.run"]
-    else:
-        cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
+    cmd = get_launch_prefix()
     if args.num_machines > 1:
         cmd.extend(
             [

@@ -21,6 +21,7 @@ import torch
 
 import accelerate
 from accelerate import Accelerator
+from accelerate.utils import get_launch_prefix
 from accelerate.test_utils import execute_subprocess_async, require_multi_gpu
 
 
@@ -33,23 +34,19 @@ class MultiGPUTester(unittest.TestCase):
     def test_multi_gpu(self):
         print(f"Found {torch.cuda.device_count()} devices.")
         distributed_args = f"""
-            -m torch.distributed.launch
-            --nproc_per_node={torch.cuda.device_count()}
-            --use_env
-            {self.test_file_path}
+        --nproc_per_node={torch.cuda.device_count()}
+        {self.test_file_path}
         """.split()
-        cmd = [sys.executable] + distributed_args
+        cmd = get_launch_prefix() + distributed_args
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_gpu
     def test_pad_across_processes(self):
         distributed_args = f"""
-            -m torch.distributed.launch
             --nproc_per_node={torch.cuda.device_count()}
-            --use_env
             {inspect.getfile(self.__class__)}
         """.split()
-        cmd = [sys.executable] + distributed_args
+        cmd = get_launch_prefix() + distributed_args
         execute_subprocess_async(cmd, env=os.environ.copy())
 
 
