@@ -334,8 +334,8 @@ def sync_test():
     model.to(device)
     ddp_input, ddp_target = next(iter(ddp_dl)).values()
     input, target = next(iter(dl)).values()
-    input.to(accelerator.device)
-    target.to(accelerator.device)
+    input = input.to(accelerator.device)
+    target = target.to(accelerator.device)
     
     # Ensure accumulate grads works with no_grad => no grads are accumulated
     with torch.no_grad():
