@@ -313,15 +313,16 @@ def training_check():
     assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
 def sync_test():
-    def step_model(accelerator, model, input, target):
+    def step_model(accelerator, model, input, target, device):
         model.train()
-        output = model(input.to(accelerator.device))
-        loss = F.mse_loss(output, target.to(accelerator.device))
+        output = model(input.to(device))
+        loss = F.mse_loss(output, target.to(device))
         accelerator.backward(loss)
 
     accelerator = Accelerator()
     set_seed(42)
     model = RegressionModel()
+    model.to("cuda:0")
     modelDDP = RegressionModel()
     dataset = RegressionDataset(length=6)
     dataloader = DataLoader(dataset, batch_size=2)
@@ -331,14 +332,14 @@ def sync_test():
     )
     # Check two model parameters over three batches
     for iteration, (batch, batch_ddp) in enumerate(zip(dataloader, dataloader_ddp)):
-        step_model(accelerator, model, batch["x"], batch["y"])
+        step_model(accelerator, model, batch["x"], batch["y"], 'cuda:0')
         if iteration % 2 == 0:
             # Accumulate locally
             with accelerator.no_sync(modelDDP):
-                step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"])
+                step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
         else:
             # Sync
-            step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"])
+            step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
 
         # Make sure they align
         for i,j in zip(model.parameters(), modelDDP.parameters()):
