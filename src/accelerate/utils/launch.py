@@ -23,8 +23,8 @@ from .dataclasses import DistributedType
 
 def get_launch_prefix():
     """
-    Grabs the correct launcher for starting a distributed command, such
-    as either `torchrun`, `python -m torch.distributed.run`, etc
+    Grabs the correct launcher for starting a distributed command, such as either `torchrun`, `python -m
+    torch.distributed.run`, etc
     """
     if is_torch_version(">=", "1.10.0"):
         cmd = ["torchrun"]
