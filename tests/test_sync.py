@@ -49,7 +49,7 @@ class SyncTester(unittest.TestCase):
         modelB.to(accelerator.device)
         # Check two model parameters over three batches
         for iteration, batch in enumerate(dataloader):
-            x,y = batch["input"], batch["target"]
+            x,y = batch["x"], batch["y"]
             self.step_model(accelerator, modelA, x, y)
             if iteration % 2 == 0:
                 # Accumulate locally
@@ -76,7 +76,7 @@ class SyncTester(unittest.TestCase):
         modelB.to(accelerator.device)
         # Check two model parameters over three batches
         for iteration, batch in enumerate(dataloader):
-            x,y = batch["input"], batch["target"]
+            x,y = batch["x"], batch["y"]
             self.step_model(accelerator, modelA, x, y)
             if iteration % 2 == 0:
                 # Accumulate locally
