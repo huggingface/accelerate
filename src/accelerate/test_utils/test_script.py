@@ -347,11 +347,9 @@ def sync_test():
             if not i.requires_grad: 
                 continue
             if iteration % 2 == 0:
-                print(f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | !=')
-                assert i.grad != j.grad
+                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == False
             else:
-                print(f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | ==')
-                assert i.grad == j.grad
+                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == True
 
 
 def main():
