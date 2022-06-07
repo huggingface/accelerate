@@ -373,6 +373,10 @@ def main():
         print("\n**Training integration test**")
     training_check()
 
+    if state.local_process_index == 0:
+        print("\n**Gradient sync test**")
+    sync_test()
+
 
 if __name__ == "__main__":
     main()
