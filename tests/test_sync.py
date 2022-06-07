@@ -60,7 +60,4 @@ class SyncTest(unittest.TestCase):
             for i, j in zip(model.parameters(), ddp_model.parameters()):
                 if not i.requires_grad:
                     continue
-                if iteration % 2 == 0:
-                    assert torch.allclose(i.grad, j.grad), f"{i.grad} != {j.grad}"
-                else:
-                    assert torch.allclose(i.grad, j.grad), f"{i.grad} != {j.grad}"
+                assert torch.allclose(i.grad, j.grad), f"{i.grad} != {j.grad}"
