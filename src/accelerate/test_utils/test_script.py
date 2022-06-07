@@ -332,10 +332,6 @@ def sync_test():
     )
     model.to(device)
     ddp_input, ddp_target = next(iter(dl)).values()
-
-    input, target = accelerator.gather((ddp_input, ddp_target))
-    input = input.to(accelerator.device)
-    target = target.to(accelerator.device)
     
     # Ensure accumulate grads works with no_grad => no grads are accumulated
     with torch.no_grad():
@@ -346,7 +342,9 @@ def sync_test():
     
     # Check two model parameters over num_iters iterations
     for iteration in range(2):
-        print(f'Iteration: {iteration}')
+        input, target = accelerator.gather((ddp_input, ddp_target))
+        input = input.to(accelerator.device)
+        target = target.to(accelerator.device)
         step_model(model, input, target, accelerator)
         if iteration % 2 == 0:
             # Accumulate grads locally
@@ -366,7 +364,7 @@ def sync_test():
                 assert torch.allclose(i.grad, j.grad) == True, f'{i.grad} != {j.grad}'
 
         torch.manual_seed(1337+iteration)
-        input = input[torch.randperm(16)]
+        ddp_input = ddp_input[torch.randperm(16)]
 
 def main():
     accelerator = Accelerator()
