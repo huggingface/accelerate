@@ -330,7 +330,7 @@ def sync_test():
         modelDDP, dataloader_ddp
     )
     # Check two model parameters over three batches
-    for iteration, batch, batch_ddp in enumerate(zip(dataloader, dataloader_ddp)):
+    for iteration, (batch, batch_ddp) in enumerate(zip(dataloader, dataloader_ddp)):
         step_model(accelerator, model, batch["x"], batch["y"])
         if iteration % 2 == 0:
             # Accumulate locally
