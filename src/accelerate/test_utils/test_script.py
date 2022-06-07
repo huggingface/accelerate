@@ -340,19 +340,16 @@ def sync_test():
         else:
             # Sync
             step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
-        model.to('cpu')
-        modelDDP.to('cpu')
         # Make sure they align
         for i,j in zip(model.parameters(), modelDDP.parameters()):
+            i = i.cpu()
+            j = j.cpu()
             if not i.requires_grad: 
                 continue
             if iteration % 2 == 0:
-                print(f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | !=')
-                print(torch.allclose(i.grad, j.grad, 1e-4, 1e-5))
-                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == False
+                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == False, f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | !='
             else:
-                print(f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | ==')
-                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == True
+                assert torch.allclose(i.grad, j.grad, 1e-4, 1e-5) == True, f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | =='
 
 
 def main():
