@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 
 import accelerate
 from accelerate import Accelerator
-from accelerate.test_utils import RegressionDataset, RegressionModel
+from accelerate.test_utils import RegressionDataset, RegressionModel, require_multi_gpu, require_gpu, require_cpu
 from accelerate.utils import set_seed
 
 
@@ -31,13 +31,44 @@ class SyncTester(unittest.TestCase):
         loss = F.mse_loss(output, target)
         accelerator.backward(loss)
 
-    def test_gradient_accumulation(self):
-        accelerator = Accelerator()
-        set_seed(42)
+    @staticmethod
+    def setup_training():
         modelA = RegressionModel()
         modelB = RegressionModel()
         dataset = RegressionDataset(length=6)
-        dataloader = DataLoader(dataset, bs=2)
+        dataloader = DataLoader(dataset, batch_size=2)
+        return modelA, modelB, dataloader
+
+    @require_cpu
+    @require_gpu
+    def test_ignored_accumulation(self):
+        accelerator = Accelerator()
+        set_seed(42)
+        modelA, modelB, dataloader = self.setup_training()
+        dataloader, modelA, modelB = accelerate.prepare(dataloader, modelA, modelB)
+        # Check two model parameters over three batches
+        for iteration, (x, y) in enumerate(dataloader):
+            self.step_model(accelerator, modelA, x, y)
+            if iteration % 2 == 0:
+                # Accumulate locally
+                with accelerator.no_sync(modelB):
+                    self.step_model(accelerator, modelB, x, y)
+            else:
+                # Sync
+                self.step_model(accelerator, modelB, x, y)
+
+            # Make sure they align
+            for i, j in zip(modelA.parameters(), modelB.parameters()):
+                if not i.requires_grad:
+                    continue
+                self.assertEqual(i.grad, j.grad)
+
+
+    @require_multi_gpu
+    def test_gradient_accumulation(self):
+        accelerator = Accelerator()
+        set_seed(42)
+        modelA, modelB, dataloader = self.setup_training()
         dataloader, modelA, modelB = accelerate.prepare(dataloader, modelA, modelB)
         # Check two model parameters over three batches
         for iteration, (x, y) in enumerate(dataloader):
