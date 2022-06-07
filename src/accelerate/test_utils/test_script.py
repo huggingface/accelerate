@@ -358,9 +358,9 @@ def sync_test():
             if not i.requires_grad:
                 continue
             if iteration % 2 == 0:
-                assert torch.allclose(i.grad, j.grad) == False
+                assert torch.allclose(i.grad, j.grad) == False, f'{i.grad} == {j.grad}'
             else:
-                assert torch.allclose(i.grad, j.grad) == True
+                assert torch.allclose(i.grad, j.grad) == True, f'{i.grad} != {j.grad}'
 
         torch.manual_seed(1337+iteration)
         input = input[torch.randperm(16)]
