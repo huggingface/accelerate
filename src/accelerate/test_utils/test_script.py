@@ -343,6 +343,8 @@ def sync_test():
             # Sync
             loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], device)
             accelerator.backward(loss)
+
+        print(f"Iteration {iteration}")
         # Make sure they align
         for i,j in zip(model.parameters(), modelDDP.parameters()):
             if not i.requires_grad: 
