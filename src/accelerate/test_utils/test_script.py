@@ -347,8 +347,10 @@ def sync_test():
             if not i.requires_grad: 
                 continue
             if iteration % 2 == 0:
+                print(f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | !=')
                 assert i.grad != j.grad
             else:
+                print(f'Model grad: {i.grad} | ModelDDP grad: {j.grad} | ==')
                 assert i.grad == j.grad
 
 
