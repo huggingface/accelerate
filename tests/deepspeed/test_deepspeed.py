@@ -234,6 +234,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
         state = AcceleratorState(_from_accelerator=True)
         if state.initialized:
             state.initialized = False
+
         deepspeed_plugin = DeepSpeedPlugin(
             gradient_accumulation_steps=1,
             gradient_clipping=1.0,
