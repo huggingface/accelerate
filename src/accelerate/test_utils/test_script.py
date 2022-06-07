@@ -335,8 +335,7 @@ def sync_test():
     
     # Ensure accumulate grads works with no_grad => no grads are accumulated
     with torch.no_grad():
-        with ddp_model.no_sync():
-        #with accelerator.no_sync(ddp_model):
+        with accelerator.no_sync(ddp_model):
             ddp_model.train()
             ddp_model(ddp_input)
     
@@ -348,8 +347,7 @@ def sync_test():
         step_model(model, input, target, accelerator)
         if iteration % 2 == 0:
             # Accumulate grads locally
-            with ddp_model.no_sync():
-            #with accelerator.no_sync(ddp_model):
+            with accelerator.no_sync(ddp_model):
                 step_model(ddp_model, ddp_input, ddp_target, accelerator)
         else:
             # Sync grads
