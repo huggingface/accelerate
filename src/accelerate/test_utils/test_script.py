@@ -333,8 +333,7 @@ def sync_test():
     model.to(device)
     ddp_input, ddp_target = next(iter(dl)).values()
 
-    input = accelerator.gather((ddp_input))
-    print(input)
+    input, target = accelerator.gather((ddp_input, ddp_target))
     input = input.to(accelerator.device)
     target = target.to(accelerator.device)
     
