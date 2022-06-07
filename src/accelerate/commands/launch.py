@@ -35,7 +35,6 @@ from accelerate.utils import (
     is_deepspeed_available,
     is_sagemaker_available,
 )
-from accelerate.utils.versions import is_torch_version
 
 
 def launch_command_parser(subparsers=None):

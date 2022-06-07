@@ -13,16 +13,17 @@
 # limitations under the License.
 
 import os
-
 import sys
+
 import torch
 
-from .dataclasses import DistributedType
 from ..utils import is_torch_version
+from .dataclasses import DistributedType
+
 
 def get_launch_prefix():
     """
-    Grabs the correct launcher for starting a distributed command, such 
+    Grabs the correct launcher for starting a distributed command, such
     as either `torchrun`, `python -m torch.distributed.run`, etc
     """
     if is_torch_version(">=", "1.10.0"):

@@ -14,15 +14,14 @@
 
 import inspect
 import os
-import sys
 import unittest
 
 import torch
 
 import accelerate
 from accelerate import Accelerator
-from accelerate.utils import get_launch_prefix, patch_environment
 from accelerate.test_utils import execute_subprocess_async, require_multi_gpu
+from accelerate.utils import get_launch_prefix, patch_environment
 
 
 class MultiGPUTester(unittest.TestCase):
