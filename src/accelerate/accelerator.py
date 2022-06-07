@@ -368,7 +368,7 @@ class Accelerator:
             model (`torch.nn.Module`):
                 PyTorch Module that was prepared with `Accelerator.prepare`
         """
-        print(type(model))
+        print(f'DISTRIBUTED TYPE: {self.distributed_type}')
         context = getattr(model, "no_sync", contextlib.nullcontext)
         with context():
             yield
