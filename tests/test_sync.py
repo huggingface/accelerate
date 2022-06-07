@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 
 import accelerate
 from accelerate import Accelerator
-from accelerate.test_utils import RegressionDataset, RegressionModel, require_multi_gpu, require_gpu, require_cpu
+from accelerate.test_utils import RegressionDataset, RegressionModel, require_multi_gpu, require_cuda, require_cpu
 from accelerate.utils import set_seed
 
 
@@ -40,7 +40,7 @@ class SyncTester(unittest.TestCase):
         return modelA, modelB, dataloader
 
     @require_cpu
-    @require_gpu
+    @require_cuda
     def test_ignored_accumulation(self):
         accelerator = Accelerator()
         set_seed(42)
