@@ -321,27 +321,27 @@ def sync_test():
 
     accelerator = Accelerator()
     set_seed(42)
-    modelA = RegressionModel()
-    modelB = RegressionModel()
-    assert modelA.state_dict() == modelB.state_dict()
+    model = RegressionModel()
+    modelDDP = RegressionModel()
     dataset = RegressionDataset(length=6)
     dataloader = DataLoader(dataset, batch_size=2)
-    modelA, modelB, dataloader = accelerator.prepare(
-        modelA, modelB, dataloader
+    dataloader_ddp = DataLoader(dataset, batch_size=2)
+    modelDDP, dataloader_ddp = accelerator.prepare(
+        modelDDP, dataloader_ddp
     )
     # Check two model parameters over three batches
-    for iteration, batch in enumerate(dataloader):
-        step_model(accelerator, modelA, batch["x"], batch["y"])
+    for iteration, batch, batch_ddp in enumerate(zip(dataloader, dataloader_ddp)):
+        step_model(accelerator, model, batch["x"], batch["y"])
         if iteration % 2 == 0:
             # Accumulate locally
-            with accelerator.no_sync(modelB):
-                step_model(accelerator, modelB, batch["x"], batch["y"])
+            with accelerator.no_sync(modelDDP):
+                step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"])
         else:
             # Sync
-            step_model(accelerator, modelB, batch["x"], batch["y"])
+            step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"])
 
         # Make sure they align
-        for i,j in zip(modelA.parameters(), modelB.parameters()):
+        for i,j in zip(model.parameters(), modelDDP.parameters()):
             if not i.requires_grad: 
                 continue
             if iteration % 2 == 0:
