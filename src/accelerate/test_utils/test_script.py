@@ -342,8 +342,8 @@ def sync_test():
             step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
         # Make sure they align
         for i,j in zip(model.parameters(), modelDDP.parameters()):
-            i = i.cpu()
-            j = j.cpu()
+            i.cpu()
+            j.cpu()
             if not i.requires_grad: 
                 continue
             if iteration % 2 == 0:
