@@ -322,7 +322,9 @@ def sync_test():
     accelerator = Accelerator()
     set_seed(42)
     modelA = RegressionModel()
+    initial_state = modelA.state_dict()
     modelB = RegressionModel()
+    modelB.load_state_dict(initial_state)
     dataset = RegressionDataset(length=6)
     dataloader = DataLoader(dataset, batch_size=2)
     modelA, modelB, dataloader = accelerator.prepare(
