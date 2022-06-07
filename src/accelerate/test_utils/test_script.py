@@ -343,7 +343,7 @@ def sync_test():
         for i,j in zip(modelA.parameters(), modelB.parameters()):
             if not i.requires_grad: 
                 continue
-            if accelerator.num_processes > 1 and iteration % 2 != 0:
+            if iteration % 2 == 0:
                 assert i.grad != j.grad
             else:
                 assert i.grad == j.grad
