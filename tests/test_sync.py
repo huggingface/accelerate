@@ -40,7 +40,6 @@ class SyncTester(unittest.TestCase):
         return modelA, modelB, dataloader
 
     @require_cpu
-    @require_cuda
     def test_ignored_accumulation(self):
         accelerator = Accelerator()
         set_seed(42)
