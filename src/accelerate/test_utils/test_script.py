@@ -313,11 +313,11 @@ def training_check():
     assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
 def sync_test():
-    def step_model(accelerator, model, input, target, device):
+    def step_model(model, input, target, device):
         model.train()
         output = model(input.to(device))
         loss = F.mse_loss(output, target.to(device))
-        accelerator.backward(loss)
+        return loss
 
     accelerator = Accelerator()
     set_seed(42)
@@ -332,18 +332,20 @@ def sync_test():
     )
     # Check two model parameters over three batches
     for iteration, (batch, batch_ddp) in enumerate(zip(dataloader, dataloader_ddp)):
-        step_model(accelerator, model, batch["x"], batch["y"], 'cuda:0')
+        step_model(model, batch["x"], batch["y"], 'cuda:0').backward()
         if iteration % 2 == 0:
             # Accumulate locally
             with accelerator.no_sync(modelDDP):
-                step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
+                loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
+                accelerator.backward(loss)
         else:
             # Sync
-            step_model(accelerator, modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
+            loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
+            accelerator.backward(loss)
+        model.to('cpu')
+        modelDDP.to('cpu')
         # Make sure they align
         for i,j in zip(model.parameters(), modelDDP.parameters()):
-            i.cpu()
-            j.cpu()
             if not i.requires_grad: 
                 continue
             if iteration % 2 == 0:
