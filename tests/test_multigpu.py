@@ -21,7 +21,7 @@ import torch
 
 import accelerate
 from accelerate import Accelerator
-from accelerate.utils import get_launch_prefix
+from accelerate.utils import get_launch_prefix, patch_environment
 from accelerate.test_utils import execute_subprocess_async, require_multi_gpu
 
 
@@ -38,7 +38,8 @@ class MultiGPUTester(unittest.TestCase):
         {self.test_file_path}
         """.split()
         cmd = get_launch_prefix() + distributed_args
-        execute_subprocess_async(cmd, env=os.environ.copy())
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_gpu
     def test_pad_across_processes(self):
@@ -47,7 +48,8 @@ class MultiGPUTester(unittest.TestCase):
             {inspect.getfile(self.__class__)}
         """.split()
         cmd = get_launch_prefix() + distributed_args
-        execute_subprocess_async(cmd, env=os.environ.copy())
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd, env=os.environ.copy())
 
 
 if __name__ == "__main__":
