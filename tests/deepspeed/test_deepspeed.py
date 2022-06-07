@@ -158,7 +158,6 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             self.assertFalse(deepspeed_plugin.zero3_init_flag)
         elif stage == ZERO3:
             self.assertTrue(deepspeed_plugin.zero3_init_flag)
-            deepspeed_plugin.deepspeed_config = None
 
         # Test `gradient_accumulation_steps` is set to 1 if unavailable in config file
         with tempfile.TemporaryDirectory() as dirpath:
@@ -232,6 +231,9 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
     def test_accelerate_state_deepspeed(self, dtype):
+        state = AcceleratorState(_from_accelerator=True)
+        if state.initialized:
+            state.initialized = False
         deepspeed_plugin = DeepSpeedPlugin(
             gradient_accumulation_steps=1,
             gradient_clipping=1.0,
