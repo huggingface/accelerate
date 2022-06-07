@@ -316,6 +316,7 @@ def training_check():
 def sync_test():
     def step_model(model, input, target, accelerator):
         model.train()
+        print(input.shape, target.shape)
         output = model(input)
         loss = F.mse_loss(output, target.to(output.device))
         accelerator.backward(loss)
@@ -334,7 +335,6 @@ def sync_test():
     ddp_input, ddp_target = next(iter(dl)).values()
 
     input, target = accelerator.gather((ddp_input, ddp_target))
-    print(input.shape, target.shape)
     input = input.to(accelerator.device)
     target = target.to(accelerator.device)
     
