@@ -71,7 +71,9 @@ class SyncTester(unittest.TestCase):
         accelerator = Accelerator()
         set_seed(42)
         modelA, modelB, dataloader = self.setup_training()
-        dataloader, modelA, modelB = accelerator.prepare(dataloader, modelA, modelB)
+        modelA, modelB, dataloader = accelerator.prepare(
+            modelA, modelB, dataloader
+        )
         modelA.to(accelerator.device)
         modelB.to(accelerator.device)
         # Check two model parameters over three batches
