@@ -325,7 +325,7 @@ def sync_test():
     set_seed(42)
     model = RegressionModel()
     dset = RegressionDataset()
-    dl = DataLoader(dset, bs=16)
+    dl = DataLoader(dset, batch_size=16)
     ddp_model, ddp_dl = accelerator.prepare(
         deepcopy(model),
         deepcopy(dl)
