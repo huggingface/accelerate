@@ -320,9 +320,10 @@ def sync_test():
         return loss
 
     accelerator = Accelerator()
+    device = accelerator.device
     set_seed(42)
     model = RegressionModel()
-    model.to("cuda:0")
+    model.to(device)
     modelDDP = RegressionModel()
     dataset = RegressionDataset(length=6)
     dataloader = DataLoader(dataset, batch_size=2)
@@ -332,18 +333,16 @@ def sync_test():
     )
     # Check two model parameters over three batches
     for iteration, (batch, batch_ddp) in enumerate(zip(dataloader, dataloader_ddp)):
-        step_model(model, batch["x"], batch["y"], 'cuda:0').backward()
+        step_model(model, batch["x"], batch["y"], device).backward()
         if iteration % 2 == 0:
             # Accumulate locally
             with accelerator.no_sync(modelDDP):
-                loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
+                loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], device)
                 accelerator.backward(loss)
         else:
             # Sync
-            loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], accelerator.device)
+            loss = step_model(modelDDP, batch_ddp["x"], batch_ddp["y"], device)
             accelerator.backward(loss)
-        model.to('cpu')
-        modelDDP.to('cpu')
         # Make sure they align
         for i,j in zip(model.parameters(), modelDDP.parameters()):
             if not i.requires_grad: 
