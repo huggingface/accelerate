@@ -316,7 +316,6 @@ def training_check():
 def sync_test():
     def step_model(model, input, target, accelerator):
         model.train()
-        print(input.shape, target.shape)
         output = model(input)
         loss = F.mse_loss(output, target.to(output.device))
         accelerator.backward(loss)
@@ -347,6 +346,7 @@ def sync_test():
     
     # Check two model parameters over num_iters iterations
     for iteration in range(2):
+        print(f'Iteration: {iteration}')
         step_model(model, input, target, accelerator)
         if iteration % 2 == 0:
             # Accumulate grads locally
