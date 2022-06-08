@@ -30,7 +30,7 @@ from accelerate.test_utils import (
 from accelerate.utils import get_launch_prefix, patch_environment
 
 
-class GradientSyncTester(unittest.TestCase):
+class MultiCPUTester2(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
         self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_sync.py"])
