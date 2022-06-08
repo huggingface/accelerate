@@ -21,7 +21,7 @@ import torch
 import accelerate
 from accelerate import Accelerator
 from accelerate.test_utils import execute_subprocess_async, require_multi_gpu
-from accelerate.utils import patch_environment, get_launch_prefix
+from accelerate.utils import get_launch_prefix, patch_environment
 
 
 class MultiGPUTester(unittest.TestCase):
