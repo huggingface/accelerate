@@ -215,3 +215,7 @@ class FeatureExamplesTests(TempDirTestCase):
             """.split()
             _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
+
+    def test_gradient_accumulation(self):
+        testargs = ["examples/by_feature/gradient_accumulation.py"]
+        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
