@@ -12,14 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
-import torch
 import inspect
 import os
+import unittest
+
+import torch
 
 import accelerate
 from accelerate import debug_launcher
-from accelerate.test_utils import execute_subprocess_async, require_multi_gpu, require_single_gpu, require_cpu, test_sync, patch_environment
+from accelerate.test_utils import (
+    execute_subprocess_async,
+    patch_environment,
+    require_cpu,
+    require_multi_gpu,
+    require_single_gpu,
+    test_sync,
+)
 from accelerate.utils import get_launch_prefix
 
 
@@ -31,18 +39,18 @@ class GradientSyncTester(unittest.TestCase):
     @require_cpu
     def test_gradient_sync_single_cpu_noop(self):
         debug_launcher(test_sync.main, num_processes=1)
-    
+
     @require_cpu
     def test_gradient_sync_multi_cpu(self):
         debug_launcher(test_sync.main, num_processes=2)
-    
+
     @require_single_gpu
     def test_gradient_sync_single_gpu(self):
         debug_launcher(test_sync.main, num_processes=1)
-    
+
     @require_multi_gpu
     def test_gradient_sync_multi_gpu(self):
-        print(f'Found {torch.cuda.device_count()} devices.')
+        print(f"Found {torch.cuda.device_count()} devices.")
         cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}"]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
