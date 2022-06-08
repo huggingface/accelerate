@@ -30,19 +30,19 @@ from accelerate.test_utils import (
 from accelerate.utils import get_launch_prefix, patch_environment
 
 
-# class GradientSyncTester(unittest.TestCase):
-#     def setUp(self):
-#         mod_file = inspect.getfile(accelerate.test_utils)
-#         self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_sync.py"])
+class GradientSyncTester(unittest.TestCase):
+    def setUp(self):
+        mod_file = inspect.getfile(accelerate.test_utils)
+        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_sync.py"])
 
-#     @require_cpu
-#     def test_gradient_sync_single_cpu_noop(self):
-#         debug_launcher(test_sync.main)
-#         debug_launcher(test_sync.main, num_processes=1)
+    @require_cpu
+    def test_gradient_sync_single_cpu_noop(self):
+        debug_launcher(test_sync.main)
+        debug_launcher(test_sync.main, num_processes=1)
 
-#     # @require_cpu
-#     # def test_gradient_sync_multi_cpu(self):
-#     #     debug_launcher(test_sync.main, num_processes=2)
+    # @require_cpu
+    # def test_gradient_sync_multi_cpu(self):
+    #     debug_launcher(test_sync.main)
 
 #     @require_single_gpu
 #     def test_gradient_sync_single_gpu(self):
