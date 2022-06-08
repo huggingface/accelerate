@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
 from copy import deepcopy
 
 import torch
@@ -21,7 +20,7 @@ from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
 from accelerate.test_utils import RegressionDataset, RegressionModel, require_cpu
-from accelerate.utils import set_seed
+from accelerate.utils import set_seed, DistributedType
 
 
 def step_model(model, input, target, accelerator):
@@ -31,33 +30,95 @@ def step_model(model, input, target, accelerator):
     accelerator.backward(loss)
 
 
-@require_cpu
-class SyncTest(unittest.TestCase):
-    def test_noop_wrapper(self):
-        accelerator = Accelerator()
-        device = accelerator.device
-        set_seed(42)
-        model = RegressionModel()
-        dset = RegressionDataset()
-        dl = DataLoader(dset, batch_size=16)
-        ddp_model, dl = accelerator.prepare(deepcopy(model), dl)
-        model.to(device)
-        ddp_input, ddp_target = next(iter(dl)).values()
+def get_training_setup(accelerator):
+    "Returns everything needed to perform basic training"
+    set_seed(42)
+    model = RegressionModel()
+    model.to(accelerator.device)
+    dset = RegressionDataset()
+    dataloader = DataLoader(dset, batch_size=16)
+    # Make a copy of `model`
+    ddp_model, dataloader = accelerator.prepare(deepcopy(model), dataloader)
+    # Use a single batch for all of the tests
+    ddp_input, ddp_target = next(iter(dataloader)).values()
+    return model, ddp_model, ddp_input, ddp_target
 
-        for iteration in range(2):
-            input, target = accelerator.gather((ddp_input, ddp_target))
-            input = input.to(accelerator.device)
-            target = target.to(accelerator.device)
-            step_model(model, input, target, accelerator)
-            if iteration % 2 == 0:
-                # Accumulate grads locally
-                with accelerator.no_sync(ddp_model):
-                    step_model(ddp_model, ddp_input, ddp_target, accelerator)
-            else:
-                # Sync grads
+
+def test_noop_sync(accelerator):
+    # Test when on a single CPU or GPU that the context manager does nothing
+    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
+    for iteration in range(3):
+        # Gather the distributed inputs and targs for the base model
+        input, target = accelerator.gather((ddp_input, ddp_target))
+        input, target = input.to(accelerator.device), target.to(accelerator.device)
+        # Perform our initial ground truth step in non "DDP"
+        step_model(model, input, target, accelerator)
+        # Do "gradient accumulation" (noop)
+        if iteration % 2 == 0:
+            # Accumulate grads locally
+            with accelerator.no_sync(ddp_model):
                 step_model(ddp_model, ddp_input, ddp_target, accelerator)
+        else:
+            # Sync grads
+            step_model(ddp_model, ddp_input, ddp_target, accelerator)
 
-            for i, j in zip(model.parameters(), ddp_model.parameters()):
-                if not i.requires_grad:
-                    continue
-                assert torch.allclose(i.grad, j.grad), f"{i.grad} != {j.grad}"
+        # Since `no_sync` is a noop, `ddp_model` and `model` grads should always be in sync
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            assert (torch.allclose(param.grad, ddp_param.grad), \
+            f"Gradients not in sync when they should be:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})")
+
+        # Shuffle ddp_input on each iteration
+        torch.manual_seed(1337 + iteration)
+        ddp_input = ddp_input[torch.randperm(16)]
+
+def test_sync(accelerator):
+    # Test on multi-gpu that context manager behaves properly
+    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
+    for iteration in range(3):
+        # Gather the distributed inputs and targs for the base model
+        input, target = accelerator.gather((ddp_input, ddp_target))
+        input, target = input.to(accelerator.device), target.to(accelerator.device)
+        # Perform our initial ground truth step in non "DDP"
+        step_model(model, input, target, accelerator)
+        # Do "gradient accumulation" (noop)
+        if iteration % 2 == 0:
+            # Accumulate grads locally
+            with accelerator.no_sync(ddp_model):
+                step_model(ddp_model, ddp_input, ddp_target, accelerator)
+        else:
+            # Sync grads
+            step_model(ddp_model, ddp_input, ddp_target, accelerator)
+
+        # DDP model and model should only be in sync when not (iteration % 2 == 0)
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            if iteration % 2 == 0:
+                # Grads should not be in sync
+                assert torch.allclose(param.grad, ddp_param.grad) is False, \
+                    f"Gradients in sync when they should not be:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
+            else:
+                # Grads should be in sync
+                assert torch.allclose(param.grad, ddp_param.grad) is True, \
+                    f"Gradients not in sync when they should be:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+        
+        # Shuffle ddp_input on each iteration
+        torch.manual_seed(1337 + iteration)
+        ddp_input = ddp_input[torch.randperm(16)]
+
+def main():
+    accelerator = Accelerator()
+    state = accelerator.state
+    if state.distributed_type == DistributedType.NO:
+        if state.local_process_index == 0:
+            print("**NOOP no_sync gradient accumulation**")
+        test_noop_sync(accelerator)
+    if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_CPU):
+        if state.local_process_index == 0:
+            print("**Distributed no_sync gradient accumulation")
+        test_sync(accelerator)
+
+if __name__ == "__main__":
+    main()

@@ -314,56 +314,6 @@ def training_check():
     assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
     assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
-
-def sync_test():
-    def step_model(model, input, target, accelerator):
-        model.train()
-        output = model(input)
-        loss = F.mse_loss(output, target.to(output.device))
-        accelerator.backward(loss)
-
-    accelerator = Accelerator()
-    device = accelerator.device
-    set_seed(42)
-    model = RegressionModel()
-    dset = RegressionDataset()
-    dl = DataLoader(dset, batch_size=16)
-    ddp_model, dl = accelerator.prepare(deepcopy(model), dl)
-    model.to(device)
-    ddp_input, ddp_target = next(iter(dl)).values()
-
-    # Ensure accumulate grads works with no_grad => no grads are accumulated
-    with torch.no_grad():
-        with accelerator.no_sync(ddp_model):
-            ddp_model.train()
-            ddp_model(ddp_input)
-
-    # Check two model parameters over num_iters iterations
-    for iteration in range(2):
-        input, target = accelerator.gather((ddp_input, ddp_target))
-        input = input.to(accelerator.device)
-        target = target.to(accelerator.device)
-        step_model(model, input, target, accelerator)
-        if iteration % 2 == 0:
-            # Accumulate grads locally
-            with accelerator.no_sync(ddp_model):
-                step_model(ddp_model, ddp_input, ddp_target, accelerator)
-        else:
-            # Sync grads
-            step_model(ddp_model, ddp_input, ddp_target, accelerator)
-
-        for i, j in zip(model.parameters(), ddp_model.parameters()):
-            if not i.requires_grad:
-                continue
-            if iteration % 2 == 0:
-                assert torch.allclose(i.grad, j.grad) is False, f"{i.grad} == {j.grad}"
-            else:
-                assert torch.allclose(i.grad, j.grad) is True, f"{i.grad} != {j.grad}"
-
-        torch.manual_seed(1337 + iteration)
-        ddp_input = ddp_input[torch.randperm(16)]
-
-
 def main():
     accelerator = Accelerator()
     state = accelerator.state
@@ -387,10 +337,6 @@ def main():
     if state.local_process_index == 0:
         print("\n**Training integration test**")
     training_check()
-
-    if state.local_process_index == 0:
-        print("\n**Gradient sync test**")
-    sync_test()
 
 
 if __name__ == "__main__":
