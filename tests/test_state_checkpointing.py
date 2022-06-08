@@ -16,6 +16,7 @@ import logging
 import os
 import random
 import tempfile
+from time import time
 import unittest
 
 import torch
@@ -75,6 +76,10 @@ class DummyModel(nn.Module):
 
 
 class CheckpointTest(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        time.sleep(2)
+
     def test_can_resume_training(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
