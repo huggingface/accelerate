@@ -14,10 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from copy import deepcopy
-
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
@@ -313,6 +310,7 @@ def training_check():
     model = accelerator.unwrap_model(model).cpu()
     assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
     assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+
 
 def main():
     accelerator = Accelerator()
