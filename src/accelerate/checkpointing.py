@@ -116,7 +116,7 @@ def load_accelerator_state(input_dir, models, optimizers, schedulers, process_in
     Args:
         input_dir (`str` or `os.PathLike`):
             The name of the folder to load all relevant weights and states.
-        model_stmodelsates (`List[torch.nn.Module]`):
+        models (`List[torch.nn.Module]`):
             A list of model instances
         optimizers (`List[torch.optim.Optimizer]`):
             A list of optimizer instances
@@ -145,13 +145,13 @@ def load_accelerator_state(input_dir, models, optimizers, schedulers, process_in
     for i, scheduler in enumerate(schedulers):
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         input_scheduler_file = os.path.join(input_dir, scheduler_name)
-        scheduler.load_state_dict(torch.load(input_scheduler_file))
+        scheduler.load_state_dict(torch.load(input_scheduler_file, map_location="cpu"))
     logger.info("All scheduler states loaded successfully")
 
     # GradScaler state
     if scaler is not None:
         input_scaler_file = os.path.join(input_dir, SCALER_NAME)
-        scaler.load_state_dict(torch.load(input_scaler_file))
+        scaler.load_state_dict(torch.load(input_scaler_file, map_location="cpu"))
         logger.info("GradScaler state loaded successfully")
 
     # Random states
