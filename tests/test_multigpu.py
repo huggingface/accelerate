@@ -27,28 +27,29 @@ from accelerate.utils import get_launch_prefix, patch_environment
 class MultiGPUTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["test_script.py"])
+        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_script.py"])
+        self.test_grad_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_sync.py"])
+        self.launch_args = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}"]
 
     @require_multi_gpu
     def test_multi_gpu(self):
         print(f"Found {torch.cuda.device_count()} devices.")
-        distributed_args = f"""
-        --nproc_per_node={torch.cuda.device_count()}
-        {self.test_file_path}
-        """.split()
-        cmd = get_launch_prefix() + distributed_args
+        cmd = self.launch_args + [self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_gpu
     def test_pad_across_processes(self):
-        distributed_args = f"""
-            --nproc_per_node={torch.cuda.device_count()}
-            {inspect.getfile(self.__class__)}
-        """.split()
-        cmd = get_launch_prefix() + distributed_args
+        cmd = self.launch_args + [inspect.getfile(self.__class__)]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
+
+    @require_multi_gpu
+    def test_gradient_sync(self):
+        cmd = self.launch_args + [self.test_grad_file_path]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd, env=os.environ.copy())
+
 
 
 if __name__ == "__main__":

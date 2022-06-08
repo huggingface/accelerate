@@ -12,3 +12,4 @@ from .testing import (
     slow,
 )
 from .training import RegressionDataset, RegressionModel
+from .scripts import test_sync, test_script

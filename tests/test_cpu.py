@@ -15,10 +15,12 @@
 import unittest
 
 from accelerate import debug_launcher
-from accelerate.test_utils import require_cpu, test_script
+from accelerate.test_utils import require_cpu, test_script, test_sync
 
 
 @require_cpu
 class MultiCPUTester(unittest.TestCase):
     def test_cpu(self):
         debug_launcher(test_script.main)
+    def test_gradient_sync_noop(self):
+        debug_launcher(test_sync.main)
