@@ -58,6 +58,7 @@ class SchedulerTester(unittest.TestCase):
 
     def test_scheduler_steps_with_optimizer_multiprocess(self):
         debug_launcher(scheduler_test)
+        debug_launcher(partial(scheduler_test, num_processes=1, split_batches=True), num_processes=1)
 
     def test_scheduler_not_step_with_optimizer_multiprocess(self):
         debug_launcher(partial(scheduler_test, step_scheduler_with_optimizer=False))
