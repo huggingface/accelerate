@@ -22,13 +22,12 @@ import accelerate
 from accelerate import debug_launcher
 from accelerate.test_utils import (
     execute_subprocess_async,
-    patch_environment,
     require_cpu,
     require_multi_gpu,
     require_single_gpu,
     test_sync,
 )
-from accelerate.utils import get_launch_prefix
+from accelerate.utils import get_launch_prefix, patch_environment
 
 
 class GradientSyncTester(unittest.TestCase):
