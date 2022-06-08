@@ -21,15 +21,13 @@ import torch
 import accelerate
 from accelerate import Accelerator
 from accelerate.test_utils import execute_subprocess_async, require_multi_gpu
-from accelerate.utils import get_launch_prefix, patch_environment
+from accelerate.utils import patch_environment
 
 
 class MultiGPUTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
         self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_script.py"])
-        self.test_grad_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_sync.py"])
-        self.launch_args = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}"]
 
     @require_multi_gpu
     def test_multi_gpu(self):
@@ -41,12 +39,6 @@ class MultiGPUTester(unittest.TestCase):
     @require_multi_gpu
     def test_pad_across_processes(self):
         cmd = self.launch_args + [inspect.getfile(self.__class__)]
-        with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
-
-    @require_multi_gpu
-    def test_gradient_sync(self):
-        cmd = self.launch_args + [self.test_grad_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
