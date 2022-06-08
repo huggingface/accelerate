@@ -12,4 +12,6 @@ from .testing import (
     slow,
 )
 from .training import RegressionDataset, RegressionModel
-from .scripts import test_script, test_sync
+
+
+from .scripts import test_script, test_sync  # isort:skip
