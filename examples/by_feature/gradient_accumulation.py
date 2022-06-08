@@ -193,6 +193,7 @@ def main():
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
         "and an Nvidia Ampere GPU.",
     )
+    # New Code #
     parser.add_argument(
         "--gradient_accumulation_steps",
         type=int,
