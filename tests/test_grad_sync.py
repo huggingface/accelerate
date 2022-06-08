@@ -51,6 +51,6 @@ class SyncScheduler(unittest.TestCase):
     @require_multi_gpu
     def test_gradient_sync_multi_gpu(self):
         print(f"Found {torch.cuda.device_count()} devices.")
-        cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}"]
+        cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}", self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
