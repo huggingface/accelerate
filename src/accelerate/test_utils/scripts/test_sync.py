@@ -75,8 +75,8 @@ def test_noop_sync(accelerator):
         ddp_input = ddp_input[torch.randperm(16)]
 
 
-def test_sync(accelerator):
-    # Test on multi-gpu that context manager behaves properly
+def test_distributed_sync(accelerator):
+    # Test on distributed setup that context manager behaves properly
     model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
     for iteration in range(3):
         # Gather the distributed inputs and targs for the base model
@@ -123,7 +123,7 @@ def main():
     if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_CPU):
         if state.local_process_index == 0:
             print("**Distributed `no_sync` gradient accumulation**")
-        test_sync(accelerator)
+        test_distributed_sync(accelerator)
 
 
 if __name__ == "__main__":
