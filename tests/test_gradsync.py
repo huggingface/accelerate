@@ -40,17 +40,17 @@ class SyncScheduler(unittest.TestCase):
         debug_launcher(test_sync.main)
         debug_launcher(test_sync.main, num_processes=1)
 
-    # @require_cpu
-    # def test_gradient_sync_multi_cpu(self):
-    #     debug_launcher(test_sync.main)
+    @require_cpu
+    def test_gradient_sync_multi_cpu(self):
+        debug_launcher(test_sync.main)
 
-#     @require_single_gpu
-#     def test_gradient_sync_single_gpu(self):
-#         debug_launcher(test_sync.main, num_processes=1)
+    @require_single_gpu
+    def test_gradient_sync_single_gpu(self):
+        debug_launcher(test_sync.main, num_processes=1)
 
-#     @require_multi_gpu
-#     def test_gradient_sync_multi_gpu(self):
-#         print(f"Found {torch.cuda.device_count()} devices.")
-#         cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}"]
-#         with patch_environment(omp_num_threads=1):
-#             execute_subprocess_async(cmd, env=os.environ.copy())
+    @require_multi_gpu
+    def test_gradient_sync_multi_gpu(self):
+        print(f"Found {torch.cuda.device_count()} devices.")
+        cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}"]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd, env=os.environ.copy())
