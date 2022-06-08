@@ -25,3 +25,4 @@ class MultiCPUTester(unittest.TestCase):
 
     def test_gradient_sync_noop(self):
         debug_launcher(test_sync.main)
+        debug_launcher(test_sync.main, num_processes=1)
