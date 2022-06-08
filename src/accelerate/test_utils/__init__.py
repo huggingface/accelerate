@@ -8,7 +8,11 @@ from .testing import (
     require_cpu,
     require_cuda,
     require_multi_gpu,
+    require_single_gpu,
     require_tpu,
     slow,
 )
 from .training import RegressionDataset, RegressionModel
+
+
+from .scripts import test_script, test_sync  # isort:skip
