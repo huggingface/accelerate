@@ -368,7 +368,10 @@ class Accelerator:
             model (`torch.nn.Module`):
                 PyTorch Module that was prepared with `Accelerator.prepare`
         """
-        context = getattr(model, "no_sync", contextlib.nullcontext)
+        context = contextlib.nullcontext
+        if self.num_processes > 1:
+            context = getattr(model, "no_sync", context)
+
         with context():
             yield
 

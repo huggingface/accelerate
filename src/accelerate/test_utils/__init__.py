@@ -2,6 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
+from .scripts import test_script, test_sync
 from .testing import (
     are_the_same_tensors,
     execute_subprocess_async,
@@ -12,4 +13,3 @@ from .testing import (
     slow,
 )
 from .training import RegressionDataset, RegressionModel
-from .scripts import test_sync, test_script

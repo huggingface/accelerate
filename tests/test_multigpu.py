@@ -51,7 +51,6 @@ class MultiGPUTester(unittest.TestCase):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
 
-
 if __name__ == "__main__":
     accelerator = Accelerator()
     shape = (accelerator.state.process_index + 2, 10)
