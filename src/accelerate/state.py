@@ -105,21 +105,6 @@ class AcceleratorState:
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
                 self.mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
-                mixed_precision = (
-                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-                )
-                if (
-                    mixed_precision == "fp16"
-                    and "fp16" not in deepspeed_plugin.deepspeed_config
-                    and "bf16" not in deepspeed_plugin.deepspeed_config
-                ):
-                    deepspeed_plugin.deepspeed_config.update({"fp16": {"enabled": True}})
-                elif (
-                    mixed_precision == "bf16"
-                    and "fp16" not in deepspeed_plugin.deepspeed_config
-                    and "bf16" not in deepspeed_plugin.deepspeed_config
-                ):
-                    deepspeed_plugin.deepspeed_config.update({"bf16": {"enabled": True}})
                 self.deepspeed_plugin = deepspeed_plugin
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU

@@ -83,6 +83,7 @@ if is_deepspeed_available():
         DeepSpeedSchedulerWrapper,
         DummyOptim,
         DummyScheduler,
+        HfDeepSpeedConfig,
     )
 
 from .launch import PrepareForLaunch

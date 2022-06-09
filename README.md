@@ -241,4 +241,5 @@ pip install accelerate
 - multi-GPU on several nodes (machines)
 - TPU
 - FP16 with native AMP (apex on the roadmap)
-- DeepSpeed support (experimental)
+- DeepSpeed support
+- PyTorch Fully Sharded Data Parallel (FSDP) support 
