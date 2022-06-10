@@ -199,16 +199,16 @@ class Accelerator:
                     ds_config.update({"bf16": {"enabled": True}})
                 self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
+        if os.environ.get("USE_FSDP", "false") == "true" or isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
+            if is_torch_version("<", "1.12.0.dev20220418+cu113"):
+                raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
+
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = FullyShardedDataParallelPlugin() if os.environ.get("USE_FSDP", "false") == "true" else None
         else:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["USE_FSDP"] = "true"  # use FSDP if plugin is provided
-
-        if os.environ.get("USE_FSDP", "false") == "true":
-            if is_torch_version("<", "1.12.0.dev20220418+cu113"):
-                raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
 
         # Kwargs handlers
         self.ddp_handler = None
