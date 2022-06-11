@@ -299,10 +299,7 @@ class DataLoaderShard(DataLoader):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
-        state = AcceleratorState()
         for batch in super().__iter__():
-            if state.distributed_type == DistributedType.TPU:
-                xm.mark_step()
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 
@@ -571,17 +568,15 @@ def prepare_data_loader(
         )
     else:
         dataloader = DataLoaderShard(
-        new_dataset,
-        device=device if put_on_device else None,
-        batch_sampler=new_batch_sampler,
-        rng_types=rng_types,
-        generator=generator,
-        **kwargs,
-    )
+            new_dataset,
+            device=device if put_on_device else None,
+            batch_sampler=new_batch_sampler,
+            rng_types=rng_types,
+            generator=generator,
+            **kwargs,
+        )
 
     if state.distributed_type == DistributedType.TPU:
-        return pl.MpDeviceLoader(
-            dataloader, device
-        )
+        return pl.MpDeviceLoader(dataloader, device)
 
     return dataloader

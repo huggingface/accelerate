@@ -21,9 +21,10 @@ import warnings
 from contextlib import contextmanager
 from copy import deepcopy
 from typing import List, Optional, Union
-from accelerate.accelerate.src.accelerate.utils.imports import is_tpu_available
 
 import torch
+
+from accelerate.accelerate.src.accelerate.utils.imports import is_tpu_available
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
