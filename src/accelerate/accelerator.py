@@ -24,8 +24,6 @@ from typing import List, Optional, Union
 
 import torch
 
-from accelerate.accelerate.src.accelerate.utils.imports import is_tpu_available
-
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
 from .logging import get_logger
@@ -52,6 +50,7 @@ from .utils import (
     is_deepspeed_available,
     is_torch_version,
     is_transformers_available,
+    is_tpu_available,
     pad_across_processes,
     reduce,
     save,
