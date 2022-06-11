@@ -36,6 +36,7 @@ from .utils import (
 
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
+    import torch_xla.distributed.parallel_loader as pl
 
 
 # kwargs of the DataLoader in min version 1.4.0.
@@ -565,11 +566,11 @@ def prepare_data_loader(
         kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
 
     if dispatch_batches:
-        return DataLoaderDispatcher(
+        dataloader = DataLoaderDispatcher(
             new_dataset, split_batches=split_batches, batch_sampler=new_batch_sampler, **kwargs
         )
-
-    return DataLoaderShard(
+    else:
+        dataloader = DataLoaderShard(
         new_dataset,
         device=device if put_on_device else None,
         batch_sampler=new_batch_sampler,
@@ -577,3 +578,10 @@ def prepare_data_loader(
         generator=generator,
         **kwargs,
     )
+
+    if state.distributed_type == DistributedType.TPU:
+        return pl.MpDeviceLoader(
+            dataloader, device
+        )
+
+    return dataloader

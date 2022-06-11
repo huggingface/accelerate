@@ -25,8 +25,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from .imports import is_tpu_available
 from .offload import offload_weight, save_offload_index
 
+if is_tpu_available():
+    import torch_xla.distributed.xla_multiprocessing as xmp
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
@@ -612,3 +615,17 @@ def load_checkpoint_in_model(
     if offload_state_dict:
         load_offloaded_weights(model, state_dict_index, state_dict_folder)
         shutil.rmtree(state_dict_folder)
+
+def WrapTPUModel(model:nn.Module) -> nn.Module:
+    """Wraps a model in `xmp.MpModelWrapper` for efficient
+    memory usage on the TPU. If not on a TPU this does nothing.
+    
+    Should be called before `xla.spawn` is used.
+
+    Args:
+        model (`nn.Module`):
+            A PyTorch model
+    """
+    if is_tpu_available():
+        return xmp.MpModelWrapper(model)
+    return model
