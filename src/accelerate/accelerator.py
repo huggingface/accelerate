@@ -712,7 +712,7 @@ class Accelerator:
     def prepare_data_loader(self, data_loader):
         return prepare_data_loader(
             data_loader,
-            self.device,
+            self.device if self.distributed_type != DistributedType.TPU else None,
             num_processes=self.num_processes,
             process_index=self.process_index,
             split_batches=self.split_batches,
