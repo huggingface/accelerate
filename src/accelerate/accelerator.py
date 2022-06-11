@@ -543,7 +543,7 @@ class Accelerator:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         elif self.distributed_type == DistributedType.TPU:
-            model = xmp.MpModelWrapper(model)
+            model = xmp.MpModelWrapper(model).to(self.device)
         if self.native_amp:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
@@ -993,8 +993,6 @@ class Accelerator:
             if isinstance(obj, torch.nn.Module):
                 obj = extract_model_from_parallel(obj)
                 named_parameters.update({n: p for n, p in obj.named_parameters()})
-            elif self.distributed_type == DistributedType.TPU and isinstance(obj, xmp.MpModelWrapper):
-                named_parameters.update({n: p for n, p in obj._model.named_parameters()})
         return named_parameters
 
     def _get_devices(self, *args):
