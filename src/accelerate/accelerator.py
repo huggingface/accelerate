@@ -993,6 +993,8 @@ class Accelerator:
             if isinstance(obj, torch.nn.Module):
                 obj = extract_model_from_parallel(obj)
                 named_parameters.update({n: p for n, p in obj.named_parameters()})
+            elif self.distributed_type == DistributedType.TPU and isinstance(obj, xmp.MpModelWrapper):
+                named_parameters.update({n: p for n, p in obj._model.named_parameters()})
         return named_parameters
 
     def _get_devices(self, *args):
