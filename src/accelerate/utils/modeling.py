@@ -25,8 +25,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .imports import is_tpu_available
 from .offload import offload_weight, save_offload_index
+
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 

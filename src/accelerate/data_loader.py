@@ -36,7 +36,7 @@ from .utils import (
 
 if is_tpu_available():
     import torch_xla.core.xla_model as xm
-    import torch_xla.distributed.parallel_loader as pl
+    import torch_xla.distributed.parallel_loader as xpl
 
 
 # kwargs of the DataLoader in min version 1.4.0.
@@ -299,10 +299,7 @@ class DataLoaderShard(DataLoader):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
-        state = AcceleratorState()
         for batch in super().__iter__():
-            # if state.distributed_type == DistributedType.TPU:
-            #     xm.mark_step()
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 
@@ -579,4 +576,6 @@ def prepare_data_loader(
             **kwargs,
         )
 
+    if state.distributed_type == DistributedType.TPU:
+        return xpl.MpDeviceLoader(dataloader, device)
     return dataloader
