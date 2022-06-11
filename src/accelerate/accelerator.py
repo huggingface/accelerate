@@ -21,6 +21,7 @@ import warnings
 from contextlib import contextmanager
 from copy import deepcopy
 from typing import List, Optional, Union
+from accelerate.accelerate.src.accelerate.utils.imports import is_tpu_available
 
 import torch
 
@@ -67,6 +68,9 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
     )
+
+if is_tpu_available():
+    import torch_xla.distributed.xla_multiprocessing as xmp
 
 logger = get_logger(__name__)
 
@@ -538,6 +542,8 @@ class Accelerator:
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
+        elif self.distributed_type == DistributedType.TPU:
+            model = xmp.MpModelWrapper(model)
         if self.native_amp:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
