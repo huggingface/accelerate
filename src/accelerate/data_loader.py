@@ -301,8 +301,8 @@ class DataLoaderShard(DataLoader):
             synchronize_rng_states(self.rng_types, self.generator)
         state = AcceleratorState()
         for batch in super().__iter__():
-            if state.distributed_type == DistributedType.TPU:
-                xm.mark_step()
+            # if state.distributed_type == DistributedType.TPU:
+            #     xm.mark_step()
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 
