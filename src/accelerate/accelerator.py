@@ -71,6 +71,7 @@ if is_deepspeed_available():
 
 if is_tpu_available():
     import torch_xla.distributed.xla_multiprocessing as xmp
+    import torch_xla.core.xla_model as xm
 
 logger = get_logger(__name__)
 
@@ -383,7 +384,9 @@ class Accelerator:
         """
         Use in replacement of `print()` to only print once per server.
         """
-        if self.is_local_main_process:
+        if self.distributed_type == DistributedType.TPU:
+            xm.master_print(*args, **kwargs)
+        elif self.is_local_main_process:
             print(*args, **kwargs)
 
     def _prepare_one(self, obj, first_pass=False):
