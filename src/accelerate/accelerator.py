@@ -70,8 +70,8 @@ if is_deepspeed_available():
     )
 
 if is_tpu_available():
-    import torch_xla.distributed.xla_multiprocessing as xmp
     import torch_xla.core.xla_model as xm
+    import torch_xla.distributed.xla_multiprocessing as xmp
 
 logger = get_logger(__name__)
 
