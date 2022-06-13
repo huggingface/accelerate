@@ -56,6 +56,29 @@ class BiggerModelForTest(nn.Module):
         return self.linear4(self.linear3(self.batchnorm(self.linear2(self.linear1(x)))))
 
 
+# To test load_all_weights_classes
+class ModuleWithUnusedSubModules(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super().__init__()
+        self.linear = nn.Linear(input_dim, output_dim)
+
+    def forward(self, x):
+        return x @ self.linear.weight.t() + self.linear.bias
+
+
+class ModelWithUnusedSubModulesForTest(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = ModuleWithUnusedSubModules(3, 4)
+        self.linear2 = ModuleWithUnusedSubModules(4, 5)
+        self.batchnorm = nn.BatchNorm1d(5)
+        self.linear3 = ModuleWithUnusedSubModules(5, 6)
+        self.linear4 = ModuleWithUnusedSubModules(6, 5)
+
+    def forward(self, x):
+        return self.linear4(self.linear3(self.batchnorm(self.linear2(self.linear1(x)))))
+
+
 class BigModelingTester(unittest.TestCase):
     def test_init_empty_weights(self):
         # base use
@@ -107,6 +130,33 @@ class BigModelingTester(unittest.TestCase):
             torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
         )
 
+    def test_cpu_offload_with_unused_submodules(self):
+        model = ModelWithUnusedSubModulesForTest()
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        device = torch.device(0 if torch.cuda.is_available() else "cpu")
+
+        cpu_offload(model, execution_device=device, load_all_weights_classes=["ModuleWithUnusedSubModules"])
+        output = model(x)
+        self.assertTrue(
+            torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
+        )
+
+        # Clean up for next test.
+        remove_hook_from_submodules(model)
+
+        cpu_offload(
+            model,
+            execution_device=device,
+            offload_buffers=True,
+            load_all_weights_classes=["ModuleWithUnusedSubModules"],
+        )
+        output = model(x)
+        self.assertTrue(
+            torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
+        )
+
     @slow
     @require_cuda
     def test_cpu_offload_gpt2(self):
@@ -140,6 +190,38 @@ class BigModelingTester(unittest.TestCase):
 
         with TemporaryDirectory() as tmp_dir:
             disk_offload(model, tmp_dir, execution_device=device, offload_buffers=True)
+            output = model(x)
+            self.assertTrue(
+                torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
+            )
+
+    def test_disk_offload_with_unused_submodules(self):
+        model = ModelWithUnusedSubModulesForTest()
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        device = torch.device(0 if torch.cuda.is_available() else "cpu")
+
+        with TemporaryDirectory() as tmp_dir:
+            disk_offload(
+                model, tmp_dir, execution_device=device, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+            )
+            output = model(x)
+            self.assertTrue(
+                torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
+            )
+
+            # Clean up for next test.
+            remove_hook_from_submodules(model)
+
+        with TemporaryDirectory() as tmp_dir:
+            disk_offload(
+                model,
+                tmp_dir,
+                execution_device=device,
+                offload_buffers=True,
+                load_all_weights_classes=["ModuleWithUnusedSubModules"],
+            )
             output = model(x)
             self.assertTrue(
                 torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
@@ -238,6 +320,36 @@ class BigModelingTester(unittest.TestCase):
             )
 
     @require_cuda
+    def test_dispatch_model_with_unused_submodules(self):
+        model = ModelWithUnusedSubModulesForTest()
+        device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 0}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(
+                model, device_map, offload_dir=tmp_dir, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+            )
+            output = model(x)
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_multi_gpu
+    def test_dispatch_model_with_unused_submodules_multi_gpu(self):
+        model = ModelWithUnusedSubModulesForTest()
+        device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(
+                model, device_map, offload_dir=tmp_dir, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+            )
+            output = model(x)
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
     def test_load_checkpoint_and_dispatch(self):
         model = ModelForTest()
         device_map = {"linear1": "cpu", "batchnorm": "cpu", "linear2": 0}
@@ -279,6 +391,58 @@ class BigModelingTester(unittest.TestCase):
         self.assertEqual(new_model.linear2.weight.device, torch.device("meta"))
         self.assertEqual(new_model.linear3.weight.device, torch.device(0))
         self.assertEqual(new_model.linear4.weight.device, torch.device(1))
+
+        output = new_model(x)
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
+    def test_load_checkpoint_and_dispatch_with_unused_submodules(self):
+        model = ModelWithUnusedSubModulesForTest()
+        device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 0}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            new_model = ModelWithUnusedSubModulesForTest()
+            new_model = load_checkpoint_and_dispatch(
+                new_model, checkpoint, device_map=device_map, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+            )
+
+        # CPU-offloaded weights are on the meta device while waiting for the forward pass.
+        self.assertEqual(new_model.linear1.linear.weight.device, torch.device("meta"))
+        self.assertEqual(new_model.linear2.linear.weight.device, torch.device("meta"))
+        self.assertEqual(new_model.linear3.linear.weight.device, torch.device(0))
+        self.assertEqual(new_model.linear4.linear.weight.device, torch.device(0))
+
+        output = new_model(x)
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_multi_gpu
+    def test_load_checkpoint_and_dispatch_multi_gpu_with_unused_submodules(self):
+        model = ModelWithUnusedSubModulesForTest()
+        device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            new_model = ModelWithUnusedSubModulesForTest()
+            new_model = load_checkpoint_and_dispatch(
+                new_model, checkpoint, device_map=device_map, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+            )
+
+        # CPU-offloaded weights are on the meta device while waiting for the forward pass.
+        self.assertEqual(new_model.linear1.linear.weight.device, torch.device("meta"))
+        self.assertEqual(new_model.linear2.linear.weight.device, torch.device("meta"))
+        self.assertEqual(new_model.linear3.linear.weight.device, torch.device(0))
+        self.assertEqual(new_model.linear4.linear.weight.device, torch.device(1))
 
         output = new_model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
