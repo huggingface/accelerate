@@ -579,6 +579,6 @@ def prepare_data_loader(
             **kwargs,
         )
 
-    if state.distributed_type == DistributedType.TPU:
+    if state.distributed_type == DistributedType.TPU and state.num_processes > 1:
         return xpl.MpDeviceLoader(dataloader, device)
     return dataloader
