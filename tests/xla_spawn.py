@@ -78,8 +78,11 @@ def main():
 
     # Patch sys.argv
     sys.argv = [args.training_script] + args.training_script_args + ["--tpu_num_cores", str(args.num_cores)]
-    xmp.spawn(mod._mp_fn, args=(), nprocs=args.num_cores)
+    xmp.spawn(mod.__main__, args=(), nprocs=args.num_cores)
 
+def _mp_fn(index):
+    # For xla_spawn (TPUs)
+    main()
 
 if __name__ == "__main__":
     main()

@@ -712,17 +712,13 @@ class Accelerator:
         return tuple(result)
 
     def prepare_data_loader(self, data_loader):
-        if self.distributed_type == DistributedType.TPU and self.num_processes > 1:
-            device_placement = False
-        else:
-            device_placement = self.device_placement
         return prepare_data_loader(
             data_loader,
             self.device,
             num_processes=self.num_processes,
             process_index=self.process_index,
             split_batches=self.split_batches,
-            put_on_device=device_placement,
+            put_on_device=self.device_placement if self.distributedType != DistributedType.TPU else False,
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
         )
