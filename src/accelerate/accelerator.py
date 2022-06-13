@@ -718,7 +718,7 @@ class Accelerator:
             num_processes=self.num_processes,
             process_index=self.process_index,
             split_batches=self.split_batches,
-            put_on_device=self.device_placement if self.distributedType != DistributedType.TPU else False,
+            put_on_device=self.device_placement if self.distributed_type != DistributedType.TPU else False,
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
         )
