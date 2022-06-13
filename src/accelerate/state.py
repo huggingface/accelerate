@@ -90,7 +90,9 @@ class AcceleratorState:
                 self.process_index = xm.get_ordinal()
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
-                self.mixed_precision = "no"
+                self.mixed_precision = (
+                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+                )
             elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (
                     is_deepspeed_available()
