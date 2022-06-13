@@ -70,7 +70,6 @@ if is_deepspeed_available():
     )
 
 if is_tpu_available():
-    import torch_xla.core.xla_model as xm
     import torch_xla.distributed.xla_multiprocessing as xmp
 
 logger = get_logger(__name__)
@@ -384,9 +383,7 @@ class Accelerator:
         """
         Use in replacement of `print()` to only print once per server.
         """
-        if self.distributed_type == DistributedType.TPU:
-            xm.master_print(*args, **kwargs)
-        elif self.is_local_main_process:
+        if self.is_local_main_process:
             print(*args, **kwargs)
 
     def _prepare_one(self, obj, first_pass=False):
@@ -553,7 +550,7 @@ class Accelerator:
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
-        if self.distributed_type == DistributedType.TPU:
+        if self.distributed_type == DistributedType.TPU and self.num_processes > 1:
             model = xmp.MpModelWrapper(model).to(self.device)
         return model
 
@@ -715,13 +712,17 @@ class Accelerator:
         return tuple(result)
 
     def prepare_data_loader(self, data_loader):
+        if self.distributed_type == DistributedType.TPU and self.num_processes > 1:
+            device = None
+        else:
+            device = self.device
         return prepare_data_loader(
             data_loader,
-            self.device,
+            device,
             num_processes=self.num_processes,
             process_index=self.process_index,
             split_batches=self.split_batches,
-            put_on_device=self.device_placement if self.distributed_type != DistributedType.TPU else False,
+            put_on_device=self.device_placement,
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
         )

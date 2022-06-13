@@ -299,7 +299,10 @@ class DataLoaderShard(DataLoader):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
+        state = AcceleratorState()
         for batch in super().__iter__():
+            if state.distributed_type == DistributedType.TPU and state.num_processes > 1:
+                xm.mark_step()
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 
@@ -407,7 +410,7 @@ class DataLoaderDispatcher(DataLoader):
 
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
 
-            if state.distributed_type == DistributedType.TPU:
+            if state.distributed_type == DistributedType.TPU and state.num_processes > 1:
                 xm.mark_step()
             yield slice_tensors(batch, data_slice)
 
