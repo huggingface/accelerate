@@ -305,7 +305,7 @@ if is_tpu_available():
     class TPUShardedDataLoader(xpl.MpDeviceLoader):
         def __iter__(self):
             for batch in super().__iter__():
-                yield send_to_device(batch, self.device)
+                yield send_to_device(batch, self._device)
 
 
 
