@@ -301,6 +301,13 @@ class DataLoaderShard(DataLoader):
         for batch in super().__iter__():
             yield batch if self.device is None else send_to_device(batch, self.device)
 
+if is_tpu_available():
+    class TPUShardedDataLoader(xpl.MpDeviceLoader):
+        def __iter__(self):
+            for batch in super().__iter__():
+                yield send_to_device(batch, self.device)
+
+
 
 class DataLoaderDispatcher(DataLoader):
     """
@@ -565,7 +572,7 @@ def prepare_data_loader(
     else:
         dataloader = DataLoaderShard(
             new_dataset,
-            device=device if put_on_device else None,
+            device=device if put_on_device or state.distributed_type != DistributedType.TPU else None,
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
             generator=generator,
@@ -573,5 +580,5 @@ def prepare_data_loader(
         )
 
     if state.distributed_type == DistributedType.TPU:
-        return xpl.MpDeviceLoader(dataloader, device)
+        return TPUShardedDataLoader(dataloader, device)
     return dataloader
