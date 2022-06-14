@@ -326,7 +326,8 @@ def main():
     if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
-    central_dl_preparation_check()
+    if state.distributed_type != DistributedType.TPU:
+        central_dl_preparation_check()
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
     if state.distributed_type == DistributedType.DEEPSPEED:

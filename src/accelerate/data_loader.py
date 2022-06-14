@@ -301,6 +301,7 @@ class DataLoaderShard(DataLoader):
         for batch in super().__iter__():
             yield batch if self.device is None else send_to_device(batch, self.device)
 
+
 class DataLoaderDispatcher(DataLoader):
     """
     Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
