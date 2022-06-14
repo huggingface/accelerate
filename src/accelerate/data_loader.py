@@ -564,7 +564,7 @@ def prepare_data_loader(
     else:
         dataloader = DataLoaderShard(
             new_dataset,
-            device=device if put_on_device or state.distributed_type != DistributedType.TPU else None,
+            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
             generator=generator,
