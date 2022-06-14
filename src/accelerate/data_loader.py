@@ -301,17 +301,6 @@ class DataLoaderShard(DataLoader):
         for batch in super().__iter__():
             yield batch if self.device is None else send_to_device(batch, self.device)
 
-if is_tpu_available():
-    class TPUShardedDataLoader(xpl.MpDeviceLoader):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self._state = AcceleratorState()
-        def __iter__(self):
-            for batch in super().__iter__():
-                yield send_to_device(batch, self._state.device)
-
-
-
 class DataLoaderDispatcher(DataLoader):
     """
     Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
@@ -583,5 +572,5 @@ def prepare_data_loader(
         )
 
     if state.distributed_type == DistributedType.TPU:
-        return TPUShardedDataLoader(dataloader, device)
+        return xpl.MpDeviceLoader(dataloader, device)
     return dataloader
