@@ -273,7 +273,7 @@ class AlignDevicesHook(ModelHook):
 def attach_execution_device_hook(
     module: torch.nn.Module,
     execution_device: Union[int, str, torch.device],
-    load_all_weights_classes: Optional[List[str]] = None,
+    preload_module_classes: Optional[List[str]] = None,
 ):
     """
     Recursively attaches `AlignDevicesHook` to all submodules of a given model to make sure they have the right
@@ -284,7 +284,7 @@ def attach_execution_device_hook(
             The module where we want to attach the hooks.
         execution_device (`int`, `str` or `torch.device`):
             The device on which inputs and model weights should be placed before the forward pass.
-        load_all_weights_classes (`List[str]`, *optional*):
+        preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
@@ -294,7 +294,7 @@ def attach_execution_device_hook(
         add_hook_to_module(module, AlignDevicesHook(execution_device))
 
     # Break the recursion if we get to a load all weights module.
-    if load_all_weights_classes is not None and module.__class__.__name__ in load_all_weights_classes:
+    if preload_module_classes is not None and module.__class__.__name__ in preload_module_classes:
         return
 
     for child in module.children():
@@ -308,7 +308,7 @@ def attach_align_device_hook(
     weights_map: Optional[Mapping] = None,
     offload_buffers: bool = False,
     module_name: str = "",
-    load_all_weights_classes: Optional[List[str]] = None,
+    preload_module_classes: Optional[List[str]] = None,
 ):
     """
     Recursively attaches `AlignDevicesHook` to all submodules of a given model that have direct parameters and/or
@@ -327,7 +327,7 @@ def attach_align_device_hook(
             Whether or not to include the associated module's buffers when offloading.
         module_name (`str`, *optional*, defaults to `""`):
             The name of the module.
-        load_all_weights_classes (`List[str]`, *optional*):
+        preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
@@ -336,7 +336,7 @@ def attach_align_device_hook(
     # Attach the hook on this module if it has any direct tensor.
     directs = named_module_tensors(module)
     full_offload = (
-        offload and load_all_weights_classes is not None and module.__class__.__name__ in load_all_weights_classes
+        offload and preload_module_classes is not None and module.__class__.__name__ in preload_module_classes
     )
 
     if len(list(directs)) > 0 or full_offload:
@@ -368,7 +368,7 @@ def attach_align_device_hook(
             weights_map=weights_map,
             offload_buffers=offload_buffers,
             module_name=child_name,
-            load_all_weights_classes=load_all_weights_classes,
+            preload_module_classes=preload_module_classes,
         )
 
 
@@ -391,7 +391,7 @@ def attach_align_device_hook_on_blocks(
     weights_map: Mapping = None,
     offload_buffers: bool = False,
     module_name: str = "",
-    load_all_weights_classes: Optional[List[str]] = None,
+    preload_module_classes: Optional[List[str]] = None,
 ):
     """
     Attaches `AlignDevicesHook` to all blocks of a given model as needed.
@@ -411,7 +411,7 @@ def attach_align_device_hook_on_blocks(
             Whether or not to include the associated module's buffers when offloading.
         module_name (`str`, *optional*, defaults to `""`):
             The name of the module.
-        load_all_weights_classes (`List[str]`, *optional*):
+        preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
@@ -455,13 +455,13 @@ def attach_align_device_hook_on_blocks(
             weights_map=weights_map,
             offload_buffers=offload_buffers,
             module_name=module_name,
-            load_all_weights_classes=load_all_weights_classes,
+            preload_module_classes=preload_module_classes,
         )
         if not hasattr(module, "_hf_hook"):
             hook = AlignDevicesHook(execution_device=execution_device[module_name], io_same_device=(module_name == ""))
             add_hook_to_module(module, hook)
         attach_execution_device_hook(
-            module, execution_device[module_name], load_all_weights_classes=load_all_weights_classes
+            module, execution_device[module_name], preload_module_classes=preload_module_classes
         )
     elif module_name == "":
         hook = AlignDevicesHook(io_same_device=True)
@@ -476,5 +476,5 @@ def attach_align_device_hook_on_blocks(
             weights_map=weights_map,
             offload_buffers=offload_buffers,
             module_name=child_name,
-            load_all_weights_classes=load_all_weights_classes,
+            preload_module_classes=preload_module_classes,
         )

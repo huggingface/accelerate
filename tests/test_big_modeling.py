@@ -56,7 +56,7 @@ class BiggerModelForTest(nn.Module):
         return self.linear4(self.linear3(self.batchnorm(self.linear2(self.linear1(x)))))
 
 
-# To test load_all_weights_classes
+# To test preload_module_classes
 class ModuleWithUnusedSubModules(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
@@ -137,7 +137,7 @@ class BigModelingTester(unittest.TestCase):
 
         device = torch.device(0 if torch.cuda.is_available() else "cpu")
 
-        cpu_offload(model, execution_device=device, load_all_weights_classes=["ModuleWithUnusedSubModules"])
+        cpu_offload(model, execution_device=device, preload_module_classes=["ModuleWithUnusedSubModules"])
         output = model(x)
         self.assertTrue(
             torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
@@ -150,7 +150,7 @@ class BigModelingTester(unittest.TestCase):
             model,
             execution_device=device,
             offload_buffers=True,
-            load_all_weights_classes=["ModuleWithUnusedSubModules"],
+            preload_module_classes=["ModuleWithUnusedSubModules"],
         )
         output = model(x)
         self.assertTrue(
@@ -204,7 +204,7 @@ class BigModelingTester(unittest.TestCase):
 
         with TemporaryDirectory() as tmp_dir:
             disk_offload(
-                model, tmp_dir, execution_device=device, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+                model, tmp_dir, execution_device=device, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
             self.assertTrue(
@@ -220,7 +220,7 @@ class BigModelingTester(unittest.TestCase):
                 tmp_dir,
                 execution_device=device,
                 offload_buffers=True,
-                load_all_weights_classes=["ModuleWithUnusedSubModules"],
+                preload_module_classes=["ModuleWithUnusedSubModules"],
             )
             output = model(x)
             self.assertTrue(
@@ -329,7 +329,7 @@ class BigModelingTester(unittest.TestCase):
 
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(
-                model, device_map, offload_dir=tmp_dir, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+                model, device_map, offload_dir=tmp_dir, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
@@ -344,7 +344,7 @@ class BigModelingTester(unittest.TestCase):
 
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(
-                model, device_map, offload_dir=tmp_dir, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+                model, device_map, offload_dir=tmp_dir, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
@@ -409,7 +409,7 @@ class BigModelingTester(unittest.TestCase):
 
             new_model = ModelWithUnusedSubModulesForTest()
             new_model = load_checkpoint_and_dispatch(
-                new_model, checkpoint, device_map=device_map, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+                new_model, checkpoint, device_map=device_map, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
 
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
@@ -435,7 +435,7 @@ class BigModelingTester(unittest.TestCase):
 
             new_model = ModelWithUnusedSubModulesForTest()
             new_model = load_checkpoint_and_dispatch(
-                new_model, checkpoint, device_map=device_map, load_all_weights_classes=["ModuleWithUnusedSubModules"]
+                new_model, checkpoint, device_map=device_map, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
 
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
