@@ -68,4 +68,5 @@ class PrepareForLaunch:
             os.environ["LOCAL_RANK"] = str(index)
             os.environ["RANK"] = str(index)
 
+        os.environ["USE_LAUNCHER"] = str(1)
         self.launcher(*args)
