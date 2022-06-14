@@ -550,7 +550,7 @@ class Accelerator:
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
-        if self.distributed_type == DistributedType.TPU and self.state.use_fork:
+        if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         return model
 
