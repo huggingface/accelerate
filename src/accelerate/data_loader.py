@@ -35,7 +35,6 @@ from .utils import (
 
 
 if is_tpu_available():
-    import torch_xla.core.xla_model as xm
     import torch_xla.distributed.parallel_loader as xpl
 
 
@@ -490,6 +489,8 @@ def prepare_data_loader(
         raise ValueError("Using `dispatch_batches=True` requires `put_on_device=True`.")
     # Grab defaults from AcceleratorState
     state = AcceleratorState()
+    if state.distributed_type == DistributedType.TPU:
+        put_on_device = False
     if num_processes is None:
         num_processes = state.num_processes
     if process_index is None:
