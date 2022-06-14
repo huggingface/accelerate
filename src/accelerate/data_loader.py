@@ -489,8 +489,6 @@ def prepare_data_loader(
         raise ValueError("Using `dispatch_batches=True` requires `put_on_device=True`.")
     # Grab defaults from AcceleratorState
     state = AcceleratorState()
-    if state.distributed_type == DistributedType.TPU:
-        put_on_device = False
     if num_processes is None:
         num_processes = state.num_processes
     if process_index is None:
@@ -567,7 +565,7 @@ def prepare_data_loader(
     else:
         dataloader = DataLoaderShard(
             new_dataset,
-            device=device if put_on_device else None,
+            device=device if put_on_device or state.distributed_type != DistributedType.TPU else None,
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
             generator=generator,
