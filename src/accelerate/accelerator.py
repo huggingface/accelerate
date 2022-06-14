@@ -49,6 +49,7 @@ from .utils import (
     get_pretty_name,
     is_deepspeed_available,
     is_torch_version,
+    is_tpu_available,
     is_transformers_available,
     pad_across_processes,
     reduce,
@@ -67,6 +68,9 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
     )
+
+if is_tpu_available():
+    import torch_xla.distributed.xla_multiprocessing as xmp
 
 logger = get_logger(__name__)
 
@@ -546,6 +550,8 @@ class Accelerator:
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
+        if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
+            model = xmp.MpModelWrapper(model).to(self.device)
         return model
 
     def _prepare_deepspeed(self, *args):
@@ -712,7 +718,7 @@ class Accelerator:
             num_processes=self.num_processes,
             process_index=self.process_index,
             split_batches=self.split_batches,
-            put_on_device=self.device_placement,
+            put_on_device=self.device_placement if self.distributed_type != DistributedType.TPU else False,
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
         )

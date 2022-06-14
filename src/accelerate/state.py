@@ -75,6 +75,7 @@ class AcceleratorState:
         self.__dict__ = self._shared_state
         if parse_flag_from_env("USE_CPU"):
             cpu = True
+        self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
             self.backend = None
             self.deepspeed_plugin = None
@@ -90,7 +91,9 @@ class AcceleratorState:
                 self.process_index = xm.get_ordinal()
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
-                self.mixed_precision = "no"
+                self.mixed_precision = (
+                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+                )
             elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (
                     is_deepspeed_available()

@@ -68,4 +68,5 @@ class PrepareForLaunch:
             os.environ["LOCAL_RANK"] = str(index)
             os.environ["RANK"] = str(index)
 
+        os.environ["FORK_LAUNCHED"] = str(1)
         self.launcher(*args)
