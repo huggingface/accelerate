@@ -75,7 +75,7 @@ class AcceleratorState:
         self.__dict__ = self._shared_state
         if parse_flag_from_env("USE_CPU"):
             cpu = True
-        self.use_fork = parse_flag_from_env("USE_LAUNCHER", 0)
+        self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
             self.backend = None
             self.deepspeed_plugin = None
