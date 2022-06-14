@@ -303,9 +303,12 @@ class DataLoaderShard(DataLoader):
 
 if is_tpu_available():
     class TPUShardedDataLoader(xpl.MpDeviceLoader):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._state = AcceleratorState()
         def __iter__(self):
             for batch in super().__iter__():
-                yield send_to_device(batch, self._device)
+                yield send_to_device(batch, self._state.device)
 
 
 
