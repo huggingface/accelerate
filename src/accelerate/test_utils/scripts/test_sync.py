@@ -126,10 +126,5 @@ def main():
         test_distributed_sync(accelerator)
 
 
-def _mp_fn(index):
-    # For xla_spawn (TPUs)
-    main()
-
-
 if __name__ == "__main__":
     main()
