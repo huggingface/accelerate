@@ -19,14 +19,12 @@ General namespace and dataclass related classes
 import copy
 import enum
 import functools
-import io
-import json
 import os
 import typing
 import warnings
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 import torch
 
@@ -215,7 +213,12 @@ class DeepSpeedPlugin:
     This plugin is used to integrate DeepSpeed.
     """
 
-    config_file: str = field(default=None, metadata={"help": "Path to the DeepSpeed config file."})
+    hf_ds_config: Any = field(
+        default=None,
+        metadata={
+            "help": "path to DeepSpeed config file or dict or an object of class `accelerate.utils.deepspeed.HfDeepSpeedConfig`."
+        },
+    )
     gradient_accumulation_steps: int = field(
         default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
     )
@@ -249,17 +252,23 @@ class DeepSpeedPlugin:
     )
 
     def __post_init__(self):
-        if self.config_file is None:
-            self.config_file = os.environ.get("DEEPSPEED_CONFIG_FILE", "none")
-        if self.config_file != "none":
-            with io.open(self.config_file, "r", encoding="utf-8") as f:
-                self.deepspeed_config = json.load(f)
-            if "gradient_accumulation_steps" not in self.deepspeed_config:
-                self.deepspeed_config["gradient_accumulation_steps"] = 1
-            elif self.deepspeed_config["gradient_accumulation_steps"] == "auto":
-                raise ValueError("gradient_accumulation_steps cannot be set to 'auto' in the DeepSpeed config file.")
-            if "zero_optimization" not in self.deepspeed_config:
-                raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config file.")
+        from .deepspeed import HfDeepSpeedConfig
+
+        if self.hf_ds_config is None:
+            self.hf_ds_config = os.environ.get("DEEPSPEED_CONFIG_FILE", "none")
+        if (
+            isinstance(self.hf_ds_config, dict)
+            or (isinstance(self.hf_ds_config, str) and self.hf_ds_config != "none")
+            or isinstance(self.hf_ds_config, HfDeepSpeedConfig)
+        ):
+            if not isinstance(self.hf_ds_config, HfDeepSpeedConfig):
+                self.hf_ds_config = HfDeepSpeedConfig(self.hf_ds_config)
+            if "gradient_accumulation_steps" not in self.hf_ds_config.config:
+                self.hf_ds_config.config["gradient_accumulation_steps"] = 1
+            elif self.hf_ds_config.config["gradient_accumulation_steps"] == "auto":
+                raise ValueError("gradient_accumulation_steps cannot be set to 'auto' in the DeepSpeed config.")
+            if "zero_optimization" not in self.hf_ds_config.config:
+                raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config.")
         else:
             if self.gradient_accumulation_steps is None:
                 self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
@@ -281,8 +290,9 @@ class DeepSpeedPlugin:
             if self.zero3_save_16bit_model is None:
                 self.zero3_save_16bit_model = os.environ.get("DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
 
-            self.deepspeed_config = {
+            config = {
                 "train_batch_size": "auto",
+                "train_micro_batch_size_per_gpu": "auto",
                 "gradient_accumulation_steps": self.gradient_accumulation_steps,
                 "zero_optimization": {
                     "stage": self.zero_stage,
@@ -296,29 +306,18 @@ class DeepSpeedPlugin:
                 },
             }
             if self.gradient_clipping:
-                self.deepspeed_config["gradient_clipping"] = self.gradient_clipping
+                config["gradient_clipping"] = self.gradient_clipping
+            self.hf_ds_config = HfDeepSpeedConfig(config)
+        self.deepspeed_config = self.hf_ds_config.config
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
             self.zero3_init_flag = os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true"
-        if self.zero3_init_flag and self.deepspeed_config["zero_optimization"]["stage"] != 3:
+        if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
 
-    def find_config_node(self, ds_key_long):
-        config = self.deepspeed_config
-
-        # find the config node of interest if it exists
-        nodes = ds_key_long.split(".")
-        ds_key = nodes.pop()
-        for node in nodes:
-            config = config.get(node)
-            if config is None:
-                return None, ds_key
-
-        return config, ds_key
-
     def fill_match(self, ds_key_long, mismatches, must_match=True, **kwargs):
-        config, ds_key = self.find_config_node(ds_key_long)
+        config, ds_key = self.hf_ds_config.find_config_node(ds_key_long)
         if config is None:
             return
 
@@ -359,6 +358,37 @@ class DeepSpeedPlugin:
                 "Please correct the following DeepSpeed config values that mismatch kwargs "
                 f" values:\n{mismatches_msg}\nThe easiest method is to set these DeepSpeed config values to 'auto'."
             )
+
+    def set_mixed_precision(self, mixed_precision):
+        ds_config = self.deepspeed_config
+        if mixed_precision == "fp16" and "fp16" not in ds_config and "bf16" not in ds_config:
+            ds_config.update({"fp16": {"enabled": True}})
+        elif mixed_precision == "bf16" and "fp16" not in ds_config and "bf16" not in ds_config:
+            ds_config.update({"bf16": {"enabled": True}})
+
+    def set_deepspeed_weakref(self):
+        from .imports import is_transformers_available
+
+        if self.zero3_init_flag:
+            if not is_transformers_available():
+                raise Exception(
+                    "When `zero3_init_flag` is set, it requires Transformers to be installed. "
+                    "Please run `pip install transformers`."
+                )
+            ds_config = copy.deepcopy(self.deepspeed_config)
+            if "gradient_accumulation_steps" not in ds_config or ds_config["gradient_accumulation_steps"] == "auto":
+                ds_config["gradient_accumulation_steps"] = 1
+            if (
+                "train_micro_batch_size_per_gpu" not in ds_config
+                or ds_config["train_micro_batch_size_per_gpu"] == "auto"
+            ):
+                ds_config["train_micro_batch_size_per_gpu"] = 1
+            if ds_config["train_batch_size"] == "auto":
+                del ds_config["train_batch_size"]
+
+            from transformers.deepspeed import HfDeepSpeedConfig
+
+            self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
 
 @dataclass

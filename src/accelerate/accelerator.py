@@ -19,7 +19,6 @@ import os
 import sys
 import warnings
 from contextlib import contextmanager
-from copy import deepcopy
 from typing import List, Optional, Union
 
 import torch
@@ -50,7 +49,6 @@ from .utils import (
     is_deepspeed_available,
     is_torch_version,
     is_tpu_available,
-    is_transformers_available,
     pad_across_processes,
     reduce,
     save,
@@ -183,25 +181,10 @@ class Accelerator:
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
             if compare_versions("deepspeed", "<", "0.6.5"):
                 raise ImportError("DeepSpeed version must be >= 0.6.5. Please update DeepSpeed.")
-            if os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true" or deepspeed_plugin.zero3_init_flag:
-                if not is_transformers_available():
-                    raise Exception(
-                        "When `zero3_init_flag` is set, it requires Transformers to be installed. "
-                        "Please run `pip install transformers`."
-                    )
-                from transformers.deepspeed import HfDeepSpeedConfig
 
-                ds_config = deepcopy(deepspeed_plugin.deepspeed_config)
-                del ds_config["train_batch_size"]
-                ds_config.update({"train_micro_batch_size_per_gpu": 1, "gradient_accumulation_steps": 1})
-                mixed_precision = (
-                    os.environ.get("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-                )
-                if mixed_precision == "fp16":
-                    ds_config.update({"fp16": {"enabled": True}})
-                elif mixed_precision == "bf16":
-                    ds_config.update({"bf16": {"enabled": True}})
-                self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
+            mixed_precision = os.environ.get("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+            deepspeed_plugin.set_mixed_precision(mixed_precision)
+            deepspeed_plugin.set_deepspeed_weakref()
 
         if os.environ.get("USE_FSDP", "false") == "true" or isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
             if is_torch_version("<", "1.12.0.dev20220418+cu113"):

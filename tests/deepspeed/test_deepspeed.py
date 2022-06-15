@@ -40,7 +40,6 @@ from accelerate.utils.deepspeed import (
 )
 from parameterized import parameterized
 from transformers import AutoModel, AutoModelForCausalLM, get_scheduler
-from transformers.deepspeed import HfDeepSpeedConfig
 from transformers.testing_utils import mockenv_context
 from transformers.trainer_utils import set_seed
 from transformers.utils import is_torch_bf16_available
@@ -153,7 +152,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
         deepspeed_plugin.deepspeed_config = None
 
         # Test config files are loaded correctly
-        deepspeed_plugin = DeepSpeedPlugin(config_file=self.ds_config_file[stage], zero3_init_flag=True)
+        deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[stage], zero3_init_flag=True)
         if stage == ZERO2:
             self.assertFalse(deepspeed_plugin.zero3_init_flag)
         elif stage == ZERO3:
@@ -165,7 +164,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             del ds_config["gradient_accumulation_steps"]
             with open(os.path.join(dirpath, "ds_config.json"), "w") as out_file:
                 json.dump(ds_config, out_file)
-            deepspeed_plugin = DeepSpeedPlugin(config_file=os.path.join(dirpath, "ds_config.json"))
+            deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=os.path.join(dirpath, "ds_config.json"))
             self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 1)
             deepspeed_plugin.deepspeed_config = None
 
@@ -176,14 +175,14 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             with open(os.path.join(dirpath, "ds_config.json"), "w") as out_file:
                 json.dump(ds_config, out_file)
             with self.assertRaises(ValueError) as cm:
-                deepspeed_plugin = DeepSpeedPlugin(config_file=os.path.join(dirpath, "ds_config.json"))
+                deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=os.path.join(dirpath, "ds_config.json"))
             self.assertTrue(
-                "Please specify the ZeRO optimization config in the DeepSpeed config file." in str(cm.exception)
+                "Please specify the ZeRO optimization config in the DeepSpeed config." in str(cm.exception)
             )
             deepspeed_plugin.deepspeed_config = None
 
         # Test `deepspeed_config_process`
-        deepspeed_plugin = DeepSpeedPlugin(config_file=self.ds_config_file[stage])
+        deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[stage])
         kwargs = {
             "fp16.enabled": True,
             "bf16.enabled": False,
@@ -202,7 +201,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
         }
         deepspeed_plugin.deepspeed_config_process(**kwargs)
         for ds_key_long, value in kwargs.items():
-            config, ds_key = deepspeed_plugin.find_config_node(ds_key_long)
+            config, ds_key = deepspeed_plugin.hf_ds_config.find_config_node(ds_key_long)
             if config.get(ds_key) is not None:
                 self.assertEqual(config.get(ds_key), value)
 
@@ -245,7 +244,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             zero3_init_flag=True,
         )
         with mockenv_context(**self.dist_env):
-            state = AcceleratorState(mixed_precision=dtype, deepspeed_plugin=deepspeed_plugin, _from_accelerator=True)
+            state = Accelerator(mixed_precision=dtype, deepspeed_plugin=deepspeed_plugin).state
             self.assertTrue(state.deepspeed_plugin.deepspeed_config[dtype]["enabled"])
             state.initialized = False
 
@@ -262,8 +261,10 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
-            self.assertTrue("dschf" in accelerator.__dict__)
-            self.assertTrue(type(accelerator.dschf) == HfDeepSpeedConfig)
+            from transformers.deepspeed import is_deepspeed_zero3_enabled
+
+            self.assertTrue(is_deepspeed_zero3_enabled())
+            accelerator.state.initialized = False
 
     @parameterized.expand(optim_scheduler_params, name_func=parameterized_custom_name_func)
     def test_prepare_deepspeed(self, optim_type, scheduler_type):
@@ -301,7 +302,6 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             )
             with mockenv_context(**self.dist_env):
                 accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
-                self.assertEqual(accelerator.state.deepspeed_plugin.config_file, "none")
 
                 train_set = RegressionDataset(length=80)
                 eval_set = RegressionDataset(length=20)
@@ -354,7 +354,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
         elif optim_type == DS_OPTIMIZER and scheduler_type == DS_SCHEDULER:
             # Test DeepSpeed optimizer + DeepSpeed scheduler
-            deepspeed_plugin = DeepSpeedPlugin(config_file=self.ds_config_file[ZERO2])
+            deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
             with mockenv_context(**self.dist_env):
                 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
                 train_set = RegressionDataset(length=80)
@@ -414,7 +414,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
         elif optim_type == CUSTOM_OPTIMIZER and scheduler_type == DS_SCHEDULER:
             # Test custom optimizer + DeepSpeed scheduler
-            deepspeed_plugin = DeepSpeedPlugin(config_file=self.ds_config_file[ZERO2])
+            deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
             with mockenv_context(**self.dist_env):
                 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
                 train_set = RegressionDataset(length=80)
@@ -447,7 +447,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                 self.assertTrue(type(accelerator.deepspeed_engine_wrapped) == DeepSpeedEngineWrapper)
         elif optim_type == DS_OPTIMIZER and scheduler_type == CUSTOM_SCHEDULER:
             # Test deepspeed optimizer + custom scheduler
-            deepspeed_plugin = DeepSpeedPlugin(config_file=self.ds_config_file[ZERO2])
+            deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
             with mockenv_context(**self.dist_env):
                 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
                 train_set = RegressionDataset(length=80)
@@ -483,7 +483,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
     def test_save_checkpoints(self):
         deepspeed_plugin = DeepSpeedPlugin(
-            config_file=self.ds_config_file[ZERO3],
+            hf_ds_config=self.ds_config_file[ZERO3],
             zero3_init_flag=True,
         )
         del deepspeed_plugin.deepspeed_config["bf16"]
@@ -537,7 +537,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
     def test_autofill_dsconfig(self):
         deepspeed_plugin = DeepSpeedPlugin(
-            config_file=self.ds_config_file[ZERO3],
+            hf_ds_config=self.ds_config_file[ZERO3],
             zero3_init_flag=True,
         )
         del deepspeed_plugin.deepspeed_config["bf16"]
