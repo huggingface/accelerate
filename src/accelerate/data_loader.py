@@ -35,7 +35,7 @@ from .utils import (
 
 
 if is_tpu_available():
-    import torch_xla.core.xla_model as xm
+    import torch_xla.distributed.parallel_loader as xpl
 
 
 # kwargs of the DataLoader in min version 1.4.0.
@@ -298,10 +298,7 @@ class DataLoaderShard(DataLoader):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
-        state = AcceleratorState()
         for batch in super().__iter__():
-            if state.distributed_type == DistributedType.TPU:
-                xm.mark_step()
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 
@@ -408,9 +405,6 @@ class DataLoaderDispatcher(DataLoader):
                 batch_size += 1
 
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
-
-            if state.distributed_type == DistributedType.TPU:
-                xm.mark_step()
             yield slice_tensors(batch, data_slice)
 
     def __len__(self):
@@ -565,15 +559,19 @@ def prepare_data_loader(
         kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
 
     if dispatch_batches:
-        return DataLoaderDispatcher(
+        dataloader = DataLoaderDispatcher(
             new_dataset, split_batches=split_batches, batch_sampler=new_batch_sampler, **kwargs
         )
+    else:
+        dataloader = DataLoaderShard(
+            new_dataset,
+            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
+            batch_sampler=new_batch_sampler,
+            rng_types=rng_types,
+            generator=generator,
+            **kwargs,
+        )
 
-    return DataLoaderShard(
-        new_dataset,
-        device=device if put_on_device else None,
-        batch_sampler=new_batch_sampler,
-        rng_types=rng_types,
-        generator=generator,
-        **kwargs,
-    )
+    if state.distributed_type == DistributedType.TPU:
+        return xpl.MpDeviceLoader(dataloader, device)
+    return dataloader
