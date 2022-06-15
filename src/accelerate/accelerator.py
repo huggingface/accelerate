@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import gc
 import math
 import os
@@ -337,6 +338,25 @@ class Accelerator:
 
         if is_main:
             self.wait_for_everyone()
+
+    @contextmanager
+    def no_sync(self, model):
+        """
+        A context manager to disable gradient synchronizations across DDP processes by calling
+        `torch.nn.parallel.DistributedDataParallel.no_sync`.
+
+        If `model` is not in DDP, this context manager does nothing
+
+        Args:
+            model (`torch.nn.Module`):
+                PyTorch Module that was prepared with `Accelerator.prepare`
+        """
+        context = contextlib.nullcontext
+        if self.num_processes > 1:
+            context = getattr(model, "no_sync", context)
+
+        with context():
+            yield
 
     def print(self, *args, **kwargs):
         """

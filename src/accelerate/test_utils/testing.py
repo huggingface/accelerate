@@ -84,6 +84,14 @@ def require_tpu(test_case):
     return unittest.skipUnless(is_tpu_available(), "test requires TPU")(test_case)
 
 
+def require_single_gpu(test_case):
+    """
+    Decorator marking a test that requires CUDA on a single GPU. These tests are skipped when there are no GPU
+    available or number of GPUs is more than one.
+    """
+    return unittest.skipUnless(torch.cuda.device_count() == 1, "test requires a GPU")(test_case)
+
+
 def require_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
