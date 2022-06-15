@@ -13,10 +13,26 @@
 # limitations under the License.
 
 import os
+import sys
 
 import torch
 
+from ..utils import is_torch_version
 from .dataclasses import DistributedType
+
+
+def get_launch_prefix():
+    """
+    Grabs the correct launcher for starting a distributed command, such as either `torchrun`, `python -m
+    torch.distributed.run`, etc
+    """
+    if is_torch_version(">=", "1.10.0"):
+        cmd = ["torchrun"]
+    elif is_torch_version(">=", "1.9.0"):
+        cmd = [sys.executable, "-m", "torch.distributed.run"]
+    else:
+        cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
+    return cmd
 
 
 class PrepareForLaunch:
@@ -52,4 +68,5 @@ class PrepareForLaunch:
             os.environ["LOCAL_RANK"] = str(index)
             os.environ["RANK"] = str(index)
 
+        os.environ["FORK_LAUNCHED"] = str(1)
         self.launcher(*args)

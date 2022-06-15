@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import gc
 import math
 import os
@@ -47,6 +48,7 @@ from .utils import (
     get_pretty_name,
     is_deepspeed_available,
     is_torch_version,
+    is_tpu_available,
     pad_across_processes,
     reduce,
     save,
@@ -64,6 +66,9 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
     )
+
+if is_tpu_available():
+    import torch_xla.distributed.xla_multiprocessing as xmp
 
 logger = get_logger(__name__)
 
@@ -181,16 +186,16 @@ class Accelerator:
             deepspeed_plugin.set_mixed_precision(mixed_precision)
             deepspeed_plugin.set_deepspeed_weakref()
 
+        if os.environ.get("USE_FSDP", "false") == "true" or isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
+            if is_torch_version("<", "1.12.0.dev20220418+cu113"):
+                raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
+
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = FullyShardedDataParallelPlugin() if os.environ.get("USE_FSDP", "false") == "true" else None
         else:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["USE_FSDP"] = "true"  # use FSDP if plugin is provided
-
-        if os.environ.get("USE_FSDP", "false") == "true":
-            if is_torch_version("<", "1.12.0.dev20220418+cu113"):
-                raise ValueError("FSDP requires PyTorch >= 1.12.0.dev20220418+cu113")
 
         # Kwargs handlers
         self.ddp_handler = None
@@ -337,6 +342,25 @@ class Accelerator:
 
         if is_main:
             self.wait_for_everyone()
+
+    @contextmanager
+    def no_sync(self, model):
+        """
+        A context manager to disable gradient synchronizations across DDP processes by calling
+        `torch.nn.parallel.DistributedDataParallel.no_sync`.
+
+        If `model` is not in DDP, this context manager does nothing
+
+        Args:
+            model (`torch.nn.Module`):
+                PyTorch Module that was prepared with `Accelerator.prepare`
+        """
+        context = contextlib.nullcontext
+        if self.num_processes > 1:
+            context = getattr(model, "no_sync", context)
+
+        with context():
+            yield
 
     def print(self, *args, **kwargs):
         """
@@ -509,6 +533,8 @@ class Accelerator:
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
+        if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
+            model = xmp.MpModelWrapper(model).to(self.device)
         return model
 
     def _prepare_deepspeed(self, *args):
@@ -675,7 +701,7 @@ class Accelerator:
             num_processes=self.num_processes,
             process_index=self.process_index,
             split_batches=self.split_batches,
-            put_on_device=self.device_placement,
+            put_on_device=self.device_placement if self.distributed_type != DistributedType.TPU else False,
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
         )

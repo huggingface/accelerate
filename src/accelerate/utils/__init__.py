@@ -86,7 +86,7 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
-from .launch import PrepareForLaunch
+from .launch import PrepareForLaunch, get_launch_prefix
 from .memory import find_executable_batch_size
 from .other import (
     extract_model_from_parallel,

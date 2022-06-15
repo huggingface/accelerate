@@ -34,6 +34,7 @@ from accelerate.utils import write_basic_config
 
 EXCLUDE_EXAMPLES = [
     "cross_validation.py",
+    "gradient_accumulation.py",
     "multi_process_metrics.py",
     "memory.py",
     "fsdp_with_peak_mem_tracking.py",
@@ -215,3 +216,7 @@ class FeatureExamplesTests(TempDirTestCase):
             """.split()
             _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
+
+    def test_gradient_accumulation(self):
+        testargs = ["examples/by_feature/gradient_accumulation.py"]
+        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
