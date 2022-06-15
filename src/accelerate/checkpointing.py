@@ -116,7 +116,7 @@ def load_accelerator_state(input_dir, models, optimizers, schedulers, process_in
     Args:
         input_dir (`str` or `os.PathLike`):
             The name of the folder to load all relevant weights and states.
-        model_stmodelsates (`List[torch.nn.Module]`):
+        models (`List[torch.nn.Module]`):
             A list of model instances
         optimizers (`List[torch.optim.Optimizer]`):
             A list of optimizer instances
