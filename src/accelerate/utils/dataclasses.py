@@ -263,7 +263,6 @@ class DeepSpeedPlugin:
         ):
             if not isinstance(self.hf_ds_config, HfDeepSpeedConfig):
                 self.hf_ds_config = HfDeepSpeedConfig(self.hf_ds_config)
-            # self.deepspeed_config = self.hf_ds_config.config
             if "gradient_accumulation_steps" not in self.hf_ds_config.config:
                 self.hf_ds_config.config["gradient_accumulation_steps"] = 1
             elif self.hf_ds_config.config["gradient_accumulation_steps"] == "auto":
@@ -313,7 +312,7 @@ class DeepSpeedPlugin:
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
             self.zero3_init_flag = os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true"
-        if self.zero3_init_flag and self.deepspeed_config["zero_optimization"]["stage"] != 3:
+        if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
 
@@ -359,6 +358,37 @@ class DeepSpeedPlugin:
                 "Please correct the following DeepSpeed config values that mismatch kwargs "
                 f" values:\n{mismatches_msg}\nThe easiest method is to set these DeepSpeed config values to 'auto'."
             )
+
+    def set_mixed_precision(self, mixed_precision):
+        ds_config = self.deepspeed_config
+        if mixed_precision == "fp16" and "fp16" not in ds_config and "bf16" not in ds_config:
+            ds_config.update({"fp16": {"enabled": True}})
+        elif mixed_precision == "bf16" and "fp16" not in ds_config and "bf16" not in ds_config:
+            ds_config.update({"bf16": {"enabled": True}})
+
+    def set_deepspeed_weakref(self):
+        from .imports import is_transformers_available
+
+        if self.zero3_init_flag:
+            if not is_transformers_available():
+                raise Exception(
+                    "When `zero3_init_flag` is set, it requires Transformers to be installed. "
+                    "Please run `pip install transformers`."
+                )
+            ds_config = copy.deepcopy(self.deepspeed_config)
+            if "gradient_accumulation_steps" not in ds_config or ds_config["gradient_accumulation_steps"] == "auto":
+                ds_config["gradient_accumulation_steps"] = 1
+            if (
+                "train_micro_batch_size_per_gpu" not in ds_config
+                or ds_config["train_micro_batch_size_per_gpu"] == "auto"
+            ):
+                ds_config["train_micro_batch_size_per_gpu"] = 1
+            if ds_config["train_batch_size"] == "auto":
+                del ds_config["train_batch_size"]
+
+            from transformers.deepspeed import HfDeepSpeedConfig
+
+            self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
 
 @dataclass

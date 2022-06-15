@@ -358,7 +358,7 @@ def deepspeed_launcher(args):
     current_env["USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
     current_env["GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
-    current_env["GRADIENT_CLIPPING"] = str(args.gradient_clipping)
+    current_env["GRADIENT_CLIPPING"] = str(args.gradient_clipping).lower()
     current_env["DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
     current_env["DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
     current_env["DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()

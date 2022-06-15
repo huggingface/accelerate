@@ -177,12 +177,9 @@ class Accelerator:
             if compare_versions("deepspeed", "<", "0.6.5"):
                 raise ImportError("DeepSpeed version must be >= 0.6.5. Please update DeepSpeed.")
 
-            ds_config = deepspeed_plugin.deepspeed_config
             mixed_precision = os.environ.get("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-            if mixed_precision == "fp16" and "fp16" not in ds_config and "bf16" not in ds_config:
-                ds_config.update({"fp16": {"enabled": True}})
-            elif mixed_precision == "bf16" and "fp16" not in ds_config and "bf16" not in ds_config:
-                ds_config.update({"bf16": {"enabled": True}})
+            deepspeed_plugin.set_mixed_precision(mixed_precision)
+            deepspeed_plugin.set_deepspeed_weakref()
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = FullyShardedDataParallelPlugin() if os.environ.get("USE_FSDP", "false") == "true" else None
