@@ -434,7 +434,7 @@ def attach_align_device_hook_on_blocks(
         return
 
     if not isinstance(execution_device, Mapping):
-        execution_device = {key: offload for key in offload.keys()}
+        execution_device = {key: execution_device for key in offload.keys()}
     if not isinstance(offload, Mapping):
         offload = {key: offload for key in execution_device.keys()}
 
