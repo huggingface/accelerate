@@ -293,7 +293,7 @@ def attach_execution_device_hook(
     if not hasattr(module, "_hf_hook") and len(module.state_dict()) > 0:
         add_hook_to_module(module, AlignDevicesHook(execution_device))
 
-    # Break the recursion if we get to a load all weights module.
+    # Break the recursion if we get to a preload module.
     if preload_module_classes is not None and module.__class__.__name__ in preload_module_classes:
         return
 
