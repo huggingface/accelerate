@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import functools
-from typing import Dict, Mapping, Optional, Union
+from typing import Dict, List, Mapping, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -220,17 +220,23 @@ class AlignDevicesHook(ModelHook):
             for name, _ in named_module_tensors(module, recurse=self.place_submodules):
                 set_module_tensor_to_device(module, name, self.execution_device)
         elif self.offload:
-            self.original_devices = {name: param.device for name, param in named_module_tensors(module)}
+            self.original_devices = {
+                name: param.device for name, param in named_module_tensors(module, recurse=self.place_submodules)
+            }
             if self.weights_map is None:
                 self.weights_map = {
                     name: param.to("cpu")
-                    for name, param in named_module_tensors(module, include_buffers=self.offload_buffers)
+                    for name, param in named_module_tensors(
+                        module, include_buffers=self.offload_buffers, recurse=self.place_submodules
+                    )
                 }
 
-            for name, _ in named_module_tensors(module, include_buffers=self.offload_buffers):
+            for name, _ in named_module_tensors(
+                module, include_buffers=self.offload_buffers, recurse=self.place_submodules
+            ):
                 set_module_tensor_to_device(module, name, "meta")
             if not self.offload_buffers and self.execution_device is not None:
-                for name, _ in module.named_buffers(recurse=False):
+                for name, _ in module.named_buffers(recurse=self.place_submodules):
                     set_module_tensor_to_device(module, name, self.execution_device)
         return module
 
@@ -238,14 +244,18 @@ class AlignDevicesHook(ModelHook):
         if self.io_same_device:
             self.input_device = find_device([args, kwargs])
         if self.offload:
-            for name, _ in named_module_tensors(module, include_buffers=self.offload_buffers):
+            for name, _ in named_module_tensors(
+                module, include_buffers=self.offload_buffers, recurse=self.place_submodules
+            ):
                 set_module_tensor_to_device(module, name, self.execution_device, value=self.weights_map[name])
 
         return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
 
     def post_forward(self, module, output):
         if self.offload:
-            for name, _ in named_module_tensors(module, include_buffers=self.offload_buffers):
+            for name, _ in named_module_tensors(
+                module, include_buffers=self.offload_buffers, recurse=self.place_submodules
+            ):
                 set_module_tensor_to_device(module, name, "meta")
 
         if self.io_same_device and self.input_device is not None:
@@ -260,7 +270,11 @@ class AlignDevicesHook(ModelHook):
                     set_module_tensor_to_device(module, name, device, value=self.weights_map.get(name, None))
 
 
-def attach_execution_device_hook(module: torch.nn.Module, execution_device: Union[int, str, torch.device]):
+def attach_execution_device_hook(
+    module: torch.nn.Module,
+    execution_device: Union[int, str, torch.device],
+    preload_module_classes: Optional[List[str]] = None,
+):
     """
     Recursively attaches `AlignDevicesHook` to all submodules of a given model to make sure they have the right
     execution device
@@ -270,9 +284,18 @@ def attach_execution_device_hook(module: torch.nn.Module, execution_device: Unio
             The module where we want to attach the hooks.
         execution_device (`int`, `str` or `torch.device`):
             The device on which inputs and model weights should be placed before the forward pass.
+        preload_module_classes (`List[str]`, *optional*):
+            A list of classes whose instances should load all their weights (even in the submodules) at the beginning
+            of the forward. This should only be used for classes that have submodules which are registered but not
+            called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
     if not hasattr(module, "_hf_hook") and len(module.state_dict()) > 0:
         add_hook_to_module(module, AlignDevicesHook(execution_device))
+
+    # Break the recursion if we get to a preload module.
+    if preload_module_classes is not None and module.__class__.__name__ in preload_module_classes:
+        return
 
     for child in module.children():
         attach_execution_device_hook(child, execution_device)
@@ -285,6 +308,7 @@ def attach_align_device_hook(
     weights_map: Optional[Mapping] = None,
     offload_buffers: bool = False,
     module_name: str = "",
+    preload_module_classes: Optional[List[str]] = None,
 ):
     """
     Recursively attaches `AlignDevicesHook` to all submodules of a given model that have direct parameters and/or
@@ -303,10 +327,19 @@ def attach_align_device_hook(
             Whether or not to include the associated module's buffers when offloading.
         module_name (`str`, *optional*, defaults to `""`):
             The name of the module.
+        preload_module_classes (`List[str]`, *optional*):
+            A list of classes whose instances should load all their weights (even in the submodules) at the beginning
+            of the forward. This should only be used for classes that have submodules which are registered but not
+            called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
     # Attach the hook on this module if it has any direct tensor.
     directs = named_module_tensors(module)
-    if len(list(directs)) > 0:
+    full_offload = (
+        offload and preload_module_classes is not None and module.__class__.__name__ in preload_module_classes
+    )
+
+    if len(list(directs)) > 0 or full_offload:
         if weights_map is not None:
             prefix = f"{module_name}." if len(module_name) > 0 else ""
             prefixed_weights_map = PrefixedDataset(weights_map, prefix)
@@ -317,8 +350,13 @@ def attach_align_device_hook(
             offload=offload,
             weights_map=prefixed_weights_map,
             offload_buffers=offload_buffers,
+            place_submodules=full_offload,
         )
         add_hook_to_module(module, hook)
+
+    # We stop the recursion in case we hit the full offload.
+    if full_offload:
+        return
 
     # Recurse on all children of the module.
     for child_name, child in module.named_children():
@@ -330,6 +368,7 @@ def attach_align_device_hook(
             weights_map=weights_map,
             offload_buffers=offload_buffers,
             module_name=child_name,
+            preload_module_classes=preload_module_classes,
         )
 
 
@@ -352,6 +391,7 @@ def attach_align_device_hook_on_blocks(
     weights_map: Mapping = None,
     offload_buffers: bool = False,
     module_name: str = "",
+    preload_module_classes: Optional[List[str]] = None,
 ):
     """
     Attaches `AlignDevicesHook` to all blocks of a given model as needed.
@@ -371,6 +411,11 @@ def attach_align_device_hook_on_blocks(
             Whether or not to include the associated module's buffers when offloading.
         module_name (`str`, *optional*, defaults to `""`):
             The name of the module.
+        preload_module_classes (`List[str]`, *optional*):
+            A list of classes whose instances should load all their weights (even in the submodules) at the beginning
+            of the forward. This should only be used for classes that have submodules which are registered but not
+            called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
     # If one device and one offload, we've got one hook.
     if not isinstance(execution_device, Mapping) and not isinstance(offload, dict):
@@ -389,7 +434,7 @@ def attach_align_device_hook_on_blocks(
         return
 
     if not isinstance(execution_device, Mapping):
-        execution_device = {key: offload for key in offload.keys()}
+        execution_device = {key: execution_device for key in offload.keys()}
     if not isinstance(offload, Mapping):
         offload = {key: offload for key in execution_device.keys()}
 
@@ -410,11 +455,14 @@ def attach_align_device_hook_on_blocks(
             weights_map=weights_map,
             offload_buffers=offload_buffers,
             module_name=module_name,
+            preload_module_classes=preload_module_classes,
         )
         if not hasattr(module, "_hf_hook"):
             hook = AlignDevicesHook(execution_device=execution_device[module_name], io_same_device=(module_name == ""))
             add_hook_to_module(module, hook)
-        attach_execution_device_hook(module, execution_device[module_name])
+        attach_execution_device_hook(
+            module, execution_device[module_name], preload_module_classes=preload_module_classes
+        )
     elif module_name == "":
         hook = AlignDevicesHook(io_same_device=True)
         add_hook_to_module(module, hook)
@@ -428,4 +476,5 @@ def attach_align_device_hook_on_blocks(
             weights_map=weights_map,
             offload_buffers=offload_buffers,
             module_name=child_name,
+            preload_module_classes=preload_module_classes,
         )
