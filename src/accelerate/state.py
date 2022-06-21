@@ -75,6 +75,11 @@ class AcceleratorState:
         self.__dict__ = self._shared_state
         if parse_flag_from_env("USE_CPU"):
             cpu = True
+        if getattr(self, "initialized", False) and cpu and not self.device == "cpu":
+            raise ValueError(
+                "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `cpu=True` to `Accelerate()`."
+            )
+
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
             self.backend = None
