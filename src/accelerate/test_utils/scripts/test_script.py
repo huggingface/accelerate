@@ -247,7 +247,7 @@ def training_check():
 
     # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
     print("FP16 training check.")
-    AcceleratorState()._reset()
+    AcceleratorState._reset_state()
     accelerator = Accelerator(mixed_precision="fp16")
     train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
@@ -270,7 +270,7 @@ def training_check():
 
     # TEST that previous fp16 flag still works
     print("Legacy FP16 training check.")
-    AcceleratorState()._reset()
+    AcceleratorState._reset_state()
     accelerator = Accelerator(fp16=True)
     train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
@@ -293,7 +293,7 @@ def training_check():
 
     # Mostly a test that BF16 doesn't crash as the operation inside the model is not converted to BF16
     print("BF16 training check.")
-    AcceleratorState()._reset()
+    AcceleratorState._reset_state()
     accelerator = Accelerator(mixed_precision="bf16")
     train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
