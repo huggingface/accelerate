@@ -19,7 +19,13 @@ from tempfile import TemporaryDirectory
 import torch
 import torch.nn as nn
 
-from accelerate.utils import OffloadedWeightsLoader, offload_state_dict
+from accelerate.utils import (
+    OffloadedWeightsLoader,
+    is_torch_version,
+    load_offloaded_weight,
+    offload_state_dict,
+    offload_weight,
+)
 
 
 class ModelForTest(nn.Module):
@@ -35,8 +41,6 @@ class ModelForTest(nn.Module):
 
 class OffloadTester(unittest.TestCase):
     def test_offload_state_dict(self):
-        from tempfile import TemporaryDirectory
-
         model = ModelForTest()
         with TemporaryDirectory() as tmp_dir:
             offload_state_dict(tmp_dir, model.state_dict())
@@ -48,6 +52,22 @@ class OffloadTester(unittest.TestCase):
                 weight_file = os.path.join(tmp_dir, f"{key}.dat")
                 self.assertTrue(os.path.isfile(weight_file))
                 # TODO: add tests on the fact weights are properly loaded
+
+    def test_offload_weight(self):
+        dtypes = [torch.float16, torch.float32]
+        if is_torch_version(">=", "1.10"):
+            dtypes.append(torch.bfloat16)
+
+        for dtype in dtypes:
+            weight = torch.randn(2, 3, dtype=dtype)
+            with TemporaryDirectory() as tmp_dir:
+                index = offload_weight(weight, "weight", tmp_dir, {})
+                weight_file = os.path.join(tmp_dir, "weight.dat")
+                self.assertTrue(os.path.isfile(weight_file))
+                self.assertDictEqual(index, {"weight": {"shape": [2, 3], "dtype": str(dtype).split(".")[1]}})
+
+                new_weight = load_offloaded_weight(weight_file, index["weight"])
+                self.assertTrue(torch.equal(weight, new_weight))
 
     def test_offload_weights_loader(self):
         model = ModelForTest()
