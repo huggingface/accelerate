@@ -14,7 +14,6 @@
 
 import os
 from distutils.util import strtobool
-from string import Template
 
 import torch
 
@@ -202,10 +201,8 @@ class AcceleratorState:
     def _check_initialized(self, mixed_precision=None, cpu=None):
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
         if getattr(self, "initialized", False):
-            template = Template(
-                "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `$flag` to `Accelerate()`."
-            )
+            err = "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `Accelerate()`."
             if cpu and self.device.type != "cpu":
-                raise ValueError(template.substitute(flag=self.device))
+                raise ValueError(err.format(flag="cpu=True"))
             if mixed_precision is not None and mixed_precision != self.mixed_precision:
-                raise ValueError(template.substitute(flag=f"mixed_precision='{mixed_precision}'"))
+                raise ValueError(err.format(flag=f"mixed_precision='{mixed_precision}'"))
