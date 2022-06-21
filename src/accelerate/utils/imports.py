@@ -34,7 +34,12 @@ except ImportError:
 try:
     import torch_xla.core.xla_model as xm  # noqa: F401
 
-    _tpu_available = True
+    try:
+        # Will raise a RuntimeError if no XLA configuration is found
+        _ = xm.xla_device()
+        _tpu_available = True
+    except RuntimeError:
+        _tpu_available = False
 except ImportError:
     _tpu_available = False
 
