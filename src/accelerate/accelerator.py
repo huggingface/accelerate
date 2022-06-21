@@ -269,6 +269,10 @@ class Accelerator:
             self.rng_types = ["torch"] if is_torch_version("<=", "1.5.1") else ["generator"]
 
     @property
+    def use_tpu(self):
+        return self.state.use_tpu
+
+    @property
     def distributed_type(self):
         return self.state.distributed_type
 
@@ -459,7 +463,7 @@ class Accelerator:
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
-        if self.distributed_type == DistributedType.TPU:
+        if self.use_tpu:
             model_device, optimizer_device = self._get_devices()
             if model_device is not None and optimizer_device is not None and model_device != optimizer_device:
                 raise ValueError(
@@ -471,7 +475,7 @@ class Accelerator:
                 )
 
         # If we're dealing with device placement, this deals with that by...
-        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
+        tpu_should_fix_optimizer = self.device_placement and self.use_tpu
         if tpu_should_fix_optimizer:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
@@ -533,7 +537,7 @@ class Accelerator:
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
-        if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
+        if self.use_tpu and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         return model
 
@@ -701,7 +705,7 @@ class Accelerator:
             num_processes=self.num_processes,
             process_index=self.process_index,
             split_batches=self.split_batches,
-            put_on_device=self.device_placement if self.distributed_type != DistributedType.TPU else False,
+            put_on_device=self.device_placement if not self.use_tpu else False,
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
         )

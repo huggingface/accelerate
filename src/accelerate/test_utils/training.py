@@ -16,8 +16,6 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from accelerate.utils.dataclasses import DistributedType
-
 
 class RegressionDataset:
     def __init__(self, a=2, b=3, length=64, seed=None):
@@ -77,7 +75,7 @@ def mocked_dataloaders(accelerator, batch_size: int = 16):
 
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
-        if accelerator.distributed_type == DistributedType.TPU:
+        if accelerator.use_tpu:
             return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
         return tokenizer.pad(examples, padding="longest", return_tensors="pt")
 

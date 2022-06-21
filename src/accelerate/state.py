@@ -196,3 +196,7 @@ class AcceleratorState:
     @property
     def use_fp16(self):
         return self.mixed_precision != "no"
+
+    @property
+    def use_tpu(self):
+        return is_tpu_available() and self.distributed_type == DistributedType.TPU

@@ -18,7 +18,7 @@ from typing import List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
-from .state import AcceleratorState, DistributedType, is_tpu_available
+from .state import AcceleratorState, is_tpu_available
 from .utils import (
     RNGType,
     broadcast,
@@ -565,13 +565,13 @@ def prepare_data_loader(
     else:
         dataloader = DataLoaderShard(
             new_dataset,
-            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
+            device=device if put_on_device and not state.use_tpu else None,
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
             generator=generator,
             **kwargs,
         )
 
-    if state.distributed_type == DistributedType.TPU:
+    if state.use_tpu:
         return xpl.MpDeviceLoader(dataloader, device)
     return dataloader
