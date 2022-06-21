@@ -198,10 +198,10 @@ class AcceleratorState:
     def use_fp16(self):
         return self.mixed_precision != "no"
 
-    @classmethod
-    def _reset_state(cls):
+    @staticmethod
+    def _reset_state():
         "Resets `_shared_state`, is used internally and should not be called"
-        cls._shared_state = {}
+        AcceleratorState._shared_state = {}
 
     def _check_initialized(self, mixed_precision=None, cpu=None):
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
