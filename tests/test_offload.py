@@ -59,7 +59,7 @@ class OffloadTester(unittest.TestCase):
             dtypes.append(torch.bfloat16)
 
         for dtype in dtypes:
-            weight = torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=dtype)
+            weight = torch.randn(2, 3, dtype=dtype)
             with TemporaryDirectory() as tmp_dir:
                 index = offload_weight(weight, "weight", tmp_dir, {})
                 weight_file = os.path.join(tmp_dir, "weight.dat")
