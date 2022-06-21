@@ -18,7 +18,7 @@ import warnings
 import torch
 
 from .state import AcceleratorState
-from .utils import DistributedType, honor_type, is_torch_version, is_tpu_available
+from .utils import honor_type, is_torch_version, is_tpu_available
 
 
 if is_tpu_available():
@@ -59,7 +59,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         # Handle device placement
         if device_placement:
             state_dict = self.optimizer.state_dict()
-            if self.accelerator_state.distributed_type == DistributedType.TPU:
+            if self.accelerator_state.use_tpu:
                 xm.send_cpu_data_to_device(state_dict, self.accelerator_state.device)
             else:
                 state_dict = move_to_device(state_dict, self.accelerator_state.device)
@@ -93,7 +93,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.optimizer.add_param_group(param_group)
 
     def load_state_dict(self, state_dict):
-        if self.accelerator_state.distributed_type == DistributedType.TPU and self.device_placement:
+        if self.accelerator_state.use_tpu and self.device_placement:
             xm.send_cpu_data_to_device(state_dict, self.accelerator_state.device)
         self.optimizer.load_state_dict(state_dict)
 
@@ -120,7 +120,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 self.optimizer.zero_grad()
 
     def step(self, closure=None):
-        if self.accelerator_state.distributed_type == DistributedType.TPU:
+        if self.accelerator_state.use_tpu:
             optimizer_args = {"closure": closure} if closure is not None else {}
             xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)
         elif self.scaler is not None:

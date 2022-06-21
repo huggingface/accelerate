@@ -43,26 +43,26 @@ def set_seed(seed: int, device_specific: bool = False):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
-    if is_tpu_available():
+    if AcceleratorState().use_tpu:
         xm.set_rng_state(seed)
 
 
 def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optional[torch.Generator] = None):
+    state = AcceleratorState()
     # Get the proper rng state
     if rng_type == RNGType.TORCH:
         rng_state = torch.get_rng_state()
     elif rng_type == RNGType.CUDA:
         rng_state = torch.cuda.get_rng_state()
     elif rng_type == RNGType.XLA:
-        assert is_tpu_available(), "Can't synchronize XLA seeds on an environment without TPUs."
+        assert state.use_tpu, "Can't synchronize XLA seeds on an environment without TPUs."
         rng_state = torch.tensor(xm.get_rng_state())
     elif rng_type == RNGType.GENERATOR:
         assert generator is not None, "Need a generator to synchronize its seed."
         rng_state = generator.get_state()
 
     # Broadcast the rng state from device 0 to other devices
-    state = AcceleratorState()
-    if state.distributed_type == DistributedType.TPU:
+    if state.use_tpu():
         rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
     elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
         rng_state = rng_state.to(state.device)
@@ -76,7 +76,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         torch.set_rng_state(rng_state)
     elif rng_type == RNGType.CUDA:
         torch.cuda.set_rng_state(rng_state)
-    elif rng_type == RNGType.XLA:
+    elif rng_type == RNGType.XLA and state.use_tpu:
         xm.set_rng_state(rng_state.item())
     elif rng_type == RNGType.GENERATOR:
         generator.set_state(rng_state)

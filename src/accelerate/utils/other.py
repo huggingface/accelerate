@@ -61,13 +61,13 @@ def wait_for_everyone():
 
     </Tip>
     """
-    if (
-        AcceleratorState().distributed_type == DistributedType.MULTI_GPU
-        or AcceleratorState().distributed_type == DistributedType.MULTI_CPU
-        or AcceleratorState().distributed_type == DistributedType.DEEPSPEED
+    state = AcceleratorState()
+    if any(
+        state.distributed_type == dtype
+        for dtype in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.DEEPSPEED]
     ):
         torch.distributed.barrier()
-    elif AcceleratorState().distributed_type == DistributedType.TPU:
+    elif state.use_tpu():
         xm.rendezvous("accelerate.utils.wait_for_everyone")
 
 
@@ -79,7 +79,7 @@ def save(obj, f):
         obj: The data to save
         f: The file (or file-like object) to use to save the data
     """
-    if AcceleratorState().distributed_type == DistributedType.TPU:
+    if AcceleratorState().use_tpu:
         xm.save(obj, f)
     elif AcceleratorState().local_process_index == 0:
         torch.save(obj, f)
