@@ -21,7 +21,6 @@ import numpy as np
 import torch
 from torch.cuda.amp import GradScaler
 
-from .state import AcceleratorState
 from .utils import (
     MODEL_NAME,
     OPTIMIZER_NAME,
@@ -102,7 +101,7 @@ def save_accelerator_state(
     states["torch_manual_seed"] = torch.get_rng_state()
     states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
     # ^^ safe to call this function even if cuda is not available
-    if AcceleratorState().use_tpu:
+    if is_tpu_available():
         states["xm_seed"] = xm.get_rng_state()
     output_states_file = os.path.join(output_dir, states_name)
     torch.save(states, output_states_file)
