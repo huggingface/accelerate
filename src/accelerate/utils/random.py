@@ -43,7 +43,7 @@ def set_seed(seed: int, device_specific: bool = False):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
-    if AcceleratorState().use_tpu:
+    if is_tpu_available():
         xm.set_rng_state(seed)
 
 
