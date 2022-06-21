@@ -33,7 +33,6 @@ except ImportError:
 
 try:
     import torch_xla.core.xla_model as xm  # noqa: F401
-
     try:
         # Will raise a RuntimeError if no XLA configuration is found
         _ = xm.xla_device()
