@@ -62,7 +62,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         rng_state = generator.get_state()
 
     # Broadcast the rng state from device 0 to other devices
-    if state.use_tpu():
+    if state.use_tpu:
         rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
     elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
         rng_state = rng_state.to(state.device)

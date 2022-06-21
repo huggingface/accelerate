@@ -67,7 +67,7 @@ def wait_for_everyone():
         for dtype in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.DEEPSPEED]
     ):
         torch.distributed.barrier()
-    elif state.use_tpu():
+    elif state.use_tpu:
         xm.rendezvous("accelerate.utils.wait_for_everyone")
 
 
