@@ -157,7 +157,7 @@ def training_function(config, args):
             # We use the new `no_sync` context manager to prevent gradient averaging
             # until we want to at the proper step if we happen to be in a distributed setup
             # otherwise it does nothing
-            if step % gradient_accumulation_steps == 0:
+            if step % gradient_accumulation_steps != 0:
                 # Accumulate gradients locally
                 with accelerator.no_sync(model):
                     output = model(**batch)
