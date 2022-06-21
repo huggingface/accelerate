@@ -14,6 +14,7 @@
 
 import os
 from distutils.util import strtobool
+from string import Template
 
 import torch
 
@@ -75,11 +76,7 @@ class AcceleratorState:
         self.__dict__ = self._shared_state
         if parse_flag_from_env("USE_CPU"):
             cpu = True
-        if getattr(self, "initialized", False) and cpu and not self.device == "cpu":
-            raise ValueError(
-                "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `cpu=True` to `Accelerate()`."
-            )
-
+        self._check_initialized(mixed_precision, cpu)
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
             self.backend = None
@@ -201,3 +198,14 @@ class AcceleratorState:
     @property
     def use_fp16(self):
         return self.mixed_precision != "no"
+
+    def _check_initialized(self, mixed_precision=None, cpu=None):
+        "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
+        if getattr(self, "initialized", False):
+            template = Template(
+                "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `$flag` to `Accelerate()`."
+            )
+            if cpu and not self.device == "cpu":
+                raise ValueError(template.substitute(flag="cpu=True"))
+            if mixed_precision is not None and mixed_precision != self.mixed_precision:
+                raise ValueError(template.substitute(flag=f"mixed_precision='{mixed_precision}'"))
