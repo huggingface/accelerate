@@ -48,6 +48,7 @@ from .offload import (
     OffloadedWeightsLoader,
     PrefixedDataset,
     extract_submodules_state_dict,
+    load_offloaded_weight,
     offload_state_dict,
     offload_weight,
     save_offload_index,

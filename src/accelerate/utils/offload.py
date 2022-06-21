@@ -22,16 +22,46 @@ import torch
 
 
 def offload_weight(weight, weight_name, offload_folder, index=None):
+    dtype = None
+    # Check the string instead of the dtype to be compatible with versions of PyTorch that don't have bfloat16.
+    if str(weight.dtype) == "torch.bfloat16":
+        # Need to convert to FP32 since NumPy does not handle bfloat16s.
+        weight = weight.float()
+        dtype = "bfloat16"
     array = weight.numpy()
     tensor_file = os.path.join(offload_folder, f"{weight_name}.dat")
     if index is not None:
-        index[weight_name] = {"dtype": str(array.dtype), "shape": list(array.shape)}
+        if dtype is None:
+            dtype = str(array.dtype)
+        index[weight_name] = {"dtype": dtype, "shape": list(array.shape)}
     if array.ndim == 0:
         array = array[None]
     file_array = np.memmap(tensor_file, dtype=array.dtype, mode="w+", shape=array.shape)
     file_array[:] = array[:]
     file_array.flush()
     return index
+
+
+def load_offloaded_weight(weight_file, weight_info):
+    shape = tuple(weight_info["shape"])
+    if shape == ():
+        # NumPy memory-mapped arrays can't have 0 dims so it was saved as 1d tensor
+        shape = (1,)
+
+    dtype = weight_info["dtype"]
+    if dtype == "bfloat16":
+        # NumPy does not support bfloat16 so this was saved as a float32
+        dtype = "float32"
+
+    weight = np.memmap(weight_file, dtype=dtype, shape=shape, mode="r")
+
+    if len(weight_info["shape"]) == 0:
+        weight = weight[0]
+    weight = torch.tensor(weight)
+    if weight_info["dtype"] == "bfloat16":
+        weight = weight.to(torch.bfloat16)
+
+    return weight
 
 
 def save_offload_index(index, offload_folder):
@@ -129,12 +159,7 @@ class OffloadedWeightsLoader(Mapping):
             return self.state_dict[key]
         weight_info = self.index[key]
         weight_file = os.path.join(self.save_folder, f"{key}.dat")
-        shape = tuple(weight_info["shape"])
-        if shape == ():
-            weight = np.memmap(weight_file, dtype=weight_info["dtype"], shape=(1,), mode="r")[0]
-        else:
-            weight = np.memmap(weight_file, dtype=weight_info["dtype"], shape=shape, mode="r")
-        return torch.tensor(weight)
+        return load_offloaded_weight(weight_file, weight_info)
 
     def __iter__(self):
         return iter(self.all_keys)
