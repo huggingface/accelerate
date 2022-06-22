@@ -50,6 +50,13 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
     else:
         in_colab_or_kaggle = False
 
+    try:
+        mixed_precision = PrecisionType(mixed_precision.lower())
+    except ValueError:
+        raise ValueError(
+            f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
+        )
+
     if in_colab_or_kaggle:
         if os.environ.get("TPU_NAME", None) is not None:
             # TPU launch
@@ -65,14 +72,16 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                 num_processes = 8
 
             launcher = PrepareForLaunch(function, distributed_type="TPU")
-            print(f"Launching a training on {num_processes} TPU cores.")
-            xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
+            use_bf16 = mixed_precision == PrecisionType.BF16
+            with patch_environment(xla_use_bf16=use_bf16):
+                print(f"Launching a training on {num_processes} TPU cores with BF16={use_bf16}")
+                xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
             if torch.cuda.is_available():
                 print("Launching training on one GPU.")
             else:
-                print("Launching training on CPU.")
+                print("Launching training on one CPU.")
             function(*args)
 
     else:
@@ -103,13 +112,6 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                     "To launch a multi-GPU training from your notebook, you need to avoid running any instruction "
                     "using `torch.cuda` in any cell. Restart your notebook and make sure no cells use any CUDA "
                     "function."
-                )
-
-            try:
-                mixed_precision = PrecisionType(mixed_precision.lower())
-            except ValueError:
-                raise ValueError(
-                    f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
                 )
 
             if use_fp16:

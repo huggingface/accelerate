@@ -20,6 +20,7 @@ from .dataclasses import (
 )
 from .imports import (
     is_apex_available,
+    is_bf16_available,
     is_boto3_available,
     is_ccl_available,
     is_comet_ml_available,

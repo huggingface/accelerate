@@ -15,6 +15,10 @@
 import importlib
 import sys
 
+import torch
+
+from .versions import is_torch_version
+
 
 # The package importlib_metadata is in a different place, depending on the Python version.
 if sys.version_info < (3, 8):
@@ -66,6 +70,15 @@ def is_deepspeed_available():
             return True
         except importlib_metadata.PackageNotFoundError:
             return False
+
+
+def is_bf16_available(ignore_tpu=True):
+    "Checks if bf16 is supported, optionally ignoring the TPU"
+    if torch.cuda.is_available():
+        return torch.cuda.is_bf16_supported()
+    elif is_tpu_available():
+        return ignore_tpu
+    return is_torch_version(">=", "1.10")
 
 
 def is_transformers_available():

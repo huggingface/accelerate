@@ -46,6 +46,7 @@ from .utils import (
     extract_model_from_parallel,
     gather,
     get_pretty_name,
+    is_bf16_available,
     is_deepspeed_available,
     is_torch_version,
     is_tpu_available,
@@ -244,18 +245,22 @@ class Accelerator:
         self.native_amp = False
         if self.state.mixed_precision == "fp16":
             self.native_amp = is_torch_version(">=", "1.6")
+            err = "fp16 mixed precision requires {requirement}"
             if not self.native_amp:
-                raise ValueError("fp16 mixed precision requires PyTorch >= 1.6")
-
+                raise ValueError(err.format(err="PyTorch >= 1.6"))
+            if not torch.cuda.is_available():
+                raise ValueError(err.format(err="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = torch.cuda.amp.GradScaler(**kwargs)
         elif self.state.mixed_precision == "bf16":
-            self.native_amp = is_torch_version(">=", "1.10")
+            self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp:
-                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10")
+                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
 
-            kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
-            self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+            # Only on the GPU do we care about scaling the gradients
+            if torch.cuda.is_available():
+                kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
+                self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
         # Internal references to the training objects
         self._optimizers = []
@@ -528,8 +533,9 @@ class Accelerator:
         if self.native_amp:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
-            elif self.mixed_precision == "bf16":
-                model.forward = torch.cuda.amp.autocast(dtype=torch.bfloat16)(model.forward)
+            elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
+                device_type = "cpu" if torch.cuda.is_available() else "cuda"
+                model.forward = torch.autocast(device_type=device_type, dtype=torch.bfloat16)(model.forward)
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
@@ -1054,8 +1060,10 @@ class Accelerator:
         if self.native_amp:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
-            elif self.mixed_precision == "bf16":
-                autocast_context = torch.cuda.amp.autocast(dtype=torch.bfloat16)
+            elif self.mixed_precision == "bf16" and is_bf16_available():
+                if self.distributed_type in [DistributedType.NO, DistributedType.MULTI_CPU, DistributedType.MULTI_GPU]:
+                    device_type = "cpu" if not torch.cuda.is_available() else "cuda"
+                    autocast_context = torch.autocast(dtype=torch.bfloat16, device_type=device_type)
             else:
                 autocast_context = torch.cuda.amp.autocast()
 

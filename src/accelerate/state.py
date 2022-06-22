@@ -75,6 +75,9 @@ class AcceleratorState:
         self.__dict__ = self._shared_state
         if parse_flag_from_env("USE_CPU"):
             cpu = True
+        mixed_precision = (
+            parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+        )
         self._check_initialized(mixed_precision, cpu)
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
@@ -92,9 +95,7 @@ class AcceleratorState:
                 self.process_index = xm.get_ordinal()
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
-                self.mixed_precision = (
-                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-                )
+                self.mixed_precision = mixed_precision
             elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (
                     is_deepspeed_available()
@@ -120,9 +121,7 @@ class AcceleratorState:
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-                self.mixed_precision = (
-                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-                )
+                self.mixed_precision = mixed_precision
                 if os.environ.get("USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP
                     if self.mixed_precision != "no":
@@ -166,15 +165,13 @@ class AcceleratorState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
                 self.device = torch.device("cpu")
-                self.mixed_precision = "no"
+                self.mixed_precision = mixed_precision
             else:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
                 self.device = torch.device("cuda" if torch.cuda.is_available() and not cpu else "cpu")
-                self.mixed_precision = (
-                    parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-                )
+                self.mixed_precision = mixed_precision
             self.initialized = True
 
     def __repr__(self):
