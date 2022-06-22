@@ -72,7 +72,7 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                 num_processes = 8
 
             launcher = PrepareForLaunch(function, distributed_type="TPU")
-            print(f"Launching a training on {num_processes} TPU cores")
+            print(f"Launching a training on {num_processes} TPU cores.")
             xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
