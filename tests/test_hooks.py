@@ -77,20 +77,20 @@ class HooksModelTester(unittest.TestCase):
         test_hook = PreForwardHook()
         add_hook_to_module(test_model, test_hook)
         output1 = test_model(x)
-        self.assertTrue(torch.allclose(output1, expected))
+        self.assertTrue(torch.allclose(output1, expected, atol=1e-5))
 
         # Attaching a hook to a model when it already has one replaces, does not chain
         test_hook = PreForwardHook()
         add_hook_to_module(test_model, test_hook)
         output1 = test_model(x)
-        self.assertTrue(torch.allclose(output1, expected))
+        self.assertTrue(torch.allclose(output1, expected, atol=1e-5))
 
         # You need to use the sequential hook to chain two or more hooks
         test_hook = SequentialHook(PreForwardHook(), PreForwardHook())
         add_hook_to_module(test_model, test_hook)
 
         output2 = test_model(x)
-        assert torch.allclose(output2, expected2)
+        assert torch.allclose(output2, expected2, atol=1e-5)
 
     def test_post_forward_hook_is_executed(self):
         test_model = ModelForTest()
@@ -100,20 +100,20 @@ class HooksModelTester(unittest.TestCase):
         test_hook = PostForwardHook()
         add_hook_to_module(test_model, test_hook)
         output1 = test_model(x)
-        self.assertTrue(torch.allclose(output1, output + 1))
+        self.assertTrue(torch.allclose(output1, output + 1, atol=1e-5))
 
         # Attaching a hook to a model when it already has one replaces, does not chain
         test_hook = PostForwardHook()
         add_hook_to_module(test_model, test_hook)
         output1 = test_model(x)
-        self.assertTrue(torch.allclose(output1, output + 1))
+        self.assertTrue(torch.allclose(output1, output + 1, atol=1e-5))
 
         # You need to use the sequential hook to chain two or more hooks
         test_hook = SequentialHook(PostForwardHook(), PostForwardHook())
         add_hook_to_module(test_model, test_hook)
 
         output2 = test_model(x)
-        assert torch.allclose(output2, output + 2)
+        assert torch.allclose(output2, output + 2, atol=1e-5)
 
     def test_no_grad_in_hook(self):
         test_model = ModelForTest()
