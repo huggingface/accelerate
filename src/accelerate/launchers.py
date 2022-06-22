@@ -72,10 +72,8 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                 num_processes = 8
 
             launcher = PrepareForLaunch(function, distributed_type="TPU")
-            use_bf16 = mixed_precision == PrecisionType.BF16
-            with patch_environment(xla_use_bf16=use_bf16):
-                print(f"Launching a training on {num_processes} TPU cores with BF16={use_bf16}")
-                xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
+            print(f"Launching a training on {num_processes} TPU cores")
+            xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
         else:
             # No need for a distributed launch otherwise as it's either CPU or one GPU.
             if torch.cuda.is_available():

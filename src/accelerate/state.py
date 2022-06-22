@@ -92,6 +92,10 @@ class AcceleratorState:
                 self.process_index = xm.get_ordinal()
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
+                if mixed_precision == "bf16":
+                    os.environ["XLA_USE_BF16"] = 1
+                else:
+                    os.environ["XLA_USE_BF16"] = 0
                 self.mixed_precision = mixed_precision
             elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (
