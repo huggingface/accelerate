@@ -75,9 +75,6 @@ class AcceleratorState:
         self.__dict__ = self._shared_state
         if parse_flag_from_env("USE_CPU"):
             cpu = True
-        mixed_precision = (
-            parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
-        )
         self._check_initialized(mixed_precision, cpu)
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):

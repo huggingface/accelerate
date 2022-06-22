@@ -243,19 +243,19 @@ class Accelerator:
         # Mixed precision attributes
         self.scaler = None
         self.native_amp = False
+        err = "{mode} mixed precision requires {requirement}"
         if self.state.mixed_precision == "fp16":
             self.native_amp = is_torch_version(">=", "1.6")
-            err = "fp16 mixed precision requires {requirement}"
             if not self.native_amp:
-                raise ValueError(err.format(err="PyTorch >= 1.6"))
+                raise ValueError(err.format(mode="fp16", requirement="PyTorch >= 1.6"))
             if not torch.cuda.is_available():
-                raise ValueError(err.format(err="a GPU"))
+                raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = torch.cuda.amp.GradScaler(**kwargs)
         elif self.state.mixed_precision == "bf16":
             self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp:
-                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
+                raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
             # Only on the GPU do we care about scaling the gradients
             if torch.cuda.is_available():
@@ -534,7 +534,7 @@ class Accelerator:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
-                device_type = "cpu" if torch.cuda.is_available() else "cuda"
+                device_type = "cuda" if torch.cuda.is_available() else "cpu"
                 model.forward = torch.autocast(device_type=device_type, dtype=torch.bfloat16)(model.forward)
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
