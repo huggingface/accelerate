@@ -72,15 +72,15 @@ def is_deepspeed_available():
             return False
 
 
-def is_bf16_available(ignore_tpu=True):
+def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
-    if torch.cuda.is_available():
-        if is_torch_version(">=", "1.10"):
+    if is_tpu_available():
+        return not ignore_tpu
+    if is_torch_version(">=", "1.10"):
+        if torch.cuda.is_available():
             return torch.cuda.is_bf16_supported()
-        return False
-    elif is_tpu_available():
-        return ignore_tpu
-    return is_torch_version(">=", "1.10")
+        return True
+    return False
 
 
 def is_transformers_available():
