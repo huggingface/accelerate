@@ -1,4 +1,4 @@
-name: Check for dependency modification
+name: Trigger docker images and run slow tests
 
 on:
   push:
@@ -38,3 +38,8 @@ jobs:
     if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
     uses: ./.github/workflows/build-docker-images.yml
     secrets: inherit
+
+  run-tests:
+    needs: build-docker-containers
+    if: always()
+    uses: ./.github/workflows/on-merge.yml
