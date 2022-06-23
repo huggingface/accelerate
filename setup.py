@@ -16,7 +16,7 @@ from setuptools import setup
 from setuptools import find_packages
 
 extras = {}
-extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3"]
+extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3", "hf-doc-builder >= 0.3.0"]
 extras["docs"] = []
 extras["test"] = [
     "pytest",
