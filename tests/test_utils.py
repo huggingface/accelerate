@@ -23,7 +23,7 @@ from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import convert_outputs_to_fp32, find_device, patch_environment, send_to_device
 
 
-TestNamedTuple = namedtuple("TestNamedTuple", "a b c")
+ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
 
 
 class UtilsTester(unittest.TestCase):
@@ -50,8 +50,8 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(torch.equal(result2["b"][1].cpu(), tensor))
         self.assertEqual(result2["c"], 1)
 
-        result3 = send_to_device(TestNamedTuple(a=tensor, b=[tensor, tensor], c=1), device)
-        self.assertIsInstance(result3, TestNamedTuple)
+        result3 = send_to_device(ExampleNamedTuple(a=tensor, b=[tensor, tensor], c=1), device)
+        self.assertIsInstance(result3, ExampleNamedTuple)
         self.assertTrue(torch.equal(result3.a.cpu(), tensor))
         self.assertIsInstance(result3.b, list)
         self.assertTrue(torch.equal(result3.b[0].cpu(), tensor))
