@@ -16,18 +16,13 @@ import argparse
 import os
 
 import torch
+from torch.optim import AdamW
 from torch.utils.data import DataLoader
 
 import evaluate
 from accelerate import Accelerator, DistributedType
 from datasets import load_dataset
-from transformers import (
-    AdamW,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    get_linear_schedule_with_warmup,
-    set_seed,
-)
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 
 ########################################################################

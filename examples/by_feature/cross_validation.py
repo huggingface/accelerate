@@ -17,6 +17,7 @@ from typing import List
 
 import numpy as np
 import torch
+from torch.optim import AdamW
 from torch.utils.data import DataLoader
 
 import evaluate
@@ -26,13 +27,7 @@ from datasets import DatasetDict, load_dataset
 # New Code #
 # We'll be using StratifiedKFold for this example
 from sklearn.model_selection import StratifiedKFold
-from transformers import (
-    AdamW,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    get_linear_schedule_with_warmup,
-    set_seed,
-)
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 
 ########################################################################
