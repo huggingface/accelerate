@@ -134,7 +134,7 @@ def training_function(config, args):
     model = model.to(accelerator.device)
 
     # Instantiate optimizer
-    optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
+    optimizer = AdamW(params=model.parameters(), lr=lr, capturable=correct_bias)
 
     # New Code #
     # We now can define an inner training loop function. It should take a batch size as the only parameter,

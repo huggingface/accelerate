@@ -137,7 +137,7 @@ def training_function(config, args):
     model = model.to(accelerator.device)
 
     # Instantiate optimizer
-    optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias)
+    optimizer = AdamW(params=model.parameters(), lr=lr, capturable=correct_bias)
 
     # Instantiate scheduler
     lr_scheduler = get_linear_schedule_with_warmup(
