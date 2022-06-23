@@ -253,7 +253,7 @@ class Accelerator:
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             self.scaler = torch.cuda.amp.GradScaler(**kwargs)
         elif self.state.mixed_precision == "bf16":
-            self.native_amp = is_bf16_available(True)
+            self.native_amp = is_bf16_available()
             if mixed_precision == "bf16" and not self.native_amp:
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
