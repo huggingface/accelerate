@@ -179,6 +179,16 @@ class BaseEnum(enum.Enum, metaclass=EnumWithContains):
 
 
 class LoggerType(BaseEnum):
+    """Represents a type of supported experiment tracker
+
+    Values:
+
+        - **ALL** -- all available trackers in the environment that are supported
+        - **TENSORBOARD** -- TensorBoard as an experiment tracker
+        - **WANDB** -- wandb as an experiment tracker
+        - **COMETML** -- comet_ml as an experiment tracker
+    """
+
     ALL = "all"
     TENSORBOARD = "tensorboard"
     WANDB = "wandb"
@@ -186,6 +196,15 @@ class LoggerType(BaseEnum):
 
 
 class PrecisionType(BaseEnum):
+    """Represents a type of precision used on floating point values
+
+    Values:
+
+        - **NO** -- using full precision (FP32)
+        - **FP16** -- using half precision
+        - **BF16** -- using brain floating point precision
+    """
+
     NO = "no"
     FP16 = "fp16"
     BF16 = "bf16"
