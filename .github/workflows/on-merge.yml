@@ -1,10 +1,6 @@
-name: Self-hosted runner (push to "main")
+name: Self-hosted runner tests (push to "main")
 
 on:
-  workflow_run:
-    workflows: ["Check for dependency modification"]
-    branches: ["main"]
-    types: [completed]
   workflow_dispatch:
 
 env:

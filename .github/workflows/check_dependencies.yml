@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - actions
   workflow_dispatch:
 
 env:
@@ -38,3 +39,7 @@ jobs:
     if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
     uses: ./.github/workflows/build-docker-images.yml
     secrets: inherit
+
+  run-tests:
+    needs: build-docker-containers
+    uses: ./.github/workflows/on-merge.yml
