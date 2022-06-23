@@ -1,4 +1,4 @@
-name: Check for dependency modification
+name: Trigger docker images and run slow tests
 
 on:
   push:
