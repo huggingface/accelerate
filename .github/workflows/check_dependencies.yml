@@ -42,4 +42,5 @@ jobs:
 
   run-tests:
     needs: build-docker-containers
+    if: always()
     uses: ./.github/workflows/on-merge.yml
