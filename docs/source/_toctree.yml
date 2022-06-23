@@ -19,10 +19,10 @@
     title: Notebook Launcher
   - local: kwargs
     title: Kwargs Handlers
-  - local: internal
-    title: Internals
   - local: checkpoint
     title: Checkpointing
+  - local: internal
+    title: Internals
   - local: tracking
     title: Experiment Tracking
   - local: fsdp
@@ -31,4 +31,6 @@
     title: Memory Utilities
   - local: deepspeed
     title: DeepSpeed
+  - local: utilities
+    title: General Utilities
   title: API Reference
