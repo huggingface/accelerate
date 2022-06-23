@@ -15,13 +15,18 @@
 import argparse
 
 import torch
-from torch.optim import AdamW
 from torch.utils.data import DataLoader
 
 import evaluate
 from accelerate import Accelerator, DistributedType
 from datasets import load_dataset
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
+from transformers import (
+    AdamW,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    get_linear_schedule_with_warmup,
+    set_seed,
+)
 
 
 ########################################################################
@@ -121,7 +126,7 @@ def training_function(config, args):
     model = model.to(accelerator.device)
 
     # Instantiate optimizer
-    optimizer = AdamW(params=model.parameters(), lr=lr, capturable=correct_bias)
+    optimizer = AdamW(params=model.parameters(), lr=lr, correct_bias=correct_bias, no_deprecation_warning=True)
 
     # Instantiate scheduler
     lr_scheduler = get_linear_schedule_with_warmup(

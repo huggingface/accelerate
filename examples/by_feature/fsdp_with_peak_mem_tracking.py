@@ -17,7 +17,6 @@ import gc
 import os
 
 import torch
-from torch.optim import AdamW
 from torch.utils.data import DataLoader
 
 import evaluate
@@ -171,7 +170,7 @@ def training_function(config, args):
     # New Code #
     # For FSDP feature, at present it doesn't support multiple parameter groups,
     # so we need to create a single parameter group for the whole model
-    optimizer = AdamW(params=model.parameters(), lr=lr, weight_decay=2e-4)
+    optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr, weight_decay=2e-4)
 
     # Instantiate scheduler
     lr_scheduler = get_linear_schedule_with_warmup(
