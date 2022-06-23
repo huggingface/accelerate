@@ -1,6 +1,7 @@
 name: Self-hosted runner tests (push to "main")
 
 on:
+  workflow_call:
   workflow_dispatch:
 
 env:
