@@ -80,7 +80,9 @@ class AcceleratorState:
         if not getattr(self, "initialized", False):
             self.backend = None
             self.deepspeed_plugin = None
-            mixed_precision = mixed_precision.lower() if mixed_precision else None
+            mixed_precision = (
+                parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision.lower()
+            )
             if not _from_accelerator:
                 raise ValueError(
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
