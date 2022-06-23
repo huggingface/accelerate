@@ -57,6 +57,7 @@ def is_apex_available():
 
 
 def is_tpu_available():
+    "Checks if `torch_xla` is installed and if a TPU is in the environment"
     return _tpu_available
 
 
