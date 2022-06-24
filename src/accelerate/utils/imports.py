@@ -37,6 +37,8 @@ except ImportError:
 
 try:
     import torch_xla.core.xla_model as xm  # noqa: F401
+
+    _tpu_available = True
 except ImportError:
     _tpu_available = False
 
