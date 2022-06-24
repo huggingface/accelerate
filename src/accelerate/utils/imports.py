@@ -53,14 +53,17 @@ def is_apex_available():
 
 def is_tpu_available():
     "Checks if `torch_xla` is installed and if a TPU is in the environment"
-    if _tpu_available:
+    return is_tpu_available()
+
+def on_tpu_device():
+    "Checks if a TPU is in the environment"
+    if is_tpu_available():
         try:
             # Will raise a RuntimeError if no XLA configuration is found
             _ = xm.xla_device()
             return True
         except RuntimeError:
             return False
-    return False
 
 
 def is_deepspeed_available():
