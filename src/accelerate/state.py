@@ -17,7 +17,7 @@ from distutils.util import strtobool
 
 import torch
 
-from .utils import DistributedType, is_ccl_available, is_deepspeed_available, is_tpu_available
+from .utils import DistributedType, is_ccl_available, is_deepspeed_available, is_tpu_available, on_tpu_device
 
 
 if is_tpu_available():
@@ -88,12 +88,13 @@ class AcceleratorState:
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
                     "before using any functionality from the `accelerate` library."
                 )
-            elif is_tpu_available() and not cpu:
+            _tpu_device = on_tpu_device()
+            if _tpu_device is not None and not cpu:
                 self.distributed_type = DistributedType.TPU
                 self.num_processes = xm.xrt_world_size()
                 self.process_index = xm.get_ordinal()
                 self.local_process_index = xm.get_local_ordinal()
-                self.device = xm.xla_device()
+                self.device = _tpu_device
                 if mixed_precision == "bf16":
                     os.environ["XLA_USE_BF16"] = str(1)
                 self.mixed_precision = mixed_precision

@@ -55,15 +55,15 @@ def is_tpu_available():
     "Checks if `torch_xla` is installed and if a TPU is in the environment"
     return _tpu_available
 
+
 def on_tpu_device():
     "Checks if a TPU is in the environment"
     if is_tpu_available():
         try:
             # Will raise a RuntimeError if no XLA configuration is found
-            _ = xm.xla_device()
-            return True
+            return xm.xla_device()
         except RuntimeError:
-            return False
+            return None
 
 
 def is_deepspeed_available():

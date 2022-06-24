@@ -30,6 +30,7 @@ from .imports import (
     is_tpu_available,
     is_transformers_available,
     is_wandb_available,
+    on_tpu_device,
 )
 from .modeling import (
     check_device_map,
