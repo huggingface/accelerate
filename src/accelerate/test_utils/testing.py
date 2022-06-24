@@ -81,7 +81,7 @@ def require_tpu(test_case):
     """
     Decorator marking a test that requires TPUs. These tests are skipped when there are no TPUs available.
     """
-    return unittest.skipUnless(is_tpu_available(True), "test requires TPU")(test_case)
+    return unittest.skipUnless(is_tpu_available(), "test requires TPU")(test_case)
 
 
 def require_single_gpu(test_case):
