@@ -77,7 +77,7 @@ def is_deepspeed_available():
 
 def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
-    if is_tpu_available(check_device=False):
+    if is_tpu_available():
         return not ignore_tpu
     if is_torch_version(">=", "1.10"):
         if torch.cuda.is_available():
