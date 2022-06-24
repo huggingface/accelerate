@@ -68,7 +68,7 @@ if is_deepspeed_available():
         DummyScheduler,
     )
 
-if is_tpu_available():
+if is_tpu_available(check_device=False):
     import torch_xla.distributed.xla_multiprocessing as xmp
 
 logger = get_logger(__name__)

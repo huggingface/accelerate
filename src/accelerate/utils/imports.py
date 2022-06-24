@@ -38,12 +38,7 @@ except ImportError:
 try:
     import torch_xla.core.xla_model as xm  # noqa: F401
 
-    try:
-        # Will raise a RuntimeError if no XLA configuration is found
-        _ = xm.xla_device()
-        _tpu_available = True
-    except RuntimeError:
-        _tpu_available = False
+    _tpu_available = True
 except ImportError:
     _tpu_available = False
 
@@ -56,8 +51,15 @@ def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
-def is_tpu_available():
-    "Checks if `torch_xla` is installed and if a TPU is in the environment"
+def is_tpu_available(check_device=True):
+    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
+    if _tpu_available and check_device:
+        try:
+            # Will raise a RuntimeError if no XLA configuration is found
+            _ = xm.xla_device()
+            return True
+        except RuntimeError:
+            return False
     return _tpu_available
 
 

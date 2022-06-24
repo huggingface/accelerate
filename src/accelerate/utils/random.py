@@ -23,7 +23,7 @@ from .dataclasses import DistributedType, RNGType
 from .imports import is_tpu_available
 
 
-if is_tpu_available():
+if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 

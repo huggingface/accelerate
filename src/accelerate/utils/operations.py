@@ -29,7 +29,7 @@ from .imports import is_tpu_available
 from .versions import is_torch_version
 
 
-if is_tpu_available():
+if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
