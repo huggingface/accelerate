@@ -51,7 +51,7 @@ def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
-def is_tpu_available(check_device=False):
+def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if _tpu_available and check_device:
         try:
@@ -77,7 +77,7 @@ def is_deepspeed_available():
 
 def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
-    if is_tpu_available():
+    if is_tpu_available(check_device=False):
         return not ignore_tpu
     if is_torch_version(">=", "1.10"):
         if torch.cuda.is_available():

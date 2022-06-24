@@ -20,7 +20,7 @@ import torch
 from .utils import DistributedType, is_ccl_available, is_deepspeed_available, is_tpu_available
 
 
-if is_tpu_available():
+if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 

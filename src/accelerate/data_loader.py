@@ -34,7 +34,7 @@ from .utils import (
 )
 
 
-if is_tpu_available():
+if is_tpu_available(check_device=False):
     import torch_xla.distributed.parallel_loader as xpl
 
 
