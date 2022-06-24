@@ -13,5 +13,6 @@ jobs:
     with:
       commit_sha: ${{ github.sha }}
       package: accelerate
+      additional_args: yes
     secrets:
       token: ${{ secrets.HUGGINGFACE_PUSH }}
