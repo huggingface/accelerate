@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 # Accelerator
 
 The [`Accelerator`] is the main class provided by 🤗 Accelerate. It serves at the main entrypoint for
-the API. To quickly adapt your script to work on any kind of setup with 🤗 Accelerate juste:
+the API. To quickly adapt your script to work on any kind of setup with 🤗 Accelerate just:
 
 1. Initialize an [`Accelerator`] object (that we will call `accelerator` in the rest of this
    page) as early as possible in your script.
@@ -21,10 +21,10 @@ the API. To quickly adapt your script to work on any kind of setup with 🤗 Acc
 3. (Optional but best practice) Remove all the `.cuda()` or `.to(device)` in your code and let the
    `accelerator` handle device placement for you.
 4. Replace the `loss.backward()` in your code by `accelerator.backward(loss)`.
-5. (Optional, when using distributed evaluation) Gather your predictions and labelsbefore storing them or using them
-   for metric computation using [`~Accelerator.gather`].
+5. (Optional, when using distributed evaluation) Gather your predictions and labels before storing them or using
+   them for metric computation using [`~Accelerator.gather`].
 
-This is all what is needed in most cases. For more advanced case or a nicer experience here are the functions you
+This is all that is needed in most cases. For more advanced cases or a nicer experience here are the functions you
 should search for and replace by the corresponding methods of your `accelerator`:
 
 - `print` statements should be replaced by [`~Accelerator.print`] to be only printed once per

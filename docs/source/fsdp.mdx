@@ -18,7 +18,7 @@ To read more about it and the benefits, check out the [Fully Sharded Data Parall
 We have integrated the latest PyTorch's Fully Sharded Data Parallel (FSDP) training feature.
 All you need to do is enable it through the config.
 
-## How it works out the box
+## How it works out of the box
 
 On your machine(s) just run:
 
@@ -57,7 +57,7 @@ use_cpu: false
 accelerate launch examples/nlp_example.py
 ```
 
-Currently, `Accelerate` supports following config through the CLI:
+Currently, `Accelerate` supports the following config through the CLI:
 
 ```bash
 `Sharding Strategy`: [1] FULL_SHARD, [2] SHARD_GRAD_OP
@@ -65,11 +65,11 @@ Currently, `Accelerate` supports following config through the CLI:
 `Offload Params`: Decides Whether to offload parameters and gradients to CPU.
 ```
 
-## Few caveats to be aware of
+## A few caveats to be aware of
 
 - PyTorch FSDP auto wraps sub-modules, flattens the parameters and shards the parameters in place.
   Due to this, any optimizer created before model wrapping gets broken and occupies more memory.
-  Hence, it is highly recommended and efficient to prepare model before creating optimizer.
+  Hence, it is highly recommended and efficient to prepare the model before creating the optimizer.
   `Accelerate` will automatically wrap the model and create an optimizer for you in case of single model with a warning message.
   > FSDP Warning: When using FSDP, it is efficient and recommended to call prepare for the model before creating the optimizer
 
@@ -91,14 +91,14 @@ optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr)
 
 ```
 
-- In case of a single model, if you have created optimizer with multiple parameter groups and called prepare with them together,
+- In case of a single model, if you have created the optimizer with multiple parameter groups and called prepare with them together,
   then the parameter groups will be lost and the following warning is displayed:
   > FSDP Warning: When using FSDP, several parameter groups will be conflated into
   > a single one due to nested module wrapping and parameter flattening.
   
-  This is because parameter groups created before wrapping will have no meaning post wrapping due parameter flattening of nested FSDP modules into 1D arrays (which can consume many layers).
-  For instance, below are the named parameters of FSDP model on GPU 0 (When using 2 GPUs. Around 55M (110M/2) params in 1D arrays as this will have the 1st shard of the parameters). 
-  Here, if one has applied no weight decay for [bias, LayerNorm.weight] named parameters of unwrapped BERT model, 
+  This is because parameter groups created before wrapping will have no meaning post wrapping due to parameter flattening of nested FSDP modules into 1D arrays (which can consume many layers).
+  For instance, below are the named parameters of an FSDP model on GPU 0 (When using 2 GPUs. Around 55M (110M/2) params in 1D arrays as this will have the 1st shard of the parameters). 
+  Here, if one has applied no weight decay for [bias, LayerNorm.weight] the named parameters of an unwrapped BERT model, 
   it can't be applied to the below FSDP wrapped model as there are no named parameters with either of those strings and 
   the parameters of those layers are concatenated with parameters of various other layers.
   ```
@@ -110,7 +110,7 @@ optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr)
   ```
 
 
-- In case of multiple models, it is necessary to prepare the models before creating optimizers else it will throw an error.
+- In case of multiple models, it is necessary to prepare the models before creating optimizers or else it will throw an error.
 - Mixed precision is currently not supported with FSDP.
 
 For more control, users can leverage the `FullyShardedDataParallelPlugin` wherein they can specify `auto_wrap_policy`, `backward_prefetch` and `ignored_modules`.
