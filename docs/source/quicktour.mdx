@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Quick tour
 
-Let's have a look at a look at 🤗 Accelerate main features and traps to avoid.
+Let's have a look at the 🤗 Accelerate main features and traps to avoid.
 
 ## Main use
 
@@ -54,7 +54,7 @@ model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
 )
 ```
 
-In particular, your training dataloader will be sharded accross all GPUs/TPU cores available so that each one sees a
+In particular, your training dataloader will be sharded across all GPUs/TPU cores available so that each one sees a
 different portion of the training dataset. Also, the random states of all processes will be synchronized at the
 beginning of each iteration through your dataloader, to make sure the data is shuffled the same way (if you decided to
 use `shuffle=True` or any kind of random sampler).
@@ -118,7 +118,7 @@ method:
 validation_dataloader = accelerator.prepare(validation_dataloader)
 ```
 
-Like for your training dataloader, it will mean that (should you run your script on multiple devices) each device will
+As for your training dataloader, it will mean that (should you run your script on multiple devices) each device will
 only see part of the evaluation data. This means you will need to group your predictions together. This is very easy to
 do with the [`~Accelerator.gather`] method.
 
@@ -134,8 +134,8 @@ for inputs, targets in validation_dataloader:
 
 <Tip warning={true}>
 
-Like for the training dataloader, passing your validation dataloader through
-[`~Accelerator.prepare`] may change its: if you run on X GPUs, it will have its length divided by X
+As for the training dataloader, passing your validation dataloader through
+[`~Accelerator.prepare`] may change it: if you run on X GPUs, it will have its length divided by X
 (since your actual batch size will be multiplied by X), unless you set `split_batches=True`.
 
 Any instruction using your training dataloader length (for instance if you need the number of total training steps
@@ -159,7 +159,7 @@ PyTorch), they are fully compatible with 🤗 Accelerate. The only caveat here i
 to determine all useful information, so `torch.distributed.launch` should be used with the flag `--use_env`.
 
 🤗 Accelerate also provides a CLI tool that unifies all launcher, so you only have to remember one command. To use it,
-just run
+just run:
 
 ```bash
 accelerate config
@@ -175,7 +175,7 @@ on your machine and reply to the questions asked. This will save a *default_conf
 
 You can also specify with the flag `--config_file` the location of the file you want to save.
 
-Once this is done, you can test everything is going well on your setup by running
+Once this is done, you can test everything is going well on your setup by running:
 
 ```bash
 accelerate test
@@ -235,14 +235,14 @@ step). This is why your first step of training will always be very long as build
 optimizations takes some time.
 
 The good news is that this compilation will be cached so the second step and all the following will be much faster. The
-bas news is that it only applies if all of your steps do exactly the same operations, which implies:
+bad news is that it only applies if all of your steps do exactly the same operations, which implies:
 
 - having all tensors of the same length in all your lengths
 - having static code (i.e., not a for loop of length that could change from step to step)
 
 Having any of the things above change between two steps will trigger a new compilation which will, once again, take a
 lot of time. In practice, that means you must take special care to have all your tensors in your inputs of the same
-shape (so no dynamic padding for instance if you are in an NLP problem) and should not use layer with for loops that
+shape (so no dynamic padding for instance if you are in an NLP problem) and should not use layers with for loops that
 have different lengths depending on the inputs (such as an LSTM) or the training will be excruciatingly slow.
 
 To introduce special behavior in your script for TPUs you can check the `distributed_type` of your
@@ -257,10 +257,10 @@ else:
     # go crazy and be dynamic
 ```
 
-The [NLP example](https://github.com/huggingface/accelerate/blob/main/examples/nlp_example.py) shows an example in
+The [NLP example](https://github.com/huggingface/accelerate/blob/main/examples/nlp_example.py) shows an example in a 
 situation with dynamic padding.
 
-One last thing to pay close attnetion to: if your model has tied weights (such as language models which tie the weights
+One last thing to pay close attention to: if your model has tied weights (such as language models which tie the weights
 of the embedding matrix with the weights of the decoder), moving this model to the TPU (either yourself or after you
 passed your model to [`~Accelerator.prepare`]) will break the tying. You will need to retie the weights
 after. You can find an example of this in the [run_clm_no_trainer](https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_clm.py) script in
@@ -317,8 +317,8 @@ following line in your code:
 accelerator.wait_for_everyone()
 ```
 
-This instruction will block all the processes that arrive them first until all the other processes have reached that
-point (if you run your script on just one GPU or CPU, this wont' do anything).
+This instruction will block all the processes that arrive first until all the other processes have reached that
+point (if you run your script on just one GPU or CPU, this won't do anything).
 
 
 ### Saving/loading a model
@@ -338,7 +338,7 @@ unwrapped_model = accelerator.unwrap_model(model)
 accelerator.save(unwrapped_model.state_dict(), filename)
 ```
 
-If your script contains a logic to load checkpoint, we also recommend you load your weights in the unwrapped model
+If your script contains logic to load a checkpoint, we also recommend you load your weights in the unwrapped model
 (this is only useful if you use the load function after making your model go through
 [`~Accelerator.prepare`]). Here is an example:
 
@@ -368,7 +368,7 @@ and `accelerator.clip_grad_value_` respectively.
 
 ### Mixed Precision training
 
-If you are running your training in Mixed Precision with Accelerate, you will get the best result with your loss being
+If you are running your training in Mixed Precision with 🤗 Accelerate, you will get the best result with your loss being
 computed inside your model (like in Transformer models for instance). Every computation outside of the model will be
 executed in full precision (which is generally what you want for loss computation, expecially if it involves a
 softmax). However you might want to put your loss computation inside the *accelerator.autocast* context manager:
@@ -438,14 +438,14 @@ The random number generator synchronization will by default synchronize:
 - the main random number generator in PyTorch <=1.5.1
 
 You can choose which random number generator(s) to synchronize with the `rng_types` argument of the main
-[`Accelerator`]. In PyTorch >= 1.6, it is recommended to rely on local `generator` to avoid
+[`Accelerator`]. In PyTorch >= 1.6, it is recommended to rely on a local `generator` to avoid
 setting the same seed in the main random number generator in all processes.
 
 <Tip warning={true}>
 
-Synchronization the main torch (or CUDA or XLA) random number generator will affect any other potential random
-artifacts you could have in your dataset (like random data augmentation) in the sense all processes will get the
-same random numbers from the torch random modules (so will apply the same random data augmentation if it's
+Synchronization of the main torch (or CUDA or XLA) random number generator will affect any other potential random
+artifacts you could have in your dataset (like random data augmentation) in the sense that all processes will get
+the same random numbers from the torch random modules (so will apply the same random data augmentation if it's
 controlled by torch).
 
 </Tip>
@@ -457,4 +457,4 @@ The randomization part of your custom sampler, batch sampler or iterable dataset
 
 </Tip>
 
-See more details about the internal in the [Internals page](internal).
+For more details about the internals, see the [Internals page](internal).
