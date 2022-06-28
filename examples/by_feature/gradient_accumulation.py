@@ -110,10 +110,11 @@ def training_function(config, args):
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
     # New Code #
-    if accelerator.distributed_type != DistributedType.TPU:
-        gradient_accumulation_steps = int(args.gradient_accumulation_steps)
-    else:
-        gradient_accumulation_steps = 1
+    gradient_accumulation_steps = int(args.gradient_accumulation_steps)
+    if accelerator.distributed_type == DistributedType.TPU and gradient_accumulation_steps > 1:
+        raise NotImplementedError(
+            "Gradient accumulation on TPUs is currently not supported. Pass `gradient_accumulation_steps=1`"
+        )
 
     metric = evaluate.load("glue", "mrpc")
 
