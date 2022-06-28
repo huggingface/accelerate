@@ -146,7 +146,7 @@ def training_function(config, args):
             loss = outputs.loss
             loss = loss / gradient_accumulation_steps
             accelerator.backward(loss)
-            # We currently do not support nor recommend gradient accumulation on the TPU as bugs were found in our code
+            # We currently do not support nor recommend gradient accumulation on the TPU as bugs were found on the XLA side when running our tests
             if step % gradient_accumulation_steps == 0 or accelerator.distributed_type == DistributedType.TPU:
                 optimizer.step()
                 lr_scheduler.step()

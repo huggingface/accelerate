@@ -196,7 +196,8 @@ def training_function(config, args):
             if args.with_tracking:
                 total_loss += loss.detach().float()
             accelerator.backward(loss)
-            if step % gradient_accumulation_steps == 0:
+            # We currently do not support nor recommend gradient accumulation on the TPU as bugs were found on the XLA side when running our tests
+            if step % gradient_accumulation_steps == 0 or accelerator.distributed_type == DistributedType.TPU:
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
