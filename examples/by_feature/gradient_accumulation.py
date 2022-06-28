@@ -111,6 +111,10 @@ def training_function(config, args):
     batch_size = int(config["batch_size"])
     # New Code #
     gradient_accumulation_steps = int(args.gradient_accumulation_steps)
+    if accelerator.distributed_type == DistributedType.TPU and gradient_accumulation_steps > 1:
+        raise NotImplementedError(
+            "Gradient accumulation on TPUs is currently not supported. Pass `gradient_accumulation_steps=1`"
+        )
 
     metric = evaluate.load("glue", "mrpc")
 
@@ -151,6 +155,7 @@ def training_function(config, args):
             # We use the new `no_sync` context manager to prevent gradient averaging
             # until we want to at the proper step if we happen to be in a distributed setup
             # otherwise it does nothing
+            # We also currently do not support TPUs nor advise it as bugs were found on the XLA side when running our tests.
             if step % gradient_accumulation_steps != 0:
                 # Accumulate gradients locally
                 with accelerator.no_sync(model):
