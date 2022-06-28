@@ -112,11 +112,8 @@ def training_function(config, args):
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking:
         if accelerator.is_main_process:
-            run = os.path.split(__file__)[-1].split(".")[0]
-            if args.logging_dir:
-                run = os.path.join(args.logging_dir, run)
-                accelerator.print(run)
-            accelerator.init_trackers(run, config)
+            experiment_config = vars(args)
+            accelerator.init_trackers("fsdp_glue_no_trainer", experiment_config)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     datasets = load_dataset("glue", "mrpc")
