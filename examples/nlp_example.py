@@ -105,7 +105,7 @@ def training_function(config, args):
 
     # If the batch size is too big we use gradient accumulation
     gradient_accumulation_steps = 1
-    if batch_size > MAX_GPU_BATCH_SIZE:
+    if batch_size > MAX_GPU_BATCH_SIZE and accelerator.distributed_type != DistributedType.TPU:
         gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
         batch_size = MAX_GPU_BATCH_SIZE
 
@@ -146,7 +146,8 @@ def training_function(config, args):
             loss = outputs.loss
             loss = loss / gradient_accumulation_steps
             accelerator.backward(loss)
-            if step % gradient_accumulation_steps == 0:
+            # We currently do not support nor recommend gradient accumulation on the TPU as bugs were found in our code
+            if step % gradient_accumulation_steps == 0 or accelerator.distributed_type == DistributedType.TPU:
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
