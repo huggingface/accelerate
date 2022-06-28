@@ -22,7 +22,7 @@ extras["test"] = [
     "pytest",
     "pytest-xdist",
     "pytest-subtests",
-    "datasets",
+    "datasets<=2.2.2",
     "evaluate",
     "transformers",
     "scipy",
