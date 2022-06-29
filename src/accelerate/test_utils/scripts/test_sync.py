@@ -181,6 +181,8 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
+        model.train()
+        ddp_model.train()
         step_model(model, input, target, accelerator, False)
         if ((iteration + 1) % 2 == 0) or ((iteration + 1) == 4):
             opt.step()
@@ -197,6 +199,8 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         #assert (accelerator.num_processes*sched.last_epoch) == ddp_sched.scheduler.last_epoch, f'Schedulers were not called the same number of times at iteration {iteration}:\nSched: {sched.last_epoch}\nDDP Sched: {ddp_sched.scheduler.last_epoch}'
 
         with torch.no_grad():
+            ddp_model.eval()
+            model.eval()
             ddp_out = ddp_model(input)
             baseline_out = model(input)
             # if not torch.allclose(ddp_out, baseline_out):
