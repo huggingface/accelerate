@@ -25,11 +25,11 @@ from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, set_seed
 
 
-def step_model(model, input, target, accelerator):
+def step_model(model, input, target, accelerator, do_backward=True):
     model.train()
     output = model(input)
     loss = F.mse_loss(output, target.to(output.device))
-    if not accelerator:
+    if not do_backward:
         loss /= accelerator.gradient_accumulation_steps
         loss.backward()
     else:
@@ -127,7 +127,7 @@ def test_gradient_accumulation(accelerator):
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
-        step_model(model, input, target, False)
+        step_model(model, input, target, accelerator, False)
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model, [0, 1, 2]):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
@@ -167,7 +167,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(accelerator):
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
-        step_model(model, input, target, accelerator)
+        step_model(model, input, target, accelerator, False)
         opt.step()
         opt.zero_grad()
         # Do training
