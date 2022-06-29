@@ -283,6 +283,8 @@ class Accelerator:
         if self.rng_types is None:
             self.rng_types = ["torch"] if is_torch_version("<=", "1.5.1") else ["generator"]
 
+        self.step = 0
+
     @property
     def distributed_type(self):
         return self.state.distributed_type
