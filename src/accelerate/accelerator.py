@@ -377,7 +377,6 @@ class Accelerator:
         with context():
             yield
 
-    @property
     def _do_sync(self, dataloader) -> bool:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
         return (self.step % self.gradient_accumulation_steps == 0) or (self.step + 1 == len(dataloader))
