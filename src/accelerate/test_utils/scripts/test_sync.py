@@ -30,7 +30,6 @@ def step_model(model, input, target, accelerator, do_backward=True):
     model.train()
     output = model(input)
     loss = F.mse_loss(output, target.to(output.device))
-    loss = accelerator.gather((loss))
     loss /= accelerator.gradient_accumulation_steps
     if not do_backward:
         print(f'Calculated loss: {loss}')
@@ -188,7 +187,6 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         # Perform our initial ground truth step in non "DDP"
         step_model(model, input, target, accelerator, False)
         if ((iteration + 1) % 2 == 0) or ((iteration + 1) == 4):
-            print(f'Stepping in base script!')
             opt.step()
             sched.step()
             opt.zero_grad()
@@ -199,8 +197,8 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
-        assert opt.state == ddp_opt.state, f'Opt states are not the same at step {iteration}:\nOpt: {opt.state}\nDDP Opt: {ddp_opt.state}'
-        assert sched.last_epoch == ddp_sched.scheduler.last_epoch
+        assert opt._step_count == ddp_opt._step_count, f'Optimizers were not called the same number of times:\nOpt: {opt._step_count}\nDDP Opt: {ddp_opt._step_count}'
+        assert sched.last_epoch == ddp_sched.scheduler.last_epoch, f'Schedulers were not called the same number of times:\nSched: {sched.last_epoch}\nDDP Sched: {ddp_sched.scheduler.last_epoch}'
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
