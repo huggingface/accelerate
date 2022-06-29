@@ -197,10 +197,9 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         assert (accelerator.num_processes*sched.last_epoch) == ddp_sched.scheduler.last_epoch, f'Schedulers were not called the same number of times at iteration {iteration}:\nSched: {sched.last_epoch}\nDDP Sched: {ddp_sched.scheduler.last_epoch}'
 
         with torch.no_grad():
-            ddp_out = accelerator.gather(ddp_model(input))
+            ddp_out = ddp_model(input)
+            ddp_out = accelerator.gather(ddp_out)[:len(ddp_out)//accelerator.num_processes]
             baseline_out = model(input)
-            print(f'DDP Out 1: {ddp_out[:(len(ddp_out)//2)]}')
-            print(f'DDP Out 2: {ddp_out[(len(ddp_out)//2):]}')
             assert torch.allclose(ddp_out[:(len(ddp_out)//2)], baseline_out), f"Wasn't close:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
 
         # Shuffle ddp_input on each iteration
