@@ -384,7 +384,9 @@ class Accelerator:
         if self.gradient_accumulation_steps == 1:
             return True
         if (((self.step + 1) % self.gradient_accumulation_steps) == 0) or ((self.step + 1) == len(dataloader)):
+            print(f'Setting sync to True')
             return True
+        print(f'Setting sync to False')
         return False
 
     @contextmanager
