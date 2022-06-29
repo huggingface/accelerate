@@ -188,10 +188,18 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         opt.step()
         sched.step()
         opt.zero_grad()
-        if iteration % 2 == 0:
-            print(f'Saving states at iteration {iteration}')
-            test_opt_state = deepcopy(opt.state)
-            test_sched_epoch = deepcopy(sched.last_epoch)
+        if iteration == 0:
+            opt_at_zero = deepcopy(opt.state)
+            sched_epoch_at_zero = deepcopy(sched.last_epoch)
+        elif iteration == 1:
+            opt_at_one = deepcopy(opt.state)
+            sched_epoch_at_one = deepcopy(sched.last_epoch)
+        if iteration < 2:
+            test_opt_state = opt_at_zero
+            test_sched_epoch = sched_epoch_at_zero
+        else:
+            test_opt_state = opt_at_one
+            test_sched_epoch = sched_epoch_at_one
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model, [0, 1, 2, 3]):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
