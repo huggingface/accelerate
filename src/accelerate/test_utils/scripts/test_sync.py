@@ -184,23 +184,11 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
-        step_model(model, input, target, accelerator, False)
-        opt.step()
-        sched.step()
-        opt.zero_grad()
-        if iteration == 0:
-            opt_at_zero = deepcopy(opt.state)
-            sched_epoch_at_zero = deepcopy(sched.last_epoch)
-        elif iteration == 1:
-            opt_at_one = deepcopy(opt.state)
-            sched_epoch_at_one = deepcopy(sched.last_epoch)
-        print(f'Opt Zero at {iteration}: {opt_at_zero}')
-        if iteration < 2:
-            test_opt_state = opt_at_zero
-            test_sched_epoch = sched_epoch_at_zero
-        else:
-            test_opt_state = opt_at_one
-            test_sched_epoch = sched_epoch_at_one
+        if iteration % 2 == 0:
+            step_model(model, input, target, accelerator, False)
+            opt.step()
+            sched.step()
+            opt.zero_grad()
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model, [0, 1, 2, 3]):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
@@ -208,34 +196,19 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
-        # DDP model and model should only be in sync when not (iteration % 2 == 0)
-        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
-            if not param.requires_grad:
-                continue
-            if iteration % 2 == 0:
-                # Grads should not be in sync
-                assert (
-                    torch.allclose(param.grad, ddp_param.grad) is False
-                ), f"Gradients in sync when they should not be:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
-            else:
-                # Grads should be in sync
-                assert (
-                    torch.allclose(param.grad, ddp_param.grad) is True
-                ), f"Gradients not in sync when they should be:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
-
         # DDP schedule and DDP optimizer should only be in sync when not (iteration % 2 == 0)
         if iteration % 2 == 0:
             # States should not be in sync
             assert (
-                test_opt_state != ddp_opt.state
+                opt.state != ddp_opt.state
             ), f"Optimizer states are in sync when they should not be at step {iteration}:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
-            assert test_sched_epoch != ddp_sched.scheduler.last_epoch
+            assert sched.last_epoch != ddp_sched.scheduler.last_epoch
         else:
             # States should be in sync
             assert (
-                test_opt_state == ddp_opt.state
+                opt.state == ddp_opt.state
             ), f"Optimizer states are not in sync when they should be at step {iteration}:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
-            assert test_sched_epoch == ddp_sched.scheduler.last_epoch
+            assert sched.last_epoch == ddp_sched.scheduler.last_epoch
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
