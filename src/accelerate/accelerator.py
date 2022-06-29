@@ -405,16 +405,17 @@ class Accelerator:
         if self._do_sync(dataloader):
             context = contextlib.nullcontext
             self.print(f"Setting state to True")
-            self.state._set_state("sync", True)
+            AcceleratorState._set_state("sync", True)
         else:
             context = self.no_sync
             self.print(f"Setting state to False")
-            self.state._set_state("sync", False)
+            AcceleratorState._set_state("sync", False)
+        self.state = AcceleratorState()
         self.print((
-            f'Self state: {self.state}\n'
-            f'AcceleratorState: {AcceleratorState()}\n'
-            f'Context: {context}\n'
-            f'Step: {self.step}\n'
+            f'**Self state**:\n{self.state}\n'
+            f'**AcceleratorState**:\n{AcceleratorState()}\n'
+            f'**Context**:\n{context}\n'
+            f'**Step**:\n{self.step}\n'
 
         ))
         with context(model):
