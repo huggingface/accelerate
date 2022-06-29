@@ -29,7 +29,7 @@ def step_model(model, input, target, accelerator):
     model.train()
     output = model(input)
     loss = F.mse_loss(output, target.to(output.device))
-    accelerator.backward(loss)
+    accelerator.backward(loss) if accelerator else loss.backward()
 
 
 def get_training_setup(accelerator):
@@ -123,7 +123,7 @@ def test_gradient_accumulation(accelerator):
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
-        step_model(model, input, target, accelerator)
+        step_model(model, input, target, False)
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model, [0, 1, 2]):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
