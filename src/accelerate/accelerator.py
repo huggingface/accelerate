@@ -384,7 +384,6 @@ class Accelerator:
         if self.gradient_accumulation_steps == 1:
             return True
         elif self.step == (len(dataloader) - 1):
-            print("Hit end of dataloader")
             self.step = 0
             return True
         elif (self.step+1) % self.gradient_accumulation_steps == 0:
