@@ -214,11 +214,11 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         if iteration % 2 == 0:
             # States should not be in sync
             assert opt.state != ddp_opt.state
-            assert sched.last_epoch != ddp_sched.last_epoch
+            assert sched.last_epoch != ddp_sched.scheduler.last_epoch
         else:
             # States should be in sync
             assert opt.state == ddp_opt.state
-            assert sched.last_epoch == ddp_sched.last_epoch
+            assert sched.last_epoch == ddp_sched.scheduler.last_epoch
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
