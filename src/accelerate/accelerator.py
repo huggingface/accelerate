@@ -775,6 +775,7 @@ class Accelerator:
     def backward(self, loss, **kwargs):
         """
         Use `accelerator.backward(loss)` in lieu of `loss.backward()`.
+        Will also take into account dividing for gradient accumulation
         """
         loss /= self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:
