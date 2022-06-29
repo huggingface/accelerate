@@ -189,7 +189,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         opt.step()
         sched.step()
         opt.zero_grad()
-        if iteration % 2 != 0:
+        if iteration % 2 == 0:
             test_opt_state = opt.state
             test_sched_epoch = sched.last_epoch
         # Do "gradient accumulation" (noop)
