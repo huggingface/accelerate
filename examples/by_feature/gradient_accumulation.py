@@ -156,19 +156,15 @@ def training_function(config, args):
             # until we want to at the proper step if we happen to be in a distributed setup
             # otherwise it does nothing
             # We also currently do not support TPUs nor advise it as bugs were found on the XLA side when running our tests.
-            if step % gradient_accumulation_steps != 0:
-                # Accumulate gradients locally
-                with accelerator.no_sync(model):
-                    output = model(**batch)
-                    loss = output.loss / gradient_accumulation_steps
-                    accelerator.backward(loss)
-            else:
-                # Sync gradients and step
+            with accelerator.accumulate(model):
                 output = model(**batch)
-                loss = output.loss / gradient_accumulation_steps
+                loss = output.loss
+                # Check if in ctx mgr & see if I have access to that
                 accelerator.backward(loss)
+                # Interensic check accelerator.n_steps
                 optimizer.step()
-                lr_scheduler.step()
+                # Can call lr_scheduler.step() when optimizer.step() is done
+                # lr_scheduler.step()
                 optimizer.zero_grad()
 
         model.eval()

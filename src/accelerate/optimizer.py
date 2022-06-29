@@ -101,37 +101,39 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         return self.optimizer.state_dict()
 
     def zero_grad(self, set_to_none=None):
-        if is_torch_version("<", "1.7.0"):
-            if set_to_none is not None:
-                raise ValueError(
-                    "`set_to_none` for Optimizer.zero_grad` was introduced in PyTorch 1.7.0 and can't be used for "
-                    f"earlier versions (found version {torch.__version__})."
-                )
-            self.optimizer.zero_grad()
-        else:
-            accept_arg = "set_to_none" in inspect.signature(self.optimizer.zero_grad).parameters
-            if accept_arg:
-                if set_to_none is None:
-                    set_to_none = False
-                self.optimizer.zero_grad(set_to_none=set_to_none)
-            else:
+        if self.accelerator_state.sync_gradients:
+            if is_torch_version("<", "1.7.0"):
                 if set_to_none is not None:
-                    raise ValueError("`set_to_none` for Optimizer.zero_grad` is not supported by this optimizer.")
+                    raise ValueError(
+                        "`set_to_none` for Optimizer.zero_grad` was introduced in PyTorch 1.7.0 and can't be used for "
+                        f"earlier versions (found version {torch.__version__})."
+                    )
                 self.optimizer.zero_grad()
+            else:
+                accept_arg = "set_to_none" in inspect.signature(self.optimizer.zero_grad).parameters
+                if accept_arg:
+                    if set_to_none is None:
+                        set_to_none = False
+                    self.optimizer.zero_grad(set_to_none=set_to_none)
+                else:
+                    if set_to_none is not None:
+                        raise ValueError("`set_to_none` for Optimizer.zero_grad` is not supported by this optimizer.")
+                    self.optimizer.zero_grad()
 
     def step(self, closure=None):
-        if self.accelerator_state.distributed_type == DistributedType.TPU:
-            optimizer_args = {"closure": closure} if closure is not None else {}
-            xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)
-        elif self.scaler is not None:
-            scale_before = self.scaler.get_scale()
-            self.scaler.step(self.optimizer, closure)
-            self.scaler.update()
-            scale_after = self.scaler.get_scale()
-            # If we reduced the loss scale, it means the optimizer step was skipped because of gradient overflow.
-            self._is_overflow = scale_after < scale_before
-        else:
-            self.optimizer.step(closure)
+        if self.accelerator_state.sync_gradients:
+            if self.accelerator_state.distributed_type == DistributedType.TPU:
+                optimizer_args = {"closure": closure} if closure is not None else {}
+                xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)
+            elif self.scaler is not None:
+                scale_before = self.scaler.get_scale()
+                self.scaler.step(self.optimizer, closure)
+                self.scaler.update()
+                scale_after = self.scaler.get_scale()
+                # If we reduced the loss scale, it means the optimizer step was skipped because of gradient overflow.
+                self._is_overflow = scale_after < scale_before
+            else:
+                self.optimizer.step(closure)
 
     def _switch_parameters(self, parameters_map):
         for param_group in self.optimizer.param_groups:

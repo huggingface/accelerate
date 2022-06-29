@@ -92,6 +92,9 @@ class Accelerator:
             default to the value in the environment variable `MIXED_PRECISION`, which will use the default value in the
             accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
             requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+        gradient_accumulation_steps (`int`, *optional*):
+            The number of steps that should pass before gradients are accumulated. Should be combined with
+            `Accelerator.accumulate`
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
@@ -146,6 +149,7 @@ class Accelerator:
         split_batches: bool = False,
         fp16: bool = None,
         mixed_precision: Union[PrecisionType, str] = None,
+        gradient_accumulation_steps: int = 1,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
@@ -230,6 +234,12 @@ class Accelerator:
             _from_accelerator=True,
             **kwargs,
         )
+
+        if gradient_accumulation_steps > 1 and self.state.distributed_type == DistributedType.TPU:
+            raise NotImplementedError(
+                "Gradient accumulation on TPU is not supported. Pass in `gradient_accumulation_steps=1`"
+            )
+        self.gradient_accumulation_steps = gradient_accumulation_steps
 
         self.device_placement = device_placement
         self.split_batches = split_batches
@@ -366,6 +376,38 @@ class Accelerator:
 
         with context():
             yield
+
+    @property
+    def _do_sync(self, dataloader) -> bool:
+        "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
+        return (self.step % self.gradient_accumulation_steps == 0) or (self.step + 1 == len(dataloader))
+
+    @contextmanager
+    def accumulate(self, model, dataloader):
+        """
+        A context manager that will lightly wrap around and perform gradient accumulation automatically
+
+        Args:
+            model (`torch.nn.Module`):
+                PyTorch Module that was prepared with `Accelerator.prepare`
+            dataloader (`torch.utils.DataLoader`)
+                PyTorch DataLoader that was prepared with `Accelerator.prepare`
+        """
+
+        if self._do_sync(dataloader):
+            context = contextlib.nullcontext
+            AcceleratorState._set_state("sync", True)
+        else:
+            context = self.no_sync
+            AcceleratorState._set_state("sync", False)
+
+        with context(model):
+            yield
+
+        if self._do_sync(dataloader):
+            self.step = 0
+        else:
+            self.step += 1
 
     def print(self, *args, **kwargs):
         """
@@ -734,6 +776,7 @@ class Accelerator:
         """
         Use `accelerator.backward(loss)` in lieu of `loss.backward()`.
         """
+        loss /= self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:
             self.deepspeed_engine_wrapped.backward(loss, **kwargs)
         elif self.scaler is not None:

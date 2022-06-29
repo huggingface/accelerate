@@ -52,6 +52,7 @@ class AcceleratorState:
     Attributes:
 
         - **device** (`torch.device`) -- The device to use.
+        - **sync_gradients** (`bool`) -- Whether to sync the gradients or not
         - **distributed_type** (`~accelerate.state.DistributedType`) -- The type of distributed environment currently
           in use.
         - **num_processes** (`int`) -- The number of processes currently launched in parallel.
@@ -75,6 +76,7 @@ class AcceleratorState:
         self.__dict__ = self._shared_state
         if parse_flag_from_env("USE_CPU"):
             cpu = True
+        self.sync_gradients = True
         self._check_initialized(mixed_precision, cpu)
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
@@ -200,6 +202,11 @@ class AcceleratorState:
     def _reset_state():
         "Resets `_shared_state`, is used internally and should not be called"
         AcceleratorState._shared_state = {}
+
+    @staticmethod
+    def _set_state(key, val):
+        "Sets `key` to `val` in AcceleratorState"
+        AcceleratorState._shared_state[key] = val
 
     def _check_initialized(self, mixed_precision=None, cpu=None):
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"

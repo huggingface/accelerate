@@ -16,6 +16,8 @@ from copy import deepcopy
 
 import torch
 import torch.nn.functional as F
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
@@ -113,6 +115,92 @@ def test_distributed_sync(accelerator):
         ddp_input = ddp_input[torch.randperm(16)]
 
 
+def test_gradient_accumulation(accelerator):
+    # Test that context manager behaves properly
+    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
+    for iteration in range(3):
+        # Gather the distributed inputs and targs for the base model
+        input, target = accelerator.gather((ddp_input, ddp_target))
+        input, target = input.to(accelerator.device), target.to(accelerator.device)
+        # Perform our initial ground truth step in non "DDP"
+        step_model(model, input, target, accelerator)
+        # Do "gradient accumulation" (noop)
+        with accelerator.accumulate(ddp_model, [0, 1, 2]):
+            step_model(ddp_model, ddp_input, ddp_target, accelerator)
+
+        # DDP model and model should only be in sync when not (iteration % 2 == 0)
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            if iteration % 2 == 0:
+                # Grads should not be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is False
+                ), f"Gradients in sync when they should not be:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
+            else:
+                # Grads should be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is True
+                ), f"Gradients not in sync when they should be:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+
+        # Shuffle ddp_input on each iteration
+        torch.manual_seed(1337 + iteration)
+        ddp_input = ddp_input[torch.randperm(16)]
+
+
+def test_gradient_accumulation_with_opt_and_scheduler(accelerator):
+    # Test that context manager behaves properly
+    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
+    opt = AdamW(params=model.parameters(), lr=1e-3)
+    ddp_opt = AdamW(params=ddp_model.parameters(), lr=1e-3)
+    sched = LambdaLR(opt, lr_lambda=lambda epoch: 0.65**epoch)
+    ddp_sched = LambdaLR(opt, lr_lambda=lambda epoch: 0.65**epoch)
+
+    ddp_opt, ddp_sched = accelerator.prepare(ddp_opt, ddp_sched)
+
+    for iteration in range(3):
+        # Gather the distributed inputs and targs for the base model
+        input, target = accelerator.gather((ddp_input, ddp_target))
+        input, target = input.to(accelerator.device), target.to(accelerator.device)
+        # Perform our initial ground truth step in non "DDP"
+        step_model(model, input, target, accelerator)
+        opt.step()
+        opt.zero_grad()
+        # Do training
+        with accelerator.accumulate(ddp_model, [0, 1, 2]):
+            step_model(ddp_model, ddp_input, ddp_target, accelerator)
+            ddp_opt.step()
+            ddp_opt.zero_grad()
+
+        # DDP model and model should only be in sync when not (iteration % 2 == 0)
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            if iteration % 2 == 0:
+                # Grads should not be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is False
+                ), f"Gradients in sync when they should not be:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
+            else:
+                # Grads should be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is True
+                ), f"Gradients not in sync when they should be:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+
+        # DDP schedule and DDP optimizer should only be in sync when not (iteration % 2 == 0)
+        if iteration % 2 == 0:
+            # States should not be in sync
+            assert opt.state != ddp_opt.state
+            assert sched.last_epoch != ddp_sched.last_epoch
+        else:
+            # States should be in sync
+            assert opt.state == ddp_opt.state
+            assert sched.last_epoch == ddp_sched.last_epoch
+        # Shuffle ddp_input on each iteration
+        torch.manual_seed(1337 + iteration)
+        ddp_input = ddp_input[torch.randperm(16)]
+
+
 def main():
     accelerator = Accelerator()
     state = accelerator.state
@@ -124,6 +212,11 @@ def main():
         if state.local_process_index == 0:
             print("**Distributed `no_sync` gradient accumulation**")
         test_distributed_sync(accelerator)
+    accelerator = Accelerator(gradient_accumulation_steps=2)
+    print("**Test `accumulate` gradient accumulation**")
+    test_gradient_accumulation()
+    print("**Test `accumulate` gradient accumulation with optimizer and scheduler**")
+    test_gradient_accumulation_with_opt_and_scheduler()
 
 
 def _mp_fn(index):
