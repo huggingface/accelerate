@@ -207,10 +207,10 @@ def test_gradient_accumulation_with_opt_and_scheduler():
 def main():
     accelerator = Accelerator()
     state = accelerator.state
-    if state.distributed_type == DistributedType.NO:
-        if state.local_process_index == 0:
-            print("**NOOP `no_sync` gradient accumulation**")
-        test_noop_sync(accelerator)
+    # if state.distributed_type == DistributedType.NO:
+    #     if state.local_process_index == 0:
+    #         print("**NOOP `no_sync` gradient accumulation**")
+    #     test_noop_sync(accelerator)
     if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_CPU):
         if state.local_process_index == 0:
             print("**Distributed `no_sync` gradient accumulation**")
