@@ -385,7 +385,7 @@ class Accelerator:
             return True
         elif self.step == 0: 
             return False
-        self.print(f'Step: {self.step}, N_Steps: {self.gradient_accumulation_steps}\nShould sync: {(self.step % self.gradient_accumulation_steps) == 0}')
+        self.print(f'Step: {self.step}, N_Steps: {self.gradient_accumulation_steps}\nShould sync: {(self.step % self.gradient_accumulation_steps) == 0}\n')
         if (self.step % self.gradient_accumulation_steps) != 0 or (self.step + 1) == len(dataloader):
             return True
         return False
