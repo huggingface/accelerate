@@ -197,8 +197,9 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
-        assert ddp_opt.optimizer._step_count == opt._step_count
-        
+        assert ddp_opt.optimizer._step_count == opt._step_count, f'Optimizers were not called the same number of times:\nOptimizer: {opt._step_count}\nDDP Optimizer: {ddp_opt.optimizer._step_count}'
+        assert ddp_sched.scheduler.last_epoch == sched.last_epoch*2, f'Scheduler was not stepped 2x as much as the base:\nScheduler: {sched.last_epoch}\nDDP: {ddp_sched.scheduler.last_epoch}'
+
         for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
             if not param.requires_grad:
                 continue
