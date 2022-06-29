@@ -385,7 +385,7 @@ class Accelerator:
             return True
         elif self.step == 0:
             return False
-        if (self.step % self.gradient_accumulation_steps) != 0 or (self.step + 1) == len(dataloader):
+        if (self.step + 1) == 0 or (self.step + 1) == len(dataloader):
             return True
         return False
 
