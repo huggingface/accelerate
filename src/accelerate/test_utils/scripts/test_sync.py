@@ -198,7 +198,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
 
         with torch.no_grad():
             ddp_out = ddp_model(input)
-            ddp_out = accelerator.gather(ddp_out)[:len(ddp_out)//accelerator.num_processes]
+            ddp_out = accelerator.gather(ddp_out)
             baseline_out = model(input)
             import pdb; pdb.set_trace()
             print(f'Running iteration: {iteration}')
