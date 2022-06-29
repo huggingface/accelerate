@@ -102,7 +102,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def zero_grad(self, set_to_none=None):
         print(f'Should zero_grad (from optimizer): {self.accelerator_state.sync_gradients}\n')
-        print(f'State ID from Optimizer: {id(AcceleratorState)}')
+        print(f'State ID from Optimizer zero_grad: {id(AcceleratorState._shared_state)}')
         if self.accelerator_state.sync_gradients:
             if is_torch_version("<", "1.7.0"):
                 if set_to_none is not None:
@@ -124,7 +124,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def step(self, closure=None):
         print(f'Should step (from optimizer): {self.accelerator_state.sync_gradients}')
-        print(f'State ID from Optimizer: {id(AcceleratorState._shared_state)}')
+        print(f'State ID from Optimizer step: {id(AcceleratorState._shared_state)}')
         if self.accelerator_state.sync_gradients:
             if self.accelerator_state.distributed_type == DistributedType.TPU:
                 optimizer_args = {"closure": closure} if closure is not None else {}
