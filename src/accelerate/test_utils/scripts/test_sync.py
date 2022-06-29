@@ -150,7 +150,6 @@ def test_gradient_accumulation():
         # Perform our initial ground truth step in non "DDP"
         step_model(model, input, target, accelerator, False)
         # Do "gradient accumulation" (noop)
-        print(f'AcceleratorState at iteration {iteration}, step {accelerator.step} {accelerator.state.sync_gradients}')
         with accelerator.accumulate(ddp_model, [0, 1, 2]):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
 
@@ -188,6 +187,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         ddp_model.train()
         step_model(model, input, target, accelerator, False)
         if ((iteration + 1) % 2 == 0) or (iteration == 3):
+            print(f'Stepped base optimizer and scheduler at step {iteration}')
             opt.step()
             sched.step()
             opt.zero_grad()
@@ -197,9 +197,6 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_opt.step()
             ddp_sched.step()
             ddp_opt.zero_grad()
-
-        #assert (accelerator.num_processes*opt._step_count) == ddp_opt.optimizer._step_count, f'Optimizers were not called the same number of times at iteration {iteration}:\nOpt: {opt._step_count}\nDDP Opt: {ddp_opt.optimizer._step_count}'
-        #assert (accelerator.num_processes*sched.last_epoch) == ddp_sched.scheduler.last_epoch, f'Schedulers were not called the same number of times at iteration {iteration}:\nSched: {sched.last_epoch}\nDDP Sched: {ddp_sched.scheduler.last_epoch}'
 
         with torch.no_grad():
             ddp_model.eval()
