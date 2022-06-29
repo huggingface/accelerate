@@ -199,7 +199,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         with torch.no_grad():
             ddp_out = accelerator.gather(ddp_model(input))
             baseline_out = model(input)
-            print(f'DDP Out: {ddp_out}')
+            print(f'DDP Out: {ddp_out.shape}')
             assert torch.allclose(ddp_out, baseline_out), f"Wasn't close:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
 
         # Shuffle ddp_input on each iteration
