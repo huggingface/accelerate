@@ -409,7 +409,6 @@ class Accelerator:
         else:
             context = self.no_sync
             AcceleratorState._set_state("sync_gradients", False)
-        self.print(f'Using {context} at step {step}')
         with context(model):
             yield
 
