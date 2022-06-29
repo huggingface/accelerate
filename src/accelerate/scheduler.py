@@ -40,7 +40,6 @@ class AcceleratedScheduler:
         self.scheduler = scheduler
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
-        self.accelerator_state = AcceleratorState()
         self.step_with_optimizer = step_with_optimizer
 
     def step(self, *args, **kwargs):
@@ -53,17 +52,16 @@ class AcceleratedScheduler:
         for opt in self.optimizers:
             if opt.step_was_skipped:
                 return
-        if self.accelerator_state.sync_gradients:
-            if self.split_batches:
-                # Split batches -> the training dataloader batch size is not changed so one step per training step
-                self.scheduler.step(*args, **kwargs)
-            else:
-                # Otherwise the training dataloader batch size was multiplied by `num_processes`, so we need to do
-                # num_processes steps per training step
-                for _ in range(self.accelerator_state.num_processes):
-                    # Special case when using OneCycle and `drop_last` was not used
-                    if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch:
-                        self.scheduler.step(*args, **kwargs)
+        if self.split_batches:
+            # Split batches -> the training dataloader batch size is not changed so one step per training step
+            self.scheduler.step(*args, **kwargs)
+        else:
+            # Otherwise the training dataloader batch size was multiplied by `num_processes`, so we need to do
+            # num_processes steps per training step
+            for _ in range(AcceleratorState().num_processes):
+                # Special case when using OneCycle and `drop_last` was not used
+                if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch:
+                    self.scheduler.step(*args, **kwargs)
 
     # Passthroughs
     def get_last_lr(self):

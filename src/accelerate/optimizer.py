@@ -122,6 +122,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def step(self, closure=None):
         if self.accelerator_state.sync_gradients:
+            self._is_accumulating = False
             if self.accelerator_state.distributed_type == DistributedType.TPU:
                 optimizer_args = {"closure": closure} if closure is not None else {}
                 xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)
@@ -134,6 +135,8 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 self._is_overflow = scale_after < scale_before
             else:
                 self.optimizer.step(closure)
+        else:
+            self._is_accumulating = True
 
     def _switch_parameters(self, parameters_map):
         for param_group in self.optimizer.param_groups:
@@ -152,4 +155,4 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     @property
     def step_was_skipped(self):
         """Whether or not the optimizer step was skipped."""
-        return self._is_overflow
+        return self._is_overflow or self._is_accumulating
