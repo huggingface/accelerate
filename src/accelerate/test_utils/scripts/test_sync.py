@@ -198,8 +198,9 @@ def test_gradient_accumulation_with_opt_and_scheduler():
 
         with torch.no_grad():
             ddp_out = ddp_model(input)
-            ddp_out = accelerator.gather(ddp_out)
+            ddp_out = accelerator.gather(ddp_out)[:len(ddp_out)//accelerator.num_processes]
             baseline_out = model(input)
+            import pdb; pdb.set_trace()
             print(f'Running iteration: {iteration}')
             assert torch.allclose(ddp_out, baseline_out), f"Outputs not the same at iteration {iteration}:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
 
