@@ -776,6 +776,7 @@ class Accelerator:
         """
         Use `accelerator.backward(loss)` in lieu of `loss.backward()`.
         """
+        loss /= self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:
             self.deepspeed_engine_wrapped.backward(loss, **kwargs)
         elif self.scaler is not None:
