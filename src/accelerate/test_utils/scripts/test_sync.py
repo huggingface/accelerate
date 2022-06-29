@@ -197,10 +197,10 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_opt.zero_grad()
 
         assert opt._step_count == ddp_opt.optimizer._step_count, f'Optimizers were not called the same number of times at iteration {iteration}:\nOpt: {opt._step_count}\nDDP Opt: {ddp_opt._step_count}'
-        if iteration == 0:
+        if (iteration + 1) % 2 == 0:
             assert sched.last_epoch == ddp_sched.scheduler.last_epoch, f'Schedulers were not called the same number of times at iteration {iteration}:\nSched: {sched.last_epoch}\nDDP Sched: {ddp_sched.scheduler.last_epoch}'
         else:
-            assert sched.last_epoch + 1 == ddp_sched.scheduler.last_epoch, f'Schedulers were not called the same number of times at iteration {iteration}:\nSched: {sched.last_epoch}\nDDP Sched: {ddp_sched.scheduler.last_epoch}'
+            assert sched.last_epoch != ddp_sched.scheduler.last_epoch, f'Schedulers were called the same number of times at iteration {iteration}:\nSched: {sched.last_epoch}\nDDP Sched: {ddp_sched.scheduler.last_epoch}'
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
