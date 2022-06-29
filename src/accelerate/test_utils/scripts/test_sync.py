@@ -143,21 +143,21 @@ def test_gradient_accumulation():
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
     model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
-    for iteration in range(3):
+    for iteration in range(4):
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
         step_model(model, input, target, accelerator, False)
         # Do "gradient accumulation" (noop)
-        with accelerator.accumulate(ddp_model, [0, 1, 2]):
+        with accelerator.accumulate(ddp_model, [0, 1, 2, 3]):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
 
         # DDP model and model should only be in sync when not (iteration % 2 == 0)
         for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
             if not param.requires_grad:
                 continue
-            if ((iteration + 1) % 2 == 0) or (iteration == 2):
+            if ((iteration + 1) % 2 == 0) or (iteration == 3):
                 # Grads should be in sync
                 assert (
                     torch.allclose(param.grad, ddp_param.grad) is True
