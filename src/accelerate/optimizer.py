@@ -101,7 +101,8 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         return self.optimizer.state_dict()
 
     def zero_grad(self, set_to_none=None):
-        print(f'Should zero_grad (from optimizer): {self.accelerator_state.sync_gradients}')
+        print(f'Should zero_grad (from optimizer): {self.accelerator_state.sync_gradients}\n')
+        print(f'New AcceleratorState from optimizer: {AcceleratorState().sync_gradients}\n')
         if self.accelerator_state.sync_gradients:
             if is_torch_version("<", "1.7.0"):
                 if set_to_none is not None:
