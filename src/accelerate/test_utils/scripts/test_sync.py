@@ -196,6 +196,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             print(f'State ID from accelerator: {id(accelerator.state._shared_state)}')
             ddp_opt.step()
             ddp_sched.step()
+            print(f'Should sync (from test before zero_grad): {accelerator.state.sync_gradients}')
             ddp_opt.zero_grad()
 
         # DDP model and model should only be in sync when not (iteration % 2 == 0)
