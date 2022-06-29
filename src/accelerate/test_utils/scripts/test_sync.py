@@ -197,14 +197,27 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
-        with torch.no_grad():
-            ddp_model.eval()
-            model.eval()
-            ddp_out = ddp_model(input)
-            baseline_out = model(input)
-            if ((iteration + 1) % 2 == 0) or (iteration == 0):
-                assert torch.allclose(ddp_out, baseline_out), f"Outputs not the same at iteration {iteration}:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
-
+        # with torch.no_grad():
+        #     ddp_model.eval()
+        #     model.eval()
+        #     ddp_out = ddp_model(input)
+        #     baseline_out = model(input)
+        #     if ((iteration + 1) % 2 == 0) or (iteration == 0):
+        #         assert torch.allclose(ddp_out, baseline_out), f"Outputs not the same at iteration {iteration}:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            if ((iteration + 1) % 2 == 0) or (iteration == 3):
+                # Grads should be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is True
+                ), f"Gradients not in sync when they should be at iteration {iteration}:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+            else:
+                # Grads should not be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is False
+                ), f"Gradients in sync when they should not be at iteration {iteration}:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
+            
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
