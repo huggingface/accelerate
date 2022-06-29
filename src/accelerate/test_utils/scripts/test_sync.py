@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import DistributedType, set_seed
+from accelerate.utils import set_seed
 
 
 def step_model(model, input, target, accelerator, do_backward=True):
@@ -190,9 +190,9 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         opt.zero_grad()
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model, [0, 1, 2]):
-            accelerator.print(f'Iteration: {iteration}\nState: {accelerator.state}\n')
+            accelerator.print(f"Iteration: {iteration}\nState: {accelerator.state}\n")
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
-            print(f'Should sync (from test): {accelerator.state.sync_gradients}')
+            print(f"Should sync (from test): {accelerator.state.sync_gradients}")
             ddp_opt.step()
             ddp_sched.step()
             ddp_opt.zero_grad()
@@ -215,11 +215,15 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         # DDP schedule and DDP optimizer should only be in sync when not (iteration % 2 == 0)
         if iteration % 2 == 0:
             # States should not be in sync
-            assert opt.state != ddp_opt.state
+            assert (
+                opt.state != ddp_opt.state
+            ), f"Optimizer states are in sync when they should not be:\nOpt state ({opt.state}) == DDP Opt state ({ddp_opt.state})"
             assert sched.last_epoch != ddp_sched.scheduler.last_epoch
         else:
             # States should be in sync
-            assert opt.state == ddp_opt.state
+            assert (
+                opt.state == ddp_opt.state
+            ), f"Optimizer states are not in sync when they should be:\nOpt state ({opt.state}) != DDP Opt state ({ddp_opt.state})"
             assert sched.last_epoch == ddp_sched.scheduler.last_epoch
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
