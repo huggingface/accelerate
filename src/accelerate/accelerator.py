@@ -401,7 +401,7 @@ class Accelerator:
         else:
             context = self.no_sync
             AcceleratorState._set_state("sync", False)
-
+        self.print(f'Current context manager: {context}')
         with context(model):
             yield
 
