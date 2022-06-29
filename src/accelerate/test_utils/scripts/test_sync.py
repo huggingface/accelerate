@@ -192,6 +192,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         with accelerator.accumulate(ddp_model, [0, 1, 2]):
             accelerator.print(f'Iteration: {iteration}\nState: {accelerator.state}\n')
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
+            accelerator.print(f'Should sync (from test): {accelerator.state.sync_gradients}')
             ddp_opt.step()
             ddp_sched.step()
             ddp_opt.zero_grad()
