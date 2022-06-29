@@ -383,7 +383,7 @@ class Accelerator:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
         if self.gradient_accumulation_steps == 1:
             return True
-        if self.step % self.gradient_accumulation_steps != 0 or self.step + 1 == len(dataloader):
+        if self.step % self.gradient_accumulation_steps == 0 or self.step + 1 == len(dataloader):
             return True
         return False
 
