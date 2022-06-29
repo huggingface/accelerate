@@ -124,7 +124,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def step(self, closure=None):
         print(f'Should step (from optimizer): {self.accelerator_state.sync_gradients}')
-        print(f'State ID from Optimizer: {id(AcceleratorState)}')
+        print(f'State ID from Optimizer: {id(AcceleratorState._shared_state)}')
         if self.accelerator_state.sync_gradients:
             if self.accelerator_state.distributed_type == DistributedType.TPU:
                 optimizer_args = {"closure": closure} if closure is not None else {}
