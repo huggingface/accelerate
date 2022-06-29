@@ -383,7 +383,7 @@ class Accelerator:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
         if self.gradient_accumulation_steps == 1:
             return True
-        elif self.step == len(dataloader) - 1:
+        elif self.step == (len(dataloader) - 1):
             self.step = 0
             return True
         elif (self.step+1) % self.gradient_accumulation_steps == 0:
@@ -402,7 +402,6 @@ class Accelerator:
             dataloader (`torch.utils.DataLoader`)
                 PyTorch DataLoader that was prepared with `Accelerator.prepare`
         """
-        step = self.step
         if self._do_sync(dataloader):
             context = contextlib.nullcontext
             AcceleratorState._set_state("sync_gradients", True)
