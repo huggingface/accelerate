@@ -405,6 +405,7 @@ class Accelerator:
         else:
             context = self.no_sync
             AcceleratorState._set_state("sync", False)
+        self.print(f'Context: {context}\nStep: {self.step}')
         with context(model):
             yield
 
