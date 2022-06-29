@@ -383,8 +383,8 @@ class Accelerator:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
         if self.gradient_accumulation_steps == 1:
             return True
-        self.print(f'Step: {self.step}, N_Steps: {self.gradient_accumulation_steps}')
-        if (self.step % self.gradient_accumulation_steps == 0) or (self.step + 1 == len(dataloader)):
+        self.print(f'Step: {self.step}, N_Steps: {self.gradient_accumulation_steps}\nShould sync: {(self.step % self.gradient_accumulation_steps) == 0}')
+        if ((self.step % self.gradient_accumulation_steps) == 0) or (self.step + 1 == len(dataloader)):
             return True
         return False
 
