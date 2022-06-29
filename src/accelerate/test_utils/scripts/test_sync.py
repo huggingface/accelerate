@@ -160,7 +160,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
     opt = AdamW(params=model.parameters(), lr=1e-3)
     ddp_opt = AdamW(params=ddp_model.parameters(), lr=1e-3)
     sched = LambdaLR(opt, lr_lambda=lambda epoch: 0.65**epoch)
-    ddp_sched = LambdaLR(opt, lr_lambda=lambda epoch: 0.65**epoch)
+    ddp_sched = LambdaLR(ddp_opt, lr_lambda=lambda epoch: 0.65**epoch)
 
     ddp_opt, ddp_sched = accelerator.prepare(ddp_opt, ddp_sched)
 
