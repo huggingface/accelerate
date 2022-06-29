@@ -194,6 +194,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         elif iteration == 1:
             opt_at_one = deepcopy(opt.state)
             sched_epoch_at_one = deepcopy(sched.last_epoch)
+        print(f'Opt Zero at {iteration}: {opt_at_zero}')
         if iteration < 2:
             test_opt_state = opt_at_zero
             test_sched_epoch = sched_epoch_at_zero
