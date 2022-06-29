@@ -197,7 +197,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
-        assert opt.state == ddp_opt.state
+        assert opt.state == ddp_opt.state, f'Opt states are not the same at step {iteration}:\nOpt: {opt.state}\nDDP Opt: {ddp_opt.state}'
         assert sched.last_epoch == ddp_sched.scheduler.last_epoch
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
