@@ -179,7 +179,6 @@ def test_gradient_accumulation_with_opt_and_scheduler():
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
     model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target = get_training_setup(accelerator, True)
-    print(f'DDP Opt ID: {id(ddp_opt)}\nNon-DDP Opt ID: {id(opt)}')
     for iteration in range(4):
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
@@ -195,9 +194,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             test_sched_epoch = sched.last_epoch
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model, [0, 1, 2, 3]):
-            accelerator.print(f"Iteration: {iteration}\nState: {accelerator.state}\n")
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
-            print(f"Should sync (from test): {accelerator.state.sync_gradients}")
             ddp_opt.step()
             ddp_sched.step()
             ddp_opt.zero_grad()
