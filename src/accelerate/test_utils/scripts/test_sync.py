@@ -175,7 +175,6 @@ def test_gradient_accumulation():
 
 
 def test_gradient_accumulation_with_opt_and_scheduler():
-    AcceleratorState._set_state("sync_gradients", False)
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
     model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target = get_training_setup(accelerator, True)
