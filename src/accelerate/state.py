@@ -207,6 +207,8 @@ class AcceleratorState:
     @staticmethod
     def _set_state(key, val):
         "Sets `key` to `val` in AcceleratorState"
+        if key not in AcceleratorState._shared_state.keys():
+            raise KeyError(f'{key} is not a valid key to set in AcceleratorState')
         AcceleratorState._shared_state[key] = val
 
     def _check_initialized(self, mixed_precision=None, cpu=None):
