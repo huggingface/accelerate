@@ -149,8 +149,8 @@ def test_gradient_accumulation():
         # Perform our initial ground truth step in non "DDP"
         step_model(model, input, target, accelerator, False)
         # Do "gradient accumulation" (noop)
+        print(f'AcceleratorState at iteration {iteration}, step {accelerator.step} {accelerator.state.sync_gradients}')
         with accelerator.accumulate(ddp_model, [0, 1, 2]):
-            print(f'AcceleratorState at iteration {iteration}: {accelerator.step-1} {accelerator.state.sync_gradients}')
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
 
         # DDP model and model should only be in sync when not (iteration % 2 == 0)
