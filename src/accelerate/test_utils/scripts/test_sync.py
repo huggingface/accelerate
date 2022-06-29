@@ -198,6 +198,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
+    assert opt.state == ddp_opt.state
 
 
 def main():
@@ -211,9 +212,9 @@ def main():
         if state.local_process_index == 0:
             print("**Distributed `no_sync` gradient accumulation**")
         test_distributed_sync(accelerator)
-    if state.local_process_index == 0:
-        print("**Test `accumulate` gradient accumulation**")
-    test_gradient_accumulation()
+        if state.local_process_index == 0:
+            print("**Test `accumulate` gradient accumulation**")
+        test_gradient_accumulation()
     if state.local_process_index == 0:
         print("**Test `accumulate` gradient accumulation with optimizer and scheduler**")
     test_gradient_accumulation_with_opt_and_scheduler()
