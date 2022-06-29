@@ -198,12 +198,12 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_opt.zero_grad()
 
         # DDP schedule and DDP optimizer should only be in sync when not (iteration % 2 == 0)
-        if iteration % 2 == 0 and iteration > 1:
+        if iteration % 2 != 0 and iteration > 1:
             # States should be in sync
             assert (
-                opt.state != ddp_opt.state
-            ), f"Optimizer states are in sync when they should not be at step {iteration}:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
-            assert sched.last_epoch != ddp_sched.scheduler.last_epoch
+                opt.state == ddp_opt.state
+            ), f"Optimizer states are not in sync when they should not be at step {iteration}:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
+            assert sched.last_epoch == ddp_sched.scheduler.last_epoch
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]

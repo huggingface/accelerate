@@ -406,7 +406,6 @@ class Accelerator:
         else:
             context = self.no_sync
             AcceleratorState._set_state("sync_gradients", False)
-        self.print(f"Calling `Accelerator.accumulate` under: {context}")
         with context(model):
             yield
 
