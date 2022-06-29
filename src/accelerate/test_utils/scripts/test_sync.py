@@ -202,7 +202,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             model.eval()
             ddp_out = ddp_model(input)
             baseline_out = model(input)
-            if ((iteration + 1) % 2 == 0) or (iteration == 3):
+            if iteration in [0,3]:
                 assert torch.allclose(ddp_out, baseline_out), f"Outputs not the same at iteration {iteration}:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
             else:
                 assert not torch.allclose(ddp_out, baseline_out), f"Outputs the same at iteration {iteration}:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
