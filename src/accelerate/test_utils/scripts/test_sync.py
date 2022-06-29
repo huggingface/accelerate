@@ -138,7 +138,6 @@ def test_distributed_sync(accelerator):
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
 
-
 def test_gradient_accumulation():
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
@@ -171,7 +170,6 @@ def test_gradient_accumulation():
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
-
 
 def test_gradient_accumulation_with_opt_and_scheduler():
     accelerator = Accelerator(gradient_accumulation_steps=2)
@@ -213,9 +211,11 @@ def main():
         if state.local_process_index == 0:
             print("**Distributed `no_sync` gradient accumulation**")
         test_distributed_sync(accelerator)
-    print("**Test `accumulate` gradient accumulation**")
-    test_gradient_accumulation()
-    print("**Test `accumulate` gradient accumulation with optimizer and scheduler**")
+        if state.local_process_index == 0:
+            print("**Test `accumulate` gradient accumulation**")
+        test_gradient_accumulation()
+    if state.local_process_index == 0:
+        print("**Test `accumulate` gradient accumulation with optimizer and scheduler**")
     test_gradient_accumulation_with_opt_and_scheduler()
 
 
