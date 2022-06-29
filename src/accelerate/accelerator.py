@@ -381,7 +381,7 @@ class Accelerator:
 
     def _do_sync(self, dataloader) -> bool:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
-        if self.gradient_accumulation_steps == 1: 
+        if self.gradient_accumulation_steps == 1:
             return True
         if self.step % self.gradient_accumulation_steps != 0 or self.step + 1 == len(dataloader):
             return True
@@ -405,7 +405,7 @@ class Accelerator:
         else:
             context = self.no_sync
             AcceleratorState._set_state("sync", False)
-        self.print(f'Context: {context}\nStep: {self.step}')
+        self.print(f"Context: {context}\nStep: {self.step}")
         with context(model):
             yield
 
