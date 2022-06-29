@@ -193,7 +193,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             test_opt_state = opt.state
             test_sched_epoch = sched.last_epoch
         # Do "gradient accumulation" (noop)
-        with accelerator.accumulate(ddp_model, [0, 1, 2]):
+        with accelerator.accumulate(ddp_model, [0, 1, 2, 3]):
             accelerator.print(f"Iteration: {iteration}\nState: {accelerator.state}\n")
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
             print(f"Should sync (from test): {accelerator.state.sync_gradients}")
