@@ -200,7 +200,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_out = ddp_model(input)
             ddp_out = accelerator.gather(ddp_out)[:len(ddp_out)//accelerator.num_processes]
             baseline_out = model(input)
-            assert torch.allclose(ddp_out[:(len(ddp_out)//2)], baseline_out), f"Wasn't close:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
+            assert torch.allclose(ddp_out[:(len(ddp_out)//2)], baseline_out), f"Outputs not the same at iteration {iteration}:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
