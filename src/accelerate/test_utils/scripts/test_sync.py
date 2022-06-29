@@ -160,12 +160,12 @@ def test_gradient_accumulation():
                 # Grads should be in sync
                 assert (
                     torch.allclose(param.grad, ddp_param.grad) is True
-                ), f"Gradients not in sync when they should be at iteration {iteration}:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+                ), f"Gradients not in sync when they should be at iteration {iteration+1}:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
             else:
                 # Grads should not be in sync
                 assert (
                     torch.allclose(param.grad, ddp_param.grad) is False
-                ), f"Gradients in sync when they should not be at iteration {iteration}:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
+                ), f"Gradients in sync when they should not be at iteration {iteration+1}:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
             
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
