@@ -177,7 +177,6 @@ def test_gradient_accumulation_with_opt_and_scheduler():
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
     model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target = get_training_setup(accelerator, True)
-    set_seed(42)
     for iteration in range(4):
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
@@ -200,20 +199,6 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         assert ddp_opt.optimizer._step_count == opt._step_count, f'Optimizers were not called the same number of times:\nOptimizer: {opt._step_count}\nDDP Optimizer: {ddp_opt.optimizer._step_count}'
         assert ddp_sched.scheduler.last_epoch == sched.last_epoch*2, f'Scheduler was not stepped 2x as much as the base:\nScheduler: {sched.last_epoch}\nDDP: {ddp_sched.scheduler.last_epoch}'
 
-        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
-            if not param.requires_grad:
-                continue
-            if ((iteration + 1) % 2 == 0) or (iteration == 3):
-                # Grads should be in sync
-                assert (
-                    torch.allclose(param.grad, ddp_param.grad) is True
-                ), f"Gradients not in sync when they should be at iteration {iteration}:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
-            else:
-                # Grads should not be in sync
-                assert (
-                    torch.allclose(param.grad, ddp_param.grad) is False
-                ), f"Gradients in sync when they should not be at iteration {iteration}:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
-            
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
