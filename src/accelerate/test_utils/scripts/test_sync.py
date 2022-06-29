@@ -193,7 +193,6 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             opt.zero_grad()
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model, [0, 1, 2, 3]):
-            print(f'AcceleratorState at iteration {iteration}: {accelerator.step} {accelerator.state.sync_gradients}')
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
             ddp_opt.step()
             ddp_sched.step()
@@ -207,9 +206,6 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             model.eval()
             ddp_out = ddp_model(input)
             baseline_out = model(input)
-            if not torch.allclose(ddp_out, baseline_out):
-                import pdb; pdb.set_trace()
-                print(f'Running iteration: {iteration}')
             assert torch.allclose(ddp_out, baseline_out), f"Outputs not the same at iteration {iteration}:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
 
         # Shuffle ddp_input on each iteration
