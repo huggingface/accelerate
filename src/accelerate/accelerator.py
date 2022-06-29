@@ -409,7 +409,6 @@ class Accelerator:
         else:
             context = self.no_sync
             self.print(f"Setting state to False")
-            self.state["sync"] = False
             AcceleratorState._set_state("sync", False)
         self.print(f'Shared state after:\n{AcceleratorState._shared_state}\n')
         self.print((
