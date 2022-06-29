@@ -190,7 +190,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             opt.zero_grad()
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model, [0, 1, 2, 3]):
-            print(f'AcceleratorState at iteration {iteration}: {accelerator.state.sync_gradients}')
+            print(f'AcceleratorState at iteration {iteration}: {accelerator.step} {accelerator.state.sync_gradients}')
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
             ddp_opt.step()
             ddp_sched.step()
