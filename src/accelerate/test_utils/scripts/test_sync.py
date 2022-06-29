@@ -21,6 +21,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
+from accelerate.state import AcceleratorState
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, set_seed
 
@@ -177,6 +178,7 @@ def test_gradient_accumulation():
 
 def test_gradient_accumulation_with_opt_and_scheduler():
     accelerator = Accelerator(gradient_accumulation_steps=2)
+    AcceleratorState._set_state("sync_gradients", False)
     # Test that context manager behaves properly
     model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target = get_training_setup(accelerator, True)
     for iteration in range(3):
