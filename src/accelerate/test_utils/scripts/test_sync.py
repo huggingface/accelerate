@@ -180,7 +180,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
     # Test that context manager behaves properly
     model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target = get_training_setup(accelerator, True)
     print(f'DDP Opt ID: {id(ddp_opt)}\nNon-DDP Opt ID: {id(opt)}')
-    for iteration in range(3):
+    for iteration in range(4):
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
@@ -189,6 +189,9 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         opt.step()
         sched.step()
         opt.zero_grad()
+        if iteration % 2 != 0:
+            test_opt_state = opt.state
+            test_sched_epoch = sched.last_epoch
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model, [0, 1, 2]):
             accelerator.print(f"Iteration: {iteration}\nState: {accelerator.state}\n")
@@ -217,15 +220,15 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         if iteration % 2 == 0:
             # States should not be in sync
             assert (
-                opt.state != ddp_opt.state
+                test_opt_state != ddp_opt.state
             ), f"Optimizer states are in sync when they should not be at step {iteration}:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
-            assert sched.last_epoch != ddp_sched.scheduler.last_epoch
+            assert test_sched_epoch != ddp_sched.scheduler.last_epoch
         else:
             # States should be in sync
             assert (
-                opt.state == ddp_opt.state
+                test_opt_state == ddp_opt.state
             ), f"Optimizer states are not in sync when they should be at step {iteration}:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
-            assert sched.last_epoch == ddp_sched.scheduler.last_epoch
+            assert test_sched_epoch == ddp_sched.scheduler.last_epoch
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
