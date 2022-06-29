@@ -186,6 +186,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         # Perform our initial ground truth step in non "DDP"
         step_model(model, input, target, accelerator, False)
         if ((iteration + 1) % 2 == 0) or ((iteration + 1) == 4):
+            print(f'Stepping in base script!')
             opt.step()
             sched.step()
             opt.zero_grad()

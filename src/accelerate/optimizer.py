@@ -102,6 +102,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def zero_grad(self, set_to_none=None):
         if self.accelerator_state.sync_gradients:
+            print(f'Zeroing gradients in AcceleratedOptimizer!')
             if is_torch_version("<", "1.7.0"):
                 if set_to_none is not None:
                     raise ValueError(
@@ -122,6 +123,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def step(self, closure=None):
         if self.accelerator_state.sync_gradients:
+            print(f'Stepping in AcceleratedOptimizer!')
             if self.accelerator_state.distributed_type == DistributedType.TPU:
                 optimizer_args = {"closure": closure} if closure is not None else {}
                 xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)

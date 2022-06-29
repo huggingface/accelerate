@@ -45,6 +45,7 @@ class AcceleratedScheduler:
 
     def step(self, *args, **kwargs):
         if not self.step_with_optimizer and self.accelerator_state.sync_gradients:
+            print(f'Stepping in AcceleratedScheduler!')
             # No link between scheduler and optimizer -> just step
             self.scheduler.step(*args, **kwargs)
             return
@@ -54,6 +55,7 @@ class AcceleratedScheduler:
             if opt.step_was_skipped:
                 return
         if self.accelerator_state.sync_gradients:
+            print(f'Stepping in AcceleratedScheduler!')
             if self.split_batches:
                 # Split batches -> the training dataloader batch size is not changed so one step per training step
                 self.scheduler.step(*args, **kwargs)
