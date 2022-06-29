@@ -156,7 +156,7 @@ def test_gradient_accumulation():
         for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
             if not param.requires_grad:
                 continue
-            if ((iteration + 1) % 2 == 0) or ((iteration + 1) == 3):
+            if (iteration % 2) != 0 or (iteration == 2):
                 # Grads should be in sync
                 assert (
                     torch.allclose(param.grad, ddp_param.grad) is True
