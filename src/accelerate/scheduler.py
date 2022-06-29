@@ -61,9 +61,7 @@ class AcceleratedScheduler:
             else:
                 # Otherwise the training dataloader batch size was multiplied by `num_processes`, so we need to do
                 # num_processes steps per training step
-                print(f'AcceleratorState from scheduler:\n{AcceleratorState()}')
-                num_processes = AcceleratorState().num_processes
-                for _ in range(num_processes):
+                for _ in range(self.accelerator_state.num_processes):
                     # Special case when using OneCycle and `drop_last` was not used
                     if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch:
                         self.scheduler.step(*args, **kwargs)
