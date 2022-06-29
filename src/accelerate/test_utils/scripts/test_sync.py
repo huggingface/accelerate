@@ -193,7 +193,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
-        assert opt._step_count == ddp_opt.optimizer._step_count, f'Optimizers were not called the same number of times at iteration {iteration}:\nOpt: {opt._step_count}\nDDP Opt: {ddp_opt._step_count}'
+        assert opt._step_count == ddp_opt.optimizer._step_count, f'Optimizers were not called the same number of times at iteration {iteration}:\nOpt: {opt._step_count}\nDDP Opt: {ddp_opt.optimizer._step_count}'
         assert (accelerator.num_processes*sched.last_epoch) == ddp_sched.scheduler.last_epoch, f'Schedulers were not called the same number of times at iteration {iteration}:\nSched: {sched.last_epoch}\nDDP Sched: {ddp_sched.scheduler.last_epoch}'
 
         with torch.no_grad():
