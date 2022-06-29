@@ -383,10 +383,10 @@ class Accelerator:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
         if self.gradient_accumulation_steps == 1:
             return True
+        elif (self.step+1) % self.gradient_accumulation_steps == 0:
+            return True
         elif self.step == (len(dataloader) - 1):
             self.step = 0
-            return True
-        elif (self.step+1) % self.gradient_accumulation_steps == 0:
             return True
         self.step += 1
         return False
@@ -408,7 +408,6 @@ class Accelerator:
         else:
             context = self.no_sync
             AcceleratorState._set_state("sync_gradients", False)
-
         print(f'ctx at {self.step}: {context}\nState: {self.state.sync_gradients}')
         with context(model):
             yield
