@@ -214,9 +214,9 @@ def main():
         test_distributed_sync(accelerator)
     accelerator = Accelerator(gradient_accumulation_steps=2)
     print("**Test `accumulate` gradient accumulation**")
-    test_gradient_accumulation()
+    test_gradient_accumulation(accelerator)
     print("**Test `accumulate` gradient accumulation with optimizer and scheduler**")
-    test_gradient_accumulation_with_opt_and_scheduler()
+    test_gradient_accumulation_with_opt_and_scheduler(accelerator)
 
 
 def _mp_fn(index):
