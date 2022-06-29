@@ -381,14 +381,16 @@ class Accelerator:
 
     def _do_sync(self, dataloader) -> bool:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
-        self.step += 1
         if self.gradient_accumulation_steps == 1:
-            return True
-        elif (self.step+1) % self.gradient_accumulation_steps == 0:
+            self.step += 1
             return True
         elif self.step == (len(dataloader) - 1):
             self.step = 0
             return True
+        elif (self.step+1) % self.gradient_accumulation_steps == 0:
+            self.step += 1
+            return True
+        self.step += 1
         return False
 
     @contextmanager
