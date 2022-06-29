@@ -121,6 +121,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                     self.optimizer.zero_grad()
 
     def step(self, closure=None):
+        print(f'Should I step optimizer: {self.accelerator_state.sync_gradients}')
         if self.accelerator_state.sync_gradients:
             if self.accelerator_state.distributed_type == DistributedType.TPU:
                 optimizer_args = {"closure": closure} if closure is not None else {}
