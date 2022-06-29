@@ -382,13 +382,16 @@ class Accelerator:
     def _do_sync(self, dataloader) -> bool:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
         if self.gradient_accumulation_steps == 1:
+            print(f'Grad accum of 1 step, returned True at {self.step}')
             return True
         elif (self.step+1) % self.gradient_accumulation_steps == 0:
+            print(f'Fell under grad accum logic, returned True at {self.step}')
             return True
         elif self.step == (len(dataloader) - 1):
             print(f'Reset length!!!!')
             self.step = 0
             return True
+        print(f'Did not fall under the previous three, returned False at {self.step}')
         self.step += 1
         return False
 
