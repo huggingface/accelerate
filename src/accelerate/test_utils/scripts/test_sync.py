@@ -195,10 +195,20 @@ def test_gradient_accumulation_with_opt_and_scheduler():
 
         assert opt._step_count == ddp_opt.optimizer._step_count, f'Optimizers were not called the same number of times at iteration {iteration}:\nOpt: {opt._step_count}\nDDP Opt: {ddp_opt._step_count}'
         assert (accelerator.num_processes*sched.last_epoch) == ddp_sched.scheduler.last_epoch, f'Schedulers were not called the same number of times at iteration {iteration}:\nSched: {sched.last_epoch}\nDDP Sched: {ddp_sched.scheduler.last_epoch}'
+
+        # DDP model and model should only be in sync when not (iteration % 2 == 0)
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            # Grads should always be in sync
+            assert (
+                torch.allclose(param.grad, ddp_param.grad) is True
+            ), f"Gradients not in sync when they should be at iteration {iteration}:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+
+
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
-    assert opt.state == ddp_opt.state
 
 
 def main():
