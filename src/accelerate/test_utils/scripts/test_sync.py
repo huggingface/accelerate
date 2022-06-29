@@ -197,7 +197,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
-        assert ddp_opt.optimizer._steps == opt._steps
+        assert ddp_opt.optimizer._step_count == opt._step_count
         
         for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
             if not param.requires_grad:
