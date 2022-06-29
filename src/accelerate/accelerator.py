@@ -402,13 +402,14 @@ class Accelerator:
             dataloader (`torch.utils.DataLoader`)
                 PyTorch DataLoader that was prepared with `Accelerator.prepare`
         """
+        step = self.step
         if self._do_sync(dataloader):
             context = contextlib.nullcontext
             AcceleratorState._set_state("sync_gradients", True)
         else:
             context = self.no_sync
             AcceleratorState._set_state("sync_gradients", False)
-        self.print(f'Using {context} at step {self.step}')
+        self.print(f'Using {context} at step {step}')
         with context(model):
             yield
 
