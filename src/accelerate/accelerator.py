@@ -402,6 +402,7 @@ class Accelerator:
                 PyTorch DataLoader that was prepared with `Accelerator.prepare`
         """
         self.print(f'Shared state before:\n{AcceleratorState._shared_state}\n')
+        self.print(f'AcceleratorState id before: {AcceleratorState._shared_state}\n')
         if self._do_sync(dataloader):
             context = contextlib.nullcontext
             self.print(f"Setting state to True")
@@ -410,6 +411,7 @@ class Accelerator:
             context = self.no_sync
             self.print(f"Setting state to False")
             AcceleratorState._set_state("sync", False)
+        self.print(f'AcceleratorState id after: {AcceleratorState._shared_state}\n')
         self.print(f'Shared state after:\n{AcceleratorState._shared_state}\n')
         self.print((
             f'**Self state**:\n{self.state}\n'
