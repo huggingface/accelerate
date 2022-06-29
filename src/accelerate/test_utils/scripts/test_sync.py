@@ -128,11 +128,11 @@ def test_gradient_accumulation(accelerator):
         with accelerator.accumulate(ddp_model, [0, 1, 2]):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
 
-        # DDP model and model should only be in sync when (iteration % 2 == 0)
+        # DDP model and model should only be in sync when not (iteration % 2 == 0)
         for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
             if not param.requires_grad:
                 continue
-            if iteration % 2 != 0:
+            if iteration % 2 == 0:
                 # Grads should not be in sync
                 assert (
                     torch.allclose(param.grad, ddp_param.grad) is False
@@ -172,11 +172,11 @@ def test_gradient_accumulation_with_opt_and_scheduler(accelerator):
             ddp_opt.step()
             ddp_opt.zero_grad()
 
-        # DDP model and model should only be in sync when (iteration % 2 == 0)
+        # DDP model and model should only be in sync when not (iteration % 2 == 0)
         for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
             if not param.requires_grad:
                 continue
-            if iteration % 2 != 0:
+            if iteration % 2 == 0:
                 # Grads should not be in sync
                 assert (
                     torch.allclose(param.grad, ddp_param.grad) is False
