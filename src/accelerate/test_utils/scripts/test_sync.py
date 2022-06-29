@@ -21,9 +21,8 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
-from accelerate.state import AcceleratorState
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import set_seed
+from accelerate.utils import set_seed, DistributedType
 
 
 def step_model(model, input, target, accelerator, do_backward=True):
