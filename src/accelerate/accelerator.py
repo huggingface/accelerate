@@ -386,6 +386,7 @@ class Accelerator:
         elif (self.step+1) % self.gradient_accumulation_steps == 0:
             return True
         elif self.step == (len(dataloader) - 1):
+            print(f'Reset length!!!!')
             self.step = 0
             return True
         self.step += 1
