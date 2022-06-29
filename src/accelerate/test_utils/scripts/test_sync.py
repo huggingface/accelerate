@@ -197,13 +197,8 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
-        # with torch.no_grad():
-        #     ddp_model.eval()
-        #     model.eval()
-        #     ddp_out = ddp_model(input)
-        #     baseline_out = model(input)
-        #     if ((iteration + 1) % 2 == 0) or (iteration == 0):
-        #         assert torch.allclose(ddp_out, baseline_out), f"Outputs not the same at iteration {iteration}:\nDDP: {ddp_out}\nBaseline: {baseline_out}"
+        assert ddp_opt.optimizer._steps == opt._steps
+        
         for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
             if not param.requires_grad:
                 continue
