@@ -387,6 +387,7 @@ class Accelerator:
             self.step = 0
             return True
         elif (self.step+1) % self.gradient_accumulation_steps == 0:
+            self.step = 0
             return True
         self.step += 1
         return False
