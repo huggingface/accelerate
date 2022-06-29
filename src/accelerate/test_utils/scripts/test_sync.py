@@ -187,7 +187,6 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         ddp_model.train()
         step_model(model, input, target, accelerator, False)
         if ((iteration + 1) % 2 == 0) or (iteration == 3):
-            print(f'Stepped base optimizer and scheduler at step {iteration}')
             opt.step()
             sched.step()
             opt.zero_grad()
