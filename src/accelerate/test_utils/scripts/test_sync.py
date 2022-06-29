@@ -36,17 +36,30 @@ def step_model(model, input, target, accelerator, do_backward=True):
         accelerator.backward(loss)
 
 
-def get_training_setup(accelerator):
+def get_training_setup(accelerator, sched=False):
     "Returns everything needed to perform basic training"
     set_seed(42)
     model = RegressionModel()
     model.to(accelerator.device)
     dset = RegressionDataset()
     dataloader = DataLoader(dset, batch_size=16)
+    ddp_model = deepcopy(model)
+    if sched:
+        opt = AdamW(params=model.parameters(), lr=1e-3)
+        ddp_opt = AdamW(params=ddp_model.parameters(), lr=1e-3)
+        sched = LambdaLR(opt, lr_lambda=lambda epoch: 0.65**epoch)
+        ddp_sched = LambdaLR(ddp_opt, lr_lambda=lambda epoch: 0.65**epoch)
     # Make a copy of `model`
-    ddp_model, dataloader = accelerator.prepare(deepcopy(model), dataloader)
+    if sched:
+        ddp_model, ddp_opt, ddp_sched, dataloader = accelerator.prepare(
+            ddp_model, ddp_opt, ddp_sched, dataloader
+        )
+    else:
+        ddp_model, dataloader = accelerator.prepare(ddp_model, dataloader)
     # Use a single batch for all of the tests
     ddp_input, ddp_target = next(iter(dataloader)).values()
+    if sched:
+        return model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target,
     return model, ddp_model, ddp_input, ddp_target
 
 
@@ -156,13 +169,7 @@ def test_gradient_accumulation():
 def test_gradient_accumulation_with_opt_and_scheduler():
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
-    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
-    opt = AdamW(params=model.parameters(), lr=1e-3)
-    ddp_opt = AdamW(params=ddp_model.parameters(), lr=1e-3)
-    sched = LambdaLR(opt, lr_lambda=lambda epoch: 0.65**epoch)
-    ddp_sched = LambdaLR(ddp_opt, lr_lambda=lambda epoch: 0.65**epoch)
-
-    ddp_opt, ddp_sched = accelerator.prepare(ddp_opt, ddp_sched)
+    model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target = get_training_setup(accelerator)
 
     for iteration in range(3):
         # Gather the distributed inputs and targs for the base model
