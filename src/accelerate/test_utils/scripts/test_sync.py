@@ -178,7 +178,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
     # Test that context manager behaves properly
     model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target = get_training_setup(accelerator, True)
     set_seed(42)
-    for iteration in range(4):
+    for iteration in range(3):
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
