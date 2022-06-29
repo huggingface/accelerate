@@ -218,13 +218,13 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             # States should not be in sync
             assert (
                 opt.state != ddp_opt.state
-            ), f"Optimizer states are in sync when they should not be:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
+            ), f"Optimizer states are in sync when they should not be at step {iteration}:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
             assert sched.last_epoch != ddp_sched.scheduler.last_epoch
         else:
             # States should be in sync
             assert (
                 opt.state == ddp_opt.state
-            ), f"Optimizer states are not in sync when they should be:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
+            ), f"Optimizer states are not in sync when they should be at step {iteration}:\nOpt state:\n{opt.state}\n\nDDP Opt state:\n{ddp_opt.state}"
             assert sched.last_epoch == ddp_sched.scheduler.last_epoch
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
