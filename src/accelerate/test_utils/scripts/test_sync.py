@@ -29,7 +29,11 @@ def step_model(model, input, target, accelerator):
     model.train()
     output = model(input)
     loss = F.mse_loss(output, target.to(output.device))
-    accelerator.backward(loss) if accelerator else loss.backward()
+    if not accelerator:
+        loss /= accelerator.gradient_accumulation_steps
+        loss.backward()
+    else:
+        accelerator.backward(loss)
 
 
 def get_training_setup(accelerator):
