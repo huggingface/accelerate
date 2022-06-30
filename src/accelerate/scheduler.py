@@ -12,7 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# We ignore warnings about stepping the scheduler since we step it ourselves during gradient accumulation
+
+import warnings
+
 from .state import AcceleratorState, GradientState
+
+
+warnings.filterwarnings("ignore", category=UserWarning, module="torch.optim.lr_scheduler")
 
 
 class AcceleratedScheduler:
@@ -44,7 +51,7 @@ class AcceleratedScheduler:
         self.step_with_optimizer = step_with_optimizer
 
     def step(self, *args, **kwargs):
-        if not self.step_with_optimizer:
+        if not self.step_with_optimizer or not self.gradient_state.sync_gradients:
             # No link between scheduler and optimizer -> just step
             self.scheduler.step(*args, **kwargs)
             return
