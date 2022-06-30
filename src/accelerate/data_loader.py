@@ -346,6 +346,7 @@ class DataLoaderDispatcher(DataLoader):
             main_iterator = super().__iter__()
         stop_iteration = False
         first_batch = None
+        current_idx = 0
         while not stop_iteration:
             # On process 0, we gather the batch to dispatch.
             if state.process_index == 0:
@@ -407,6 +408,8 @@ class DataLoaderDispatcher(DataLoader):
 
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
             yield slice_tensors(batch, data_slice)
+            current_idx += 1
+            AcceleratorState._set_state("end_of_dataloader", current_idx == len(self) - 1)
 
     def __len__(self):
         state = AcceleratorState()
