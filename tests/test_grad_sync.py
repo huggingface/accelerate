@@ -36,19 +36,19 @@ class SyncScheduler(unittest.TestCase):
         self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_sync.py"])
 
     @require_cpu
-    def test_gradient_sync_single_cpu_noop(self):
+    def test_gradient_sync_cpu_noop(self):
         test_sync.main()
 
     @require_cpu
-    def test_gradient_sync_multi_cpu(self):
+    def test_gradient_sync_cpu_multi(self):
         debug_launcher(test_sync.main)
 
     @require_single_gpu
-    def test_gradient_sync_single_gpu(self):
+    def test_gradient_sync_gpu(self):
         test_sync.main()
 
     @require_multi_gpu
-    def test_gradient_sync_multi_gpu(self):
+    def test_gradient_sync_gpu_multi(self):
         print(f"Found {torch.cuda.device_count()} devices.")
         cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}", self.test_file_path]
         with patch_environment(omp_num_threads=1):
