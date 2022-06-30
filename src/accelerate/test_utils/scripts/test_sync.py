@@ -214,11 +214,11 @@ def main():
     state = accelerator.state
     if state.distributed_type == DistributedType.NO:
         if state.local_process_index == 0:
-            print("**Test NOOP `no_sync` gradient accumulation**")
+            print("**Test NOOP `no_sync` context manager**")
         test_noop_sync(accelerator)
     if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_CPU):
         if state.local_process_index == 0:
-            print("**Test Distributed `no_sync` gradient accumulation**")
+            print("**Test Distributed `no_sync` context manager**")
         test_distributed_sync(accelerator)
         if state.local_process_index == 0:
             print("**Test `accumulate` gradient accumulation**")
