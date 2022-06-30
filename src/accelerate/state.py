@@ -63,7 +63,6 @@ class AcceleratorState:
     """
 
     _shared_state = {}
-    __allowed_keys = ["sync_gradients", "end_of_dataloader"]
 
     def __init__(
         self,
@@ -80,8 +79,6 @@ class AcceleratorState:
         self._check_initialized(mixed_precision, cpu)
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
-            self.end_of_dataloader = False
-            self.sync_gradients = True
             self.backend = None
             self.deepspeed_plugin = None
             mixed_precision = (
@@ -188,7 +185,6 @@ class AcceleratorState:
             f"Process index: {self.process_index}\n"
             f"Local process index: {self.local_process_index}\n"
             f"Device: {self.device}\n"
-            f"Sync gradients: {self.sync_gradients}"
         )
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
@@ -206,13 +202,6 @@ class AcceleratorState:
         "Resets `_shared_state`, is used internally and should not be called"
         AcceleratorState._shared_state = {}
 
-    @staticmethod
-    def _set_state(key, val):
-        "Sets `key` to `val` in AcceleratorState"
-        if AcceleratorState._shared_state != {} and key not in AcceleratorState.__allowed_keys:
-            raise KeyError(f"{key} cannot be manually set in AcceleratorState")
-        AcceleratorState._shared_state[key] = val
-
     def _check_initialized(self, mixed_precision=None, cpu=None):
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
         if getattr(self, "initialized", False):
@@ -221,3 +210,35 @@ class AcceleratorState:
                 raise ValueError(err.format(flag="cpu=True"))
             if mixed_precision is not None and mixed_precision != self.mixed_precision:
                 raise ValueError(err.format(flag=f"mixed_precision='{mixed_precision}'"))
+
+
+class GradientState:
+    """
+    This is a variation of a [singleton class](https://en.wikipedia.org/wiki/Singleton_pattern) in the sense that all
+    instance of `GradientState` share the same state, which is initialized on the first instantiation.
+
+    This specific state revolves around whether gradients should be synced and if we have reached the end of a prepared
+    dataloader Attributes:
+
+        - **sync_gradients** (`bool`) -- Whether the gradients should be synced
+        - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
+    """
+
+    _shared_state = {}
+
+    def __init__(self):
+        self.__dict__ = self._shared_state
+        if not getattr(self, "initialized", False):
+            self.sync_gradients = True
+            self.end_of_dataloader = False
+        self.initialized = True
+
+    @staticmethod
+    def _set_state(key, val):
+        "Sets `key` to `val` in GradientState"
+        if GradientState._shared_state != {} and key not in GradientState._shared_state.keys():
+            raise KeyError(f"{key} is not a valid key of `GradientState`, {GradientState._shared_state.keys()}")
+        GradientState._shared_state[key] = val
+
+    def __repr__(self):
+        return f"Sync Gradients: {self.sync_gradients}\n" f"At end of current dataloader: {self.end_of_dataloader}\n"

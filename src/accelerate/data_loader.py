@@ -18,7 +18,7 @@ from typing import List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
-from .state import AcceleratorState, DistributedType, is_tpu_available
+from .state import AcceleratorState, DistributedType, GradientState, is_tpu_available
 from .utils import (
     RNGType,
     broadcast,
@@ -299,7 +299,7 @@ class DataLoaderShard(DataLoader):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
         for i, batch in enumerate(super().__iter__()):
-            AcceleratorState._set_state("end_of_dataloader", i == len(self) - 1)
+            GradientState._set_state("end_of_dataloader", i == (len(self) - 1))
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 
@@ -409,7 +409,7 @@ class DataLoaderDispatcher(DataLoader):
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
             yield slice_tensors(batch, data_slice)
             current_idx += 1
-            AcceleratorState._set_state("end_of_dataloader", current_idx == len(self) - 1)
+            GradientState._set_state("end_of_dataloader", current_idx == len(self) - 1)
 
     def __len__(self):
         state = AcceleratorState()

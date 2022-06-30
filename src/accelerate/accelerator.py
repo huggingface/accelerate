@@ -28,7 +28,7 @@ from .data_loader import prepare_data_loader
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState
+from .state import AcceleratorState, GradientState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     DeepSpeedPlugin,
@@ -380,13 +380,14 @@ class Accelerator:
         with context():
             yield
 
-    @property
     def _do_sync(self) -> bool:
         "Checks if gradients should be synchronized and the optimizers + schedulers should be stepped"
-        self.step += 1
-        if (self.step % self.gradient_accumulation_steps) == 0 or self.state.end_of_dataloader:
+        if GradientState().end_of_dataloader:
+            self.step = 0
             return True
-        return False
+        else:
+            self.step += 1
+        return (self.step % self.gradient_accumulation_steps) == 0
 
     @contextmanager
     def accumulate(self, model):
@@ -400,18 +401,15 @@ class Accelerator:
                 PyTorch DataLoader that was prepared with `Accelerator.prepare`
         """
 
-        if self._do_sync:
+        if self._do_sync():
             context = contextlib.nullcontext
-            AcceleratorState._set_state("sync_gradients", True)
+            GradientState._set_state("sync_gradients", True)
         else:
             context = self.no_sync
-            AcceleratorState._set_state("sync_gradients", False)
+            GradientState._set_state("sync_gradients", False)
 
         with context(model):
             yield
-
-        if self.state.end_of_dataloader:
-            self.step = 0
 
     def print(self, *args, **kwargs):
         """

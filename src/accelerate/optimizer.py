@@ -17,7 +17,7 @@ import warnings
 
 import torch
 
-from .state import AcceleratorState
+from .state import AcceleratorState, GradientState
 from .utils import DistributedType, honor_type, is_torch_version, is_tpu_available
 
 
@@ -53,6 +53,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.optimizer = optimizer
         self.scaler = scaler
         self.accelerator_state = AcceleratorState()
+        self.gradient_state = GradientState()
         self.device_placement = device_placement
         self._is_overflow = False
 
@@ -101,7 +102,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         return self.optimizer.state_dict()
 
     def zero_grad(self, set_to_none=None):
-        if self.accelerator_state.sync_gradients:
+        if self.gradient_state.sync_gradients:
             if is_torch_version("<", "1.7.0"):
                 if set_to_none is not None:
                     raise ValueError(
@@ -121,7 +122,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                     self.optimizer.zero_grad()
 
     def step(self, closure=None):
-        if self.accelerator_state.sync_gradients:
+        if self.gradient_state.sync_gradients:
             if self.accelerator_state.distributed_type == DistributedType.TPU:
                 optimizer_args = {"closure": closure} if closure is not None else {}
                 xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)
@@ -154,4 +155,4 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         """Whether or not the optimizer step was skipped."""
         if self._is_overflow:
             return True
-        return not self.accelerator_state.sync_gradients
+        return not self.gradient_state.sync_gradients

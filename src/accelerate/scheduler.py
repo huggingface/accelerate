@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .state import AcceleratorState
+from .state import AcceleratorState, GradientState
 
 
 class AcceleratedScheduler:
@@ -40,11 +40,11 @@ class AcceleratedScheduler:
         self.scheduler = scheduler
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
-        self.accelerator_state = AcceleratorState()
+        self.gradient_state = GradientState()
         self.step_with_optimizer = step_with_optimizer
 
     def step(self, *args, **kwargs):
-        if not self.step_with_optimizer and self.accelerator_state.sync_gradients:
+        if not self.step_with_optimizer and self.gradient_state.sync_gradients:
             # No link between scheduler and optimizer -> just step
             self.scheduler.step(*args, **kwargs)
             return
@@ -53,7 +53,7 @@ class AcceleratedScheduler:
         for opt in self.optimizers:
             if opt.step_was_skipped:
                 return
-        if self.accelerator_state.sync_gradients:
+        if self.gradient_state.sync_gradients:
             if self.split_batches:
                 # Split batches -> the training dataloader batch size is not changed so one step per training step
                 self.scheduler.step(*args, **kwargs)
