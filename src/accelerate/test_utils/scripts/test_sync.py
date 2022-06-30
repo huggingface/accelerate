@@ -143,8 +143,9 @@ def test_distributed_sync(accelerator):
 def test_gradient_accumulation():
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
-    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
-    for iteration in range(4):
+    model, ddp_model, dataloader = get_training_setup(accelerator)
+    for iteration, batch in enumerate(dataloader):
+        ddp_input, ddp_target = batch.values()
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
