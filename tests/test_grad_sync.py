@@ -37,7 +37,7 @@ class SyncScheduler(unittest.TestCase):
 
     @require_cpu
     def test_gradient_sync_single_cpu_noop(self):
-        debug_launcher(test_sync.main, num_processes=1)
+        test_sync.main()
 
     @require_cpu
     def test_gradient_sync_multi_cpu(self):
@@ -45,7 +45,7 @@ class SyncScheduler(unittest.TestCase):
 
     @require_single_gpu
     def test_gradient_sync_single_gpu(self):
-        debug_launcher(test_sync.main, num_processes=1)
+        test_sync.main()
 
     @require_multi_gpu
     def test_gradient_sync_multi_gpu(self):
