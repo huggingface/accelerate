@@ -63,6 +63,7 @@ class AcceleratorState:
     """
 
     _shared_state = {}
+    __allowed_keys = ["sync_gradients", "end_of_dataloader"]
 
     def __init__(
         self,
@@ -76,10 +77,11 @@ class AcceleratorState:
         self.__dict__ = self._shared_state
         if parse_flag_from_env("USE_CPU"):
             cpu = True
-        self.sync_gradients = True
         self._check_initialized(mixed_precision, cpu)
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
+            self.end_of_dataloader = False
+            self.sync_gradients = True
             self.backend = None
             self.deepspeed_plugin = None
             mixed_precision = (
@@ -186,6 +188,7 @@ class AcceleratorState:
             f"Process index: {self.process_index}\n"
             f"Local process index: {self.local_process_index}\n"
             f"Device: {self.device}\n"
+            f"Sync gradients: {self.sync_gradients}"
         )
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
@@ -206,6 +209,8 @@ class AcceleratorState:
     @staticmethod
     def _set_state(key, val):
         "Sets `key` to `val` in AcceleratorState"
+        if AcceleratorState._shared_state != {} and key not in AcceleratorState.__allowed_keys:
+            raise KeyError(f"{key} cannot be manually set in AcceleratorState")
         AcceleratorState._shared_state[key] = val
 
     def _check_initialized(self, mixed_precision=None, cpu=None):
