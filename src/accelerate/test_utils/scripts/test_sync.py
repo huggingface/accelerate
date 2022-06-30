@@ -178,7 +178,8 @@ def test_gradient_accumulation_with_opt_and_scheduler():
     model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target = get_training_setup(accelerator, True)
     for iteration in range(4):
         # Gather the distributed inputs and targs for the base model
-        input, target = accelerator.gather((ddp_input, ddp_target))
+        input, target = ddp_input, ddp_target
+        # input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
         model.train()
