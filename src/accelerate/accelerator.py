@@ -383,11 +383,8 @@ class Accelerator:
     @property
     def _do_sync(self) -> bool:
         "Checks if gradients should be synchronized and the optimizers + schedulers should be stepped"
-        if self.state.end_of_dataloader:
-            self.step = 0
-            return True
         self.step += 1
-        if (self.gradient_accumulation_steps == 1) or ((self.step % self.gradient_accumulation_steps) == 0):
+        if (self.step % self.gradient_accumulation_steps) == 0 or self.state.end_of_dataloader:
             return True
         return False
 
@@ -412,6 +409,9 @@ class Accelerator:
 
         with context(model):
             yield
+
+        if self.state.end_of_dataloader:
+            self.step = 0
 
     def print(self, *args, **kwargs):
         """

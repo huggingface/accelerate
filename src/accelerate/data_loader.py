@@ -298,7 +298,8 @@ class DataLoaderShard(DataLoader):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
-        for batch in super().__iter__():
+        for i, batch in enumerate(super().__iter__()):
+            AcceleratorState._set_state("end_of_dataloader", i == len(self) - 1)
             yield batch if self.device is None else send_to_device(batch, self.device)
 
 

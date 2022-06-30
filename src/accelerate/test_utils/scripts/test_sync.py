@@ -55,15 +55,7 @@ def get_training_setup(accelerator, sched=False):
     else:
         ddp_model, dataloader = accelerator.prepare(ddp_model, dataloader)
     if sched:
-        return (
-            model,
-            opt,
-            sched,
-            dataloader,
-            ddp_model,
-            ddp_opt,
-            ddp_sched
-        )
+        return (model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched)
     return model, ddp_model, dataloader
 
 
@@ -159,7 +151,7 @@ def test_gradient_accumulation():
         for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
             if not param.requires_grad:
                 continue
-            if ((iteration + 1) % 2 == 0) or (iteration == 3):
+            if ((iteration + 1) % 2 == 0) or (iteration == len(dataloader)):
                 # Grads should be in sync
                 assert (
                     torch.allclose(param.grad, ddp_param.grad) is True
@@ -173,6 +165,7 @@ def test_gradient_accumulation():
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
+    assert accelerator.step == 0
 
 
 def test_gradient_accumulation_with_opt_and_scheduler():
@@ -189,7 +182,7 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         ddp_model.train()
         step_model(model, input, target, accelerator, False)
         # Perform normal gradient accumulation
-        if ((iteration + 1) % 2 == 0) or (iteration == 3):
+        if ((iteration + 1) % 2 == 0) or (iteration == len(dataloader) - 1):
             opt.step()
             sched.step()
             opt.zero_grad()
@@ -209,7 +202,8 @@ def test_gradient_accumulation_with_opt_and_scheduler():
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
-        ddp_input = ddp_input[torch.randperm(16)]
+
+    assert accelerator.step == 0
 
 
 def main():
