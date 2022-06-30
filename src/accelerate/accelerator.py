@@ -272,6 +272,9 @@ class Accelerator:
                 kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
+        # Start of internal step tracking
+        self.step = 0
+
         # Internal references to the training objects
         self._optimizers = []
         self._models = []
@@ -380,7 +383,13 @@ class Accelerator:
     @property
     def _do_sync(self) -> bool:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or if we're on the last batch"
-        return (self.step % self.gradient_accumulation_steps == 0) or self.state.end_of_dataloader
+        if self.state.end_of_dataloader:
+            self.step = 0
+            return True
+        self.step += 1
+        if (self.gradient_accumulation_steps == 1) or ((self.step % self.gradient_accumulation_steps) == 0):
+            return True
+        return False
 
     @contextmanager
     def accumulate(self, model):
@@ -396,18 +405,13 @@ class Accelerator:
 
         if self._do_sync:
             context = contextlib.nullcontext
-            AcceleratorState._set_state("sync", True)
+            AcceleratorState._set_state("sync_gradients", True)
         else:
             context = self.no_sync
-            AcceleratorState._set_state("sync", False)
+            AcceleratorState._set_state("sync_gradients", False)
 
         with context(model):
             yield
-
-        if self._do_sync:
-            self.step = 0
-        else:
-            self.step += 1
 
     def print(self, *args, **kwargs):
         """
