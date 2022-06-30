@@ -40,9 +40,9 @@ def get_training_setup(accelerator, sched=False):
     "Returns everything needed to perform basic training"
     set_seed(42)
     model = RegressionModel()
+    ddp_model = deepcopy(model)
     dset = RegressionDataset()
     dataloader = DataLoader(dset, batch_size=16)
-    ddp_model = RegressionModel()
     model.to(accelerator.device)
     if sched:
         opt = AdamW(params=model.parameters(), lr=1e-3)
