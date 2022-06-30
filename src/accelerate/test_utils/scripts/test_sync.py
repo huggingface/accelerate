@@ -46,9 +46,10 @@ def get_training_setup(accelerator, sched=False):
     model.to(accelerator.device)
     if sched:
         opt = AdamW(params=model.parameters(), lr=1e-3)
+        def lambda_func(epoch): return epoch ** .65
+        sched = LambdaLR(opt, lr_lambda=lambda_func)
         ddp_opt = AdamW(params=ddp_model.parameters(), lr=1e-3)
-        sched = LambdaLR(opt, lr_lambda=lambda epoch: 0.65**epoch)
-        ddp_sched = LambdaLR(ddp_opt, lr_lambda=lambda epoch: 0.65**epoch)
+        ddp_sched = LambdaLR(ddp_opt, lr_lambda=lambda_func)
     # Make a copy of `model`
     if sched:
         ddp_model, ddp_opt, ddp_sched, dataloader = accelerator.prepare(ddp_model, ddp_opt, ddp_sched, dataloader)
