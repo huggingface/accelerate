@@ -274,6 +274,7 @@ class Accelerator:
 
         # Start of internal step tracking
         self.step = 0
+        self.gradient_state = GradientState()
 
         # Internal references to the training objects
         self._optimizers = []
@@ -382,12 +383,23 @@ class Accelerator:
 
     def _do_sync(self) -> bool:
         "Checks if gradients should be synchronized and the optimizers + schedulers should be stepped"
-        if GradientState().end_of_dataloader:
+        if self.gradient_state.end_of_dataloader:
             self.step = 0
             return True
         else:
             self.step += 1
         return (self.step % self.gradient_accumulation_steps) == 0
+
+    @staticmethod
+    def set_gradient_sync(do_sync: bool):
+        """
+        Enables or disables synchronizing of the gradients
+        """
+        GradientState._set_state("sync_gradients", do_sync)
+
+    @property
+    def sync_gradients(self):
+        return self.gradient_state.sync_gradients
 
     @contextmanager
     def accumulate(self, model):
@@ -397,16 +409,13 @@ class Accelerator:
         Args:
             model (`torch.nn.Module`):
                 PyTorch Module that was prepared with `Accelerator.prepare`
-            dataloader (`torch.utils.DataLoader`)
-                PyTorch DataLoader that was prepared with `Accelerator.prepare`
         """
-
-        if self._do_sync():
+        do_sync = self._do_sync()
+        self.set_gradient_sync(do_sync)
+        if self.sync_gradients:
             context = contextlib.nullcontext
-            GradientState._set_state("sync_gradients", True)
         else:
             context = self.no_sync
-            GradientState._set_state("sync_gradients", False)
 
         with context(model):
             yield
