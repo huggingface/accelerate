@@ -408,8 +408,7 @@ class DataLoaderDispatcher(DataLoader):
 
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
             yield slice_tensors(batch, data_slice)
-            current_idx += 1
-            GradientState._set_state("end_of_dataloader", current_idx == len(self) - 1)
+        GradientState._set_state("end_of_dataloader", True)
 
     def __len__(self):
         state = AcceleratorState()
