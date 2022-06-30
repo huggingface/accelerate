@@ -23,8 +23,6 @@ from typing import List, Optional, Union
 
 import torch
 
-from packaging.version import Version
-
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
 from .logging import get_logger
