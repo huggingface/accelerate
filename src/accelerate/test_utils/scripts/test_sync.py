@@ -41,7 +41,7 @@ def get_training_setup(accelerator, sched=False):
     set_seed(42)
     model = RegressionModel()
     ddp_model = deepcopy(model)
-    dset = RegressionDataset()
+    dset = RegressionDataset(length=80)
     dataloader = DataLoader(dset, batch_size=16)
     model.to(accelerator.device)
     if sched:
@@ -54,25 +54,24 @@ def get_training_setup(accelerator, sched=False):
         ddp_model, ddp_opt, ddp_sched, dataloader = accelerator.prepare(ddp_model, ddp_opt, ddp_sched, dataloader)
     else:
         ddp_model, dataloader = accelerator.prepare(ddp_model, dataloader)
-    # Use a single batch for all of the tests
-    ddp_input, ddp_target = next(iter(dataloader)).values()
     if sched:
         return (
             model,
             opt,
             sched,
+            dataloader,
             ddp_model,
             ddp_opt,
-            ddp_sched,
-            ddp_input,
-            ddp_target,
+            ddp_sched
         )
-    return model, ddp_model, ddp_input, ddp_target
+    return model, ddp_model, dataloader
 
 
 def test_noop_sync(accelerator):
     # Test when on a single CPU or GPU that the context manager does nothing
-    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
+    model, ddp_model, dataloader = get_training_setup(accelerator)
+    # Use a single batch
+    ddp_input, ddp_target = next(iter(dataloader)).values()
     for iteration in range(3):
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
@@ -103,7 +102,9 @@ def test_noop_sync(accelerator):
 
 def test_distributed_sync(accelerator):
     # Test on distributed setup that context manager behaves properly
-    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
+    model, ddp_model, dataloader = get_training_setup(accelerator)
+    # Use a single batch
+    ddp_input, ddp_target = next(iter(dataloader)).values()
     for iteration in range(3):
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
@@ -142,7 +143,7 @@ def test_distributed_sync(accelerator):
 def test_gradient_accumulation():
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
-    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator)
+    model, ddp_model, ddp_input, ddp_target = get_training_setup(accelerator, True)
     for iteration in range(4):
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
@@ -176,8 +177,9 @@ def test_gradient_accumulation():
 def test_gradient_accumulation_with_opt_and_scheduler():
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
-    model, opt, sched, ddp_model, ddp_opt, ddp_sched, ddp_input, ddp_target = get_training_setup(accelerator, True)
-    for iteration in range(4):
+    model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
+    for iteration, batch in enumerate(dataloader):
+        ddp_input, ddp_target = batch.values()
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
@@ -220,6 +222,7 @@ def main():
         if state.local_process_index == 0:
             print("**Test Distributed `no_sync` context manager**")
         test_distributed_sync(accelerator)
+    if state.distributed_type == DistributedType.MULTI_GPU:
         if state.local_process_index == 0:
             print("**Test `accumulate` gradient accumulation**")
         test_gradient_accumulation()
