@@ -375,7 +375,7 @@ class Accelerator:
         context = contextlib.nullcontext
         if self.num_processes > 1:
             context = getattr(model, "no_sync", context)
-            with context(): 
+            with context():
                 yield
 
         with context():
@@ -389,7 +389,7 @@ class Accelerator:
         elif self.step == (len(dataloader) - 1):
             self.step = 0
             return True
-        elif (self.step+1) % self.gradient_accumulation_steps == 0:
+        elif (self.step + 1) % self.gradient_accumulation_steps == 0:
             self.step += 1
             return True
         self.step += 1
@@ -780,8 +780,8 @@ class Accelerator:
 
     def backward(self, loss, **kwargs):
         """
-        Use `accelerator.backward(loss)` in lieu of `loss.backward()`.
-        Will also take into account dividing for gradient accumulation
+        Use `accelerator.backward(loss)` in lieu of `loss.backward()`. Will also take into account dividing for
+        gradient accumulation
         """
         loss /= self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:

@@ -21,9 +21,8 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
-from accelerate.state import AcceleratorState
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import set_seed, DistributedType
+from accelerate.utils import DistributedType, set_seed
 
 
 def step_model(model, input, target, accelerator, do_backward=True):
@@ -139,6 +138,7 @@ def test_distributed_sync(accelerator):
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
 
+
 def test_gradient_accumulation():
     accelerator = Accelerator(gradient_accumulation_steps=2)
     # Test that context manager behaves properly
@@ -167,10 +167,11 @@ def test_gradient_accumulation():
                 assert (
                     torch.allclose(param.grad, ddp_param.grad) is False
                 ), f"Gradients in sync when they should not be at iteration {iteration}:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
-            
+
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
+
 
 def test_gradient_accumulation_with_opt_and_scheduler():
     accelerator = Accelerator(gradient_accumulation_steps=2)
@@ -190,14 +191,18 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             sched.step()
             opt.zero_grad()
         # Perform gradient accumulation under wrapper
-        # with accelerator.accumulate(ddp_model, [0, 1, 2, 3]):
-        #     step_model(ddp_model, ddp_input, ddp_target, accelerator)
-        #     ddp_opt.step()
-        #     ddp_sched.step()
-        #     ddp_opt.zero_grad()
+        with accelerator.accumulate(ddp_model, [0, 1, 2, 3]):
+            step_model(ddp_model, ddp_input, ddp_target, accelerator)
+            ddp_opt.step()
+            ddp_sched.step()
+            ddp_opt.zero_grad()
 
-        # assert ddp_opt.optimizer._step_count == opt._step_count, f'Optimizers were not called the same number of times:\nOptimizer: {opt._step_count}\nDDP Optimizer: {ddp_opt.optimizer._step_count}'
-        # assert ddp_sched.scheduler.last_epoch == sched.last_epoch*accelerator.num_processes, f'Scheduler was not stepped 2x as much as the base:\nScheduler: {sched.last_epoch}\nDDP: {ddp_sched.scheduler.last_epoch}'
+        assert (
+            ddp_opt.optimizer._step_count == opt._step_count
+        ), f"Optimizers were not called the same number of times:\nOptimizer: {opt._step_count}\nDDP Optimizer: {ddp_opt.optimizer._step_count}"
+        assert (
+            ddp_sched.scheduler.last_epoch == sched.last_epoch * accelerator.num_processes
+        ), f"Scheduler was not stepped 2x as much as the base:\nScheduler: {sched.last_epoch}\nDDP: {ddp_sched.scheduler.last_epoch}"
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
@@ -207,10 +212,10 @@ def test_gradient_accumulation_with_opt_and_scheduler():
 def main():
     accelerator = Accelerator()
     state = accelerator.state
-    # if state.distributed_type == DistributedType.NO:
-    #     if state.local_process_index == 0:
-    #         print("**NOOP `no_sync` gradient accumulation**")
-    #     test_noop_sync(accelerator)
+    if state.distributed_type == DistributedType.NO:
+        if state.local_process_index == 0:
+            print("**NOOP `no_sync` gradient accumulation**")
+        test_noop_sync(accelerator)
     if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_CPU):
         if state.local_process_index == 0:
             print("**Distributed `no_sync` gradient accumulation**")
