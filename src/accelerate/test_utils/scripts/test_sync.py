@@ -165,7 +165,6 @@ def test_gradient_accumulation():
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
-    assert accelerator.step == 0
 
 
 def test_gradient_accumulation_with_opt_and_scheduler():
@@ -184,8 +183,9 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         # Perform normal gradient accumulation
         if ((iteration + 1) % 2 == 0) or (iteration == len(dataloader) - 1):
             opt.step()
-            sched.step()
             opt.zero_grad()
+        # We always step the scheduler
+        sched.step()
         # Perform gradient accumulation under wrapper
         with accelerator.accumulate(ddp_model):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
@@ -193,17 +193,23 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
+        # Gradients should always be in sync
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            if ((iteration + 1) % 2 == 0) or (iteration == len(dataloader) - 1):
+                # Grads should be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is True
+                ), f"Gradients not in sync when they should be at iteration {iteration}:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+            
+
         assert (
             ddp_opt.optimizer._step_count == opt._step_count
         ), f"Optimizers were not called the same number of times at iteration {iteration}:\nOptimizer: {opt._step_count}\nDDP Optimizer: {ddp_opt.optimizer._step_count}"
-        assert (
-            ddp_sched.scheduler.last_epoch == sched.last_epoch * accelerator.num_processes
-        ), f"Scheduler was not stepped 2x as much as the base at iteration {iteration}:\nScheduler: {sched.last_epoch}\nDDP: {ddp_sched.scheduler.last_epoch}"
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
-
-    assert accelerator.step == 0
 
 
 def main():
