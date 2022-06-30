@@ -173,7 +173,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(accelerator):
         opt.step()
         opt.zero_grad()
         # Do training
-        with accelerator.accumulate(ddp_model, [0, 1, 2]):
+        with accelerator.accumulate(ddp_model):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
             ddp_opt.step()
             ddp_opt.zero_grad()
