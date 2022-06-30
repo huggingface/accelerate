@@ -303,7 +303,7 @@ class DataLoaderShard(DataLoader):
             synchronize_rng_states(self.rng_types, self.generator)
         self.gradient_state._set_end_of_dataloader(False)
         _current_batch = 0
-        _dataloader_length = len(self) - 1 if hasattr("__len__", self) else False
+        _dataloader_length = len(self) - 1 if hasattr(self, "__len__") else False
         for batch in super().__iter__():
             if _dataloader_length:
                 self.gradient_state._set_end_of_dataloader(_current_batch == _dataloader_length)

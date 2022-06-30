@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .state import AcceleratorState, GradientState
+from .state import AcceleratorState
 
 
 class AcceleratedScheduler:
@@ -40,11 +40,10 @@ class AcceleratedScheduler:
         self.scheduler = scheduler
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
-        self.gradient_state = GradientState()
         self.step_with_optimizer = step_with_optimizer
 
     def step(self, *args, **kwargs):
-        if not self.step_with_optimizer and self.gradient_state.sync_gradients:
+        if not self.step_with_optimizer:
             # No link between scheduler and optimizer -> just step
             self.scheduler.step(*args, **kwargs)
             return
@@ -53,18 +52,17 @@ class AcceleratedScheduler:
         for opt in self.optimizers:
             if opt.step_was_skipped:
                 return
-        if self.gradient_state.sync_gradients:
-            if self.split_batches:
-                # Split batches -> the training dataloader batch size is not changed so one step per training step
-                self.scheduler.step(*args, **kwargs)
-            else:
-                # Otherwise the training dataloader batch size was multiplied by `num_processes`, so we need to do
-                # num_processes steps per training step
-                num_processes = AcceleratorState().num_processes
-                for _ in range(num_processes):
-                    # Special case when using OneCycle and `drop_last` was not used
-                    if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch:
-                        self.scheduler.step(*args, **kwargs)
+        if self.split_batches:
+            # Split batches -> the training dataloader batch size is not changed so one step per training step
+            self.scheduler.step(*args, **kwargs)
+        else:
+            # Otherwise the training dataloader batch size was multiplied by `num_processes`, so we need to do
+            # num_processes steps per training step
+            num_processes = AcceleratorState().num_processes
+            for _ in range(num_processes):
+                # Special case when using OneCycle and `drop_last` was not used
+                if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch:
+                    self.scheduler.step(*args, **kwargs)
 
     # Passthroughs
     def get_last_lr(self):
