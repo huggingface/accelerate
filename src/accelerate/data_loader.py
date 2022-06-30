@@ -18,6 +18,7 @@ from typing import List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
+from .logging import get_logger
 from .state import AcceleratorState, DistributedType, GradientState, is_tpu_available
 from .utils import (
     RNGType,
@@ -37,6 +38,7 @@ from .utils import (
 if is_tpu_available(check_device=False):
     import torch_xla.distributed.parallel_loader as xpl
 
+logger = get_logger(__name__)
 
 # kwargs of the DataLoader in min version 1.4.0.
 _PYTORCH_DATALOADER_KWARGS = {
@@ -294,13 +296,26 @@ class DataLoaderShard(DataLoader):
         self.device = device
         self.rng_types = rng_types
         self.generator = generator
+        self.gradient_state = GradientState()
 
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
-        for i, batch in enumerate(super().__iter__()):
-            GradientState._set_state("end_of_dataloader", i == (len(self) - 1))
+        self.gradient_state._set_end_of_dataloader(False)
+        _current_batch = 0
+        _dataloader_length = len(self) - 1 if hasattr("__len__", self) else False
+        for batch in super().__iter__():
+            if _dataloader_length:
+                self.gradient_state._set_end_of_dataloader(_current_batch == _dataloader_length)
+                _current_batch += 1
+            else:
+                self.gradient_state._set_end_of_dataloader(False)
             yield batch if self.device is None else send_to_device(batch, self.device)
+        if not self.gradient_state.end_of_dataloader:
+            self.gradient_state._set_end_of_dataloader(True)
+            logger.warn(
+                "Warning! DataLoader had no length and finished iterating. Backwards pass and stepping must be manually performed one last time."
+            )
 
 
 class DataLoaderDispatcher(DataLoader):
@@ -346,7 +361,7 @@ class DataLoaderDispatcher(DataLoader):
             main_iterator = super().__iter__()
         stop_iteration = False
         first_batch = None
-        current_idx = 0
+        GradientState()._set_end_of_dataloader(False)
         while not stop_iteration:
             # On process 0, we gather the batch to dispatch.
             if state.process_index == 0:
@@ -408,7 +423,7 @@ class DataLoaderDispatcher(DataLoader):
 
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
             yield slice_tensors(batch, data_slice)
-        GradientState._set_state("end_of_dataloader", True)
+        GradientState()._set_end_of_dataloader(True)
 
     def __len__(self):
         state = AcceleratorState()

@@ -94,7 +94,7 @@ class Accelerator:
             requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
         gradient_accumulation_steps (`int`, *optional*):
             The number of steps that should pass before gradients are accumulated. Should be combined with
-            [`Accelerator.accumulate`].
+            `Accelerator.accumulate`
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
@@ -381,21 +381,14 @@ class Accelerator:
         with context():
             yield
 
-    def _do_sync(self) -> bool:
-        "Checks if gradients should be synchronized and the optimizers + schedulers should be stepped"
+    def _do_sync(self):
+        "Sets the right `sync_gradients` context and either resets or increases `self.step`"
         if self.gradient_state.end_of_dataloader:
             self.step = 0
-            return True
+            self.gradient_state._set_sync_gradients(True)
         else:
             self.step += 1
-        return (self.step % self.gradient_accumulation_steps) == 0
-
-    @staticmethod
-    def set_gradient_sync(do_sync: bool):
-        """
-        Enables or disables synchronizing of the gradients
-        """
-        GradientState._set_state("sync_gradients", do_sync)
+        self.gradient_state._set_sync_gradients((self.step % self.gradient_accumulation_steps) == 0)
 
     @property
     def sync_gradients(self):
@@ -410,8 +403,7 @@ class Accelerator:
             model (`torch.nn.Module`):
                 PyTorch Module that was prepared with `Accelerator.prepare`
         """
-        do_sync = self._do_sync()
-        self.set_gradient_sync(do_sync)
+        self._do_sync()
         if self.sync_gradients:
             context = contextlib.nullcontext
         else:

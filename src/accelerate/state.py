@@ -233,12 +233,11 @@ class GradientState:
             self.end_of_dataloader = False
         self.initialized = True
 
-    @staticmethod
-    def _set_state(key, val):
-        "Sets `key` to `val` in GradientState"
-        if GradientState._shared_state != {} and key not in GradientState._shared_state.keys():
-            raise KeyError(f"{key} is not a valid key of `GradientState`, {GradientState._shared_state.keys()}")
-        GradientState._shared_state[key] = val
-
     def __repr__(self):
         return f"Sync Gradients: {self.sync_gradients}\n" f"At end of current dataloader: {self.end_of_dataloader}\n"
+
+    def _set_sync_gradients(self, sync_gradients):
+        self.sync_gradients = sync_gradients
+
+    def _set_end_of_dataloader(self, end_of_dataloader):
+        self.end_of_dataloader = end_of_dataloader
