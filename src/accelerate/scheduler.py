@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .state import AcceleratorState
+from .state import AcceleratorState, GradientState
 
 
 class AcceleratedScheduler:
@@ -40,6 +40,7 @@ class AcceleratedScheduler:
         self.scheduler = scheduler
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
+        self.gradient_state = GradientState()
         self.step_with_optimizer = step_with_optimizer
 
     def step(self, *args, **kwargs):

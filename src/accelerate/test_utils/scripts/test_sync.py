@@ -202,7 +202,6 @@ def test_gradient_accumulation_with_opt_and_scheduler():
                 assert (
                     torch.allclose(param.grad, ddp_param.grad) is True
                 ), f"Gradients not in sync when they should be at iteration {iteration}:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
-            
 
         assert (
             ddp_opt.optimizer._step_count == opt._step_count
