@@ -382,7 +382,7 @@ class Accelerator:
 
     @property
     def _do_sync(self) -> bool:
-        "Checks if self.step % self.gradient_accumulation_steps == 0 or if we're on the last batch"
+        "Checks if gradients should be synchronized and the optimizers + schedulers should be stepped"
         if self.state.end_of_dataloader:
             self.step = 0
             return True
