@@ -156,7 +156,7 @@ def training_function(config, args):
             # New code #
             # We use the new `accumulate` context manager to automatically perform gradient accumulation
             # We also currently do not support TPUs nor advise it as bugs were found on the XLA side when running our tests.
-            with accelerator.accumulate(model):
+            with accelerator.accumulate(model, train_dataloader):
                 output = model(**batch)
                 loss = output.loss
                 accelerator.backward(loss)
