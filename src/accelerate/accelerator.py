@@ -372,14 +372,11 @@ class Accelerator:
             model (`torch.nn.Module`):
                 PyTorch Module that was prepared with `Accelerator.prepare`
         """
-        context = contextlib.nullcontext
         if self.num_processes > 1:
             context = getattr(model, "no_sync", context)
-        
-        print(f"Using context {context}")
-
-        with context():
-            yield
+            with context(): 
+                yield
+        yield
 
     def _do_sync(self, dataloader) -> bool:
         "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
