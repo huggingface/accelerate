@@ -39,10 +39,10 @@ def step_model(model, input, target, accelerator, do_backward=True):
 def get_training_setup(accelerator, sched=False):
     "Returns everything needed to perform basic training"
     set_seed(42)
-    model = RegressionModel().cpu()
+    model = RegressionModel()
     dset = RegressionDataset()
     dataloader = DataLoader(dset, batch_size=16)
-    ddp_model = deepcopy(model)
+    ddp_model = RegressionModel()
     model.to(accelerator.device)
     if sched:
         opt = AdamW(params=model.parameters(), lr=1e-3)
