@@ -190,11 +190,8 @@ class Accelerator:
             deepspeed_plugin.set_deepspeed_weakref()
 
         if os.environ.get("USE_FSDP", "false") == "true" or isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
-            if (
-                compare_versions(Version(torch.__version__).base_version, "<", "1.13.0")
-                and Version(torch.__version__).dev is None
-            ):
-                raise ValueError("FSDP requires PyTorch >= 1.13.0.dev")
+            if is_torch_version("<", "1.12.0"):
+                raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = FullyShardedDataParallelPlugin() if os.environ.get("USE_FSDP", "false") == "true" else None
