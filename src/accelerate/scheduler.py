@@ -44,7 +44,7 @@ class AcceleratedScheduler:
         self.accelerator_state = AcceleratorState()
 
     def step(self, *args, **kwargs):
-        if not self.step_with_optimizer:
+        if not self.step_with_optimizer and self.accelerator_state.sync_gradients:
             # No link between scheduler and optimizer -> just step
             self.scheduler.step(*args, **kwargs)
             return
