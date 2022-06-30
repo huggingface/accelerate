@@ -94,7 +94,7 @@ class Accelerator:
             requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
         gradient_accumulation_steps (`int`, *optional*):
             The number of steps that should pass before gradients are accumulated. Should be combined with
-            `Accelerator.accumulate`
+            [`Accelerator.accumulate`].
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
