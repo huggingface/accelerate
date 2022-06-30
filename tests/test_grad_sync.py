@@ -37,7 +37,6 @@ class SyncScheduler(unittest.TestCase):
 
     @require_cpu
     def test_gradient_sync_single_cpu_noop(self):
-        debug_launcher(test_sync.main)
         debug_launcher(test_sync.main, num_processes=1)
 
     @require_cpu

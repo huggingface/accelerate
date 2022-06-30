@@ -378,12 +378,12 @@ class Accelerator:
             yield
 
     @property
-    def _do_sync(self, dataloader) -> bool:
-        "Checks if self.step % self.gradient_accumulation_steps == 0 or step == length of dataloader"
-        return (self.step % self.gradient_accumulation_steps == 0) or (self.step + 1 == len(dataloader))
+    def _do_sync(self) -> bool:
+        "Checks if self.step % self.gradient_accumulation_steps == 0 or if we're on the last batch"
+        return (self.step % self.gradient_accumulation_steps == 0) or self.state.end_of_dataloader
 
     @contextmanager
-    def accumulate(self, model, dataloader):
+    def accumulate(self, model):
         """
         A context manager that will lightly wrap around and perform gradient accumulation automatically
 
@@ -394,7 +394,7 @@ class Accelerator:
                 PyTorch DataLoader that was prepared with `Accelerator.prepare`
         """
 
-        if self._do_sync(dataloader):
+        if self._do_sync:
             context = contextlib.nullcontext
             AcceleratorState._set_state("sync", True)
         else:
@@ -404,7 +404,7 @@ class Accelerator:
         with context(model):
             yield
 
-        if self._do_sync(dataloader):
+        if self._do_sync:
             self.step = 0
         else:
             self.step += 1
