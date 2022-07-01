@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from copy import deepcopy
 
 import torch
@@ -26,7 +25,20 @@ from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, set_seed
 
 
-warnings.filterwarnings("ignore", category=UserWarning, module="torch.optim.lr_scheduler")
+def check_model_parameters(model_a,model_b,did_step):
+    for param, grad_param in zip(model_a.parameters(), model_b.parameters()):
+        if not param.requires_grad:
+            continue
+        if not did_step:
+            # Grads should not be in sync
+            assert (
+                torch.allclose(param.grad, grad_param.grad) is False
+            ), f"Gradients in sync when they should not be:\nmodel_a grad ({param.grad}) == model_b grad ({grad_param.grad})"
+        else:
+            # Grads should be in sync
+            assert (
+                torch.allclose(param.grad, grad_param.grad) is True
+            ), f"Gradients not in sync when they should be:\nmodel_a grad ({param.grad}) != model_b grad ({grad_param.grad})"
 
 
 def step_model(model, input, target, accelerator, do_backward=True):
@@ -184,12 +196,10 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         model.train()
         ddp_model.train()
         step_model(model, input, target, accelerator, False)
-        # Perform normal gradient accumulation
-        if ((iteration + 1) % 2 == 0) or (iteration == len(dataloader) - 1):
-            opt.step()
-            opt.zero_grad()
-        # We always step the scheduler
-        sched.step()
+        opt.step()
+        for _ in range(accelerator.num_processes):
+            sched.step()
+        opt.zero_grad()
         # Perform gradient accumulation under wrapper
         with accelerator.accumulate(ddp_model):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
@@ -197,21 +207,10 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_sched.step()
             ddp_opt.zero_grad()
 
-        # Gradients should be in sync on accumulated steps
-        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
-            if not param.requires_grad:
-                continue
-            if ((iteration + 1) % 2 == 0) or (iteration == len(dataloader) - 1):
-                # Grads should be in sync
-                assert (
-                    torch.allclose(param.grad, ddp_param.grad) is True
-                ), f"Gradients not in sync when they should be at iteration {iteration}:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
-
-        # Optimizer should always be in sync
-        assert (
-            ddp_opt.optimizer._step_count == opt._step_count
-        ), f"Optimizers were not called the same number of times at iteration {iteration}:\nOptimizer: {opt._step_count}\nDDP Optimizer: {ddp_opt.optimizer._step_count}"
-
+        # Learning rates should be the same
+        assert opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"]
+        did_step = (((iteration+1) % 2) == 0) or (iteration == (len(dataloader)-1))
+        check_model_parameters(model,ddp_model,did_step)
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
 
