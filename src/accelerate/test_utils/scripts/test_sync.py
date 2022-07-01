@@ -25,7 +25,7 @@ from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, set_seed
 
 
-def check_model_parameters(model_a,model_b,did_step):
+def check_model_parameters(model_a, model_b, did_step):
     for param, grad_param in zip(model_a.parameters(), model_b.parameters()):
         if not param.requires_grad:
             continue
@@ -209,8 +209,8 @@ def test_gradient_accumulation_with_opt_and_scheduler():
 
         # Learning rates should be the same
         assert opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"]
-        did_step = (((iteration+1) % 2) == 0) or (iteration == (len(dataloader)-1))
-        check_model_parameters(model,ddp_model,did_step)
+        did_step = (((iteration + 1) % 2) == 0) or (iteration == (len(dataloader) - 1))
+        check_model_parameters(model, ddp_model, did_step)
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
 
