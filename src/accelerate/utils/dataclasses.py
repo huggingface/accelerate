@@ -442,7 +442,7 @@ class FullyShardedDataParallelPlugin:
 
     def __post_init__(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, ShardingStrategy
-        from torch.distributed.fsdp.wrap import default_auto_wrap_policy
+        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
 
         if self.sharding_strategy is None:
             self.sharding_strategy = ShardingStrategy(int(os.environ.get("FSDP_SHARDING_STRATEGY", 1)))
@@ -458,4 +458,6 @@ class FullyShardedDataParallelPlugin:
 
         if self.auto_wrap_policy is None:
             if self.min_num_params > 0:
-                self.auto_wrap_policy = functools.partial(default_auto_wrap_policy, min_num_params=self.min_num_params)
+                self.auto_wrap_policy = functools.partial(
+                    size_based_auto_wrap_policy, min_num_params=self.min_num_params
+                )
