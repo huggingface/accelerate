@@ -314,6 +314,8 @@ class DataLoaderShard(DataLoader):
                 yield current_batch
                 current_batch = next_batch
             except StopIteration:
+                if self.device is not None:
+                    send_to_device(current_batch, self.device)
                 self.gradient_state._set_end_of_dataloader(True)
                 yield current_batch
                 break
