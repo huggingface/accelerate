@@ -309,13 +309,11 @@ class DataLoaderShard(DataLoader):
             try:
                 # But we still move it to the device so it is done before `StopIteration` is reached
                 if self.device is not None:
-                    send_to_device(current_batch, self.device)
+                    current_batch = send_to_device(current_batch, self.device)
                 next_batch = next(dataloader_iter)
                 yield current_batch
                 current_batch = next_batch
             except StopIteration:
-                if self.device is not None:
-                    send_to_device(current_batch, self.device)
                 self.gradient_state._set_end_of_dataloader(True)
                 yield current_batch
                 break
