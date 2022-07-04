@@ -302,20 +302,21 @@ class DataLoaderShard(DataLoader):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
         self.gradient_state._set_end_of_dataloader(False)
-        _current_batch = 0
-        _dataloader_length = len(self) - 1 if hasattr(self, "__len__") else False
-        for batch in super().__iter__():
-            if _dataloader_length:
-                self.gradient_state._set_end_of_dataloader(_current_batch == _dataloader_length)
-                _current_batch += 1
-            else:
-                self.gradient_state._set_end_of_dataloader(False)
-            yield batch if self.device is None else send_to_device(batch, self.device)
-        if not self.gradient_state.end_of_dataloader:
-            self.gradient_state._set_end_of_dataloader(True)
-            logger.warn(
-                "Warning! DataLoader had no length and finished iterating. Backwards pass and stepping must be manually performed one last time."
-            )
+        dataloader_iter = super().__iter__()
+        # We iterate one batch ahead to check when we are at the end
+        current_batch = next(dataloader_iter)
+        while True:
+            try:
+                # But we still move it to the device so it is done before `StopIteration` is reached
+                if self.device is not None:
+                    send_to_device(current_batch, self.device)
+                next_batch = next(dataloader_iter)
+                yield current_batch
+                current_batch = next_batch
+            except StopIteration:
+                self.gradient_state._set_end_of_dataloader(True)
+                yield current_batch
+                break
 
 
 class DataLoaderDispatcher(DataLoader):
