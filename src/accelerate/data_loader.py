@@ -387,7 +387,7 @@ class DataLoaderDispatcher(DataLoader):
             # We only iterate through the DataLoader on process 0.
             main_iterator = super().__iter__()
             self.gradient_state._set_end_of_dataloader(False)
-            current_batch, current_batch_info = self._next_batch(main_iterator)
+        current_batch, current_batch_info = self._next_batch(main_iterator)
         stop_iteration = False
         first_batch = None
 
