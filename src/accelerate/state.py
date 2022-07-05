@@ -237,7 +237,9 @@ class GradientState:
         return f"Sync Gradients: {self.sync_gradients}\n" f"At end of current dataloader: {self.end_of_dataloader}\n"
 
     def _set_sync_gradients(self, sync_gradients):
+        "Private function that sets whether gradients should be synchronized. Users should not have to call this."
         self.sync_gradients = sync_gradients
 
     def _set_end_of_dataloader(self, end_of_dataloader):
+        "Private function that sets whether the end of the current dataloader has been reached. Users should not have to call this."
         self.end_of_dataloader = end_of_dataloader

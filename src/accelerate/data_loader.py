@@ -304,7 +304,10 @@ class DataLoaderShard(DataLoader):
         self.gradient_state._set_end_of_dataloader(False)
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
-        current_batch = next(dataloader_iter)
+        try:
+            current_batch = next(dataloader_iter)
+        except StopIteration:
+            raise StopIteration("Tried iterating over an empty dataloader")
         while True:
             try:
                 # But we still move it to the device so it is done before `StopIteration` is reached
