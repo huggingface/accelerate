@@ -359,19 +359,26 @@ class DataLoaderDispatcher(DataLoader):
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
 
-    def _draw_batch(self, iterator, stop_iteration):
+    def __iter__(self):
+        state = AcceleratorState()
+        if state.process_index == 0:
+            # We only iterate through the DataLoader on process 0.
+            main_iterator = super().__iter__()
+
+        stop_iteration = False
+        first_batch = None
         # On process 0, we gather the batch to dispatch.
-        if self.state.process_index == 0:
+        if state.process_index == 0:
             try:
                 if self.split_batches:
                     # One batch of the main iterator is dispatched and split.
-                    batch = next(iterator)
+                    batch = next(main_iterator)
                 else:
                     # num_processes batches of the main iterator are concatenated then dispatched and split.
                     # We add the batches one by one so we have the remainder available when drop_last=False.
                     batches = []
-                    for _ in range(self.state.num_processes):
-                        batches.append(next(iterator))
+                    for _ in range(state.num_processes):
+                        batches.append(next(main_iterator))
                     batch = concatenate(batches, dim=0)
                 # In both cases, we need to get the structure of the batch that we will broadcast on other
                 # processes to initialize the tensors with the right shape.
@@ -381,60 +388,69 @@ class DataLoaderDispatcher(DataLoader):
                 batch_info = [None, True]
         else:
             batch_info = [None, stop_iteration]
-
-        # This is inplace, so after this instruction, every process has the same `batch_info` as process 0.
-        broadcast_object_list(batch_info)
-        stop_iteration = batch_info[1]
-        if stop_iteration:
-            # If drop_last is False and split_batches is False, we may have a remainder to take care of.
-            if not self.split_batches and not self.drop_last:
-                if self.state.process_index == 0 and len(batches) > 0:
-                    batch = concatenate(batches, dim=0)
-                    batch_info = [get_data_structure(batch), False]
-                else:
-                    batch_info = [None, True]
-                broadcast_object_list(batch_info)
-                self.gradient_state._set_end_of_dataloader(batch_info[1])
-                return stop_iteration, batch, batch_info
-            else:
-                return stop_iteration, [], batch_info
-        return stop_iteration, [], batch_info
-
-    def __iter__(self):
-        main_iterator = None
-        if self.state.process_index == 0:
-            # We only iterate through the DataLoader on process 0.
-            main_iterator = super().__iter__()
-        stop_iteration, batch, batch_info = self._draw_batch(main_iterator, False)
-        first_batch = None
-        next_stop_iteration = False
-        self.gradient_state._set_end_of_dataloader(False)
+        
         while not stop_iteration:
-            stop_iteration = next_stop_iteration
-            if self.state.process_index != 0:
+            # This is inplace, so after this instruction, every process has the same `batch_info` as process 0.
+            broadcast_object_list(batch_info)
+            stop_iteration = batch_info[1]
+            if stop_iteration:
+                # If drop_last is False and split_batches is False, we may have a remainder to take care of.
+                if not self.split_batches and not self.drop_last:
+                    if state.process_index == 0 and len(batches) > 0:
+                        batch = concatenate(batches, dim=0)
+                        batch_info = [get_data_structure(batch), False]
+                    else:
+                        batch_info = [None, True]
+                    broadcast_object_list(batch_info)
+                    if batch_info[1]:
+                        continue
+                else:
+                    continue
+
+            if state.process_index != 0:
                 # Initialize tensors on other processes than process 0.
                 batch = initialize_tensors(batch_info[0])
-            batch = send_to_device(batch, self.state.device)
+            batch = send_to_device(batch, state.device)
             # Broadcast the batch before splitting it.
             batch = broadcast(batch, from_process=0)
 
             if not self.drop_last and first_batch is None:
                 # We keep at least num processes elements of the first batch to be able to complete the last batch
-                first_batch = slice_tensors(batch, slice(0, self.state.num_processes))
+                first_batch = slice_tensors(batch, slice(0, state.num_processes))
 
             observed_batch_size = find_batch_size(batch)
-            batch_size = observed_batch_size // self.state.num_processes
+            batch_size = observed_batch_size // state.num_processes
 
-            if not self.drop_last and stop_iteration and observed_batch_size % self.state.num_processes != 0:
+            if not self.drop_last and stop_iteration and observed_batch_size % state.num_processes != 0:
                 # If the last batch is not complete, let's add the first batch to it.
                 batch = concatenate([batch, first_batch], dim=0)
                 batch_size += 1
 
-            data_slice = slice(self.state.process_index * batch_size, (self.state.process_index + 1) * batch_size)
-            next_stop_iteration, next_batch, next_batch_info = self._draw_batch(main_iterator, False)
-            yield slice_tensors(batch, data_slice)
-            if next_stop_iteration:
+            data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
+            # On process 0, we gather the batch to dispatch.
+            if state.process_index == 0:
+                try:
+                    if self.split_batches:
+                        # One batch of the main iterator is dispatched and split.
+                        next_batch = next(main_iterator)
+                    else:
+                        # num_processes batches of the main iterator are concatenated then dispatched and split.
+                        # We add the batches one by one so we have the remainder available when drop_last=False.
+                        batches = []
+                        for _ in range(state.num_processes):
+                            batches.append(next(main_iterator))
+                        next_batch = concatenate(batches, dim=0)
+                    # In both cases, we need to get the structure of the batch that we will broadcast on other
+                    # processes to initialize the tensors with the right shape.
+                    # data_structure, stop_iteration
+                    next_batch_info = [get_data_structure(next_batch), False]
+                except StopIteration:
+                    next_batch_info = [None, True]
+            else:
+                next_batch_info = [None, stop_iteration]
+            if next_batch[1]:
                 self.gradient_state._set_end_of_dataloader(True)
+            yield slice_tensors(batch, data_slice)
             batch, batch_info = next_batch, next_batch_info
 
     def __len__(self):
