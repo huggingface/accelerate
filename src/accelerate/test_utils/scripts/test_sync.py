@@ -97,6 +97,13 @@ def test_noop_sync(accelerator):
 
         # Since `no_sync` is a noop, `ddp_model` and `model` grads should always be in sync
         check_model_parameters(model, ddp_model, True)
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            assert torch.allclose(
+                param.grad, ddp_param.grad
+            ), f"Gradients not in sync when they should be:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
@@ -123,7 +130,20 @@ def test_distributed_sync(accelerator):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
 
         # DDP model and model should only be in sync when not (iteration % 2 == 0)
-        check_model_parameters(model, ddp_model, (iteration % 2 == 0))
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            if iteration % 2 == 0:
+                # Grads should not be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is False
+                ), f"Gradients in sync when they should not be:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
+            else:
+                # Grads should be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is True
+                ), f"Gradients not in sync when they should be:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(16)]
@@ -144,9 +164,20 @@ def test_gradient_accumulation():
         with accelerator.accumulate(ddp_model):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
 
-        # DDP model and model should only be in sync when not (iteration % 2 == 0) or last batch
-        did_step = (((iteration + 1) % 2) == 0) or (iteration == (len(dataloader) - 1))
-        check_model_parameters(model, ddp_model, did_step)
+        # DDP model and model should only be in sync when not (iteration % 2 == 0)
+        for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+            if not param.requires_grad:
+                continue
+            if ((iteration + 1) % 2 == 0) or (iteration == len(dataloader) - 1):
+                # Grads should be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is True
+                ), f"Gradients not in sync when they should be at iteration {iteration}:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+            else:
+                # Grads should not be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is False
+                ), f"Gradients in sync when they should not be at iteration {iteration}:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
