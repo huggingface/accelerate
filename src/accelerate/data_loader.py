@@ -385,13 +385,13 @@ class DataLoaderDispatcher(DataLoader):
 
     def __iter__(self):
         state = AcceleratorState()
+        main_iterator = None
         if state.process_index == 0:
             # We only iterate through the DataLoader on process 0.
             main_iterator = super().__iter__()
             self.gradient_state._set_end_of_dataloader(False)
         stop_iteration = False
         first_batch = None
-        main_iterator = None
         batch, batch_info = self._draw_batch(main_iterator, stop_iteration)
 
         while not stop_iteration:
