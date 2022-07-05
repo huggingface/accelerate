@@ -391,6 +391,7 @@ class DataLoaderDispatcher(DataLoader):
             self.gradient_state._set_end_of_dataloader(False)
         stop_iteration = False
         first_batch = None
+        main_iterator = None
         batch, batch_info = self._draw_batch(main_iterator, stop_iteration)
 
         while not stop_iteration:
