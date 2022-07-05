@@ -379,7 +379,7 @@ class DataLoaderDispatcher(DataLoader):
                 batch_info = [get_data_structure(batch), False]
             except StopIteration:
                 batch_info = [None, True]
-            return batches, batch_info
+            return batch, batch_info
 
     def __iter__(self):
         state = AcceleratorState()
