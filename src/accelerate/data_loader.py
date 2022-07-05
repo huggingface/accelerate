@@ -365,13 +365,13 @@ class DataLoaderDispatcher(DataLoader):
             try:
                 if self.split_batches:
                     # One batch of the main iterator is dispatched and split.
-                    batch = next(main_iterator)
+                    batch = next(iterator)
                 else:
                     # num_processes batches of the main iterator are concatenated then dispatched and split.
                     # We add the batches one by one so we have the remainder available when drop_last=False.
                     batches = []
                     for _ in range(self.state.num_processes):
-                        batches.append(next(main_iterator))
+                        batches.append(next(iterator))
                     batch = concatenate(batches, dim=0)
                 # In both cases, we need to get the structure of the batch that we will broadcast on other
                 # processes to initialize the tensors with the right shape.
