@@ -380,6 +380,7 @@ class DataLoaderDispatcher(DataLoader):
             except StopIteration:
                 batch_info = [None, True]
         else:
+            batch = []
             batch_info = [None, stop_iteration]
         return batch, batch_info
 
@@ -415,7 +416,7 @@ class DataLoaderDispatcher(DataLoader):
 
             if state.process_index != 0:
                 # Initialize tensors on other processes than process 0.
-                batch_info = initialize_tensors(batch_info[0])
+                batch = initialize_tensors(batch_info[0])
             batch = send_to_device(batch, state.device)
             # Broadcast the batch before splitting it.
             batch = broadcast(batch, from_process=0)
