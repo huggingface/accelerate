@@ -38,4 +38,23 @@ should search for and replace by the corresponding methods of your `accelerator`
 - Use [`~Accelerator.clip_grad_norm_`] instead of `torch.nn.utils.clip_grad_norm_` and
   [`~Accelerator.clip_grad_value_`] instead of `torch.nn.utils.clip_grad_value_`.
 
+To perform gradient accumulation use [`~Accelerator.accumulate`] and specify a `gradient_accumulation_steps`. 
+This will also automatically ensure the gradients are synced or unsynced when on multi-node, check if the step should
+actually be performed, and auto-scale the loss:
+
+```python
+accelerator = Accelerator(gradient_accumulation_steps=2)
+
+for (input, label) in enumerate(training_dataloader):
+  with accelerator.accumulate(model):
+    predictions = model(input)
+    loss = loss_function(predictions, labels)
+    accelerator.backward(loss)
+    optimizer.step()
+    scheduler.step()
+    optimizer.zero_grad()
+```
+
+**Note**: Using this with `dispatch_batches=True` is currently not supported.
+
 [[autodoc]] Accelerator
