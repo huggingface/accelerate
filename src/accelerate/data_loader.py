@@ -448,7 +448,7 @@ class DataLoaderDispatcher(DataLoader):
                     next_batch_info = [None, True]
             else:
                 next_batch_info = [None, stop_iteration]
-            if next_batch[1]:
+            if next_batch_info[1]:
                 self.gradient_state._set_end_of_dataloader(True)
             yield slice_tensors(batch, data_slice)
             batch, batch_info = next_batch, next_batch_info
