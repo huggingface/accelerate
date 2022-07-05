@@ -419,7 +419,6 @@ class DataLoaderDispatcher(DataLoader):
             broadcast_object_list(batch_info)
             stop_iteration = batch_info[1]
             if stop_iteration:
-                self.gradient_state._set_end_of_dataloader(True)
                 # If drop_last is False and split_batches is False, we may have a remainder to take care of.
                 if not self.split_batches and not self.drop_last:
                     if state.process_index == 0 and len(batches) > 0:
@@ -453,6 +452,8 @@ class DataLoaderDispatcher(DataLoader):
                 batch_size += 1
 
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
+            if stop_iteration:
+                self.gradient_state._set_end_of_dataloader(True)
             yield slice_tensors(batch, data_slice)
 
     def __len__(self):
