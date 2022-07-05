@@ -178,7 +178,7 @@ def training_function(config, args):
             predictions, references = accelerator.gather((predictions, batch["labels"]))
             # New Code #
             # First we check if it's a distributed system
-            if accelerator.num_processes > 1:
+            if accelerator.use_distributed:
                 # Then see if we're on the last batch of our eval dataloader
                 if step == len(eval_dataloader) - 1:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples

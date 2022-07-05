@@ -274,6 +274,10 @@ class Accelerator:
             self.rng_types = ["torch"] if is_torch_version("<=", "1.5.1") else ["generator"]
 
     @property
+    def use_distributed(self):
+        return self.distributed_type != DistributedType.NO and self.num_processes > 1
+
+    @property
     def distributed_type(self):
         return self.state.distributed_type
 
@@ -361,7 +365,7 @@ class Accelerator:
                 PyTorch Module that was prepared with `Accelerator.prepare`
         """
         context = contextlib.nullcontext
-        if self.num_processes > 1:
+        if self.use_distributed:
             context = getattr(model, "no_sync", context)
 
         with context():
