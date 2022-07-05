@@ -12,7 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .state import AcceleratorState
+# We ignore warnings about stepping the scheduler since we step it ourselves during gradient accumulation
+
+import warnings
+
+from .state import AcceleratorState, GradientState
+
+
+warnings.filterwarnings("ignore", category=UserWarning, module="torch.optim.lr_scheduler")
 
 
 class AcceleratedScheduler:
@@ -40,6 +47,7 @@ class AcceleratedScheduler:
         self.scheduler = scheduler
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
+        self.gradient_state = GradientState()
         self.step_with_optimizer = step_with_optimizer
 
     def step(self, *args, **kwargs):
@@ -52,7 +60,6 @@ class AcceleratedScheduler:
         for opt in self.optimizers:
             if opt.step_was_skipped:
                 return
-
         if self.split_batches:
             # Split batches -> the training dataloader batch size is not changed so one step per training step
             self.scheduler.step(*args, **kwargs)

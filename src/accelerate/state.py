@@ -52,6 +52,7 @@ class AcceleratorState:
     Attributes:
 
         - **device** (`torch.device`) -- The device to use.
+        - **sync_gradients** (`bool`) -- Whether to sync the gradients or not
         - **distributed_type** (`~accelerate.state.DistributedType`) -- The type of distributed environment currently
           in use.
         - **num_processes** (`int`) -- The number of processes currently launched in parallel.
@@ -209,3 +210,36 @@ class AcceleratorState:
                 raise ValueError(err.format(flag="cpu=True"))
             if mixed_precision is not None and mixed_precision != self.mixed_precision:
                 raise ValueError(err.format(flag=f"mixed_precision='{mixed_precision}'"))
+
+
+class GradientState:
+    """
+    This is a variation of a [singleton class](https://en.wikipedia.org/wiki/Singleton_pattern) in the sense that all
+    instance of `GradientState` share the same state, which is initialized on the first instantiation.
+
+    This specific state revolves around whether gradients should be synced and if we have reached the end of a prepared
+    dataloader Attributes:
+
+        - **sync_gradients** (`bool`) -- Whether the gradients should be synced
+        - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
+    """
+
+    _shared_state = {}
+
+    def __init__(self):
+        self.__dict__ = self._shared_state
+        if not getattr(self, "initialized", False):
+            self.sync_gradients = True
+            self.end_of_dataloader = False
+        self.initialized = True
+
+    def __repr__(self):
+        return f"Sync Gradients: {self.sync_gradients}\n" f"At end of current dataloader: {self.end_of_dataloader}\n"
+
+    def _set_sync_gradients(self, sync_gradients):
+        "Private function that sets whether gradients should be synchronized. Users should not have to call this."
+        self.sync_gradients = sync_gradients
+
+    def _set_end_of_dataloader(self, end_of_dataloader):
+        "Private function that sets whether the end of the current dataloader has been reached. Users should not have to call this."
+        self.end_of_dataloader = end_of_dataloader

@@ -21,6 +21,7 @@ from dataclasses import dataclass
 import torch
 
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
+from accelerate.state import AcceleratorState
 from accelerate.test_utils import execute_subprocess_async, require_cuda, require_multi_gpu
 from accelerate.utils import KwargsHandler
 
@@ -44,7 +45,8 @@ class DataLoaderTester(unittest.TestCase):
     def test_grad_scaler_kwargs(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         scaler_handler = GradScalerKwargs(init_scale=1024, growth_factor=2)
-        accelerator = Accelerator(fp16=True, kwargs_handlers=[scaler_handler])
+        AcceleratorState._reset_state()
+        accelerator = Accelerator(mixed_precision="fp16", kwargs_handlers=[scaler_handler])
         print(accelerator.use_fp16)
         scaler = accelerator.scaler
 

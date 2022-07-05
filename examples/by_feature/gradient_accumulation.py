@@ -102,19 +102,21 @@ if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
 
 
 def training_function(config, args):
+    # New Code #
+    gradient_accumulation_steps = int(args.gradient_accumulation_steps)
     # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    accelerator = Accelerator(
+        cpu=args.cpu, mixed_precision=args.mixed_precision, gradient_accumulation_steps=gradient_accumulation_steps
+    )
+    if accelerator.distributed_type == DistributedType.TPU and gradient_accumulation_steps > 1:
+        raise NotImplementedError(
+            "Gradient accumulation on TPUs is currently not supported. Pass `gradient_accumulation_steps=1`"
+        )
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
-    # New Code #
-    gradient_accumulation_steps = int(args.gradient_accumulation_steps)
-    if accelerator.distributed_type == DistributedType.TPU and gradient_accumulation_steps > 1:
-        raise NotImplementedError(
-            "Gradient accumulation on TPUs is currently not supported. Pass `gradient_accumulation_steps=1`"
-        )
 
     metric = evaluate.load("glue", "mrpc")
 
@@ -152,20 +154,11 @@ def training_function(config, args):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             # New code #
-            # We use the new `no_sync` context manager to prevent gradient averaging
-            # until we want to at the proper step if we happen to be in a distributed setup
-            # otherwise it does nothing
+            # We use the new `accumulate` context manager to perform gradient accumulation
             # We also currently do not support TPUs nor advise it as bugs were found on the XLA side when running our tests.
-            if step % gradient_accumulation_steps != 0:
-                # Accumulate gradients locally
-                with accelerator.no_sync(model):
-                    output = model(**batch)
-                    loss = output.loss / gradient_accumulation_steps
-                    accelerator.backward(loss)
-            else:
-                # Sync gradients and step
+            with accelerator.accumulate(model):
                 output = model(**batch)
-                loss = output.loss / gradient_accumulation_steps
+                loss = output.loss
                 accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()

@@ -28,7 +28,7 @@ from .data_loader import prepare_data_loader
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState
+from .state import AcceleratorState, GradientState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     DeepSpeedPlugin,
@@ -92,6 +92,9 @@ class Accelerator:
             default to the value in the environment variable `MIXED_PRECISION`, which will use the default value in the
             accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
             requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+        gradient_accumulation_steps (`int`, *optional*, default to 1):
+            The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
+            `Accelerator.accumulate`.
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
@@ -146,6 +149,7 @@ class Accelerator:
         split_batches: bool = False,
         fp16: bool = None,
         mixed_precision: Union[PrecisionType, str] = None,
+        gradient_accumulation_steps: int = 1,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
@@ -231,6 +235,17 @@ class Accelerator:
             **kwargs,
         )
 
+        if gradient_accumulation_steps > 1:
+            if self.state.distributed_type == DistributedType.TPU:
+                raise NotImplementedError(
+                    "Gradient accumulation on TPU is not supported. Pass in `gradient_accumulation_steps=1`"
+                )
+            if dispatch_batches:
+                raise NotImplementedError(
+                    "Gradient accumulation with dispatched dataloaders is not supported. Pass in `gradient_accumulation_steps=1` or `dispatch_batches=False`"
+                )
+
+        self.gradient_accumulation_steps = gradient_accumulation_steps
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
@@ -261,6 +276,10 @@ class Accelerator:
             if torch.cuda.is_available():
                 kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+
+        # Start of internal step tracking
+        self.step = 0
+        self.gradient_state = GradientState()
 
         # Internal references to the training objects
         self._optimizers = []
@@ -369,6 +388,37 @@ class Accelerator:
             context = getattr(model, "no_sync", context)
 
         with context():
+            yield
+
+    def _do_sync(self):
+        "Sets the right `sync_gradients` context and either resets or increases `self.step`"
+        if self.gradient_state.end_of_dataloader:
+            self.step = 0
+            self.gradient_state._set_sync_gradients(True)
+        else:
+            self.step += 1
+        self.gradient_state._set_sync_gradients((self.step % self.gradient_accumulation_steps) == 0)
+
+    @property
+    def sync_gradients(self):
+        return self.gradient_state.sync_gradients
+
+    @contextmanager
+    def accumulate(self, model):
+        """
+        A context manager that will lightly wrap around and perform gradient accumulation automatically
+
+        Args:
+            model (`torch.nn.Module`):
+                PyTorch Module that was prepared with `Accelerator.prepare`
+        """
+        self._do_sync()
+        if self.sync_gradients:
+            context = contextlib.nullcontext
+        else:
+            context = self.no_sync
+
+        with context(model):
             yield
 
     def print(self, *args, **kwargs):
@@ -738,6 +788,7 @@ class Accelerator:
         """
         Use `accelerator.backward(loss)` in lieu of `loss.backward()`.
         """
+        loss /= self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:
             self.deepspeed_engine_wrapped.backward(loss, **kwargs)
         elif self.scaler is not None:

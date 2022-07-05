@@ -18,7 +18,8 @@ from typing import List, Optional, Union
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
-from .state import AcceleratorState, DistributedType, is_tpu_available
+from .logging import get_logger
+from .state import AcceleratorState, DistributedType, GradientState, is_tpu_available
 from .utils import (
     RNGType,
     broadcast,
@@ -37,6 +38,7 @@ from .utils import (
 if is_tpu_available(check_device=False):
     import torch_xla.distributed.parallel_loader as xpl
 
+logger = get_logger(__name__)
 
 # kwargs of the DataLoader in min version 1.4.0.
 _PYTORCH_DATALOADER_KWARGS = {
@@ -294,31 +296,44 @@ class DataLoaderShard(DataLoader):
         self.device = device
         self.rng_types = rng_types
         self.generator = generator
+        self.gradient_state = GradientState()
 
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
-        for batch in super().__iter__():
-            yield batch if self.device is None else send_to_device(batch, self.device)
+        self.gradient_state._set_end_of_dataloader(False)
+        dataloader_iter = super().__iter__()
+        # We iterate one batch ahead to check when we are at the end
+        try:
+            current_batch = next(dataloader_iter)
+        except StopIteration:
+            yield
+        while True:
+            try:
+                # But we still move it to the device so it is done before `StopIteration` is reached
+                if self.device is not None:
+                    current_batch = send_to_device(current_batch, self.device)
+                next_batch = next(dataloader_iter)
+                yield current_batch
+                current_batch = next_batch
+            except StopIteration:
+                self.gradient_state._set_end_of_dataloader(True)
+                yield current_batch
+                break
 
 
 class DataLoaderDispatcher(DataLoader):
     """
+    Args:
     Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
     process their part of the batch.
-
-    Args:
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the resulting `DataLoader` should split the batches of the original data loader across devices or
             yield full batches (in which case it will yield batches starting at the `process_index`-th and advancing of
-            `num_processes` batches at each iteration).
-
-            Another way to see this is that the observed batch size will be the same as the initial `dataloader` if
-            this option is set to `True`, the batch size of the initial `dataloader` multiplied by `num_processes`
-            otherwise.
-
-            Setting this option to `True` requires that the batch size of the `dataloader` is a round multiple of
-            `batch_size`.
+            `num_processes` batches at each iteration). Another way to see this is that the observed batch size will be
+            the same as the initial `dataloader` if this option is set to `True`, the batch size of the initial
+            `dataloader` multiplied by `num_processes` otherwise. Setting this option to `True` requires that the batch
+            size of the `dataloader` is a round multiple of `batch_size`.
     """
 
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
@@ -337,6 +352,9 @@ class DataLoaderDispatcher(DataLoader):
             )
         if shuffle:
             torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
+
+        self.gradient_state = GradientState()
+        self.state = AcceleratorState()
 
     def __iter__(self):
         state = AcceleratorState()
@@ -408,12 +426,11 @@ class DataLoaderDispatcher(DataLoader):
             yield slice_tensors(batch, data_slice)
 
     def __len__(self):
-        state = AcceleratorState()
         whole_length = super().__len__()
         if self.drop_last:
-            return whole_length // state.num_processes
+            return whole_length // self.state.num_processes
         else:
-            return math.ceil(whole_length / state.num_processes)
+            return math.ceil(whole_length / self.state.num_processes)
 
 
 def prepare_data_loader(
