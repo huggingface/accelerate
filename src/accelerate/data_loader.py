@@ -398,6 +398,7 @@ class DataLoaderDispatcher(DataLoader):
                 return stop_iteration, batch, batch_info
             else:
                 return stop_iteration, [], batch_info
+        return stop_iteration, [], batch_info
 
     def __iter__(self):
         main_iterator = None
