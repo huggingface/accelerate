@@ -46,13 +46,13 @@ actually be performed, and auto-scale the loss:
 accelerator = Accelerator(gradient_accumulation_steps=2)
 
 for (input, label) in enumerate(training_dataloader):
-  with accelerator.accumulate(model):
-    predictions = model(input)
-    loss = loss_function(predictions, labels)
-    accelerator.backward(loss)
-    optimizer.step()
-    scheduler.step()
-    optimizer.zero_grad()
+    with accelerator.accumulate(model):
+        predictions = model(input)
+        loss = loss_function(predictions, labels)
+        accelerator.backward(loss)
+        optimizer.step()
+        scheduler.step()
+        optimizer.zero_grad()
 ```
 
 **Note**: Using this with `dispatch_batches=True` is currently not supported.
