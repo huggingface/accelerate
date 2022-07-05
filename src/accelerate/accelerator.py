@@ -92,8 +92,8 @@ class Accelerator:
             default to the value in the environment variable `MIXED_PRECISION`, which will use the default value in the
             accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
             requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
-        gradient_accumulation_steps (`int`, *optional*):
-            The number of steps that should pass before gradients are accumulated. Should be combined with
+        gradient_accumulation_steps (`int`, *optional*, default to 1):
+            The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
             `Accelerator.accumulate`.
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force

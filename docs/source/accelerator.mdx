@@ -39,7 +39,7 @@ should search for and replace by the corresponding methods of your `accelerator`
   [`~Accelerator.clip_grad_value_`] instead of `torch.nn.utils.clip_grad_value_`.
 
 To perform gradient accumulation use [`~Accelerator.accumulate`] and specify a `gradient_accumulation_steps`. 
-This will also automatically ensure the gradients are synced or unsynced when on multi-node, check if the step should
+This will also automatically ensure the gradients are synced or unsynced when on multi-device training, check if the step should
 actually be performed, and auto-scale the loss:
 
 ```python
@@ -55,6 +55,10 @@ for (input, label) in enumerate(training_dataloader):
         optimizer.zero_grad()
 ```
 
-**Note**: Using this with `dispatch_batches=True` is currently not supported.
+<Tip warning={true}>
+
+Using this with `dispatch_batches=True`  (which is the default for iterable datasets) is currently not supported.
+
+</Tip>
 
 [[autodoc]] Accelerator
