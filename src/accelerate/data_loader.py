@@ -307,7 +307,7 @@ class DataLoaderShard(DataLoader):
         try:
             current_batch = next(dataloader_iter)
         except StopIteration:
-            yield current_batch
+            yield
         while True:
             try:
                 # But we still move it to the device so it is done before `StopIteration` is reached
@@ -360,7 +360,7 @@ class DataLoaderDispatcher(DataLoader):
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
 
-    def _next_batch(self, iterator):
+    def _draw_batch(self, iterator, stop_iteration):
         if self.state.process_index == 0:
             try:
                 if self.split_batches:
@@ -379,7 +379,9 @@ class DataLoaderDispatcher(DataLoader):
                 batch_info = [get_data_structure(batch), False]
             except StopIteration:
                 batch_info = [None, True]
-            return batch, batch_info
+        else:
+            batch_info = [None, stop_iteration]
+        return batch, batch_info
 
     def __iter__(self):
         state = AcceleratorState()
@@ -387,51 +389,52 @@ class DataLoaderDispatcher(DataLoader):
             # We only iterate through the DataLoader on process 0.
             main_iterator = super().__iter__()
             self.gradient_state._set_end_of_dataloader(False)
-        current_batch, current_batch_info = self._next_batch(main_iterator)
         stop_iteration = False
         first_batch = None
+        batch, batch_info = self._draw_batch(main_iterator, stop_iteration)
 
         while not stop_iteration:
+            # On process 0 we gather the batch to dispatch
             # This is inplace, so after this instruction, every process has the same `batch_info` as process 0.
-            broadcast_object_list(current_batch_info)
-            stop_iteration = current_batch_info[1]
+            broadcast_object_list(batch_info)
+            stop_iteration = batch_info[1]
             if stop_iteration:
                 # If drop_last is False and split_batches is False, we may have a remainder to take care of.
                 if not self.split_batches and not self.drop_last:
-                    if state.process_index == 0 and len(current_batch) > 0:
-                        current_batch = concatenate(current_batch, dim=0)
-                        current_batch_info = [get_data_structure(current_batch), False]
+                    if state.process_index == 0 and len(batch) > 0:
+                        batch = concatenate(batch_info, dim=0)
+                        batch_info = [get_data_structure(batch), False]
                     else:
-                        current_batch_info = [None, True]
-                    broadcast_object_list(current_batch_info)
-                    if current_batch_info[1]:
+                        batch_info = [None, True]
+                    broadcast_object_list(batch_info)
+                    if batch_info[1]:
                         continue
                 else:
                     continue
 
             if state.process_index != 0:
                 # Initialize tensors on other processes than process 0.
-                current_batch = initialize_tensors(current_batch_info[0])
-            current_batch = send_to_device(current_batch, state.device)
+                batch_info = initialize_tensors(batch_info[0])
+            batch = send_to_device(batch, state.device)
             # Broadcast the batch before splitting it.
-            current_batch = broadcast(current_batch, from_process=0)
+            batch = broadcast(batch, from_process=0)
 
             if not self.drop_last and first_batch is None:
                 # We keep at least num processes elements of the first batch to be able to complete the last batch
-                first_batch = slice_tensors(current_batch, slice(0, state.num_processes))
+                first_batch = slice_tensors(batch, slice(0, state.num_processes))
 
-            observed_batch_size = find_batch_size(current_batch)
+            observed_batch_size = find_batch_size(batch)
             batch_size = observed_batch_size // state.num_processes
 
             if not self.drop_last and stop_iteration and observed_batch_size % state.num_processes != 0:
                 # If the last batch is not complete, let's add the first batch to it.
-                current_batch = concatenate([current_batch, first_batch], dim=0)
+                batch = concatenate([batch, first_batch], dim=0)
                 batch_size += 1
 
             data_slice = slice(state.process_index * batch_size, (state.process_index + 1) * batch_size)
-            next_batch, next_batch_info = self._next_batch(main_iterator)
-            yield slice_tensors(current_batch, data_slice)
-            current_batch, current_batch_info = next_batch, next_batch_info
+            next_batch, next_batch_info = self._draw_batch(main_iterator, stop_iteration)
+            yield slice_tensors(batch, data_slice)
+            batch, batch_info = next_batch, next_batch_info
 
     def __len__(self):
         state = AcceleratorState()
