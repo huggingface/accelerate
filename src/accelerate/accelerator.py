@@ -275,7 +275,7 @@ class Accelerator:
 
     @property
     def use_distributed(self):
-        return self.distributed_type != DistributedType.NO
+        return self.distributed_type != DistributedType.NO and self.num_processes > 1
 
     @property
     def distributed_type(self):
