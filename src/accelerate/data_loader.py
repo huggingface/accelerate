@@ -361,6 +361,7 @@ class DataLoaderDispatcher(DataLoader):
         self.state = AcceleratorState()
 
     def _draw_batch(self, iterator, stop_iteration):
+        batch = None
         if self.state.process_index == 0:
             try:
                 if self.split_batches:
@@ -380,7 +381,6 @@ class DataLoaderDispatcher(DataLoader):
             except StopIteration:
                 batch_info = [None, True]
         else:
-            batch = []
             batch_info = [None, stop_iteration]
         return batch, batch_info
 
