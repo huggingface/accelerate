@@ -148,8 +148,8 @@ def test_distributed_sync(accelerator):
         ddp_input = ddp_input[torch.randperm(16)]
 
 
-def test_gradient_accumulation():
-    accelerator = Accelerator(gradient_accumulation_steps=2)
+def test_gradient_accumulation(dispatch_batches=False):
+    accelerator = Accelerator(gradient_accumulation_steps=2, dispatch_batches=dispatch_batches)
     # Test that context manager behaves properly
     model, ddp_model, dataloader = get_training_setup(accelerator)
     for iteration, batch in enumerate(dataloader):
@@ -183,8 +183,8 @@ def test_gradient_accumulation():
         ddp_input = ddp_input[torch.randperm(16)]
 
 
-def test_gradient_accumulation_with_opt_and_scheduler():
-    accelerator = Accelerator(gradient_accumulation_steps=2)
+def test_gradient_accumulation_with_opt_and_scheduler(dispatch_batches=False):
+    accelerator = Accelerator(gradient_accumulation_steps=2, dispatch_batches=dispatch_batches)
     # Test that context manager behaves properly
     model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
     for iteration, batch in enumerate(dataloader):
@@ -231,9 +231,16 @@ def main():
         if state.local_process_index == 0:
             print("**Test `accumulate` gradient accumulation**")
         test_gradient_accumulation()
+        if state.local_process_index == 0:
+            print("**Test `accumulate` gradient accumulation with dispatch_batches**")
+        test_gradient_accumulation(True)
     if state.local_process_index == 0:
         print("**Test `accumulate` gradient accumulation with optimizer and scheduler**")
     test_gradient_accumulation_with_opt_and_scheduler()
+    if state.distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
+        if state.local_process_index == 0:
+            print("**Test `accumulate` gradient accumulation with optimizer and scheduler with dispatch_batches**")
+        test_gradient_accumulation_with_opt_and_scheduler(True)
 
 
 def _mp_fn(index):
