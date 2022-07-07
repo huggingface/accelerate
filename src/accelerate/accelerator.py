@@ -140,10 +140,19 @@ class Accelerator:
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
 
-    Attributes
+    **Available attributes:**
 
         - **device** (`torch.device`) -- The device to use.
+        - **distributed_type** ([`~utils.DistributedType`]) -- The distributed training configuration.
+        - **local_process_index** (`int`) -- The process index on the current machine.
+        - **mixed_precision** (`str`) -- The configured mixed precision mode.
+        - **num_processes** (`int`) -- The total number of processes used for training.
+        - **optimizer_step_was_skipped** (`bool`) -- Whether or not the optimizer update was skipped (because of gradient overflow in mixed precision), in which
+        case the learning rate should not be changed.
+        - **process_index** (`int`) -- The overall index of the current process among all processes.
         - **state** ([`~state.AcceleratorState`]) -- The distributed setup state.
+        - **sync_gradients** (`bool`) -- Whether the gradients are currently being synced across all processes.
+        - **use_distributed** (`bool`) -- Whether the current configuration is for distributed training.
     """
 
     def __init__(
@@ -308,6 +317,9 @@ class Accelerator:
 
     @property
     def use_distributed(self):
+        """
+        Whether the Accelerator is configured for distributed training
+        """
         return self.distributed_type != DistributedType.NO and self.num_processes > 1
 
     @property
