@@ -20,5 +20,9 @@ MODEL_NAME = "pytorch_model"
 RNG_STATE_NAME = "random_states"
 OPTIMIZER_NAME = "optimizer"
 SCHEDULER_NAME = "scheduler"
+SAGEMAKER_PYTORCH_VERSION = "1.10.2"
+SAGEMAKER_PYTHON_VERSION = "py38"
+SAGEMAKER_TRANSFORMERS_VERSION = "4.17.0"
+SAGEMAKER_PARALLEL_EC2_INSTANCES = ["ml.p3.16xlarge", "ml.p3dn.24xlarge", "ml.p4dn.24xlarge"]
 
 STR_OPERATION_TO_FUNC = {">": op.gt, ">=": op.ge, "==": op.eq, "!=": op.ne, "<=": op.le, "<": op.lt}

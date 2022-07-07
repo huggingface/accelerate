@@ -486,7 +486,11 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         mixed_precision = "fp16"
 
     # Environment variables to be set for use during training job
-    environment = {"MIXED_PRECISION": str(mixed_precision)}
+    environment = {
+        "USE_SAGEMAKER": "true",
+        "MIXED_PRECISION": str(mixed_precision),
+        "SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
+    }
     # configure distribution set up
     distribution = None  # TODO: not yet implemented
 
@@ -496,9 +500,9 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         entry_point=entry_point,
         source_dir=source_dir,
         role=sagemaker_config.iam_role_name,
-        transformers_version="4.4",
-        pytorch_version="1.6",
-        py_version="py36",
+        transformers_version=sagemaker_config.transformers_version,
+        pytorch_version=sagemaker_config.pytorch_version,
+        py_version=sagemaker_config.py_version,
         base_job_name=sagemaker_config.base_job_name,
         instance_count=sagemaker_config.num_machines,
         instance_type=sagemaker_config.ec2_instance_type,
