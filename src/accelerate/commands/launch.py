@@ -35,6 +35,7 @@ from accelerate.utils import (
     is_deepspeed_available,
     is_sagemaker_available,
 )
+from accelerate.utils.dataclasses import SageMakerDistributedType
 
 
 def launch_command_parser(subparsers=None):
@@ -493,6 +494,8 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     }
     # configure distribution set up
     distribution = None  # TODO: not yet implemented
+    if sagemaker_config.distributed_type == SageMakerDistributedType.DATA_PARALLEL:
+        distribution = {"smdistributed": {"dataparallel": {"enabled": True}}}
 
     # configure session
     print("Creating Estimator")
