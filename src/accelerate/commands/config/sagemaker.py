@@ -121,9 +121,9 @@ def get_sagemaker_input():
         _create_iam_role_for_sagemaker(iam_role_name)
 
     distributed_type = _ask_field(
-        "Which type of machine are you using? ([0] No distributed training, [1] data parallelism, [2] model parallelism): ",
+        "Which type of machine are you using? ([0] No distributed training, [1] data parallelism): ",
         _convert_sagemaker_distributed_mode,
-        error_message="Please enter 0, 1 or 2",
+        error_message="Please enter 0 or 1",
     )
 
     ec2_instance_query = "Which EC2 instance type you want to use for your training "
@@ -142,7 +142,6 @@ def get_sagemaker_input():
         distributed_type == SageMakerDistributedType.DATA_PARALLEL
         or distributed_type == SageMakerDistributedType.MODEL_PARALLEL
     ):
-        # raise NotImplementedError("Model or Data Parallelism is not implemented yet. We are working on it")
         num_machines = _ask_field(
             "How many machines do you want use? [1]: ",
             lambda x: int(x),

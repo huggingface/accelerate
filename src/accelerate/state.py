@@ -108,8 +108,6 @@ class AcceleratorState:
                     self.device = torch.device("cuda", self.local_process_index)
                     torch.cuda.set_device(self.device)
                     self.mixed_precision = mixed_precision
-                elif os.environ.get("SAGEMAKER_DISTRIBUTED_TYPE") == SageMakerDistributedType.MODEL_PARALLEL:
-                    raise NotImplementedError("Model Parallelism is not implemented yet. We are working on it")
             elif is_tpu_available() and not cpu:
                 self.distributed_type = DistributedType.TPU
                 self.num_processes = xm.xrt_world_size()
