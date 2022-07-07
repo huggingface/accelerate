@@ -583,7 +583,7 @@ def prepare_data_loader(
         kwargs["drop_last"] = dataloader.drop_last
         kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
 
-        total_batch_size = dataloader.batch_size if split_batches else dataloader.batch_size * num_processes
+    total_batch_size = dataloader.batch_size if split_batches else dataloader.batch_size * num_processes
 
     if dispatch_batches:
         dataloader = DataLoaderDispatcher(
