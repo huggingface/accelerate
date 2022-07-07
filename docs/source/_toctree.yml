@@ -1,36 +1,18 @@
 - sections: 
-  - local: index
-    title: 🤗 Accelerate
-  - local: quicktour
-    title: Quick tour
-  - local: installation
-    title: Installation
-  title: Get started
-- sections:
-  - local: big_modeling
-    title: Handling big models
-  - local: sagemaker
-    title: Amazon SageMaker
-  title: Guides
-- sections:
-  - local: accelerator
-    title: Accelerator
-  - local: launcher
-    title: Notebook Launcher
-  - local: kwargs
-    title: Kwargs Handlers
-  - local: checkpoint
-    title: Checkpointing
-  - local: internal
-    title: Internals
-  - local: tracking
-    title: Experiment Tracking
-  - local: fsdp
-    title: Fully Sharded Data Parallel
-  - local: memory
-    title: Memory Utilities
-  - local: deepspeed
-    title: DeepSpeed
-  - local: utilities
-    title: General Utilities
-  title: API Reference
+  - local: package_reference/accelerator
+    title: Main Accelerator class
+  - local: package_reference/torch_wrappers
+    title: Torch wrapper classes
+  - local: package_reference/tracking
+    title: Experiment trackers
+  - local: package_reference/launchers
+    title: Distributed launchers
+  - local: package_reference/logging
+    title: Logging
+  - local: package_reference/big_modeling
+    title: Working with large models
+  - local: package_reference/kwargs
+    title: Kwargs handlers
+  - local: package_reference/utilities
+    title: Utility functions and classes
+  title: "Reference"
