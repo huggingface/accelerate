@@ -39,8 +39,6 @@ if is_tpu_available(check_device=False):
     import torch_xla.distributed.parallel_loader as xpl
 
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
-        def __init__(self, loader, device, **kwargs):
-            super().__init__(loader, device, **kwargs)
 
         @property
         def total_batch_size(self):
