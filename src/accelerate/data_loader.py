@@ -41,7 +41,10 @@ if is_tpu_available(check_device=False):
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
         def __init__(self, loader, device, **kwargs):
             super().__init__(loader, device, **kwargs)
-            self.total_batch_size = loader.total_batch_size
+
+        @property
+        def total_batch_size(self):
+            return self._loader.total_batch_size
 
 
 logger = get_logger(__name__)
@@ -297,13 +300,12 @@ class DataLoaderShard(DataLoader):
             All other keyword arguments to pass to the regular `DataLoader` initialization.
     """
 
-    def __init__(self, dataset, device=None, rng_types=None, generator=None, total_batch_size=None, **kwargs):
+    def __init__(self, dataset, device=None, rng_types=None, generator=None, **kwargs):
         super().__init__(dataset, **kwargs)
         self.device = device
         self.rng_types = rng_types
         self.generator = generator
         self.gradient_state = GradientState()
-        self.total_batch_size = total_batch_size
 
     def __iter__(self):
         if self.rng_types is not None:
@@ -328,6 +330,14 @@ class DataLoaderShard(DataLoader):
                 yield current_batch
                 break
 
+    @property
+    def total_batch_size(self):
+        return (
+            self.batch_sampler.batch_size
+            if self.batch_sampler.split_batches
+            else (self.batch_sampler.batch_size * self.batch_sampler.num_processes)
+        )
+
 
 class DataLoaderDispatcher(DataLoader):
     """
@@ -343,7 +353,7 @@ class DataLoaderDispatcher(DataLoader):
             size of the `dataloader` is a round multiple of `batch_size`.
     """
 
-    def __init__(self, dataset, split_batches: bool = False, total_batch_size=None, **kwargs):
+    def __init__(self, dataset, split_batches: bool = False, **kwargs):
         shuffle = False
         if is_torch_version(">=", "1.11.0"):
             from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
@@ -362,7 +372,6 @@ class DataLoaderDispatcher(DataLoader):
 
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
-        self.total_batch_size = total_batch_size
 
     def __iter__(self):
         state = AcceleratorState()
@@ -439,6 +448,12 @@ class DataLoaderDispatcher(DataLoader):
             return whole_length // self.state.num_processes
         else:
             return math.ceil(whole_length / self.state.num_processes)
+
+    @property
+    def total_batch_size(self):
+        return (
+            self.dataset.batch_size if self.split_batches else (self.dataset.batch_size * self.dataset.num_processes)
+        )
 
 
 def prepare_data_loader(
@@ -583,14 +598,11 @@ def prepare_data_loader(
         kwargs["drop_last"] = dataloader.drop_last
         kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
 
-    total_batch_size = dataloader.batch_size if split_batches else dataloader.batch_size * num_processes
-
     if dispatch_batches:
         dataloader = DataLoaderDispatcher(
             new_dataset,
             split_batches=split_batches,
             batch_sampler=new_batch_sampler,
-            total_batch_size=total_batch_size,
             **kwargs,
         )
     else:
@@ -600,7 +612,6 @@ def prepare_data_loader(
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
             generator=generator,
-            total_batch_size=total_batch_size,
             **kwargs,
         )
 
