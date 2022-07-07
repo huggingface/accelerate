@@ -117,18 +117,35 @@ def set_module_tensor_to_device(
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
-    with torch.no_grad():
-        if value is None:
-            new_value = old_value.to(device)
-        elif isinstance(value, torch.Tensor):
-            new_value = value.to(device)
-        else:
-            new_value = torch.tensor(value, device=device)
-    if is_buffer:
-        module._buffers[tensor_name] = new_value
+    if is_buffer: has_fp16_weights = None
+    else: has_fp16_weights = getattr(module._parameters[tensor_name], 'has_fp16_weights', None)
+
+    if has_fp16_weights is not None:
+        param = module._parameters[tensor_name]
+        if param.device.type != 'cuda':
+            with torch.no_grad():
+                if value is None:
+                    new_value = old_value.to(device)
+                elif isinstance(value, torch.Tensor):
+                    new_value = value.to('cpu')
+                else:
+                    new_value = torch.tensor(value, device='cpu')
+                param_cls = type(param)
+                new_value = param_cls(new_value, requires_grad=False, has_fp16_weights=has_fp16_weights).to(device)
+                module._parameters[tensor_name] = new_value
     else:
-        new_value = nn.Parameter(new_value, requires_grad=old_value.requires_grad)
-        module._parameters[tensor_name] = new_value
+        with torch.no_grad():
+            if value is None:
+                new_value = old_value.to(device)
+            elif isinstance(value, torch.Tensor):
+                new_value = value.to(device)
+            else:
+                new_value = torch.tensor(value, device=device)
+        if is_buffer:
+            module._buffers[tensor_name] = new_value
+        else:
+            new_value = nn.Parameter(new_value, requires_grad=old_value.requires_grad)
+            module._parameters[tensor_name] = new_value
 
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
