@@ -71,7 +71,7 @@ model, optimizer, training_dataloader, scheduler = accelerator.prepare(
     model, optimizer, training_dataloader, scheduler
 )
 ```
-These objects are returned in the same order they were sent in as. If `device_placement=True` is passed into the [`Accelerator`] object (the default), 
+These objects are returned in the same order they were sent in with. If `device_placement=True` is passed into the [`Accelerator`] object (the default), 
 performing this action will also automatically move your model to the proper device as well.
 
 <Tip warning={true}>
@@ -81,7 +81,7 @@ Accelerate will only prepare objects that inherit from their respective PyTorch 
 ### Modifying the training loop
 
 Finally, three lines of code need changing in our training loop. 🤗 Accelerate's DataLoader classes will automatically handle the device placement by default,
-and the `accelerator` should be used for performing the backward pass:
+and [`Accelerator.backward`] should be used for performing the backward pass:
 
 ```diff
 -   inputs = inputs.to(device)
@@ -92,32 +92,26 @@ and the `accelerator` should be used for performing the backward pass:
 +   accelerator.backward(loss)
 ```
 
-And with that, your training loop is now ready to use 🤗 Accelerate!
+With that, your training loop is now ready to use 🤗 Accelerate!
 
-## Summary of the changes
+## The finished code
 
-Below is the final overview of all the changes we made earlier: 
+Below is the final version of the converted code: 
 
-```diff
-+from accelerate import Accelerator
+```python
+from accelerate import Accelerator
+accelerator = Accelerator()
 
-+accelerator = Accelerator()
-
--device = 'cuda'
--model.to(device)
-+model, optimizer, training_dataloader, scheduler = accelerator.prepare(
-+    model, optimizer, training_dataloader, scheduler
-+)
+model, optimizer, training_dataloader, scheduler = accelerator.prepare(
+    model, optimizer, training_dataloader, scheduler
+)
 
 for batch in training_dataloader:
     optimizer.zero_grad()
     inputs, targets = batch
--   inputs = inputs.to(device)
--   targets = targets.to(device)
     outputs = model(inputs)
     loss = loss_function(outputs, targets)
--   loss.backward()
-+   accelerator.backward(loss)
+    accelerator.backward(loss)
     optimizer.step()
     scheduler.step()
 ```
