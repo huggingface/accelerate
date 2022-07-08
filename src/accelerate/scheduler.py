@@ -28,8 +28,8 @@ class AcceleratedScheduler:
     to avoid making a scheduler step too fast when gradients went overflow and there was no training step (in mixed
     precision training)
 
-    When performing gradient accumulation scheduler lengths should not be changed accordingly, accelerate will handle
-    the right times to step.
+    When performing gradient accumulation scheduler lengths should not be changed accordingly, accelerate will
+    always step the scheduler to account for it.
 
     Args:
         scheduler (`torch.optim.lr_scheduler._LRScheduler`):
