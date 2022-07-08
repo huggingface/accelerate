@@ -7,6 +7,8 @@
     title: Overview
   - local: basic_tutorials/install
     title: Installation
+  - local: basic_tutorials/migration
+    title: Migrating to 🤗 Accelerate
   title: Tutorials
 - sections: 
   - local: package_reference/accelerator
