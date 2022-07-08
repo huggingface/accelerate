@@ -20,7 +20,9 @@ your way towards running your code on distributed systems with ease!
 
 To begin, first write out a very basic PyTorch training loop. 
 
-> Note: We are under the presumpiton that `training_dataloader`, `model`, `optimizer`, `scheduler`, and `loss_function` have been defined beforehand
+<Tip>
+We are under the presumpiton that `training_dataloader`, `model`, `optimizer`, `scheduler`, and `loss_function` have been defined beforehand
+</Tip>
 
 ```python
 device = 'cuda'
@@ -72,7 +74,9 @@ model, optimizer, training_dataloader, scheduler = accelerator.prepare(
 These objects are returned in the same order they were sent in as. If `device_placement=True` is passed into the [`Accelerator`] object (the default), 
 performing this action will also automatically move your model to the proper device as well.
 
-> Important: Accelerate will only prepare objects that inherit from their respective PyTorch classes (such as `torch.optim.Optimizer`)
+<Tip warning={true}>
+Accelerate will only prepare objects that inherit from their respective PyTorch classes (such as `torch.optim.Optimizer`)
+</Tip>
 
 ### Modifying the training loop
 
@@ -80,12 +84,12 @@ Finally, three lines of code need changing in our training loop. 🤗 Accelerate
 and the `accelerator` should be used for performing the backward pass:
 
 ```diff
--    inputs = inputs.to(device)
--    targets = targets.to(device)
+-   inputs = inputs.to(device)
+-   targets = targets.to(device)
     outputs = model(inputs)
     loss = loss_function(outputs, targets)
--    loss.backward()
-+    accelerator.backward(loss)
+-   loss.backward()
++   accelerator.backward(loss)
 ```
 
 And with that, your training loop is now ready to use 🤗 Accelerate!
@@ -108,12 +112,12 @@ Below is the final overview of all the changes we made earlier:
 for batch in training_dataloader:
     optimizer.zero_grad()
     inputs, targets = batch
--    inputs = inputs.to(device)
--    targets = targets.to(device)
+-   inputs = inputs.to(device)
+-   targets = targets.to(device)
     outputs = model(inputs)
     loss = loss_function(outputs, targets)
--    loss.backward()
-+    accelerator.backward(loss)
+-   loss.backward()
++   accelerator.backward(loss)
     optimizer.step()
     scheduler.step()
 ```
