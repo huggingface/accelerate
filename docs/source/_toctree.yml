@@ -1,6 +1,8 @@
 - sections: 
   - local: package_reference/accelerator
     title: Main Accelerator class
+  - local: package_reference/state
+    title: Stateful configuration classes
   - local: package_reference/torch_wrappers
     title: Torch wrapper classes
   - local: package_reference/tracking
