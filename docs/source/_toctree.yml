@@ -2,6 +2,12 @@
   - local: index
     title: 🤗 Accelerate
   title: Getting started
+- sections:
+  - local: basic_tutorials/overview
+    title: Overview
+  - local: basic_tutorials/install
+    title: Installation
+  title: Tutorials
 - sections: 
   - local: package_reference/accelerator
     title: Main Accelerator class
