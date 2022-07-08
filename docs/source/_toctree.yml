@@ -12,6 +12,10 @@
   - local: basic_tutorials/launch
     title: Launching distributed code
   title: Tutorials
+- sections:
+  - local: usage_guides/gradient_accumulation
+    title: Performing gradient accumulation
+  title: How-To Guides
 - sections: 
   - local: package_reference/accelerator
     title: Main Accelerator class
