@@ -75,7 +75,7 @@ In its current state, this code is not going to perform gradient accumulation ef
 ## Letting 🤗 Accelerate handle gradient accumulation
 
 All that is left now is to let 🤗 Accelerate handle the gradient accumulation for us. To do so you should pass in a `gradient_accumulation_steps` parameter to `Accelerator`, dictating the number 
-of steps to perform before each call to `step()` and `backward()`:
+of steps to perform before each call to `step()` and how to automatically adjust the loss during the call to `backward()`:
 
 ```diff
 from accelerate import Accelerator
@@ -84,21 +84,24 @@ from accelerate import Accelerator
 ```
 
 From here you can use the [`Accelerator.accumulate`] context manager from inside your training loop to automatically perform the gradient accumulation for you!
+We just wrap it around the entire training part of our code: 
 
 ```diff
 -for index, batch in enumerate(training_dataloader):
-for batch in training_dataloader:
-    optimizer.zero_grad()
-    inputs, targets = batch
-    outputs = model(inputs)
-    loss = loss_function(outputs, targets)
--    loss = loss / gradient_accumulation_steps
-    accelerator.backward(loss)
++for batch in training_dataloader:
++   with accelerator.accumulate(model):
++       optimizer.zero_grad()
++       inputs, targets = batch
++       outputs = model(inputs)
++       loss = loss_function(outputs, targets)
+-   loss = loss / gradient_accumulation_steps
+-   accelerator.backward(loss)
++       accelerator.backward(loss)
 -    if (index+1) % gradient_accumulation_steps == 0:
 -        optimizer.step()
 -        scheduler.step()
-+   optimizer.step()
-+   scheduler.step()
++       optimizer.step()
++       scheduler.step()
 ```
 
 As you can see the [`Accelerator`] is able to keep track of the batch number you are on and it will automatically know whether to actually perform the backward pass
@@ -107,3 +110,19 @@ and step through the prepared schedulers and optimizers.
 <Tip warning={true}>
 Currently this method only works with non-streaming datasets (`DataLoaders` that have a length). While support for this is being worked on, you can check out the Gradient Synchronization concept tutorial to see how to do this yourself!
 </Tip>
+
+## The finished code
+
+Below is the finished implementation for performing gradient accumulation with 🤗 Accelerate
+
+```python
+for batch in training_dataloader:
+    with accelerator.accumulate(model):
+        optimizer.zero_grad()
+        inputs, targets = batch
+        outputs = model(inputs)
+        loss = loss_function(outputs, targets)
+        accelerator.backward(loss)
+        optimizer.step()
+        scheduler.step()
+```
