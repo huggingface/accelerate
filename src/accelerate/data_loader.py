@@ -40,17 +40,17 @@ if is_tpu_available(check_device=False):
 
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
         """
-        Wrapper for the xpl.MpDeviceLoader class that knows the total batch size. 
+        Wrapper for the xpl.MpDeviceLoader class that knows the total batch size.
+
         **Available attributes:**
-        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes. Equal to the original batch size when `split_batches=True` otherwise the original batch size * the total number of processes
+
+        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
+            Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
+            number of processes
         """
+
         @property
         def total_batch_size(self):
-            """
-            Get the total batch size of the dataloader. It is the resulting batch size across processes. It is same as
-            the original batch size of the dataloader when `split_batches=True`. Otherwise, it is the product of the
-            orginal batch size of the dataloader and the number of processes.
-            """
             return self._loader.total_batch_size
 
 
@@ -305,6 +305,12 @@ class DataLoaderShard(DataLoader):
             A random number generator to keep synchronized across processes.
         kwargs:
             All other keyword arguments to pass to the regular `DataLoader` initialization.
+
+    **Available attributes:**
+
+        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
+            Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
+            number of processes
     """
 
     def __init__(self, dataset, device=None, rng_types=None, generator=None, **kwargs):
@@ -339,11 +345,6 @@ class DataLoaderShard(DataLoader):
 
     @property
     def total_batch_size(self):
-        """
-        Get the total batch size of the dataloader. It is the resulting batch size across processes. It is same as the
-        original batch size of the dataloader when `split_batches=True`. Otherwise, it is the product of the orginal
-        batch size of the dataloader and the number of processes.
-        """
         return (
             self.batch_sampler.batch_size
             if self.batch_sampler.split_batches
@@ -363,6 +364,12 @@ class DataLoaderDispatcher(DataLoader):
             the same as the initial `dataloader` if this option is set to `True`, the batch size of the initial
             `dataloader` multiplied by `num_processes` otherwise. Setting this option to `True` requires that the batch
             size of the `dataloader` is a round multiple of `batch_size`.
+
+    **Available attributes:**
+
+        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
+            Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
+            number of processes
     """
 
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
@@ -463,11 +470,6 @@ class DataLoaderDispatcher(DataLoader):
 
     @property
     def total_batch_size(self):
-        """
-        Get the total batch size of the dataloader. It is the resulting batch size across processes. It is same as the
-        original batch size of the dataloader when `split_batches=True`. Otherwise, it is the product of the orginal
-        batch size of the dataloader and the number of processes.
-        """
         return (
             self.dataset.batch_size if self.split_batches else (self.dataset.batch_size * self.dataset.num_processes)
         )
