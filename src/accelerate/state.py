@@ -49,11 +49,11 @@ class AcceleratorState:
     This is a variation of a [singleton class](https://en.wikipedia.org/wiki/Singleton_pattern) in the sense that all
     instance of `AcceleratorState` share the same state, which is initialized on the first instantiation.
 
-    Attributes:
+    **Available attributes:**
 
         - **device** (`torch.device`) -- The device to use.
         - **sync_gradients** (`bool`) -- Whether to sync the gradients or not
-        - **distributed_type** (`~accelerate.state.DistributedType`) -- The type of distributed environment currently
+        - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
           in use.
         - **num_processes** (`int`) -- The number of processes currently launched in parallel.
         - **process_index** (`int`) -- The index of the current process.
@@ -218,7 +218,9 @@ class GradientState:
     instance of `GradientState` share the same state, which is initialized on the first instantiation.
 
     This specific state revolves around whether gradients should be synced and if we have reached the end of a prepared
-    dataloader Attributes:
+    dataloader 
+    
+    **Available attributes:**
 
         - **sync_gradients** (`bool`) -- Whether the gradients should be synced
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
