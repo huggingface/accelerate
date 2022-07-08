@@ -40,10 +40,10 @@ if is_tpu_available(check_device=False):
 
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
         """
-        Wrapper for the xpl.MpDeviceLoader class. This class is used to add `total_batch_size` property to the
-        xpl.MpDeviceLoader class.
+        Wrapper for the xpl.MpDeviceLoader class that knows the total batch size. 
+        **Available attributes:**
+        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes. Equal to the original batch size when `split_batches=True` otherwise the original batch size * the total number of processes
         """
-
         @property
         def total_batch_size(self):
             """
