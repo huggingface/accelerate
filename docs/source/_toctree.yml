@@ -9,6 +9,8 @@
     title: Installation
   - local: basic_tutorials/migration
     title: Migrating to 🤗 Accelerate
+  - local: basic_tutorials/launch
+    title: Launching distributed code
   title: Tutorials
 - sections: 
   - local: package_reference/accelerator
