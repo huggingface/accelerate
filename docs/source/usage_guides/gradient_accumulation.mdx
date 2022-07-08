@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 Gradient accumulation is a technique where you can train on bigger batch sizes than 
 your machine would normally be able to fit into memory. This is done by accumulating gradients over
-several batches, and only performing the backward pass after a certain number of batches have been performed.
+several batches, and only performing the step through the optimizer after a certain number of batches have been performed.
 
 While technically standard gradient accumulation code would work fine in a distributed setup, it is not the most efficient
 method for doing so and you may experience considerable slowdowns!
