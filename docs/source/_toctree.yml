@@ -1,3 +1,7 @@
+- sections:
+  - local: index
+    title: 🤗 Accelerate
+  title: Getting started
 - sections: 
   - local: package_reference/accelerator
     title: Main Accelerator class
