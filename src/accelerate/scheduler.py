@@ -16,7 +16,7 @@
 
 import warnings
 
-from .state import AcceleratorState, GradientState
+from .state import AcceleratorState
 
 
 warnings.filterwarnings("ignore", category=UserWarning, module="torch.optim.lr_scheduler")
@@ -25,10 +25,11 @@ warnings.filterwarnings("ignore", category=UserWarning, module="torch.optim.lr_s
 class AcceleratedScheduler:
     """
     A wrapper around a learning rate scheduler that will only step when the optimizer(s) have a training step. Useful
-    to avoid making a scheduler step too fast when:
+    to avoid making a scheduler step too fast when gradients went overflow and there was no training step (in mixed
+    precision training)
 
-    - gradients went overflow and there was no training step (in mixed precision training)
-    - step was skipped because of gradient accumulation
+    When performing gradient accumulation scheduler lengths should not be changed accordingly, accelerate will handle
+    the right times to step.
 
     Args:
         scheduler (`torch.optim.lr_scheduler._LRScheduler`):
@@ -47,7 +48,6 @@ class AcceleratedScheduler:
         self.scheduler = scheduler
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
-        self.gradient_state = GradientState()
         self.step_with_optimizer = step_with_optimizer
 
     def step(self, *args, **kwargs):
