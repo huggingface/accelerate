@@ -47,20 +47,18 @@ def parse_choice_from_env(key, default="no"):
 # Inspired by Alex Martelli's 'Borg'.
 class AcceleratorState:
     """
-    This is a variation of a [singleton class](https://en.wikipedia.org/wiki/Singleton_pattern) in the sense that all
-    instance of `AcceleratorState` share the same state, which is initialized on the first instantiation.
+    Singleton class that has information about the current training environment.
 
     **Available attributes:**
 
         - **device** (`torch.device`) -- The device to use.
-        - **sync_gradients** (`bool`) -- Whether to sync the gradients or not
         - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
           in use.
-        - **num_processes** (`int`) -- The number of processes currently launched in parallel.
-        - **process_index** (`int`) -- The index of the current process.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
         - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision. If you are using
           mixed precision, define if you want to use FP16 or BF16 (bfloat16) as the floating point.
+        - **num_processes** (`int`) -- The number of processes currently launched in parallel.
+        - **process_index** (`int`) -- The index of the current process.
     """
 
     _shared_state = {}
@@ -250,15 +248,10 @@ class AcceleratorState:
 
 class GradientState:
     """
-    This is a variation of a [singleton class](https://en.wikipedia.org/wiki/Singleton_pattern) in the sense that all
-    instance of `GradientState` share the same state, which is initialized on the first instantiation.
-
-    This specific state revolves around whether gradients should be synced and if we have reached the end of a prepared
-    dataloader 
+    Singleton class that has information related to gradient synchronization for gradient accumulation
     
     **Available attributes:**
 
-        - **sync_gradients** (`bool`) -- Whether the gradients should be synced
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
         - **remainder** (`int`) -- The number of extra samples that were added from padding the dataloader
     """
