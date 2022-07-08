@@ -1,0 +1,74 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Launching your 🤗 Accelerate scripts
+
+In the previous tutorial you were introduced with how to modify your current training script to use 🤗 Accelerate.
+The final version of that code is shown below:
+
+```python
+from accelerate import Accelerator
+accelerator = Accelerator()
+
+model, optimizer, training_dataloader, scheduler = accelerator.prepare(
+    model, optimizer, training_dataloader, scheduler
+)
+
+for batch in training_dataloader:
+    optimizer.zero_grad()
+    inputs, targets = batch
+    outputs = model(inputs)
+    loss = loss_function(outputs, targets)
+    accelerator.backward(loss)
+    optimizer.step()
+    scheduler.step()
+```
+
+But how do you run this code and have it utilize the special hardware available to it?
+
+## Using `accelerate launch`
+
+🤗 Accelerate has a special CLI command to help you launch your code in your system through `accelerate launch`.
+This command wraps around all of the different commands needed to launch your script on various platforms, without you
+having to remember what each of them are.
+
+<Tip>
+If you are familiar with launching scripts in PyTorch yourself such as with `torchrun`, you can still do this. It is not required to use `accelerate launch`
+</Tip>
+
+You can launch your script quickly by using:
+```bash
+accelerate launch {script_name.py} --arg1 --arg2 ...
+```
+
+Just put `accelerate launch` at the start of your command, and pass in additional arguments and parameters to your script afterwards like normal!
+
+Since this runs the various different torch spawn methods, all of the environmental variables that would be expected for them can be modified here as well.
+For example, here is how to use `accelerate launch` but only use a single GPU:
+```bash
+CUDA_VISIBLE_DEVICES="0" accelerate launch {script_name.py} --arg1 --arg2 ...
+```
+
+You can also use `accelerate launch` without performing `accelerate config` first, but you will need to manually pass in all of the right configuration parameters.
+For example here is how you would launch a script on two GPUs with mixed precision, without doing `accelerate config` first:
+```bash
+accelerate launch --multi_gpu --mixed_precision=fp16 --num_processes=2 {script_name.py} --arg1 --arg2 ...
+```
+
+For a full list of all parameters you can pass in, run:
+```bash
+accelerate launch -h
+```
+
+<Tip>
+Even if you are not using 🤗 Accelerate in your code, you can still use the launcher for starting your scripts!
+</Tip>
