@@ -39,8 +39,18 @@ if is_tpu_available(check_device=False):
     import torch_xla.distributed.parallel_loader as xpl
 
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
+        """
+        Wrapper for the xpl.MpDeviceLoader class. This class is used to add `total_batch_size` property to the
+        xpl.MpDeviceLoader class.
+        """
+
         @property
         def total_batch_size(self):
+            """
+            Get the total batch size of the dataloader. It is the resulting batch size across processes. It is same as
+            the original batch size of the dataloader when `split_batches=True`. Otherwise, it is the product of the
+            orginal batch size of the dataloader and the number of processes.
+            """
             return self._loader.total_batch_size
 
 
@@ -329,6 +339,11 @@ class DataLoaderShard(DataLoader):
 
     @property
     def total_batch_size(self):
+        """
+        Get the total batch size of the dataloader. It is the resulting batch size across processes. It is same as the
+        original batch size of the dataloader when `split_batches=True`. Otherwise, it is the product of the orginal
+        batch size of the dataloader and the number of processes.
+        """
         return (
             self.batch_sampler.batch_size
             if self.batch_sampler.split_batches
@@ -448,6 +463,11 @@ class DataLoaderDispatcher(DataLoader):
 
     @property
     def total_batch_size(self):
+        """
+        Get the total batch size of the dataloader. It is the resulting batch size across processes. It is same as the
+        original batch size of the dataloader when `split_batches=True`. Otherwise, it is the product of the orginal
+        batch size of the dataloader and the number of processes.
+        """
         return (
             self.dataset.batch_size if self.split_batches else (self.dataset.batch_size * self.dataset.num_processes)
         )
