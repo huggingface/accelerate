@@ -12,8 +12,10 @@ specific language governing permissions and limitations under the License.
 
 # Stateful Classes
 
-Below are singleton classes where all instances are the same upon first initialization.
-They should not be modified directly and instead store information about certain configurations or 
+Below are variations of a [singleton class](https://en.wikipedia.org/wiki/Singleton_pattern) in the sense that all
+instances share the same state, which is initialized on the first instantiation.
+
+These classes are immutable and store information about certain configurations or 
 states.
 
 [[autodoc]] state.AcceleratorState
