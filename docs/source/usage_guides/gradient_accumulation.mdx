@@ -84,24 +84,25 @@ from accelerate import Accelerator
 ```
 
 From here you can use the [`Accelerator.accumulate`] context manager from inside your training loop to automatically perform the gradient accumulation for you!
-We just wrap it around the entire training part of our code: 
+You just wrap it around the entire training part of our code: 
 
 ```diff
 -for index, batch in enumerate(training_dataloader):
 +for batch in training_dataloader:
 +   with accelerator.accumulate(model):
-+       optimizer.zero_grad()
-+       inputs, targets = batch
-+       outputs = model(inputs)
-+       loss = loss_function(outputs, targets)
--   loss = loss / gradient_accumulation_steps
--   accelerator.backward(loss)
-+       accelerator.backward(loss)
--    if (index+1) % gradient_accumulation_steps == 0:
--        optimizer.step()
--        scheduler.step()
-+       optimizer.step()
-+       scheduler.step()
+        optimizer.zero_grad()
+        inputs, targets = batch
+        outputs = model(inputs)
+```
+
+and you can remove all the special checks for the step number and the loss adjustment:
+
+```diff
+-loss = loss / gradient_accumulation_steps
+accelerator.backward(loss)
+-if (index+1) % gradient_accumulation_steps == 0:
+optimizer.step()
+scheduler.step()
 ```
 
 As you can see the [`Accelerator`] is able to keep track of the batch number you are on and it will automatically know whether to actually perform the backward pass
