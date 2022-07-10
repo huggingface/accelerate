@@ -14,17 +14,17 @@ specific language governing permissions and limitations under the License.
 
 Gradient accumulation is a technique where you can train on bigger batch sizes than 
 your machine would normally be able to fit into memory. This is done by accumulating gradients over
-several batches, and only performing the step through the optimizer after a certain number of batches have been performed.
+several batches, and only stepping the optimizer after a certain number of batches have been performed.
 
 While technically standard gradient accumulation code would work fine in a distributed setup, it is not the most efficient
 method for doing so and you may experience considerable slowdowns!
 
 In this tutorial you will see how to quickly setup gradient accumulation and perform it with the utilties provided in 🤗 Accelerate,
-which can total to adding just one line of code!
+which can total to adding just one new line of code!
 
 This example will use a very simplistic PyTorch training loop that performs gradient accumulation every two batches:
 
-```python
+```
 device = 'cuda'
 model.to(device)
 
@@ -48,7 +48,7 @@ for index, batch in enumerate(training_dataloader):
 
 First the code shown earlier will be converted to utilize 🤗 Accelerate without the special gradient accumulation helper:
 
-```python
+```
 from accelerate import Accelerator
 accelerator = Accelerator()
 
@@ -75,7 +75,7 @@ In its current state, this code is not going to perform gradient accumulation ef
 ## Letting 🤗 Accelerate handle gradient accumulation
 
 All that is left now is to let 🤗 Accelerate handle the gradient accumulation for us. To do so you should pass in a `gradient_accumulation_steps` parameter to `Accelerator`, dictating the number 
-of steps to perform before each call to `step()` and how to automatically adjust the loss during the call to `backward()`:
+of steps to perform before each call to `step()` and how to automatically adjust the loss during the call to [`Accelerator.backward`]:
 
 ```diff
 from accelerate import Accelerator
@@ -105,8 +105,7 @@ optimizer.step()
 scheduler.step()
 ```
 
-As you can see the [`Accelerator`] is able to keep track of the batch number you are on and it will automatically know whether to actually perform the backward pass
-and step through the prepared schedulers and optimizers. 
+As you can see the [`Accelerator`] is able to keep track of the batch number you are on and it will automatically know whether to step through the prepared optimizer and how to adjust the loss. 
 
 <Tip warning={true}>
 Currently this method only works with non-streaming datasets (`DataLoaders` that have a length). While support for this is being worked on, you can check out the Gradient Synchronization concept tutorial to see how to do this yourself!
@@ -116,7 +115,7 @@ Currently this method only works with non-streaming datasets (`DataLoaders` that
 
 Below is the finished implementation for performing gradient accumulation with 🤗 Accelerate
 
-```python
+```
 for batch in training_dataloader:
     with accelerator.accumulate(model):
         optimizer.zero_grad()
