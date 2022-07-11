@@ -149,8 +149,8 @@ def test_distributed_sync(accelerator):
         ddp_input = ddp_input[torch.randperm(16)]
 
 
-def test_gradient_accumulation():
-    accelerator = Accelerator(gradient_accumulation_steps=2)
+def test_gradient_accumulation(split_batches=False):
+    accelerator = Accelerator(gradient_accumulation_steps=2, split_batches=split_batches)
     # Test that context manager behaves properly
     model, ddp_model, dataloader = get_training_setup(accelerator)
     for iteration, batch in enumerate(dataloader):
@@ -184,8 +184,8 @@ def test_gradient_accumulation():
         ddp_input = ddp_input[torch.randperm(16)]
 
 
-def test_gradient_accumulation_with_opt_and_scheduler():
-    accelerator = Accelerator(gradient_accumulation_steps=2)
+def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False):
+    accelerator = Accelerator(gradient_accumulation_steps=2, split_batches=split_batches)
     # Test that context manager behaves properly
     model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
     for iteration, batch in enumerate(dataloader):
@@ -229,12 +229,17 @@ def main():
             print("**Test Distributed `no_sync` context manager**")
         test_distributed_sync(accelerator)
     if state.distributed_type == DistributedType.MULTI_GPU:
-        if state.local_process_index == 0:
-            print("**Test `accumulate` gradient accumulation**")
-        test_gradient_accumulation()
+        for split_batch in [True, False]:
+            if state.local_process_index == 0:
+                print(f"**Test `accumulate` gradient accumulation, `split_batches={split_batch}`**")
+            test_gradient_accumulation(split_batch)
     if state.local_process_index == 0:
         print("**Test `accumulate` gradient accumulation with optimizer and scheduler**")
     test_gradient_accumulation_with_opt_and_scheduler()
+    if state.distributed_type == DistributedType.MULTI_GPU:
+        if state.local_process_index == 0:
+            print(f"**Test `accumulate` gradient accumulation with optimizer and scheduler, `split_batches=True`**")
+        test_gradient_accumulation_with_opt_and_scheduler(True)
 
 
 def _mp_fn(index):
