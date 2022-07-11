@@ -240,10 +240,6 @@ class Accelerator:
                 raise NotImplementedError(
                     "Gradient accumulation on TPU is not supported. Pass in `gradient_accumulation_steps=1`"
                 )
-            if dispatch_batches:
-                raise NotImplementedError(
-                    "Gradient accumulation with dispatched dataloaders is not supported. Pass in `gradient_accumulation_steps=1` or `dispatch_batches=False`"
-                )
 
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.device_placement = device_placement
