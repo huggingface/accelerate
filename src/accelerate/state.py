@@ -213,7 +213,7 @@ class AcceleratorState:
 class GradientState:
     """
     Singleton class that has information related to gradient synchronization for gradient accumulation
-    
+
     **Available attributes:**
 
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader

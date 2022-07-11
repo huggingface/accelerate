@@ -17,6 +17,7 @@ The final version of that code is shown below:
 
 ```python
 from accelerate import Accelerator
+
 accelerator = Accelerator()
 
 model, optimizer, training_dataloader, scheduler = accelerator.prepare(
