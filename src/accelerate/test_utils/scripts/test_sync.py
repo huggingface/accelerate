@@ -146,7 +146,7 @@ def test_distributed_sync(accelerator):
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
-        ddp_input = ddp_input[torch.randperm(16)]
+        ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
 
 def test_gradient_accumulation(split_batches=False):
@@ -181,7 +181,7 @@ def test_gradient_accumulation(split_batches=False):
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
-        ddp_input = ddp_input[torch.randperm(16)]
+        ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
 
 def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False):
