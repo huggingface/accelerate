@@ -247,14 +247,13 @@ def main():
         print("**Test `accumulate` gradient accumulation with optimizer and scheduler**")
     test_gradient_accumulation_with_opt_and_scheduler()
     if state.distributed_type == DistributedType.MULTI_GPU:
-        if state.local_process_index == 0:
-            print("**Test `accumulate` gradient accumulation with optimizer and scheduler, `split_batches=True`**")
-        test_gradient_accumulation_with_opt_and_scheduler(True)
-        if state.local_process_index == 0:
-            print(
-                "**Test `accumulate` gradient accumulation with optimizer and scheduler, `split_batches=True` and `dispatch_batches=True`**"
-            )
-        test_gradient_accumulation_with_opt_and_scheduler(True, True)
+        for split_batch in [True, False]:
+            for dispatch_batches in [True, False]:
+                if split_batch and dispatch_batches:
+                    continue
+                if state.local_process_index == 0:
+                    print(f"**Test `accumulate` gradient accumulation with optimizer and scheduler, `split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**")
+                test_gradient_accumulation_with_opt_and_scheduler(split_batch, dispatch_batches)
 
 
 def _mp_fn(index):
