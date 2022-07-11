@@ -32,7 +32,6 @@ from .utils import (
     send_to_device,
     slice_tensors,
     synchronize_rng_states,
-    wait_for_everyone
 )
 
 
@@ -470,11 +469,7 @@ class DataLoaderDispatcher(DataLoader):
                 if skip:
                     continue
             except StopIteration:
-                if not self.state.process_index == 0:
-                    wait_for_everyone()
                 self.gradient_state._set_end_of_dataloader(True)
-                if self.state.process_index == 0:
-                    wait_for_everyone()
                 yield slice_tensors(batch, data_slice)
                 break
 
