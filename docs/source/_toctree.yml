@@ -16,6 +16,10 @@
   - local: usage_guides/gradient_accumulation
     title: Performing gradient accumulation
   title: How-To Guides
+- sections:
+  - local: concept_guides/gradient_synchronization
+    title: Gradient synchronization
+  title: Concepts and fundamentals
 - sections: 
   - local: package_reference/accelerator
     title: Main Accelerator class
