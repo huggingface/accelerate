@@ -393,7 +393,7 @@ class DataLoaderDispatcher(DataLoader):
         self.state = AcceleratorState()
 
     def _fetch_batches(self, iterator):
-        batches = None
+        batches, batch = None, None
         # On process 0, we gather the batch to dispatch.
         if self.state.process_index == 0:
             try:
