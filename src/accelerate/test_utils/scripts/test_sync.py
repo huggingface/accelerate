@@ -198,8 +198,11 @@ def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False):
         ddp_model.train()
         step_model(model, input, target, accelerator, False)
         opt.step()
-        for _ in range(accelerator.num_processes):
+        if split_batches:
             sched.step()
+        else:
+            for _ in range(accelerator.num_processes):
+                sched.step()
         opt.zero_grad()
         # Perform gradient accumulation under wrapper
         with accelerator.accumulate(ddp_model):
