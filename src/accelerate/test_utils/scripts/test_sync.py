@@ -209,7 +209,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False):
             ddp_opt.zero_grad()
 
         # Learning rates should be the same
-        assert opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"]
+        assert opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"], f'Learning rates found in each optimizer did not align\nopt: {opt.param_groups[0]["lr"]}\nDDP opt: {ddp_opt.param_groups[0]["lr"]}\n'
         did_step = (((iteration + 1) % 2) == 0) or (iteration == (len(dataloader) - 1))
         if accelerator.num_processes > 1:
             check_model_parameters(model, ddp_model, did_step)
