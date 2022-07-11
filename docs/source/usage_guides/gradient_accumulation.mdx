@@ -19,7 +19,7 @@ several batches, and only stepping the optimizer after a certain number of batch
 While technically standard gradient accumulation code would work fine in a distributed setup, it is not the most efficient
 method for doing so and you may experience considerable slowdowns!
 
-In this tutorial you will see how to quickly setup gradient accumulation and perform it with the utilties provided in 🤗 Accelerate,
+In this tutorial you will see how to quickly setup gradient accumulation and perform it with the utilities provided in 🤗 Accelerate,
 which can total to adding just one new line of code!
 
 This example will use a very simplistic PyTorch training loop that performs gradient accumulation every two batches:
