@@ -393,7 +393,7 @@ class Accelerator:
             self.gradient_state._set_sync_gradients(True)
         else:
             self.step += 1
-        self.gradient_state._set_sync_gradients((self.step % self.gradient_accumulation_steps) == 0)
+            self.gradient_state._set_sync_gradients((self.step % self.gradient_accumulation_steps) == 0)
 
     @property
     def sync_gradients(self):
