@@ -106,7 +106,7 @@ def test_noop_sync(accelerator):
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
-        ddp_input = ddp_input[torch.randperm(16)]
+        ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
 
 def test_distributed_sync(accelerator):
