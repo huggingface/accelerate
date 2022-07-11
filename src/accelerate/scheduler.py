@@ -53,20 +53,24 @@ class AcceleratedScheduler:
     def step(self, *args, **kwargs):
         if not self.step_with_optimizer:
             # No link between scheduler and optimizer -> just step
+            print(f'Stepped scheduler because there is no link on worker {AcceleratorState().process_index}')
             self.scheduler.step(*args, **kwargs)
             return
 
         # Otherwise, first make sure the optimizer was stepped.
         for opt in self.optimizers:
             if opt.step_was_skipped:
+                print(f'Skipped scheduler step because the optimizer step was skipped on worker {AcceleratorState().process_index}')
                 return
         if self.split_batches:
             # Split batches -> the training dataloader batch size is not changed so one step per training step
+            print(f'Stepped scheduler once because of `split_batches` on worker {AcceleratorState().process_index}')
             self.scheduler.step(*args, **kwargs)
         else:
             # Otherwise the training dataloader batch size was multiplied by `num_processes`, so we need to do
             # num_processes steps per training step
             num_processes = AcceleratorState().num_processes
+            print(f'Stepped scheduler {num_processes} times because of `split_batches=False` on worker {AcceleratorState().process_index}')
             for _ in range(num_processes):
                 # Special case when using OneCycle and `drop_last` was not used
                 if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch:
