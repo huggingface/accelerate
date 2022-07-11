@@ -222,9 +222,9 @@ def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False, dispa
         ), f'Learning rates found in each optimizer did not align\nopt: {opt.param_groups[0]["lr"]}\nDDP opt: {ddp_opt.param_groups[0]["lr"]}\n'
         did_step = (((iteration + 1) % 2) == 0) or (iteration == (len(dataloader) - 1))
         if accelerator.num_processes > 1:
-            print(f'Did we step at iteration {iteration}: {did_step}')
-            print(f'First conditional check: {((iteration+1)%2 == 0)}')
-            print(f'Second conditional check: {iteration == (len(dataloader) - 1)}')
+            print(f'Did we step at iteration {iteration}: {did_step}\n')
+            print(f'First conditional check: {((iteration+1)%2 == 0)}\n')
+            print(f'Second conditional check: {iteration == (len(dataloader) - 1)}\n')
             check_model_parameters(model, ddp_model, did_step, iteration)
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
