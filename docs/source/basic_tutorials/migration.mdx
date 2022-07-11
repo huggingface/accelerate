@@ -25,7 +25,7 @@ We are under the presumpiton that `training_dataloader`, `model`, `optimizer`, `
 </Tip>
 
 ```python
-device = 'cuda'
+device = "cuda"
 model.to(device)
 
 for batch in training_dataloader:
@@ -100,6 +100,7 @@ Below is the final version of the converted code:
 
 ```python
 from accelerate import Accelerator
+
 accelerator = Accelerator()
 
 model, optimizer, training_dataloader, scheduler = accelerator.prepare(

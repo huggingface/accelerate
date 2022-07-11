@@ -48,21 +48,23 @@ for index, batch in enumerate(training_dataloader):
 
 First the code shown earlier will be converted to utilize 🤗 Accelerate without the special gradient accumulation helper:
 
-```
-from accelerate import Accelerator
-accelerator = Accelerator()
+```diff
++from accelerate import Accelerator
++accelerator = Accelerator()
 
-model, optimizer, training_dataloader, scheduler = accelerator.prepare(
-    model, optimizer, training_dataloader, scheduler
-)
++model, optimizer, training_dataloader, scheduler = accelerator.prepare(
++    model, optimizer, training_dataloader, scheduler
++)
 
 for index, batch in enumerate(training_dataloader):
     optimizer.zero_grad()
     inputs, targets = batch
+-    inputs = inputs.to(device)
+-    targets = targets.to(device)
     outputs = model(inputs)
     loss = loss_function(outputs, targets)
     loss = loss / gradient_accumulation_steps
-    accelerator.backward(loss)
++    accelerator.backward(loss)
     if (index+1) % gradient_accumulation_steps == 0:
         optimizer.step()
         scheduler.step()
@@ -115,7 +117,7 @@ Currently this method only works with non-streaming datasets (`DataLoaders` that
 
 Below is the finished implementation for performing gradient accumulation with 🤗 Accelerate
 
-```
+```python
 for batch in training_dataloader:
     with accelerator.accumulate(model):
         optimizer.zero_grad()

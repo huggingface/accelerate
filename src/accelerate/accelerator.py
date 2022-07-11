@@ -147,7 +147,8 @@ class Accelerator:
         - **local_process_index** (`int`) -- The process index on the current machine.
         - **mixed_precision** (`str`) -- The configured mixed precision mode.
         - **num_processes** (`int`) -- The total number of processes used for training.
-        - **optimizer_step_was_skipped** (`bool`) -- Whether or not the optimizer update was skipped (because of gradient overflow in mixed precision), in which
+        - **optimizer_step_was_skipped** (`bool`) -- Whether or not the optimizer update was skipped (because of
+          gradient overflow in mixed precision), in which
         case the learning rate should not be changed.
         - **process_index** (`int`) -- The overall index of the current process among all processes.
         - **state** ([`~state.AcceleratorState`]) -- The distributed setup state.
