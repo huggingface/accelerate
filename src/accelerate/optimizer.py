@@ -156,4 +156,8 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     @property
     def step_was_skipped(self):
         """Whether or not the optimizer step was skipped."""
-        return self._is_overflow
+        if self._is_overflow: 
+            return True
+        if not self.gradient_state.sync_gradients:
+            return True
+        return False
