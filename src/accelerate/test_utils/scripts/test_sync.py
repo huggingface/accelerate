@@ -239,7 +239,7 @@ def main():
         test_distributed_sync(accelerator)
     if state.distributed_type == DistributedType.MULTI_GPU:
         for split_batch in [True, False]:
-            for dispatch_batches in [True, False]
+            for dispatch_batches in [True, False]:
                 if state.local_process_index == 0:
                     print(f"**Test `accumulate` gradient accumulation, `split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**")
                 test_gradient_accumulation(split_batch)
