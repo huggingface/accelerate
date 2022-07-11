@@ -421,7 +421,7 @@ class DataLoaderDispatcher(DataLoader):
         if self._stop_iteration:
             # If drop_last is False and split_batches is False, we may have a remainder to take care of.
             if not self.split_batches and not self.drop_last:
-                if state.process_index == 0 and len(batches) > 0:
+                if self.state.process_index == 0 and len(batches) > 0:
                     batch = concatenate(batches, dim=0)
                     batch_info = [get_data_structure(batch), False]
                 else:
@@ -435,7 +435,7 @@ class DataLoaderDispatcher(DataLoader):
 
     def __iter__(self):
         self.gradient_state._set_end_of_dataloader(False)
-        if state.process_index == 0:
+        if self.state.process_index == 0:
             # We only iterate through the DataLoader on process 0.
             main_iterator = super().__iter__()
         self._stop_iteration = False

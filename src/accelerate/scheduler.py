@@ -61,7 +61,6 @@ class AcceleratedScheduler:
             if opt.step_was_skipped:
                 return
         if self.split_batches:
-            print(f'Stepping scheduler on worker {AcceleratorState().process_index}')
             # Split batches -> the training dataloader batch size is not changed so one step per training step
             self.scheduler.step(*args, **kwargs)
         else:
