@@ -149,8 +149,10 @@ def test_distributed_sync(accelerator):
         ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
 
-def test_gradient_accumulation(split_batches=False):
-    accelerator = Accelerator(gradient_accumulation_steps=2, split_batches=split_batches)
+def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
+    accelerator = Accelerator(
+        gradient_accumulation_steps=2, split_batches=split_batches, dispatch_batches=dispatch_batches
+    )
     # Test that context manager behaves properly
     model, ddp_model, dataloader = get_training_setup(accelerator)
     for iteration, batch in enumerate(dataloader):
@@ -184,8 +186,10 @@ def test_gradient_accumulation(split_batches=False):
         ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
 
-def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False):
-    accelerator = Accelerator(gradient_accumulation_steps=2, split_batches=split_batches)
+def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False, dispatch_batches=False):
+    accelerator = Accelerator(
+        gradient_accumulation_steps=2, split_batches=split_batches, dispatch_batches=dispatch_batches
+    )
     # Test that context manager behaves properly
     model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
     for iteration, batch in enumerate(dataloader):
@@ -212,7 +216,9 @@ def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False):
             ddp_opt.zero_grad()
 
         # Learning rates should be the same
-        assert opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"], f'Learning rates found in each optimizer did not align\nopt: {opt.param_groups[0]["lr"]}\nDDP opt: {ddp_opt.param_groups[0]["lr"]}\n'
+        assert (
+            opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"]
+        ), f'Learning rates found in each optimizer did not align\nopt: {opt.param_groups[0]["lr"]}\nDDP opt: {ddp_opt.param_groups[0]["lr"]}\n'
         did_step = (((iteration + 1) % 2) == 0) or (iteration == (len(dataloader) - 1))
         if accelerator.num_processes > 1:
             check_model_parameters(model, ddp_model, did_step)
@@ -241,8 +247,13 @@ def main():
     test_gradient_accumulation_with_opt_and_scheduler()
     if state.distributed_type == DistributedType.MULTI_GPU:
         if state.local_process_index == 0:
-            print(f"**Test `accumulate` gradient accumulation with optimizer and scheduler, `split_batches=True`**")
+            print("**Test `accumulate` gradient accumulation with optimizer and scheduler, `split_batches=True`**")
         test_gradient_accumulation_with_opt_and_scheduler(True)
+        if state.local_process_index == 0:
+            print(
+                "**Test `accumulate` gradient accumulation with optimizer and scheduler, `split_batches=True` and `dispatch_batches=True`**"
+            )
+        test_gradient_accumulation_with_opt_and_scheduler(True, True)
 
 
 def _mp_fn(index):
