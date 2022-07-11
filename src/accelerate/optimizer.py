@@ -39,6 +39,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     """
     Internal wrapper around a torch optimizer.
 
+    Conditionally will perform `step` and `zero_grad` if gradients should be synchronized when performing gradient
+    accumulation.
+
     Args:
         optimizer (`torch.optim.optimizer.Optimizer`):
             The optimizer to wrap.
