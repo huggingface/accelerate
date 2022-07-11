@@ -414,7 +414,7 @@ class Accelerator:
         else:
             context = self.no_sync
 
-        print(f'Context at step {self.step} on worker {self.process_index}')
+        print(f'Context at step {self.step} on worker {self.process_index}: {context}')
         with context(model):
             yield
 
