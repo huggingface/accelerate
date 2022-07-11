@@ -193,6 +193,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False, dispa
     # Test that context manager behaves properly
     model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
     for iteration, batch in enumerate(dataloader):
+        print(f'On iteration {iteration}')
         ddp_input, ddp_target = batch.values()
         # Gather the distributed inputs and targs for the base model
         input, target = accelerator.gather((ddp_input, ddp_target))
