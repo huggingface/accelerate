@@ -156,6 +156,7 @@ class ClusterConfig(BaseConfig):
 class SageMakerConfig(BaseConfig):
     ec2_instance_type: str
     iam_role_name: str
+    image_uri: str
     profile: Optional[str] = None
     region: str = "us-east-1"
     num_machines: int = 1
@@ -163,3 +164,5 @@ class SageMakerConfig(BaseConfig):
     pytorch_version: str = SAGEMAKER_PYTORCH_VERSION
     transformers_version: str = SAGEMAKER_TRANSFORMERS_VERSION
     py_version: str = SAGEMAKER_PYTHON_VERSION
+    sagemaker_inputs_file: str = None
+    sagemaker_metrics_file: str = None

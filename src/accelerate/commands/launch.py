@@ -493,13 +493,44 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         "SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
     # configure distribution set up
-    distribution = None  # TODO: not yet implemented
+    distribution = None
     if sagemaker_config.distributed_type == SageMakerDistributedType.DATA_PARALLEL:
         distribution = {"smdistributed": {"dataparallel": {"enabled": True}}}
+
+    # configure sagemaker inputs
+    sagemaker_inputs = None
+    if sagemaker_config.sagemaker_inputs_file is not None:
+        print(f"Loading SageMaker Inputs from {sagemaker_config.sagemaker_inputs_file} file")
+        sagemaker_inputs = {}
+        with open(sagemaker_config.sagemaker_inputs_file) as file:
+            for i, line in enumerate(file):
+                if i == 0:
+                    continue
+                l = line.split("\t")
+                sagemaker_inputs[l[0]] = l[1].strip()
+        print(f"Loaded SageMaker Inputs: {sagemaker_inputs}")
+
+    # configure sagemaker metrics
+    sagemaker_metrics = None
+    if sagemaker_config.sagemaker_metrics_file is not None:
+        print(f"Loading SageMaker Metrics from {sagemaker_config.sagemaker_metrics_file} file")
+        sagemaker_metrics = []
+        with open(sagemaker_config.sagemaker_metrics_file) as file:
+            for i, line in enumerate(file):
+                if i == 0:
+                    continue
+                l = line.split("\t")
+                metric_dict = {
+                    "Name": l[0],
+                    "Regex": l[1].strip(),
+                }
+                sagemaker_metrics.append(metric_dict)
+        print(f"Loaded SageMaker Metrics: {sagemaker_metrics}")
 
     # configure session
     print("Creating Estimator")
     huggingface_estimator = HuggingFace(
+        image_uri=sagemaker_config.image_uri,
         entry_point=entry_point,
         source_dir=source_dir,
         role=sagemaker_config.iam_role_name,
@@ -513,9 +544,10 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         distribution=distribution,
         hyperparameters=hyperparameters,
         environment=environment,
+        metric_definitions=sagemaker_metrics,
     )
 
-    huggingface_estimator.fit()
+    huggingface_estimator.fit(inputs=sagemaker_inputs)
     print(f"You can find your model data at: {huggingface_estimator.model_data}")
 
 
