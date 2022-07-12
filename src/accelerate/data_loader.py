@@ -442,7 +442,7 @@ class DataLoaderDispatcher(DataLoader):
         self._stop_iteration = False
         first_batch = None
         batch, batch_info, skip = self._fetch_batches(main_iterator)
-        while not self._stop_iteration:
+        while True:
             if skip:
                 continue
             if self.state.process_index != 0:
@@ -465,15 +465,14 @@ class DataLoaderDispatcher(DataLoader):
                 batch_size += 1
 
             data_slice = slice(self.state.process_index * batch_size, (self.state.process_index + 1) * batch_size)
-            try:
-                next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+            next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+            if not self._stop_iteration:
                 yield slice_tensors(batch, data_slice)
                 batch, batch_info, skip = next_batch, next_batch_info, next_skip
-            except StopIteration:
+            else:
                 self.gradient_state._set_end_of_dataloader(True)
                 yield slice_tensors(batch, data_slice)
                 break
-            print(f'Skip: {skip}, stop iteration: {self._stop_iteration}')
 
     def __len__(self):
         whole_length = super().__len__()
