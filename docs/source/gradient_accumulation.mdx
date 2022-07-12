@@ -86,7 +86,7 @@ of steps to perform before each call to `step()` and how to automatically adjust
 ```
 
 From here you can use the [`Accelerator.accumulate`] context manager from inside your training loop to automatically perform the gradient accumulation for you!
-You just wrap it around the entire training part of our code: 
+You just wrap it around the entire training part of your code: 
 
 ```diff
 - for index, batch in enumerate(training_dataloader):
