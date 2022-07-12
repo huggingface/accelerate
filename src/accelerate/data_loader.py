@@ -463,7 +463,9 @@ class DataLoaderDispatcher(DataLoader):
 
     def __len__(self):
         whole_length = super().__len__()
-        if self.drop_last:
+        if self.split_batches:
+            return whole_length
+        elif self.drop_last:
             return whole_length // self.state.num_processes
         else:
             return math.ceil(whole_length / self.state.num_processes)
