@@ -76,7 +76,7 @@ In its current state, this code is not going to perform gradient accumulation ef
 
 ## Letting 🤗 Accelerate handle gradient accumulation
 
-All that is left now is to let 🤗 Accelerate handle the gradient accumulation for us. To do so you should pass in a `gradient_accumulation_steps` parameter to `Accelerator`, dictating the number 
+All that is left now is to let 🤗 Accelerate handle the gradient accumulation for us. To do so you should pass in a `gradient_accumulation_steps` parameter to [`Accelerator`], dictating the number 
 of steps to perform before each call to `step()` and how to automatically adjust the loss during the call to [`Accelerator.backward`]:
 
 ```diff
