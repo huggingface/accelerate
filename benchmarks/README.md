@@ -4,7 +4,7 @@ Running inference with Accelerate on big models.
 
 ## Setup
 
-These benchmarks use the `Transformers` library:
+These benchmarks use the `transformers` library:
 
 ```bash
 pip install transformers
