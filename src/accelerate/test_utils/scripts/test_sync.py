@@ -25,7 +25,7 @@ from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, set_seed
 
 
-def check_model_parameters(model_a, model_b, did_step):
+def check_model_parameters(model_a, model_b, did_step, iteration):
     for param, grad_param in zip(model_a.parameters(), model_b.parameters()):
         if not param.requires_grad:
             continue
@@ -33,12 +33,12 @@ def check_model_parameters(model_a, model_b, did_step):
             # Grads should not be in sync
             assert (
                 torch.allclose(param.grad, grad_param.grad) is False
-            ), f"Gradients in sync when they should not be:\nmodel_a grad ({param.grad}) == model_b grad ({grad_param.grad})"
+            ), f"Gradients in sync when they should not be at iteration {iteration}:\nmodel_a grad ({param.grad}) == model_b grad ({grad_param.grad})"
         else:
             # Grads should be in sync
             assert (
                 torch.allclose(param.grad, grad_param.grad) is True
-            ), f"Gradients not in sync when they should be:\nmodel_a grad ({param.grad}) != model_b grad ({grad_param.grad})"
+            ), f"Gradients not in sync when they should be at iteration {iteration}:\nmodel_a grad ({param.grad}) != model_b grad ({grad_param.grad})"
 
 
 def step_model(model, input, target, accelerator, do_backward=True):
@@ -96,7 +96,7 @@ def test_noop_sync(accelerator):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
 
         # Since `no_sync` is a noop, `ddp_model` and `model` grads should always be in sync
-        check_model_parameters(model, ddp_model, True)
+        check_model_parameters(model, ddp_model, True, iteration)
         for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
             if not param.requires_grad:
                 continue
@@ -106,7 +106,7 @@ def test_noop_sync(accelerator):
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
-        ddp_input = ddp_input[torch.randperm(16)]
+        ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
 
 def test_distributed_sync(accelerator):
@@ -146,11 +146,13 @@ def test_distributed_sync(accelerator):
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
-        ddp_input = ddp_input[torch.randperm(16)]
+        ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
 
-def test_gradient_accumulation():
-    accelerator = Accelerator(gradient_accumulation_steps=2)
+def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
+    accelerator = Accelerator(
+        gradient_accumulation_steps=2, split_batches=split_batches, dispatch_batches=dispatch_batches
+    )
     # Test that context manager behaves properly
     model, ddp_model, dataloader = get_training_setup(accelerator)
     for iteration, batch in enumerate(dataloader):
@@ -181,11 +183,13 @@ def test_gradient_accumulation():
 
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
-        ddp_input = ddp_input[torch.randperm(16)]
+        ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
 
-def test_gradient_accumulation_with_opt_and_scheduler():
-    accelerator = Accelerator(gradient_accumulation_steps=2)
+def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False, dispatch_batches=False):
+    accelerator = Accelerator(
+        gradient_accumulation_steps=2, split_batches=split_batches, dispatch_batches=dispatch_batches
+    )
     # Test that context manager behaves properly
     model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
     for iteration, batch in enumerate(dataloader):
@@ -198,8 +202,11 @@ def test_gradient_accumulation_with_opt_and_scheduler():
         ddp_model.train()
         step_model(model, input, target, accelerator, False)
         opt.step()
-        for _ in range(accelerator.num_processes):
+        if split_batches:
             sched.step()
+        else:
+            for _ in range(accelerator.num_processes):
+                sched.step()
         opt.zero_grad()
         # Perform gradient accumulation under wrapper
         with accelerator.accumulate(ddp_model):
@@ -209,10 +216,12 @@ def test_gradient_accumulation_with_opt_and_scheduler():
             ddp_opt.zero_grad()
 
         # Learning rates should be the same
-        assert opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"]
-        did_step = (((iteration + 1) % 2) == 0) or (iteration == (len(dataloader) - 1))
+        assert (
+            opt.param_groups[0]["lr"] == ddp_opt.param_groups[0]["lr"]
+        ), f'Learning rates found in each optimizer did not align\nopt: {opt.param_groups[0]["lr"]}\nDDP opt: {ddp_opt.param_groups[0]["lr"]}\n'
+        did_step = (((iteration + 1) % 2) == 0) or ((iteration + 1) == len(dataloader))
         if accelerator.num_processes > 1:
-            check_model_parameters(model, ddp_model, did_step)
+            check_model_parameters(model, ddp_model, did_step, iteration)
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
 
@@ -229,12 +238,31 @@ def main():
             print("**Test Distributed `no_sync` context manager**")
         test_distributed_sync(accelerator)
     if state.distributed_type == DistributedType.MULTI_GPU:
-        if state.local_process_index == 0:
-            print("**Test `accumulate` gradient accumulation**")
-        test_gradient_accumulation()
+        for split_batch in [True, False]:
+            for dispatch_batches in [True, False]:
+                if state.local_process_index == 0:
+                    print(
+                        "**Test `accumulate` gradient accumulation, ",
+                        f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
+                    )
+                test_gradient_accumulation(split_batch)
     if state.local_process_index == 0:
-        print("**Test `accumulate` gradient accumulation with optimizer and scheduler**")
+        print(
+            "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
+            "`split_batches=False`, `dispatch_batches=False`**",
+        )
     test_gradient_accumulation_with_opt_and_scheduler()
+    if state.distributed_type == DistributedType.MULTI_GPU:
+        for split_batch in [True, False]:
+            for dispatch_batches in [True, False]:
+                if not split_batch and not dispatch_batches:
+                    continue
+                if state.local_process_index == 0:
+                    print(
+                        "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
+                        f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
+                    )
+                test_gradient_accumulation_with_opt_and_scheduler(split_batch, dispatch_batches)
 
 
 def _mp_fn(index):
