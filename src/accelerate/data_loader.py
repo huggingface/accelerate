@@ -473,6 +473,7 @@ class DataLoaderDispatcher(DataLoader):
                 self.gradient_state._set_end_of_dataloader(True)
                 yield slice_tensors(batch, data_slice)
                 break
+            print(f'Skip: {skip}, stop iteration: {self._stop_iteration}')
 
     def __len__(self):
         whole_length = super().__len__()
