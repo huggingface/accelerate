@@ -9,6 +9,8 @@
 - sections:
   - local: big_modeling
     title: Handling big models
+  - local: gradient_accumulation
+    title: Gradient accumulation
   - local: sagemaker
     title: Amazon SageMaker
   title: Guides
