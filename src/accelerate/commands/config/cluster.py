@@ -180,7 +180,9 @@ def get_cluster_input():
                     launcher_query += f"[{i}] {launcher}, "
                 launcher_query = launcher_query[:-2] + ")? [0]: "
                 deepspeed_config["deepspeed_multinode_launcher"] = _ask_field(
-                    launcher_query, lambda x: DEEPSPEED_MULTINODE_LAUNCHERS[int(x)]
+                    launcher_query,
+                    lambda x: DEEPSPEED_MULTINODE_LAUNCHERS[int(x)],
+                    default=DEEPSPEED_MULTINODE_LAUNCHERS[0],
                 )
 
     fsdp_config = {}
