@@ -33,9 +33,9 @@ from .utils import (
 @contextmanager
 def init_empty_weights(include_buffers: bool = False):
     """
+    Args:
     A context manager under which models are initialized with all parameters on the meta device, therefore creating an
     empty model. Useful when just initializing the model would blow the available RAM.
-    Args:
         include_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to also put all buffers on the meta device while initializing.
     Example:
@@ -46,9 +46,12 @@ def init_empty_weights(include_buffers: bool = False):
     with init_empty_weights():
         tst = nn.Sequential(*[nn.Linear(10000, 10000) for _ in range(1000)])
     ```
+
     <Tip warning={true}>
+
     Any model created under this context manager has no weights. As such you can't do something like
     `model.to(some_device)` with it. To load weights inside your empty model, see [`load_checkpoint_and_dispatch`].
+
     </Tip>
     """
     old_register_parameter = nn.Module.register_parameter
@@ -59,11 +62,8 @@ def init_empty_weights(include_buffers: bool = False):
         old_register_parameter(module, name, param)
         if param is not None:
             param_cls = type(module._parameters[name])
-            has_fp16_weights = getattr(param_cls, 'has_fp16_weights', None)
-            if has_fp16_weights is not None:
-                module._parameters[name] = param_cls(module._parameters[name].to(torch.device("meta")), has_fp16_weights=has_fp16_weights)
-            else:
-                module._parameters[name] = param_cls(module._parameters[name].to(torch.device("meta")))
+            kwargs = module._parameters[name].__dict__
+            module._parameters[name] = param_cls(module._parameters[name].to(torch.device("meta")), **kwargs)
 
     def register_empty_buffer(module, name, buffer):
         old_register_buffer(module, name, buffer)
