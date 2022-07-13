@@ -229,20 +229,14 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits
-            predictions, references = accelerator.gather((predictions, batch["labels"]))
             fold_predictions.append(predictions.cpu())
-            metric.add_batch(
-                predictions=predictions.argmax(dim=-1),
-                references=references,
-            )
-        test_metric = metric.compute()
         # Use accelerator.print to print only on the main process.
         test_predictions.append(torch.cat(fold_predictions, dim=0))
         # We now need to release all our memory and get rid of the current model, optimizer, etc
         accelerator.free_memory()
     # New Code #
     # Finally we check the accuracy of our folded results:
-    preds = torch.stack(test_predictions, dim=0).sum(dim=0).div(int(config["n_splits"])).argmax(dim=-1)
+    preds = torch.stack(test_predictions, dim=0).sum(dim=0).div(int(args.num_folds)).argmax(dim=-1)
     test_metric = metric.compute(predictions=preds, references=test_labels)
     accelerator.print("Average test metrics from all folds:", test_metric)
 

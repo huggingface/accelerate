@@ -165,8 +165,6 @@ def training_function(config, args):
     if args.with_tracking:
         if accelerator.is_main_process:
             run = os.path.split(__file__)[-1].split(".")[0]
-            if args.logging_dir:
-                run = os.path.join(args.logging_dir, run)
             accelerator.init_trackers(run, config)
 
     # Now we train the model
