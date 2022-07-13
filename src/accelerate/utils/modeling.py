@@ -116,6 +116,7 @@ def set_module_tensor_to_device(
 
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
+
     with torch.no_grad():
         if value is None:
             new_value = old_value.to(device)

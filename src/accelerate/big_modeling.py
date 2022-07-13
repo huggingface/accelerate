@@ -33,15 +33,17 @@ from .utils import (
 @contextmanager
 def init_empty_weights(include_buffers: bool = False):
     """
-    Args:
     A context manager under which models are initialized with all parameters on the meta device, therefore creating an
     empty model. Useful when just initializing the model would blow the available RAM.
+
+    Args:
         include_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to also put all buffers on the meta device while initializing.
     Example:
     ```pyton
     import torch.nn as nn
     from accelerate import init_empty_weights
+    
     # Initialize a model with 100 billions parameters in no time and without using any RAM.
     with init_empty_weights():
         tst = nn.Sequential(*[nn.Linear(10000, 10000) for _ in range(1000)])
