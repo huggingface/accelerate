@@ -110,6 +110,30 @@ def launch_command_parser(subparsers=None):
         "Only applicable with DeepSpeed ZeRO Stage-3.",
     )
     parser.add_argument(
+        "--deepspeed_hostfile",
+        default=None,
+        type=str,
+        help="DeepSpeed hostfile for configuring multi-node compute resources.",
+    )
+    parser.add_argument(
+        "--deepspeed_exclusion_filter",
+        default=None,
+        type=str,
+        help="DeepSpeed exclusion filter string when using mutli-node setup.",
+    )
+    parser.add_argument(
+        "--deepspeed_inclusion_filter",
+        default=None,
+        type=str,
+        help="DeepSpeed inclusion filter string when using mutli-node setup.",
+    )
+    parser.add_argument(
+        "--deepspeed_multinode_launcher",
+        default=None,
+        type=str,
+        help="DeepSpeed multi-node launcher to use.",
+    )
+    parser.add_argument(
         "--use_fsdp",
         default=False,
         action="store_true",
@@ -312,20 +336,23 @@ def deepspeed_launcher(args):
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
     cmd = ["deepspeed", "--no_local_rank"]
     if args.num_machines > 1:
-        cmd.extend(
-            [
-                "--num_gpus",
-                str(args.num_processes // args.num_machines),
-                "--num_nodes",
-                str(args.num_machines),
-                "--node_rank",
-                str(args.machine_rank),
-                "--master_addr",
-                args.main_process_ip,
-                "--master_port",
-                str(args.main_process_port),
-            ]
-        )
+        cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
+        if args.deepspeed_exclusion_filter is not None:
+            cmd.extend(
+                [
+                    "--exclude",
+                    str(args.deepspeed_exclusion_filter),
+                ]
+            )
+        elif args.deepspeed_inclusion_filter is not None:
+            cmd.extend(
+                [
+                    "--include",
+                    str(args.deepspeed_inclusion_filter),
+                ]
+            )
+        else:
+            cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
     else:
         cmd.extend(["--num_gpus", str(args.num_processes)])
 
