@@ -65,7 +65,9 @@ def init_empty_weights(include_buffers: bool = False):
     def register_empty_parameter(module, name, param):
         old_register_parameter(module, name, param)
         if param is not None:
-            module._parameters[name] = nn.Parameter(module._parameters[name].to(torch.device("meta")))
+            param_cls = type(module._parameters[name])
+            kwargs = module._parameters[name].__dict__
+            module._parameters[name] = param_cls(module._parameters[name].to(torch.device("meta")), **kwargs)
 
     def register_empty_buffer(module, name, buffer):
         old_register_buffer(module, name, buffer)
