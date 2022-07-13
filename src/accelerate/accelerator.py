@@ -860,8 +860,7 @@ class Accelerator:
         Reduce the values in *tensor* across all processes based on *reduction*.
 
         Note:
-            The reduced value is returned only in the main process. In other processes, the returned value is the
-            same as input.
+            All processes get the reduced value.
 
         Args:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
