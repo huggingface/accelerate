@@ -430,7 +430,7 @@ def reduce(tensor, reduction="mean"):
             xm.all_reduce("sum", cloned_tensor)
             return cloned_tensor
         elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
-            torch.distributed.reduce(cloned_tensor, ReduceOp.SUM)
+            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
             return cloned_tensor
         else:
             if reduction == "sum":
