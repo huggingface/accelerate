@@ -389,6 +389,13 @@ def deepspeed_launcher(args):
     current_env["DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
     current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file).lower()
 
+    if args.num_machines > 1:
+        with open(".deepspeed_env", "a") as f:
+            for key, value in current_env.items():
+                if ";" in value or " " in value:
+                    continue
+                f.write(f"{key}={value}\n")
+
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
     if process.returncode != 0:
