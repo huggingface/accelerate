@@ -137,7 +137,7 @@ class Accelerator:
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
 
-    **Available attributes:**
+    **Attributes:**
 
         - **device** (`torch.device`) -- The device to use.
         - **distributed_type** ([`~utils.DistributedType`]) -- The distributed training configuration.

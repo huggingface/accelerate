@@ -15,6 +15,21 @@
 - sections:
   - local: usage_guides/gradient_accumulation
     title: Performing gradient accumulation
+  - local: usage_guides/fsdp
+    title: Fully Sharded Data Parallelism
+  - local: usage_guides/checkpoint
+    title: Saving and loading training states
+  - local: usage_guides/deepspeed
+    title: How to use DeepSpeed
+  - local: usage_guides/tracking
+    title: Using experiment trackers
+  - local: usage_guides/big_modeling
+    title: How to use large models with small resources
+  - local: usage_guides/memory
+    title: How to avoid CUDA Out-of-Memory
+  - local: usage_guides/sagemaker
+    title: Using Accelerate on SageMaker
+
   title: How-To Guides
 - sections:
   - local: concept_guides/gradient_synchronization
@@ -31,6 +46,8 @@
     title: Experiment trackers
   - local: package_reference/launchers
     title: Distributed launchers
+  - local: package_reference/deepspeed
+    title: DeepSpeed utilities
   - local: package_reference/logging
     title: Logging
   - local: package_reference/big_modeling

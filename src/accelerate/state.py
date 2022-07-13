@@ -48,7 +48,7 @@ class AcceleratorState:
     """
     Singleton class that has information about the current training environment.
 
-    **Available attributes:**
+    **Attributes:**
 
         - **device** (`torch.device`) -- The device to use.
         - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
@@ -214,7 +214,7 @@ class GradientState:
     """
     Singleton class that has information related to gradient synchronization for gradient accumulation
 
-    **Available attributes:**
+    **Attributes:**
 
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
         - **sync_gradients** (`bool`) -- Whether the gradients should be synced
