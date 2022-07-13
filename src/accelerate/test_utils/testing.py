@@ -130,7 +130,9 @@ def require_comet_ml(test_case):
     return unittest.skipUnless(is_comet_ml_available(), "test requires comet_ml")(test_case)
 
 
-_atleast_one_tracker_available = any([is_comet_ml_available(), is_wandb_available(), is_tensorboard_available()])
+_atleast_one_tracker_available = (
+    any([is_wandb_available(), is_tensorboard_available()]) and not is_comet_ml_available()
+)
 
 
 def require_trackers(test_case):
@@ -138,9 +140,10 @@ def require_trackers(test_case):
     Decorator marking that a test requires at least one tracking library installed. These tests are skipped when none
     are installed
     """
-    return unittest.skipUnless(_atleast_one_tracker_available, "test requires at least one tracker to be available")(
-        test_case
-    )
+    return unittest.skipUnless(
+        _atleast_one_tracker_available,
+        "test requires at least one tracker to be available and for `comet_ml` to not be installed",
+    )(test_case)
 
 
 class TempDirTestCase(unittest.TestCase):
