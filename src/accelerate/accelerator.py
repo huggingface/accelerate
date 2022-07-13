@@ -979,7 +979,7 @@ class Accelerator:
         output_dir = os.path.expanduser(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
-        weights = [self.get_state_dict(m) for m in self._models]
+        weights = [self.get_state_dict(m, unwrap=False) for m in self._models]
         save_location = save_accelerator_state(
             output_dir, weights, self._optimizers, self._schedulers, self.state.process_index, self.scaler
         )
@@ -1058,7 +1058,7 @@ class Accelerator:
                         break
         return (model_device, optimizer_device)
 
-    def get_state_dict(self, model):
+    def get_state_dict(self, model, unwrap=True):
         is_zero_3 = False
         if self.distributed_type == DistributedType.DEEPSPEED:
             is_zero_3 = self.deepspeed_config["zero_optimization"]["stage"] == 3
@@ -1074,7 +1074,8 @@ class Accelerator:
                     "To save the full checkpoint, run `model.save_checkpoint(save_dir)` and use `zero_to_fp32.py` to recover weights."
                 )
         else:
-            model = self.unwrap_model(model)
+            if unwrap:
+                model = self.unwrap_model(model)
             state_dict = model.state_dict()
 
         if state_dict is not None:
