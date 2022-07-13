@@ -855,17 +855,23 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def reduce(self, tensor: torch.Tensor, reduction="sum"):
+    def reduce(self, tensor, reduction="sum"):
         """
         Reduce the values in *tensor* across all processes based on *reduction*.
 
+        Note:
+            All processes get the reduced value.
+
         Args:
-            tensor (`torch.Tensor`):
+            tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors to reduce across all processes.
             reduction (`str`, *optional*, defaults to "sum"):
                 A reduction type, can be one of 'sum', 'mean', or 'none'. If 'none', will not perform any operation.
+
+        Returns:
+            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The reduced tensor(s).
         """
-        reduce(tensor, reduction)
+        return reduce(tensor, reduction)
 
     def pad_across_processes(self, tensor, dim=0, pad_index=0, pad_first=False):
         """
