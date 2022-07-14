@@ -35,6 +35,7 @@ from accelerate.utils import (
     is_deepspeed_available,
     is_sagemaker_available,
 )
+from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
 
 
@@ -108,6 +109,30 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3. "
         "Only applicable with DeepSpeed ZeRO Stage-3.",
+    )
+    parser.add_argument(
+        "--deepspeed_hostfile",
+        default=None,
+        type=str,
+        help="DeepSpeed hostfile for configuring multi-node compute resources.",
+    )
+    parser.add_argument(
+        "--deepspeed_exclusion_filter",
+        default=None,
+        type=str,
+        help="DeepSpeed exclusion filter string when using mutli-node setup.",
+    )
+    parser.add_argument(
+        "--deepspeed_inclusion_filter",
+        default=None,
+        type=str,
+        help="DeepSpeed inclusion filter string when using mutli-node setup.",
+    )
+    parser.add_argument(
+        "--deepspeed_multinode_launcher",
+        default=None,
+        type=str,
+        help="DeepSpeed multi-node launcher to use.",
     )
     parser.add_argument(
         "--use_fsdp",
@@ -312,20 +337,42 @@ def deepspeed_launcher(args):
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
     cmd = ["deepspeed", "--no_local_rank"]
     if args.num_machines > 1:
-        cmd.extend(
-            [
-                "--num_gpus",
-                str(args.num_processes // args.num_machines),
-                "--num_nodes",
-                str(args.num_machines),
-                "--node_rank",
-                str(args.machine_rank),
-                "--master_addr",
-                args.main_process_ip,
-                "--master_port",
-                str(args.main_process_port),
-            ]
-        )
+        if args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+            cmd = get_launch_prefix()
+            cmd.extend(
+                [
+                    "--nproc_per_node",
+                    str(args.num_processes // args.num_machines),
+                    "--nnodes",
+                    str(args.num_machines),
+                    "--node_rank",
+                    str(args.machine_rank),
+                    "--master_addr",
+                    args.main_process_ip,
+                    "--master_port",
+                    str(args.main_process_port),
+                ]
+            )
+        else:
+            cmd.extend(
+                ["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)]
+            )
+            if args.deepspeed_exclusion_filter is not None:
+                cmd.extend(
+                    [
+                        "--exclude",
+                        str(args.deepspeed_exclusion_filter),
+                    ]
+                )
+            elif args.deepspeed_inclusion_filter is not None:
+                cmd.extend(
+                    [
+                        "--include",
+                        str(args.deepspeed_inclusion_filter),
+                    ]
+                )
+            else:
+                cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
     else:
         cmd.extend(["--num_gpus", str(args.num_processes)])
 
@@ -350,6 +397,7 @@ def deepspeed_launcher(args):
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
         mixed_precision = "fp16"
 
+    current_env["PYTHONPATH"] = sys.executable
     current_env["MIXED_PRECISION"] = str(mixed_precision)
     current_env["USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
@@ -360,6 +408,13 @@ def deepspeed_launcher(args):
     current_env["DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
     current_env["DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
     current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file).lower()
+
+    if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+        with open(".deepspeed_env", "a") as f:
+            for key, value in current_env.items():
+                if ";" in value or " " in value:
+                    continue
+                f.write(f"{key}={value}\n")
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
