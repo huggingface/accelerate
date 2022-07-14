@@ -566,6 +566,7 @@ class Accelerator:
             # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
             # don't wrap it again
             if type(model) != FSDP:
+                self.state.fsdp_plugin.set_auto_wrap_policy(model)
                 fsdp_plugin = self.state.fsdp_plugin
                 model = FSDP(
                     model,
@@ -573,6 +574,7 @@ class Accelerator:
                     cpu_offload=fsdp_plugin.cpu_offload,
                     auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
                     backward_prefetch=fsdp_plugin.backward_prefetch,
+                    mixed_precision=fsdp_plugin.mixed_precision_policy,
                     ignored_modules=fsdp_plugin.ignored_modules,
                 )
                 if not fsdp_plugin.cpu_offload.offload_params:

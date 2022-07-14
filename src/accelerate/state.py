@@ -146,9 +146,10 @@ class AcceleratorState:
                 if os.environ.get("USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP
                     if self.mixed_precision != "no":
-                        raise ValueError(
-                            "Mixed precision is currently not supported for FSDP. Please set `mixed_precision` to `no`."
-                        )
+                        fsdp_plugin.set_mixed_precision(self.mixed_precision)
+                    #     raise ValueError(
+                    #         "Mixed precision is currently not supported for FSDP. Please set `mixed_precision` to `no`."
+                    #     )
                     self.fsdp_plugin = fsdp_plugin
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
