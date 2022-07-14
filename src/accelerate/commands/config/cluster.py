@@ -146,35 +146,6 @@ def get_cluster_input():
                     )
 
             if num_machines > 1:
-                deepspeed_config["deepspeed_hostfile"] = _ask_field(
-                    "DeepSpeed configures multi-node compute resources with hostfile, please specify the location of hostfile: ",
-                    lambda x: str(x),
-                )
-
-                is_exclusion_filter = _ask_field(
-                    "Do you want to specify exclusion filter string? [yes/NO]: ",
-                    _convert_yes_no_to_bool,
-                    default=False,
-                    error_message="Please enter yes or no.",
-                )
-                if is_exclusion_filter:
-                    deepspeed_config["deepspeed_exclusion_filter"] = _ask_field(
-                        "DeepSpeed exclusion filter string: ",
-                        lambda x: str(x),
-                    )
-
-                is_inclusion_filter = _ask_field(
-                    "Do you want to specify inclusion filter string? [yes/NO]: ",
-                    _convert_yes_no_to_bool,
-                    default=False,
-                    error_message="Please enter yes or no.",
-                )
-                if is_inclusion_filter:
-                    deepspeed_config["deepspeed_inclusion_filter"] = _ask_field(
-                        "DeepSpeed inclusion filter string: ",
-                        lambda x: str(x),
-                    )
-
                 launcher_query = "Which Type of launcher do you want to use "
                 for i, launcher in enumerate(DEEPSPEED_MULTINODE_LAUNCHERS):
                     launcher_query += f"[{i}] {launcher}, "
@@ -184,6 +155,40 @@ def get_cluster_input():
                     lambda x: DEEPSPEED_MULTINODE_LAUNCHERS[int(x)],
                     default=DEEPSPEED_MULTINODE_LAUNCHERS[0],
                 )
+
+                if deepspeed_config["deepspeed_multinode_launcher"] != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+                    deepspeed_config["deepspeed_hostfile"] = _ask_field(
+                        "DeepSpeed configures multi-node compute resources with hostfile. "
+                        "Each row is of the format `hostname slots=[num_gpus]`, e.g., `localhost slots=2`; "
+                        "for more information please refer official [documentation]"
+                        "(https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node). "
+                        "Please specify the location of hostfile: ",
+                        lambda x: str(x),
+                    )
+
+                    is_exclusion_filter = _ask_field(
+                        "Do you want to specify exclusion filter string? [yes/NO]: ",
+                        _convert_yes_no_to_bool,
+                        default=False,
+                        error_message="Please enter yes or no.",
+                    )
+                    if is_exclusion_filter:
+                        deepspeed_config["deepspeed_exclusion_filter"] = _ask_field(
+                            "DeepSpeed exclusion filter string: ",
+                            lambda x: str(x),
+                        )
+
+                    is_inclusion_filter = _ask_field(
+                        "Do you want to specify inclusion filter string? [yes/NO]: ",
+                        _convert_yes_no_to_bool,
+                        default=False,
+                        error_message="Please enter yes or no.",
+                    )
+                    if is_inclusion_filter:
+                        deepspeed_config["deepspeed_inclusion_filter"] = _ask_field(
+                            "DeepSpeed inclusion filter string: ",
+                            lambda x: str(x),
+                        )
 
     fsdp_config = {}
     if distributed_type in [DistributedType.MULTI_GPU]:

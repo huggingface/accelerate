@@ -35,6 +35,7 @@ from accelerate.utils import (
     is_deepspeed_available,
     is_sagemaker_available,
 )
+from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
 
 
@@ -336,23 +337,42 @@ def deepspeed_launcher(args):
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
     cmd = ["deepspeed", "--no_local_rank"]
     if args.num_machines > 1:
-        cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
-        if args.deepspeed_exclusion_filter is not None:
+        if args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+            cmd = get_launch_prefix()
             cmd.extend(
                 [
-                    "--exclude",
-                    str(args.deepspeed_exclusion_filter),
-                ]
-            )
-        elif args.deepspeed_inclusion_filter is not None:
-            cmd.extend(
-                [
-                    "--include",
-                    str(args.deepspeed_inclusion_filter),
+                    "--nproc_per_node",
+                    str(args.num_processes // args.num_machines),
+                    "--nnodes",
+                    str(args.num_machines),
+                    "--node_rank",
+                    str(args.machine_rank),
+                    "--master_addr",
+                    args.main_process_ip,
+                    "--master_port",
+                    str(args.main_process_port),
                 ]
             )
         else:
-            cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+            cmd.extend(
+                ["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)]
+            )
+            if args.deepspeed_exclusion_filter is not None:
+                cmd.extend(
+                    [
+                        "--exclude",
+                        str(args.deepspeed_exclusion_filter),
+                    ]
+                )
+            elif args.deepspeed_inclusion_filter is not None:
+                cmd.extend(
+                    [
+                        "--include",
+                        str(args.deepspeed_inclusion_filter),
+                    ]
+                )
+            else:
+                cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
     else:
         cmd.extend(["--num_gpus", str(args.num_processes)])
 
@@ -389,7 +409,7 @@ def deepspeed_launcher(args):
     current_env["DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
     current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file).lower()
 
-    if args.num_machines > 1:
+    if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         with open(".deepspeed_env", "a") as f:
             for key, value in current_env.items():
                 if ";" in value or " " in value:
