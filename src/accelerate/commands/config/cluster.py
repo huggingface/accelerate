@@ -173,7 +173,7 @@ def get_cluster_input():
             )
             fsdp_wrap_query = "What should be your auto wrap policy ("
             for i, wrap_policy in enumerate(FSDP_AUTO_WRAP_POLICY):
-                fsdp_wrap_query += f"[{i+1}] {wrap_policy}, "
+                fsdp_wrap_query += f"[{i}] {wrap_policy}, "
             fsdp_wrap_query = fsdp_wrap_query[:-2] + ")? [0]: "
             fsdp_config["fsdp_auto_wrap_policy"] = _ask_field(
                 fsdp_wrap_query,

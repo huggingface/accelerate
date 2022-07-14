@@ -29,7 +29,6 @@ from typing import Any, Callable, Iterable, Optional
 import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY
-from .other import get_module_class_from_name
 
 
 class KwargsHandler:
@@ -434,7 +433,7 @@ class FullyShardedDataParallelPlugin:
     mixed_precision_policy: "typing.Any" = field(
         default=None,
         metadata={
-            "A config to enable mixed precision training with FullyShardedDataParallel. "
+            "help": "A config to enable mixed precision training with FullyShardedDataParallel. "
             "The 3 flags that are set are `param_dtype`, `reduce_dtype`, `buffer_dtype`. "
             "Each flag expects `torch.dtype` as the value. "
             "It is of type `torch.distributed.fsdp.fully_sharded_data_parallel.MixedPrecision`."
@@ -468,6 +467,26 @@ class FullyShardedDataParallelPlugin:
             else:
                 self.cpu_offload = CPUOffload(offload_params=False)
 
+    @staticmethod
+    def get_module_class_from_name(module, name):
+        """
+        Gets a class from a module by its name.
+
+        Args:
+            module (`torch.nn.Module`): The module to get the class from.
+            name (`str`): The name of the class.
+        """
+        modules_children = list(module.children())
+        if module.__class__.__name__ == name:
+            return module.__class__
+        elif len(modules_children) == 0:
+            return
+        else:
+            for child_module in modules_children:
+                module_class = FullyShardedDataParallelPlugin.get_module_class_from_name(child_module, name)
+                if module_class is not None:
+                    return module_class
+
     def set_auto_wrap_policy(self, model):
         from torch.distributed.fsdp.wrap import (
             always_wrap_policy,
@@ -479,7 +498,9 @@ class FullyShardedDataParallelPlugin:
             auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", FSDP_AUTO_WRAP_POLICY[-1])
             if auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[0]:
                 transformer_cls_to_wrap = os.environ.get("FSDP_TRANSFORMER_CLS_TO_WRAP", "")
-                transformer_cls_to_wrap = get_module_class_from_name(model, transformer_cls_to_wrap)
+                transformer_cls_to_wrap = FullyShardedDataParallelPlugin.get_module_class_from_name(
+                    model, transformer_cls_to_wrap
+                )
                 self.auto_wrap_policy = functools.partial(
                     transformer_auto_wrap_policy,
                     transformer_layer_cls={

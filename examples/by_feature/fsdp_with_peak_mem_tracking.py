@@ -162,6 +162,7 @@ def training_function(config, args):
     # New Code #
     # For FSDP feature, it is highly recommended and efficient to prepare the model before creating optimizer
     model = accelerator.prepare(model)
+    accelerator.print(model)
 
     # Instantiate optimizer
     # New Code #
