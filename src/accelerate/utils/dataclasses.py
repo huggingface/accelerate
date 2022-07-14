@@ -488,11 +488,7 @@ class FullyShardedDataParallelPlugin:
                     return module_class
 
     def set_auto_wrap_policy(self, model):
-        from torch.distributed.fsdp.wrap import (
-            always_wrap_policy,
-            size_based_auto_wrap_policy,
-            transformer_auto_wrap_policy,
-        )
+        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
         if self.auto_wrap_policy is None:
             auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", FSDP_AUTO_WRAP_POLICY[-1])
@@ -513,8 +509,6 @@ class FullyShardedDataParallelPlugin:
                     self.auto_wrap_policy = functools.partial(
                         size_based_auto_wrap_policy, min_num_params=min_num_params
                     )
-            elif auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[2]:
-                self.auto_wrap_policy = always_wrap_policy
 
     def set_mixed_precision(self, mixed_precision):
         if mixed_precision == "fp16":
