@@ -229,7 +229,7 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits
-            predictions = accelerate.gather(predictions)
+            predictions = accelerator.gather(predictions)
             fold_predictions.append(predictions.cpu())
         # Use accelerator.print to print only on the main process.
         test_predictions.append(torch.cat(fold_predictions, dim=0))
