@@ -31,7 +31,7 @@ test_deepspeed:
 	python -m pytest -s -v ./tests/deepspeed
 
 test_examples:
-	python -m pytest -s -v ./tests/test_examples.py -k "cross_validation"
+	python -m pytest -s -v ./tests/test_examples.py
 
 # Broken down example tests for the CI runners
 test_example_differences:
