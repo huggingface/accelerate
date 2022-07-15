@@ -161,7 +161,10 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         self.logging_dir = logging_dir
-        self.log_with = filter_trackers(log_with, self.logging_dir)
+        trackers = filter_trackers(log_with, self.logging_dir)
+        if len(trackers) < 1 and log_with is not None:
+            warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
+        self.log_with = trackers
 
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
