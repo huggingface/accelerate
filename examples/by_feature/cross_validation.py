@@ -152,17 +152,15 @@ def training_function(config, args):
     # New Code #
     # Create our folds:
     folds = kfold.split(np.zeros(datasets["train"].num_rows), datasets["train"]["label"])
-
+    test_references = []
     # Iterate over them
-    for train_idxs, valid_idxs in folds:
+    for i, (train_idxs, valid_idxs) in enumerate(folds):
         train_dataloader, eval_dataloader, test_dataloader = get_fold_dataloaders(
             accelerator,
             datasets,
             train_idxs,
             valid_idxs,
         )
-        if test_labels is None:
-            test_labels = datasets["validation"]["label"]
         # Instantiate the model (we build the model here so that the seed also control new weights initialization)
         model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
 
@@ -229,14 +227,17 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits
-            predictions = accelerator.gather(predictions)
+            predictions, references = accelerator.gather((predictions, batch["labels"]))
             fold_predictions.append(predictions.cpu())
+            if i == 0:
+                test_references.append(references.cpu())
         # Use accelerator.print to print only on the main process.
         test_predictions.append(torch.cat(fold_predictions, dim=0))
         # We now need to release all our memory and get rid of the current model, optimizer, etc
         accelerator.free_memory()
     # New Code #
     # Finally we check the accuracy of our folded results:
+    test_references = torch.cat(test_references, dim=0)
     preds = torch.stack(test_predictions, dim=0).sum(dim=0).div(int(args.num_folds)).argmax(dim=-1)
     test_metric = metric.compute(predictions=preds, references=test_labels)
     accelerator.print("Average test metrics from all folds:", test_metric)
