@@ -73,3 +73,38 @@ accelerate launch -h
 <Tip>
 Even if you are not using 🤗 Accelerate in your code, you can still use the launcher for starting your scripts!
 </Tip>
+
+## Custom Configurations
+
+As briefly mentioned earlier, `accelerate launch` should be mostly used through combining set configurations 
+made with the `accelerate config` command. These configs are saved to a `default_config.yaml` file in your cache folder for 🤗 Accelerate. 
+This cache folder is located at (with decreasing order of priority):
+
+- The content of your environment variable `HF_HOME` suffixed with `accelerate`.
+- If it does not exist, the content of your environment variable `XDG_CACHE_HOME` suffixed with
+  `huggingface/accelerate`.
+- If this does not exist either, the folder `~/.cache/huggingface/accelerate`
+
+To have multiple configurations, the flag `--config_file` can be passed to the `accelerate launch` command paired 
+with the location of the custom yaml. 
+
+An example yaml may look something like the following:
+```yaml
+compute_environment: LOCAL_MACHINE
+deepspeed_config: {}
+distributed_type: MULTI_GPU
+fsdp_config: {}
+machine_rank: 0
+main_process_ip: null
+main_process_port: null
+main_training_function: main
+mixed_precision: fp16
+num_machines: 1
+num_processes: 1
+use_cpu: false
+```
+
+An example of launching a script with a yaml located in a custom location would look something like so:
+```bash
+accelerate launch --config_file path/to/config/my_config_file.yaml path_to_script.py --args_for_the_script
+```

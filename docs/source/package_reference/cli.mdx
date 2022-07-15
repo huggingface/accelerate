@@ -1,0 +1,134 @@
+<!--Copyright 2021 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# The Command Line 
+
+Below is a list of all the available commands 🤗 Accelerate with their parameters
+
+## accelerate config
+
+**Command**:
+
+`accelerate config` or `accelerate-config`
+
+Launches a series of prompts to create and save a `default_config.yml` configuration file for your training system. Should 
+always be ran first on your machine.
+
+**Usage**: 
+
+```bash
+accelerate config [parameters]
+```
+
+**Optional Arguments**:
+* `--config_file CONFIG_FILE` (`str`) -- The path to use to store the config file. Will default to a file named default_config.yaml in the cache location, which is the content
+                        of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
+                        (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
+* `-h`, `--help` (`bool`, flag) -- Show a help message and exit
+
+## accelerate env
+
+**Command**:
+
+`accelerate env` or `accelerate-env`
+
+Lists the contents of the passed 🤗 Accelerate configuration file. Should always be used when opening an issue on the GitHub repository.
+
+**Usage**:
+
+```bash
+accelerate env
+```
+
+**Optional Arguments**:
+* `--config_file CONFIG_FILE` (`str`) -- The path to use to store the config file. Will default to a file named default_config.yaml in the cache location, which is the content
+                        of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
+                        (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
+* `-h`, `--help` (`bool`, flag) -- Show a help message and exit
+
+## accelerate launch
+
+**Command**:
+
+`accelerate launch` or `accelerate-launch`
+
+Launches a specified script on a distributed system with the right parameters.
+
+**Usage**: 
+
+```bash
+accelerate launch [parameters] {training_script} --{training_script-argument-1} --{training_script-argument-2} ...
+```
+
+**Positional Arguments**:
+
+- `{training_script}` -- The full path to the script to be launched in parallel
+- `--{training_script-argument-1}` -- Arguments of the training script
+
+**Optional Arguments**:
+
+* `-h`, `--help` (`bool`, flag) -- Show a help message and exit
+* `--config_file CONFIG_FILE` (`str`)-- The config file to use for the default values in the launching script.
+* `--cpu` (`bool`) -- Whether or not to force the training on the CPU.
+* `--mixed_precision {no,fp16,bf16}` (`str`) -- Whether or not to use mixed precision training. Choose between FP16 and BF16 (bfloat16) training. BF16 training is only supported on
+                    Nvidia Ampere GPUs and PyTorch 1.10 or later.
+* `--multi_gpu` (`bool`, defaults to `False`) -- Whether or not this should launch a distributed GPU training.
+* `-m`, `--module` (`bool`) -- Change each process to interpret the launch script as a Python module, executing with the same behavior as 'python -m'.
+* `--no_python` (`bool`) -- Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.
+
+The rest of these arguments are configured through `accelerate config` and are read in from the specified `--config_file` (or default configuration) for their 
+values. They can also be passed in manually.
+
+**Machine Configuration Arguments**:
+
+The following arguments are useful for customization of worker machines
+* `--machine_rank MACHINE_RANK` (`int`) -- The rank of the machine on which this script is launched.
+* `--num_machines NUM_MACHINES` (`int`) -- The total number of machines used in this training.
+* `--num_processes NUM_PROCESSES` (`int`) -- The total number of processes to be launched in parallel.
+* `--main_process_ip MAIN_PROCESS_IP` (`str`) -- The IP address of the machine of rank 0.
+* `--main_process_port MAIN_PROCESS_PORT` (`int`) -- The port to use to communicate with the machine of rank 0.
+* `--num_cpu_threads_per_process NUM_CPU_THREADS_PER_PROCESS` (`int`) -- The number of CPU threads per process. Can be tuned for optimal performance.
+
+
+**DeepSpeed Arguments**:
+
+The following arguments are only useful when `use_deepspeed` is passed: 
+* `--use_deepspeed` (`bool`) -- Whether to use deepspeed.
+* `--deepspeed_config_file DEEPSPEED_CONFIG_FILE` (`str`) -- DeepSpeed config file.
+* `--zero_stage ZERO_STAGE` (`str`) -- DeepSpeed's ZeRO optimization stage
+* `--offload_optimizer_device OFFLOAD_OPTIMIZER_DEVICE` (`str`) -- Decides where (none|cpu|nvme) to offload optimizer states
+* `--offload_param_device OFFLOAD_PARAM_DEVICE` (`str`) -- Decides where (none|cpu|nvme) to offload parameters
+* `--gradient_accumulation_steps GRADIENT_ACCUMULATION_STEPS` (`int`) -- Number of gradient_accumulation_steps used in your training script
+* `--gradient_clipping GRADIENT_CLIPPING` (`float`) -- gradient clipping value used in your training script
+The following arguments are related to using ZeRO Stage-3
+* `--zero3_init_flag ZERO3_INIT_FLAG` (`bool`) -- Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models
+* `--zero3_save_16bit_model ZERO3_SAVE_16BIT_MODEL` (`bool`) -- Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3
+
+**Fully Sharded Data Parallelism Arguments**:
+
+The following arguments are only useful when `use_fdsp` is passed:
+* `--use_fsdp` (`bool`) -- Whether to use fsdp.
+* `--offload_params OFFLOAD_PARAMS` (`bool`) -- Decides Whether (true|false) to offload parameters and gradients to CPU.
+* `--min_num_params MIN_NUM_PARAMS` (`int`) -- FSDP's minimum number of parameters for Default Auto Wrapping.
+* `--sharding_strategy SHARDING_STRATEGY` (`str`) -- FSDP's Sharding Strategy.
+
+**TPU Arguments**:
+
+The following arguments are only useful when `tpu` is passed:
+* `--tpu` (`bool`) - Whether or not this should launch a TPU training.
+* `--main_training_function MAIN_TRAINING_FUNCTION` (`str`) -- The name of the main function to be executed in your script.
+
+**AWS SageMaker Arguments**:
+
+The following arguments are only useful when training in SageMaker
+* `--aws_access_key_id AWS_ACCESS_KEY_ID` (`str`) -- The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job
+* `--aws_secret_access_key AWS_SECRET_ACCESS_KEY` (`str`) -- The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job
