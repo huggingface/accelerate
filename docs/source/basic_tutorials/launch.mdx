@@ -36,6 +36,34 @@ for batch in training_dataloader:
 
 But how do you run this code and have it utilize the special hardware available to it?
 
+First you should rewrite the above code into a function, and make it callable as a script. For example:
+
+```diff
+  from accelerate import Accelerator
+  
++ def main():
+
+    accelerator = Accelerator()
+
+    model, optimizer, training_dataloader, scheduler = accelerator.prepare(
+        model, optimizer, training_dataloader, scheduler
+    )
+
+    for batch in training_dataloader:
+        optimizer.zero_grad()
+        inputs, targets = batch
+        outputs = model(inputs)
+        loss = loss_function(outputs, targets)
+        accelerator.backward(loss)
+        optimizer.step()
+        scheduler.step()
+
++ if __name__ == "__main__":
++   main()
+```
+
+Next you need to launch it with `accelerate launch`. 
+
 ## Using `accelerate launch`
 
 🤗 Accelerate has a special CLI command to help you launch your code in your system through `accelerate launch`.

@@ -13,8 +13,6 @@
     title: Migrating to 🤗 Accelerate
   - local: basic_tutorials/launch
     title: Launching distributed code
-  - local: basic_tutorials/training_tpu
-    title: Training on TPUs
   title: Tutorials
 - sections:
   - local: usage_guides/gradient_accumulation
