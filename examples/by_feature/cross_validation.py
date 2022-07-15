@@ -229,6 +229,7 @@ def training_function(config, args):
             predictions, references = accelerator.gather((predictions, batch["labels"]))
             fold_predictions.append(predictions.cpu())
             if i == 0:
+                # We need all of the test predictions
                 test_references.append(references.cpu())
         # Use accelerator.print to print only on the main process.
         test_predictions.append(torch.cat(fold_predictions, dim=0))
