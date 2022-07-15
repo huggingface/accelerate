@@ -11,6 +11,8 @@
     title: Migrating to 🤗 Accelerate
   - local: basic_tutorials/launch
     title: Launching distributed code
+  - local: basic_tutorials/notebook
+    title: Using Jupyter Notebooks
   title: Tutorials
 - sections:
   - local: usage_guides/gradient_accumulation

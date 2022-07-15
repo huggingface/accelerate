@@ -116,10 +116,6 @@ That being said, ideally `bf16` should be utilized as it is extremely efficient 
 
 There are two "layers" when using `bf16` and 🤗 Accelerate on TPUs, at the base level and at the operation level. 
 
-<Tip>
-When using the `notebook_launcher` on a TPU, if `accelerate config` was configured with `bf16` or if `bf16` is passed into the `mixed_precision` parameter, both are automatically utilized. 
-</Tip>
-
 At the base level, this is enabled when passing `mixed_precision="bf16"` to `Accelerator`, such as:
 ```python
 accelerator = Accelerator(mixed_precision="bf16")
@@ -129,3 +125,21 @@ The specific configuration being set is an environmental variable of `XLA_USE_BF
 
 There is a futher configuration you can perform which is setting the `XLA_DOWNCAST_BF16` environmental variable. If set to `1`, then 
 `torch.float` is `bfloat16` and `torch.double` is `float32`.
+
+This is performed in the `Accelerator` object when passing `downcast_bf16=True`:
+```python
+accelerator = Accelerator(mixed_precision="bf16", downcast_bf16=True)
+```
+
+## Training Times on TPUs
+
+As you launch your script, you may notice that training seems exceptionally slow at first. This is because TPUs
+first run through a few batches of data to see how much memory to allocate before finally utilizing this configured 
+memory allocation extremely efficiently. 
+
+If you notice that your evaluation code to calculate the metrics of your model takes longer due to a larger batch size being used, 
+it is recommended to keep the batch size the same as the training data if it is too slow. Otherwise the memory will reallocate to this 
+new batch size after the first few iterations. 
+<Tip>
+Just because the memory is allocated does not mean it will be used or that the batch size will increase when going back to your training dataloader.
+</Tip>
