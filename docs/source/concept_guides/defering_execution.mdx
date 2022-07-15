@@ -1,1 +1,27 @@
-# Deferring Execution
+# Deferring Executions
+
+When you run your usual script, instructions are executed in order. Using 🤗 Accelerate to deploy your script on several
+GPUs at the same time introduces a complication: while each process executes all instructions in order, some may be
+faster than others.
+
+You might need to wait for all processes to have reached a certain point before executing a given instruction. For
+instance, you shouldn't save a model before being sure every process is done with training, and you wouldn't want to 
+continue training before all the model weights have been loaded in. To do this, just write the following line in your code:
+
+```
+accelerator.wait_for_everyone()
+```
+
+This instruction will block all the processes that arrive first until all the other processes have reached that
+point (if you run your script on just one GPU or CPU, this won't do anything).
+
+A few example cases for when to use this utility are listed below:
+
+<Tip>
+Some of these are utilized with the [`Accelerator.main_process_first`] context manager, which utilizes [`Accelerator.wait_for_everyone`] to 
+run a particular set of code on the main process beforehand before triggering and launching the other processes
+</Tip>
+
+- Downloading a dataset on the main process first and then loading the cached dataset in afterwards
+- Saving the `state_dict` of the model, since you would normally save one file on just the main process
+- Loading in the `state_dict` to a model, optimizer, or scheduler before moving on to training
