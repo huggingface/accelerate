@@ -125,7 +125,6 @@ def get_fold_dataloaders(
 
 def training_function(config, args):
     # New Code #
-    test_labels = None
     test_predictions = []
     # Download the dataset
     datasets = load_dataset("glue", "mrpc")
