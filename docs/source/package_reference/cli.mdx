@@ -26,14 +26,14 @@ always be ran first on your machine.
 **Usage**: 
 
 ```bash
-accelerate config [parameters]
+accelerate config [arguments]
 ```
 
 **Optional Arguments**:
 * `--config_file CONFIG_FILE` (`str`) -- The path to use to store the config file. Will default to a file named default_config.yaml in the cache location, which is the content
                         of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
                         (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
-* `-h`, `--help` (`bool`, flag) -- Show a help message and exit
+* `-h`, `--help` (`bool`) -- Show a help message and exit
 
 ## accelerate env
 
@@ -41,19 +41,19 @@ accelerate config [parameters]
 
 `accelerate env` or `accelerate-env`
 
-Lists the contents of the passed 🤗 Accelerate configuration file. Should always be used when opening an issue on the GitHub repository.
+Lists the contents of the passed 🤗 Accelerate configuration file. Should always be used when opening an issue on the [GitHub repository](https://github.com/huggingface/accelerate).
 
 **Usage**:
 
 ```bash
-accelerate env
+accelerate env [arguments]
 ```
 
 **Optional Arguments**:
 * `--config_file CONFIG_FILE` (`str`) -- The path to use to store the config file. Will default to a file named default_config.yaml in the cache location, which is the content
                         of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
                         (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
-* `-h`, `--help` (`bool`, flag) -- Show a help message and exit
+* `-h`, `--help` (`bool`) -- Show a help message and exit
 
 ## accelerate launch
 
@@ -66,7 +66,7 @@ Launches a specified script on a distributed system with the right parameters.
 **Usage**: 
 
 ```bash
-accelerate launch [parameters] {training_script} --{training_script-argument-1} --{training_script-argument-2} ...
+accelerate launch [arguments] {training_script} --{training_script-argument-1} --{training_script-argument-2} ...
 ```
 
 **Positional Arguments**:
@@ -76,7 +76,7 @@ accelerate launch [parameters] {training_script} --{training_script-argument-1} 
 
 **Optional Arguments**:
 
-* `-h`, `--help` (`bool`, flag) -- Show a help message and exit
+* `-h`, `--help` (`bool`) -- Show a help message and exit
 * `--config_file CONFIG_FILE` (`str`)-- The config file to use for the default values in the launching script.
 * `--cpu` (`bool`) -- Whether or not to force the training on the CPU.
 * `--mixed_precision {no,fp16,bf16}` (`str`) -- Whether or not to use mixed precision training. Choose between FP16 and BF16 (bfloat16) training. BF16 training is only supported on
@@ -132,3 +132,21 @@ The following arguments are only useful when `tpu` is passed:
 The following arguments are only useful when training in SageMaker
 * `--aws_access_key_id AWS_ACCESS_KEY_ID` (`str`) -- The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job
 * `--aws_secret_access_key AWS_SECRET_ACCESS_KEY` (`str`) -- The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job
+
+## accelerate test
+
+`accelerate test` or `accelerate-test`
+
+Runs `accelerate/test_utils/test_script.py` to verify that 🤗 Accelerate has been properly configured on your system and runs. 
+
+**Usage**: 
+
+```bash
+accelerate test [arguments]
+```
+
+**Optional Arguments**:
+* `--config_file CONFIG_FILE` (`str`) -- The path to use to store the config file. Will default to a file named default_config.yaml in the cache location, which is the content
+                        of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
+                        (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
+* `-h`, `--help` (`bool`) -- Show a help message and exit
