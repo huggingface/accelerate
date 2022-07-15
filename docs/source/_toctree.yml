@@ -11,8 +11,6 @@
     title: Migrating to 🤗 Accelerate
   - local: basic_tutorials/launch
     title: Launching distributed code
-  - local: basic_tutorials/training_tpu
-    title: Training on TPUs
   title: Tutorials
 - sections:
   - local: usage_guides/gradient_accumulation
@@ -44,6 +42,8 @@
     title: Calculating metrics
   - local: concept_guides/defering_execution
     title: Executing and deferring jobs
+  - local: concept_guides/training_tpu
+    title: TPU best practices
   title: Concepts and fundamentals
 - sections: 
   - local: package_reference/accelerator
