@@ -72,6 +72,7 @@ class AcceleratorState:
         deepspeed_plugin=None,
         fsdp_plugin=None,
         _from_accelerator: bool = False,
+        downcast_bf16: bool = False,
         **kwargs,
     ):
         self.__dict__ = self._shared_state
@@ -115,7 +116,12 @@ class AcceleratorState:
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
                 if mixed_precision == "bf16":
-                    os.environ["XLA_USE_BF16"] = str(1)
+                    if downcast_bf16:
+                        os.environ["XLA_USE_BF16"] = str(0)
+                        os.environ["XLA_DOWNCAST_BF16"] = str(1)
+                    else:
+                        os.environ["XLA_USE_BF16"] = str(1)
+                        os.environ["XLA_DOWNCAST_BF16"] = str(0)
                 self.mixed_precision = mixed_precision
             elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (

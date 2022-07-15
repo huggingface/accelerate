@@ -34,6 +34,7 @@ from accelerate.utils import (
     get_launch_prefix,
     is_deepspeed_available,
     is_sagemaker_available,
+    patch_environment,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
@@ -197,6 +198,11 @@ def launch_command_parser(subparsers=None):
         type=str,
         default=None,
         help="The name of the main function to be executed in your script (only for TPU training).",
+    )
+    parser.add_argument(
+        "--downcast_bf16",
+        action="store_true",
+        help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32",
     )
     parser.add_argument(
         "-m",
@@ -425,8 +431,18 @@ def deepspeed_launcher(args):
 def tpu_launcher(args):
     import torch_xla.distributed.xla_multiprocessing as xmp
 
+    current_env = {}
+
     if args.no_python:
         raise ValueError("--no_python cannot be used with TPU launcher")
+
+    if args.mixed_precision == "bf16":
+        if args.downcast_bf16:
+            current_env["XLA_USE_BF16"] = "0"
+            current_env["XLA_DOWNCAST_BF16"] = "1"
+        else:
+            current_env["XLA_USE_BF16"] = "1"
+            current_env["XLA_DOWNCAST_BF16"] = "0"
 
     if args.module:
         mod_name = args.training_script
@@ -447,7 +463,8 @@ def tpu_launcher(args):
     sys.argv = [mod.__file__] + args.training_script_args
 
     main_function = getattr(mod, args.main_training_function)
-    xmp.spawn(PrepareForLaunch(main_function), args=(), nprocs=args.num_processes)
+    with patch_environment(**current_env):
+        xmp.spawn(PrepareForLaunch(main_function), args=(), nprocs=args.num_processes)
 
 
 def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:

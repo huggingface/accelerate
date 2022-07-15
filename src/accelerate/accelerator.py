@@ -126,6 +126,9 @@ class Accelerator:
             accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
+        downcast_bf16 (`bool`, *optional*):
+            If set to `True` and using `mixed_precision="bf16"` then `torch.float` will become `bfloat16` and
+            `torch.double` will remain `float32` on TPUs.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
@@ -156,8 +159,9 @@ class Accelerator:
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
+        downcast_bf16: Optional[bool] = False,
         dispatch_batches: Optional[bool] = None,
-        step_scheduler_with_optimizer: bool = True,
+        step_scheduler_with_optimizer: Optional[bool] = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         self.logging_dir = logging_dir
@@ -232,8 +236,12 @@ class Accelerator:
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             _from_accelerator=True,
+            downcast_bf16=downcast_bf16,
             **kwargs,
         )
+
+        if (mixed_precision != "bf16") and downcast_bf16 and (self.state.distributedType != DistributedType.TPU):
+            raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
         if gradient_accumulation_steps > 1:
             if self.state.distributed_type == DistributedType.TPU:
