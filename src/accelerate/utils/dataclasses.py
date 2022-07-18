@@ -28,7 +28,7 @@ from typing import Any, Callable, Iterable, Optional
 
 import torch
 
-from .constants import FSDP_AUTO_WRAP_POLICY
+from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH
 
 
 class KwargsHandler:
@@ -456,7 +456,7 @@ class FullyShardedDataParallelPlugin:
     )
 
     def __post_init__(self):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, ShardingStrategy
+        from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch, CPUOffload, ShardingStrategy
 
         if self.sharding_strategy is None:
             self.sharding_strategy = ShardingStrategy(int(os.environ.get("FSDP_SHARDING_STRATEGY", 1)))
@@ -466,6 +466,11 @@ class FullyShardedDataParallelPlugin:
                 self.cpu_offload = CPUOffload(offload_params=True)
             else:
                 self.cpu_offload = CPUOffload(offload_params=False)
+
+        if self.backward_prefetch is None:
+            prefetch_policy = os.environ.get("FSDP_BACKWARD_PREFETCH", FSDP_BACKWARD_PREFETCH[-1])
+            if prefetch_policy != FSDP_BACKWARD_PREFETCH[-1]:
+                self.backward_prefetch = BackwardPrefetch(FSDP_BACKWARD_PREFETCH.index(prefetch_policy) + 1)
 
     @staticmethod
     def get_module_class_from_name(module, name):

@@ -15,7 +15,12 @@
 # limitations under the License.
 
 from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available, is_transformers_available
-from ...utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS, FSDP_AUTO_WRAP_POLICY, FSDP_SHARDING_STRATEGY
+from ...utils.constants import (
+    DEEPSPEED_MULTINODE_LAUNCHERS,
+    FSDP_AUTO_WRAP_POLICY,
+    FSDP_BACKWARD_PREFETCH,
+    FSDP_SHARDING_STRATEGY,
+)
 from .config_args import ClusterConfig
 from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
 
@@ -236,6 +241,15 @@ def get_cluster_input():
                     lambda x: int(x),
                     default=1e8,
                 )
+            fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy ("
+            for i, backward_prefetch_policy in enumerate(FSDP_BACKWARD_PREFETCH):
+                fsdp_backward_prefetch_query += f"[{i}] {backward_prefetch_policy}, "
+            fsdp_backward_prefetch_query = fsdp_backward_prefetch_query[:-2] + ")? [0]: "
+            fsdp_config["fsdp_backward_prefetch_policy"] = _ask_field(
+                fsdp_backward_prefetch_query,
+                lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
+                default=FSDP_BACKWARD_PREFETCH[0],
+            )
 
     if distributed_type == DistributedType.TPU:
         main_training_function = _ask_field(
