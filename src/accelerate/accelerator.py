@@ -262,14 +262,17 @@ class Accelerator:
             if not torch.cuda.is_available():
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
-            self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+            if self.distributed_type == DistributedType.FSDP:
+                self.scaler = torch.distributed.fsdp.sharded_grad_scaler.ShardedGradScaler(**kwargs)
+            else:
+                self.scaler = torch.cuda.amp.GradScaler(**kwargs)
         elif self.state.mixed_precision == "bf16":
             self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
             # Only on the GPU do we care about scaling the gradients
-            if torch.cuda.is_available():
+            if torch.cuda.is_available() and self.distributed_type != DistributedType.FSDP:
                 kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
@@ -819,6 +822,7 @@ class Accelerator:
         Should be used in place of `torch.nn.utils.clip_grad_norm_`.
         """
         if self.distributed_type == DistributedType.FSDP:
+            self.unscale_gradients()
             parameters = [p for p in parameters]
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:
