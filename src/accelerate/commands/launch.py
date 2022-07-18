@@ -159,6 +159,25 @@ def launch_command_parser(subparsers=None):
         help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
     )
     parser.add_argument(
+        "--fsdp_auto_wrap_policy",
+        type=str,
+        default=None,
+        help="FSDP's auto wrap policy. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--transformer_layer_cls_to_wrap",
+        default=None,
+        type=str,
+        help="Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
+        "(useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--fsdp_backward_prefetch_policy",
+        default=None,
+        type=str,
+        help="FSDP's backward prefetch policy. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
     parser.add_argument(
@@ -322,9 +341,12 @@ def multi_gpu_launcher(args):
     current_env["MIXED_PRECISION"] = str(mixed_precision)
     if args.use_fsdp:
         current_env["USE_FSDP"] = "true"
+        current_env["FSDP_AUTO_WRAP_POLICY"] = str(args.fsdp_auto_wrap_policy)
+        current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.transformer_layer_cls_to_wrap)
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.min_num_params)
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.sharding_strategy)
+        current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch_policy)
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()

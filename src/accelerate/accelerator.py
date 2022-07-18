@@ -265,8 +265,13 @@ class Accelerator:
             if not torch.cuda.is_available():
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
-            self.scaler = torch.cuda.amp.GradScaler(**kwargs)
-        elif self.state.mixed_precision == "bf16":
+            if self.distributed_type == DistributedType.FSDP:
+                from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+
+                self.scaler = ShardedGradScaler(**kwargs)
+            else:
+                self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+        elif self.state.mixed_precision == "bf16" and self.distributed_type != DistributedType.FSDP:
             self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
@@ -569,6 +574,7 @@ class Accelerator:
             # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
             # don't wrap it again
             if type(model) != FSDP:
+                self.state.fsdp_plugin.set_auto_wrap_policy(model)
                 fsdp_plugin = self.state.fsdp_plugin
                 model = FSDP(
                     model,
@@ -576,6 +582,7 @@ class Accelerator:
                     cpu_offload=fsdp_plugin.cpu_offload,
                     auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
                     backward_prefetch=fsdp_plugin.backward_prefetch,
+                    mixed_precision=fsdp_plugin.mixed_precision_policy,
                     ignored_modules=fsdp_plugin.ignored_modules,
                 )
                 if not fsdp_plugin.cpu_offload.offload_params:
@@ -820,6 +827,7 @@ class Accelerator:
         Should be used in place of `torch.nn.utils.clip_grad_norm_`.
         """
         if self.distributed_type == DistributedType.FSDP:
+            self.unscale_gradients()
             parameters = [p for p in parameters]
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:

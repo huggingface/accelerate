@@ -28,6 +28,8 @@ from typing import Any, Callable, Iterable, Optional
 
 import torch
 
+from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH
+
 
 class KwargsHandler:
     """
@@ -418,22 +420,35 @@ class FullyShardedDataParallelPlugin:
 
     sharding_strategy: "typing.Any" = field(
         default=None,
-        metadata={"help": "Possible options are [1] FULL_SHARD, [2] SHARD_GRAD_OP"},
+        metadata={
+            "help": "FSDP Sharding Strategy of type `torch.distributed.fsdp.fully_sharded_data_parallel.ShardingStrategy`"
+        },
     )
     backward_prefetch: "typing.Any" = field(
         default=None,
-        metadata={"help": "Possible options are [1] BACKWARD_PRE, [2] BACKWARD_POST"},
+        metadata={
+            "help": "FSDP Backward Prefetch of type `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`"
+        },
     )
-    auto_wrap_policy: "typing.Any" = field(
+    mixed_precision_policy: "typing.Any" = field(
+        default=None,
+        metadata={
+            "help": "A config to enable mixed precision training with FullyShardedDataParallel. "
+            "The 3 flags that are set are `param_dtype`, `reduce_dtype`, `buffer_dtype`. "
+            "Each flag expects `torch.dtype` as the value. "
+            "It is of type `torch.distributed.fsdp.fully_sharded_data_parallel.MixedPrecision`."
+        },
+    )
+    auto_wrap_policy: Optional[Callable] = field(
         default=None,
         metadata={"help": "A callable specifying a policy to recursively wrap layers with FSDP"},
     )
-    cpu_offload: Optional[Callable] = field(
+    cpu_offload: "typing.Any" = field(
         default=None,
-        metadata={"help": "Decides Whether to offload parameters and gradients to CPU."},
-    )
-    min_num_params: int = field(
-        default=None, metadata={"help": "FSDP's minimum number of parameters for Default Auto Wrapping."}
+        metadata={
+            "help": "Decides Whether to offload parameters and gradients to CPU. "
+            "It is of type `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`."
+        },
     )
     ignored_modules: Optional[Iterable[torch.nn.Module]] = field(
         default=None,
@@ -441,8 +456,7 @@ class FullyShardedDataParallelPlugin:
     )
 
     def __post_init__(self):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, ShardingStrategy
-        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
+        from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch, CPUOffload, ShardingStrategy
 
         if self.sharding_strategy is None:
             self.sharding_strategy = ShardingStrategy(int(os.environ.get("FSDP_SHARDING_STRATEGY", 1)))
@@ -453,11 +467,63 @@ class FullyShardedDataParallelPlugin:
             else:
                 self.cpu_offload = CPUOffload(offload_params=False)
 
-        if self.min_num_params is None:
-            self.min_num_params = int(os.environ.get("FSDP_MIN_NUM_PARAMS", 0))
+        if self.backward_prefetch is None:
+            prefetch_policy = os.environ.get("FSDP_BACKWARD_PREFETCH", FSDP_BACKWARD_PREFETCH[-1])
+            if prefetch_policy != FSDP_BACKWARD_PREFETCH[-1]:
+                self.backward_prefetch = BackwardPrefetch(FSDP_BACKWARD_PREFETCH.index(prefetch_policy) + 1)
+
+    @staticmethod
+    def get_module_class_from_name(module, name):
+        """
+        Gets a class from a module by its name.
+
+        Args:
+            module (`torch.nn.Module`): The module to get the class from.
+            name (`str`): The name of the class.
+        """
+        modules_children = list(module.children())
+        if module.__class__.__name__ == name:
+            return module.__class__
+        elif len(modules_children) == 0:
+            return
+        else:
+            for child_module in modules_children:
+                module_class = FullyShardedDataParallelPlugin.get_module_class_from_name(child_module, name)
+                if module_class is not None:
+                    return module_class
+
+    def set_auto_wrap_policy(self, model):
+        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
         if self.auto_wrap_policy is None:
-            if self.min_num_params > 0:
-                self.auto_wrap_policy = functools.partial(
-                    size_based_auto_wrap_policy, min_num_params=self.min_num_params
+            auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", FSDP_AUTO_WRAP_POLICY[-1])
+            if auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[0]:
+                transformer_cls_to_wrap = os.environ.get("FSDP_TRANSFORMER_CLS_TO_WRAP", "")
+                transformer_cls_to_wrap = FullyShardedDataParallelPlugin.get_module_class_from_name(
+                    model, transformer_cls_to_wrap
                 )
+                if transformer_cls_to_wrap is None:
+                    raise Exception("Could not find the transformer layer class to wrap in the model.")
+                self.auto_wrap_policy = functools.partial(
+                    transformer_auto_wrap_policy,
+                    # Transformer layer class to wrap
+                    transformer_layer_cls={transformer_cls_to_wrap},
+                )
+            elif auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[1]:
+                min_num_params = int(os.environ.get("FSDP_MIN_NUM_PARAMS", 0))
+                if min_num_params > 0:
+                    self.auto_wrap_policy = functools.partial(
+                        size_based_auto_wrap_policy, min_num_params=min_num_params
+                    )
+
+    def set_mixed_precision(self, mixed_precision):
+        if mixed_precision == "fp16":
+            dtype = torch.float16
+        elif mixed_precision == "bf16":
+            dtype = torch.bfloat16
+        else:
+            raise ValueError(f"Unknown mixed precision value: {mixed_precision}")
+        from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
+
+        if self.mixed_precision_policy is None:
+            self.mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
