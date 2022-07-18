@@ -434,22 +434,23 @@ class Accelerator:
 
     def _prepare_one(self, obj, first_pass=False):
         # First pass of preparation: DataLoader, model, optimizer
-        if isinstance(obj, torch.utils.data.DataLoader) and first_pass:
-            return self.prepare_data_loader(obj)
-        elif isinstance(obj, torch.nn.Module) and first_pass:
-            self._models.append(obj)
-            return self.prepare_model(obj)
-        elif isinstance(obj, torch.optim.Optimizer) and first_pass:
-            optimizer = self.prepare_optimizer(obj)
-            self._optimizers.append(optimizer)
-            return optimizer
+        if first_pass:
+            if isinstance(obj, torch.utils.data.DataLoader):
+                return self.prepare_data_loader(obj)
+            elif isinstance(obj, torch.nn.Module):
+                self._models.append(obj)
+                return self.prepare_model(obj)
+            elif isinstance(obj, torch.optim.Optimizer):
+                optimizer = self.prepare_optimizer(obj)
+                self._optimizers.append(optimizer)
+                return optimizer
         # Second pass of preparation: LR scheduler (which need the full list of optimizers)
-        elif isinstance(obj, torch.optim.lr_scheduler._LRScheduler) and not first_pass:
+        elif isinstance(obj, torch.optim.lr_scheduler._LRScheduler):
             scheduler = self.prepare_scheduler(obj)
             self._schedulers.append(scheduler)
             return scheduler
-        else:
-            return obj
+        # Return the unprocessed object if previous criteria was not met
+        return obj
 
     def _prepare_fsdp(self, *args):
         result = []
