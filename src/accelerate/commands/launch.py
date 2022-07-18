@@ -256,13 +256,14 @@ def simple_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
-    current_env["USE_CPU"] = str(args.cpu)
+    current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
     elif args.num_processes > 1:
-        current_env["MASTER_ADDR"] = "127.0.0.1"
-        current_env["MASTER_PORT"] = "29500"
+        current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
+        current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
+
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
