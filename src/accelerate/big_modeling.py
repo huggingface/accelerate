@@ -260,7 +260,7 @@ def load_checkpoint_and_dispatch(
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     offload_buffers: bool = False,
     dtype: Optional[Union[str, torch.dtype]] = None,
-    offload_state_dict: bool = False,
+    offload_state_dict: Optional[bool] = None,
     preload_module_classes: Optional[List[str]] = None,
 ):
     """
@@ -292,9 +292,10 @@ def load_checkpoint_and_dispatch(
             well as the parameters.
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
-        offload_state_dict (`bool`, *optional*, defaults to `False`):
+        offload_state_dict (`bool`, *optional*):
             If `True`, will temporarily offload the CPU state dict on the hard drive to avoig getting out of CPU RAM if
-            the weight of the CPU state dict + the biggest shard does not fit.
+            the weight of the CPU state dict + the biggest shard does not fit. Will default to `True` if the device map
+            picked contains `"disk"` values.
         preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
@@ -305,6 +306,8 @@ def load_checkpoint_and_dispatch(
         device_map = infer_auto_device_map(
             model, max_memory=max_memory, no_split_module_classes=no_split_module_classes, dtype=dtype
         )
+    if offload_state_dict is None and "disk" in device_map.values():
+        offload_state_dict = True
     load_checkpoint_in_model(
         model,
         checkpoint,
