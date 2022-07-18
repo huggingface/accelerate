@@ -263,7 +263,9 @@ class Accelerator:
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
-                self.scaler = torch.distributed.fsdp.sharded_grad_scaler.ShardedGradScaler(**kwargs)
+                from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+
+                self.scaler = ShardedGradScaler(**kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
         elif self.state.mixed_precision == "bf16":
