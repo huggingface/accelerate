@@ -277,7 +277,7 @@ class Accelerator:
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
             # Only on the GPU do we care about scaling the gradients
-            if torch.cuda.is_available():
+            if torch.cuda.is_available() and self.device.type != "cpu":
                 kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
