@@ -268,13 +268,13 @@ class Accelerator:
                 self.scaler = ShardedGradScaler(**kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
-        elif self.state.mixed_precision == "bf16":
+        elif self.state.mixed_precision == "bf16" and self.distributed_type != DistributedType.FSDP:
             self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
             # Only on the GPU do we care about scaling the gradients
-            if torch.cuda.is_available() and self.distributed_type != DistributedType.FSDP:
+            if torch.cuda.is_available():
                 kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
