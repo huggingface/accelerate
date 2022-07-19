@@ -225,10 +225,17 @@ device_map = infer_auto_device_map(my_model, max_memory={0: "10GiB", 1: "10GiB",
 
 <Tip warning={true}>
 
-PyTorch takes some space on a GPU, which can be up to 2GB. You should account for this when passing along `max_memory` to avoid out-of-memory errors.
+When a first allocation happens in PyTorch, it loads CUDA kernels which take about 1-2GB of memory depending on the GPU. Therefore you always have less usable memory than the actual size of the GPU. To see how much memory is actually used do `torch.ones(1).cuda()` and look at the memory usage.
+
+Therefore when you create memory maps with `max_memory` make sure to adjust the avaialble memory accordingly to avoid out-of-memory errors.
 
 </Tip>
 
+Additionally, it's important to know that the first GPU consumes more memory than the rest of the GPUs for managing activations, therefore if you would like to optimize the maximum batch size and you have many GPUs. Give the first GPU less memory. For example, with BLOOM-176B on 8x80 A100 setup the close to ideal map is:
+```
+    return {0: '30GIB', 1: '46GIB', 2: '46GIB', 3: '46GIB', 4: '46GIB', 5: '46GIB', 6: '46GIB', 7: '46GIB'}
+```
+as you can see we gave the remaining 7 GPUs ~50% more memory than GPU 0.
 If you opt to fully design the `device_map` yourself, it should be a dictionary with keys being module names of your model and values being a valid device identifier (for instance an integer for the GPUs) or `"cpu"` for CPU offload, `"disk"` for disk offload. The keys need to cover the whole model, you can then define your device map as you wish: for instance if your model has two blocks (let's say `block1` and `block2`) which each contain three linear layers (let's say `linear1`, `linear2` and `linear3`), a valid device map can be:
 
 ```python
