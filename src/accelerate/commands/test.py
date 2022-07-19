@@ -43,7 +43,7 @@ def test_command_parser(subparsers=None):
 
 
 def test_command(args):
-    script_name = os.path.sep.join(__file__.split(os.path.sep)[:-2] + ["test_utils", "test_script.py"])
+    script_name = os.path.sep.join(__file__.split(os.path.sep)[:-2] + ["test_utils", "scripts", "test_script.py"])
 
     test_args = f"""
         --config_file={args.config_file} {script_name}

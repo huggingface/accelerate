@@ -171,7 +171,10 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
         self.logging_dir = logging_dir
-        self.log_with = filter_trackers(log_with, self.logging_dir)
+        trackers = filter_trackers(log_with, self.logging_dir)
+        if len(trackers) < 1 and log_with is not None:
+            warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
+        self.log_with = trackers
 
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
@@ -250,10 +253,6 @@ class Accelerator:
                 raise NotImplementedError(
                     "Gradient accumulation on TPU is not supported. Pass in `gradient_accumulation_steps=1`"
                 )
-            if dispatch_batches:
-                raise NotImplementedError(
-                    "Gradient accumulation with dispatched dataloaders is not supported. Pass in `gradient_accumulation_steps=1` or `dispatch_batches=False`"
-                )
 
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.device_placement = device_placement
@@ -276,14 +275,19 @@ class Accelerator:
             if not torch.cuda.is_available():
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
-            self.scaler = torch.cuda.amp.GradScaler(**kwargs)
-        elif self.state.mixed_precision == "bf16":
+            if self.distributed_type == DistributedType.FSDP:
+                from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+
+                self.scaler = ShardedGradScaler(**kwargs)
+            else:
+                self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+        elif self.state.mixed_precision == "bf16" and self.distributed_type != DistributedType.FSDP:
             self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
             # Only on the GPU do we care about scaling the gradients
-            if torch.cuda.is_available():
+            if torch.cuda.is_available() and self.device.type != "cpu":
                 kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
@@ -410,7 +414,7 @@ class Accelerator:
             self.gradient_state._set_sync_gradients(True)
         else:
             self.step += 1
-        self.gradient_state._set_sync_gradients((self.step % self.gradient_accumulation_steps) == 0)
+            self.gradient_state._set_sync_gradients((self.step % self.gradient_accumulation_steps) == 0)
 
     @property
     def sync_gradients(self):
@@ -443,22 +447,23 @@ class Accelerator:
 
     def _prepare_one(self, obj, first_pass=False):
         # First pass of preparation: DataLoader, model, optimizer
-        if isinstance(obj, torch.utils.data.DataLoader) and first_pass:
-            return self.prepare_data_loader(obj)
-        elif isinstance(obj, torch.nn.Module) and first_pass:
-            self._models.append(obj)
-            return self.prepare_model(obj)
-        elif isinstance(obj, torch.optim.Optimizer) and first_pass:
-            optimizer = self.prepare_optimizer(obj)
-            self._optimizers.append(optimizer)
-            return optimizer
+        if first_pass:
+            if isinstance(obj, torch.utils.data.DataLoader):
+                return self.prepare_data_loader(obj)
+            elif isinstance(obj, torch.nn.Module):
+                self._models.append(obj)
+                return self.prepare_model(obj)
+            elif isinstance(obj, torch.optim.Optimizer):
+                optimizer = self.prepare_optimizer(obj)
+                self._optimizers.append(optimizer)
+                return optimizer
         # Second pass of preparation: LR scheduler (which need the full list of optimizers)
-        elif isinstance(obj, torch.optim.lr_scheduler._LRScheduler) and not first_pass:
+        elif isinstance(obj, torch.optim.lr_scheduler._LRScheduler):
             scheduler = self.prepare_scheduler(obj)
             self._schedulers.append(scheduler)
             return scheduler
-        else:
-            return obj
+        # Return the unprocessed object if previous criteria was not met
+        return obj
 
     def _prepare_fsdp(self, *args):
         result = []
@@ -583,6 +588,7 @@ class Accelerator:
             # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
             # don't wrap it again
             if type(model) != FSDP:
+                self.state.fsdp_plugin.set_auto_wrap_policy(model)
                 fsdp_plugin = self.state.fsdp_plugin
                 model = FSDP(
                     model,
@@ -590,6 +596,7 @@ class Accelerator:
                     cpu_offload=fsdp_plugin.cpu_offload,
                     auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
                     backward_prefetch=fsdp_plugin.backward_prefetch,
+                    mixed_precision=fsdp_plugin.mixed_precision_policy,
                     ignored_modules=fsdp_plugin.ignored_modules,
                 )
                 if not fsdp_plugin.cpu_offload.offload_params:
@@ -834,6 +841,7 @@ class Accelerator:
         Should be used in place of `torch.nn.utils.clip_grad_norm_`.
         """
         if self.distributed_type == DistributedType.FSDP:
+            self.unscale_gradients()
             parameters = [p for p in parameters]
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:
@@ -872,17 +880,23 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def reduce(self, tensor: torch.Tensor, reduction="sum"):
+    def reduce(self, tensor, reduction="sum"):
         """
         Reduce the values in *tensor* across all processes based on *reduction*.
 
+        Note:
+            All processes get the reduced value.
+
         Args:
-            tensor (`torch.Tensor`):
+            tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors to reduce across all processes.
             reduction (`str`, *optional*, defaults to "sum"):
                 A reduction type, can be one of 'sum', 'mean', or 'none'. If 'none', will not perform any operation.
+
+        Returns:
+            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The reduced tensor(s).
         """
-        reduce(tensor, reduction)
+        return reduce(tensor, reduction)
 
     def pad_across_processes(self, tensor, dim=0, pad_index=0, pad_first=False):
         """
@@ -990,7 +1004,7 @@ class Accelerator:
         output_dir = os.path.expanduser(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
-        weights = [self.get_state_dict(m) for m in self._models]
+        weights = [self.get_state_dict(m, unwrap=False) for m in self._models]
         save_location = save_accelerator_state(
             output_dir, weights, self._optimizers, self._schedulers, self.state.process_index, self.scaler
         )
@@ -1069,7 +1083,7 @@ class Accelerator:
                         break
         return (model_device, optimizer_device)
 
-    def get_state_dict(self, model):
+    def get_state_dict(self, model, unwrap=True):
         is_zero_3 = False
         if self.distributed_type == DistributedType.DEEPSPEED:
             is_zero_3 = self.deepspeed_config["zero_optimization"]["stage"] == 3
@@ -1085,7 +1099,8 @@ class Accelerator:
                     "To save the full checkpoint, run `model.save_checkpoint(save_dir)` and use `zero_to_fp32.py` to recover weights."
                 )
         else:
-            model = self.unwrap_model(model)
+            if unwrap:
+                model = self.unwrap_model(model)
             state_dict = model.state_dict()
 
         if state_dict is not None:

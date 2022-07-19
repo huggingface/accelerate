@@ -16,10 +16,11 @@
 import json
 import os
 
+from ...utils.constants import SAGEMAKER_PARALLEL_EC2_INSTANCES
 from ...utils.dataclasses import ComputeEnvironment, SageMakerDistributedType
 from ...utils.imports import is_boto3_available
 from .config_args import SageMakerConfig
-from .config_utils import _ask_field, _convert_sagemaker_distributed_mode
+from .config_utils import _ask_field, _convert_sagemaker_distributed_mode, _convert_yes_no_to_bool
 
 
 if is_boto3_available():
@@ -119,24 +120,68 @@ def get_sagemaker_input():
         print(f'Accelerate will create an iam role "{iam_role_name}" using the provided credentials')
         _create_iam_role_for_sagemaker(iam_role_name)
 
+    is_custom_docker_image = _ask_field(
+        "Do you want to use custom Docker image? [yes/NO]: ",
+        _convert_yes_no_to_bool,
+        default=False,
+        error_message="Please enter yes or no.",
+    )
+    docker_image = None
+    if is_custom_docker_image:
+        docker_image = _ask_field("Enter your Docker image: ", lambda x: str(x).lower())
+
+    is_sagemaker_inputs_enabled = _ask_field(
+        "Do you want to provide SageMaker input channels with data locations? [yes/NO]: ",
+        _convert_yes_no_to_bool,
+        default=False,
+        error_message="Please enter yes or no.",
+    )
+    sagemaker_inputs_file = None
+    if is_sagemaker_inputs_enabled:
+        sagemaker_inputs_file = _ask_field(
+            "Enter the path to the SageMaker inputs TSV file with columns (channel_name, data_location): ",
+            lambda x: str(x).lower(),
+        )
+
+    is_sagemaker_metrics_enabled = _ask_field(
+        "Do you want to enable SageMaker metrics? [yes/NO]: ",
+        _convert_yes_no_to_bool,
+        default=False,
+        error_message="Please enter yes or no.",
+    )
+    sagemaker_metrics_file = None
+    if is_sagemaker_metrics_enabled:
+        sagemaker_metrics_file = _ask_field(
+            "Enter the path to the SageMaker metrics TSV file with columns (metric_name, metric_regex): ",
+            lambda x: str(x).lower(),
+        )
+
     distributed_type = _ask_field(
-        "Which type of machine are you using? ([0] No distributed training, [1] data parallelism, [2] model parallelism): ",
+        "Which type of machine are you using? ([0] No distributed training, [1] data parallelism): ",
         _convert_sagemaker_distributed_mode,
-        error_message="Please enter 0, 1 or 2",
+        error_message="Please enter 0 or 1",
     )
 
-    # using the best two instances for single-gpu training or multi-gpu -> can turn into question to make it more diverse
-    ec2_instance_type = "ml.p3.2xlarge" if distributed_type == SageMakerDistributedType.NO else "ml.p3dn.24xlarge"
+    ec2_instance_query = "Which EC2 instance type you want to use for your training "
+    if distributed_type != SageMakerDistributedType.NO:
+        ec2_instance_query += "("
+        for i, instance_type in enumerate(SAGEMAKER_PARALLEL_EC2_INSTANCES):
+            ec2_instance_query += f"[{i}] {instance_type}, "
+        ec2_instance_query = ec2_instance_query[:-2] + ")? [0]: "
+        ec2_instance_type = _ask_field(ec2_instance_query, lambda x: SAGEMAKER_PARALLEL_EC2_INSTANCES[int(x)])
+    else:
+        ec2_instance_query += "? [ml.p3.2xlarge]:"
+        ec2_instance_type = _ask_field(ec2_instance_query, lambda x: str(x).lower(), default="ml.p3.2xlarge")
+
     num_machines = 1
     if (
         distributed_type == SageMakerDistributedType.DATA_PARALLEL
         or distributed_type == SageMakerDistributedType.MODEL_PARALLEL
     ):
-        raise NotImplementedError("Model or Data Parallelism is not implemented yet. We are working on it")
         num_machines = _ask_field(
-            "How many machines do you want use? [2]: ",
+            "How many machines do you want use? [1]: ",
             lambda x: int(x),
-            default=2,
+            default=1,
         )
 
     mixed_precision = _ask_field(
@@ -146,12 +191,16 @@ def get_sagemaker_input():
     )
 
     return SageMakerConfig(
+        image_uri=docker_image,
         compute_environment=ComputeEnvironment.AMAZON_SAGEMAKER,
         distributed_type=distributed_type,
+        use_cpu=False,
         ec2_instance_type=ec2_instance_type,
         profile=aws_profile,
         region=aws_region,
         iam_role_name=iam_role_name,
         mixed_precision=mixed_precision,
         num_machines=num_machines,
+        sagemaker_inputs_file=sagemaker_inputs_file,
+        sagemaker_metrics_file=sagemaker_metrics_file,
     )

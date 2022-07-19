@@ -35,6 +35,8 @@ from accelerate.utils import (
     is_deepspeed_available,
     is_sagemaker_available,
 )
+from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
+from accelerate.utils.dataclasses import SageMakerDistributedType
 
 
 def launch_command_parser(subparsers=None):
@@ -109,6 +111,30 @@ def launch_command_parser(subparsers=None):
         "Only applicable with DeepSpeed ZeRO Stage-3.",
     )
     parser.add_argument(
+        "--deepspeed_hostfile",
+        default=None,
+        type=str,
+        help="DeepSpeed hostfile for configuring multi-node compute resources.",
+    )
+    parser.add_argument(
+        "--deepspeed_exclusion_filter",
+        default=None,
+        type=str,
+        help="DeepSpeed exclusion filter string when using mutli-node setup.",
+    )
+    parser.add_argument(
+        "--deepspeed_inclusion_filter",
+        default=None,
+        type=str,
+        help="DeepSpeed inclusion filter string when using mutli-node setup.",
+    )
+    parser.add_argument(
+        "--deepspeed_multinode_launcher",
+        default=None,
+        type=str,
+        help="DeepSpeed multi-node launcher to use.",
+    )
+    parser.add_argument(
         "--use_fsdp",
         default=False,
         action="store_true",
@@ -131,6 +157,25 @@ def launch_command_parser(subparsers=None):
         type=int,
         default=1,
         help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--fsdp_auto_wrap_policy",
+        type=str,
+        default=None,
+        help="FSDP's auto wrap policy. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--transformer_layer_cls_to_wrap",
+        default=None,
+        type=str,
+        help="Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
+        "(useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--fsdp_backward_prefetch_policy",
+        default=None,
+        type=str,
+        help="FSDP's backward prefetch policy. (useful only when `use_fsdp` flag is passed).",
     )
     parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
@@ -230,7 +275,14 @@ def simple_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
-    current_env["USE_CPU"] = str(args.cpu)
+    current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
+    if args.num_machines > 1:
+        current_env["MASTER_ADDR"] = args.main_process_ip
+        current_env["MASTER_PORT"] = str(args.main_process_port)
+    elif args.num_processes > 1:
+        current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
+        current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
+
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
@@ -243,6 +295,7 @@ def simple_launcher(args):
         mixed_precision = "fp16"
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
+    current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
@@ -296,9 +349,12 @@ def multi_gpu_launcher(args):
     current_env["MIXED_PRECISION"] = str(mixed_precision)
     if args.use_fsdp:
         current_env["USE_FSDP"] = "true"
+        current_env["FSDP_AUTO_WRAP_POLICY"] = str(args.fsdp_auto_wrap_policy)
+        current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.transformer_layer_cls_to_wrap)
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.min_num_params)
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.sharding_strategy)
+        current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch_policy)
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
@@ -311,20 +367,42 @@ def deepspeed_launcher(args):
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
     cmd = ["deepspeed", "--no_local_rank"]
     if args.num_machines > 1:
-        cmd.extend(
-            [
-                "--num_gpus",
-                str(args.num_processes // args.num_machines),
-                "--num_nodes",
-                str(args.num_machines),
-                "--node_rank",
-                str(args.machine_rank),
-                "--master_addr",
-                args.main_process_ip,
-                "--master_port",
-                str(args.main_process_port),
-            ]
-        )
+        if args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+            cmd = get_launch_prefix()
+            cmd.extend(
+                [
+                    "--nproc_per_node",
+                    str(args.num_processes // args.num_machines),
+                    "--nnodes",
+                    str(args.num_machines),
+                    "--node_rank",
+                    str(args.machine_rank),
+                    "--master_addr",
+                    args.main_process_ip,
+                    "--master_port",
+                    str(args.main_process_port),
+                ]
+            )
+        else:
+            cmd.extend(
+                ["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)]
+            )
+            if args.deepspeed_exclusion_filter is not None:
+                cmd.extend(
+                    [
+                        "--exclude",
+                        str(args.deepspeed_exclusion_filter),
+                    ]
+                )
+            elif args.deepspeed_inclusion_filter is not None:
+                cmd.extend(
+                    [
+                        "--include",
+                        str(args.deepspeed_inclusion_filter),
+                    ]
+                )
+            else:
+                cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
     else:
         cmd.extend(["--num_gpus", str(args.num_processes)])
 
@@ -349,6 +427,7 @@ def deepspeed_launcher(args):
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
         mixed_precision = "fp16"
 
+    current_env["PYTHONPATH"] = sys.executable
     current_env["MIXED_PRECISION"] = str(mixed_precision)
     current_env["USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
@@ -359,6 +438,13 @@ def deepspeed_launcher(args):
     current_env["DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
     current_env["DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
     current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file).lower()
+
+    if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+        with open(".deepspeed_env", "a") as f:
+            for key, value in current_env.items():
+                if ";" in value or " " in value:
+                    continue
+                f.write(f"{key}={value}\n")
 
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
@@ -486,19 +572,56 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         mixed_precision = "fp16"
 
     # Environment variables to be set for use during training job
-    environment = {"MIXED_PRECISION": str(mixed_precision)}
+    environment = {
+        "USE_SAGEMAKER": "true",
+        "MIXED_PRECISION": str(mixed_precision),
+        "SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
+    }
     # configure distribution set up
-    distribution = None  # TODO: not yet implemented
+    distribution = None
+    if sagemaker_config.distributed_type == SageMakerDistributedType.DATA_PARALLEL:
+        distribution = {"smdistributed": {"dataparallel": {"enabled": True}}}
+
+    # configure sagemaker inputs
+    sagemaker_inputs = None
+    if sagemaker_config.sagemaker_inputs_file is not None:
+        print(f"Loading SageMaker Inputs from {sagemaker_config.sagemaker_inputs_file} file")
+        sagemaker_inputs = {}
+        with open(sagemaker_config.sagemaker_inputs_file) as file:
+            for i, line in enumerate(file):
+                if i == 0:
+                    continue
+                l = line.split("\t")
+                sagemaker_inputs[l[0]] = l[1].strip()
+        print(f"Loaded SageMaker Inputs: {sagemaker_inputs}")
+
+    # configure sagemaker metrics
+    sagemaker_metrics = None
+    if sagemaker_config.sagemaker_metrics_file is not None:
+        print(f"Loading SageMaker Metrics from {sagemaker_config.sagemaker_metrics_file} file")
+        sagemaker_metrics = []
+        with open(sagemaker_config.sagemaker_metrics_file) as file:
+            for i, line in enumerate(file):
+                if i == 0:
+                    continue
+                l = line.split("\t")
+                metric_dict = {
+                    "Name": l[0],
+                    "Regex": l[1].strip(),
+                }
+                sagemaker_metrics.append(metric_dict)
+        print(f"Loaded SageMaker Metrics: {sagemaker_metrics}")
 
     # configure session
     print("Creating Estimator")
     huggingface_estimator = HuggingFace(
+        image_uri=sagemaker_config.image_uri,
         entry_point=entry_point,
         source_dir=source_dir,
         role=sagemaker_config.iam_role_name,
-        transformers_version="4.4",
-        pytorch_version="1.6",
-        py_version="py36",
+        transformers_version=sagemaker_config.transformers_version,
+        pytorch_version=sagemaker_config.pytorch_version,
+        py_version=sagemaker_config.py_version,
         base_job_name=sagemaker_config.base_job_name,
         instance_count=sagemaker_config.num_machines,
         instance_type=sagemaker_config.ec2_instance_type,
@@ -506,9 +629,10 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         distribution=distribution,
         hyperparameters=hyperparameters,
         environment=environment,
+        metric_definitions=sagemaker_metrics,
     )
 
-    huggingface_estimator.fit()
+    huggingface_estimator.fit(inputs=sagemaker_inputs)
     print(f"You can find your model data at: {huggingface_estimator.model_data}")
 
 

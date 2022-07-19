@@ -23,6 +23,7 @@ from typing import Optional, Union
 import yaml
 
 from ...utils import ComputeEnvironment, DistributedType, SageMakerDistributedType
+from ...utils.constants import SAGEMAKER_PYTHON_VERSION, SAGEMAKER_PYTORCH_VERSION, SAGEMAKER_TRANSFORMERS_VERSION
 
 
 hf_cache_home = os.path.expanduser(
@@ -123,7 +124,10 @@ class BaseConfig:
         if isinstance(self.compute_environment, str):
             self.compute_environment = ComputeEnvironment(self.compute_environment)
         if isinstance(self.distributed_type, str):
-            self.distributed_type = DistributedType(self.distributed_type)
+            if self.compute_environment == ComputeEnvironment.AMAZON_SAGEMAKER:
+                self.distributed_type = SageMakerDistributedType(self.distributed_type)
+            else:
+                self.distributed_type = DistributedType(self.distributed_type)
 
 
 @dataclass
@@ -152,9 +156,13 @@ class ClusterConfig(BaseConfig):
 class SageMakerConfig(BaseConfig):
     ec2_instance_type: str
     iam_role_name: str
+    image_uri: str
     profile: Optional[str] = None
     region: str = "us-east-1"
     num_machines: int = 1
     base_job_name: str = f"accelerate-sagemaker-{num_machines}"
-    pytorch_version: str = "1.6"
-    transformers_version: str = "4.4"
+    pytorch_version: str = SAGEMAKER_PYTORCH_VERSION
+    transformers_version: str = SAGEMAKER_TRANSFORMERS_VERSION
+    py_version: str = SAGEMAKER_PYTHON_VERSION
+    sagemaker_inputs_file: str = None
+    sagemaker_metrics_file: str = None

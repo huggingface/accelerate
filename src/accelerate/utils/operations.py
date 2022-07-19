@@ -217,7 +217,11 @@ def gather(tensor):
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         return _tpu_gather(tensor, name="accelerate.utils.gather")
-    elif AcceleratorState().distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
+    elif AcceleratorState().distributed_type in [
+        DistributedType.DEEPSPEED,
+        DistributedType.MULTI_GPU,
+        DistributedType.FSDP,
+    ]:
         return _gpu_gather(tensor)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
         return _cpu_gather(tensor)
@@ -430,7 +434,7 @@ def reduce(tensor, reduction="mean"):
             xm.all_reduce("sum", cloned_tensor)
             return cloned_tensor
         elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
-            torch.distributed.reduce(cloned_tensor, ReduceOp.SUM)
+            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
             return cloned_tensor
         else:
             if reduction == "sum":

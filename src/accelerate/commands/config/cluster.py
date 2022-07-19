@@ -15,6 +15,12 @@
 # limitations under the License.
 
 from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available, is_transformers_available
+from ...utils.constants import (
+    DEEPSPEED_MULTINODE_LAUNCHERS,
+    FSDP_AUTO_WRAP_POLICY,
+    FSDP_BACKWARD_PREFETCH,
+    FSDP_SHARDING_STRATEGY,
+)
 from .config_args import ClusterConfig
 from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
 
@@ -144,6 +150,51 @@ def get_cluster_input():
                         "Please run `pip3 install transformers`."
                     )
 
+            if num_machines > 1:
+                launcher_query = "Which Type of launcher do you want to use "
+                for i, launcher in enumerate(DEEPSPEED_MULTINODE_LAUNCHERS):
+                    launcher_query += f"[{i}] {launcher}, "
+                launcher_query = launcher_query[:-2] + ")? [0]: "
+                deepspeed_config["deepspeed_multinode_launcher"] = _ask_field(
+                    launcher_query,
+                    lambda x: DEEPSPEED_MULTINODE_LAUNCHERS[int(x)],
+                    default=DEEPSPEED_MULTINODE_LAUNCHERS[0],
+                )
+
+                if deepspeed_config["deepspeed_multinode_launcher"] != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+                    deepspeed_config["deepspeed_hostfile"] = _ask_field(
+                        "DeepSpeed configures multi-node compute resources with hostfile. "
+                        "Each row is of the format `hostname slots=[num_gpus]`, e.g., `localhost slots=2`; "
+                        "for more information please refer official [documentation]"
+                        "(https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node). "
+                        "Please specify the location of hostfile: ",
+                        lambda x: str(x),
+                    )
+
+                    is_exclusion_filter = _ask_field(
+                        "Do you want to specify exclusion filter string? [yes/NO]: ",
+                        _convert_yes_no_to_bool,
+                        default=False,
+                        error_message="Please enter yes or no.",
+                    )
+                    if is_exclusion_filter:
+                        deepspeed_config["deepspeed_exclusion_filter"] = _ask_field(
+                            "DeepSpeed exclusion filter string: ",
+                            lambda x: str(x),
+                        )
+
+                    is_inclusion_filter = _ask_field(
+                        "Do you want to specify inclusion filter string? [yes/NO]: ",
+                        _convert_yes_no_to_bool,
+                        default=False,
+                        error_message="Please enter yes or no.",
+                    )
+                    if is_inclusion_filter:
+                        deepspeed_config["deepspeed_inclusion_filter"] = _ask_field(
+                            "DeepSpeed inclusion filter string: ",
+                            lambda x: str(x),
+                        )
+
     fsdp_config = {}
     if distributed_type in [DistributedType.MULTI_GPU]:
         use_fsdp = _ask_field(
@@ -155,8 +206,12 @@ def get_cluster_input():
         if use_fsdp:
             distributed_type = DistributedType.FSDP
         if distributed_type == DistributedType.FSDP:
+            sharding_strategy_query = "What should be your sharding strategy ("
+            for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
+                sharding_strategy_query += f"[{i+1}] {strategy}, "
+            sharding_strategy_query = sharding_strategy_query[:-2] + ")? [1]: "
             fsdp_config["sharding_strategy"] = _ask_field(
-                "What should be your sharding strategy ([1] FULL_SHARD, [2] SHARD_GRAD_OP)? [1]: ",
+                sharding_strategy_query,
                 lambda x: int(x),
                 default=1,
             )
@@ -166,10 +221,34 @@ def get_cluster_input():
                 default=False,
                 error_message="Please enter yes or no.",
             )
-            fsdp_config["min_num_params"] = _ask_field(
-                "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
-                lambda x: int(x),
-                default=1e8,
+            fsdp_wrap_query = "What should be your auto wrap policy ("
+            for i, wrap_policy in enumerate(FSDP_AUTO_WRAP_POLICY):
+                fsdp_wrap_query += f"[{i}] {wrap_policy}, "
+            fsdp_wrap_query = fsdp_wrap_query[:-2] + ")? [0]: "
+            fsdp_config["fsdp_auto_wrap_policy"] = _ask_field(
+                fsdp_wrap_query,
+                lambda x: FSDP_AUTO_WRAP_POLICY[int(x)],
+                default=FSDP_AUTO_WRAP_POLICY[0],
+            )
+            if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
+                fsdp_config["transformer_layer_cls_to_wrap"] = _ask_field(
+                    "What is the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ...? : ",
+                    lambda x: str(x),
+                )
+            elif fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[1]:
+                fsdp_config["min_num_params"] = _ask_field(
+                    "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
+                    lambda x: int(x),
+                    default=1e8,
+                )
+            fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy ("
+            for i, backward_prefetch_policy in enumerate(FSDP_BACKWARD_PREFETCH):
+                fsdp_backward_prefetch_query += f"[{i}] {backward_prefetch_policy}, "
+            fsdp_backward_prefetch_query = fsdp_backward_prefetch_query[:-2] + ")? [0]: "
+            fsdp_config["fsdp_backward_prefetch_policy"] = _ask_field(
+                fsdp_backward_prefetch_query,
+                lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
+                default=FSDP_BACKWARD_PREFETCH[0],
             )
 
     if distributed_type == DistributedType.TPU:

@@ -18,6 +18,7 @@ from distutils.util import strtobool
 import torch
 
 from .utils import DistributedType, is_ccl_available, is_deepspeed_available, is_tpu_available
+from .utils.dataclasses import SageMakerDistributedType
 
 
 if is_tpu_available(check_device=False):
@@ -87,7 +88,25 @@ class AcceleratorState:
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
                     "before using any functionality from the `accelerate` library."
                 )
-            if is_tpu_available() and not cpu:
+            if (
+                os.environ.get("USE_SAGEMAKER", "false") == "true"
+                and os.environ.get("SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
+                and not cpu
+            ):
+                if os.environ.get("SAGEMAKER_DISTRIBUTED_TYPE") == SageMakerDistributedType.DATA_PARALLEL:
+                    self.distributed_type = DistributedType.MULTI_GPU
+                    import smdistributed.dataparallel.torch.torch_smddp  # noqa
+
+                    if not torch.distributed.is_initialized():
+                        torch.distributed.init_process_group(backend="smddp")
+                    self.backend = "smddp"
+                    self.num_processes = torch.distributed.get_world_size()
+                    self.process_index = torch.distributed.get_rank()
+                    self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
+                    self.device = torch.device("cuda", self.local_process_index)
+                    torch.cuda.set_device(self.device)
+                    self.mixed_precision = mixed_precision
+            elif is_tpu_available() and not cpu:
                 self.distributed_type = DistributedType.TPU
                 self.num_processes = xm.xrt_world_size()
                 self.process_index = xm.get_ordinal()
@@ -125,9 +144,7 @@ class AcceleratorState:
                 if os.environ.get("USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP
                     if self.mixed_precision != "no":
-                        raise ValueError(
-                            "Mixed precision is currently not supported for FSDP. Please set `mixed_precision` to `no`."
-                        )
+                        fsdp_plugin.set_mixed_precision(self.mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU

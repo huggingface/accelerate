@@ -35,6 +35,7 @@ jobs:
       - name: Run examples on GPUs
         run: |
           source activate accelerate
+          pip uninstall comet_ml -y
           make test_examples
 
   run_all_tests_multi_gpu:
@@ -64,4 +65,5 @@ jobs:
       - name: Run examples on GPUs
         run: |
           source activate accelerate
+          pip uninstall comet_ml -y
           make test_examples

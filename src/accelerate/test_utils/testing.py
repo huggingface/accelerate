@@ -15,6 +15,7 @@
 import asyncio
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -127,6 +128,22 @@ def require_comet_ml(test_case):
     Decorator marking a test that requires comet_ml installed. These tests are skipped when comet_ml isn't installed
     """
     return unittest.skipUnless(is_comet_ml_available(), "test requires comet_ml")(test_case)
+
+
+_atleast_one_tracker_available = (
+    any([is_wandb_available(), is_tensorboard_available()]) and not is_comet_ml_available()
+)
+
+
+def require_trackers(test_case):
+    """
+    Decorator marking that a test requires at least one tracking library installed. These tests are skipped when none
+    are installed
+    """
+    return unittest.skipUnless(
+        _atleast_one_tracker_available,
+        "test requires at least one tracker to be available and for `comet_ml` to not be installed",
+    )(test_case)
 
 
 class TempDirTestCase(unittest.TestCase):
@@ -279,3 +296,24 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
         )
 
     return result
+
+
+class SubprocessCallException(Exception):
+    pass
+
+
+def run_command(command: List[str], return_stdout=False):
+    """
+    Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
+    if an error occured while running `command`
+    """
+    try:
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT)
+        if return_stdout:
+            if hasattr(output, "decode"):
+                output = output.decode("utf-8")
+            return output
+    except subprocess.CalledProcessError as e:
+        raise SubprocessCallException(
+            f"Command `{' '.join(command)}` failed with the following error:\n\n{e.output.decode()}"
+        ) from e

@@ -16,7 +16,6 @@ import ast
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -24,7 +23,7 @@ from unittest import mock
 import torch
 
 from accelerate.test_utils.examples import compare_against_test
-from accelerate.test_utils.testing import TempDirTestCase, slow
+from accelerate.test_utils.testing import TempDirTestCase, require_trackers, run_command, slow
 from accelerate.utils import write_basic_config
 
 
@@ -145,7 +144,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --checkpointing_steps epoch
         --output_dir {self.tmpdir}
         """.split()
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
 
     def test_checkpointing_by_steps(self):
@@ -154,7 +153,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --checkpointing_steps 1
         --output_dir {self.tmpdir}
         """.split()
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE, env=os.environ)
+        _ = run_command(self._launch_args + testargs)
         self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_5")))
 
     def test_load_states_by_epoch(self):
@@ -162,9 +161,7 @@ class FeatureExamplesTests(TempDirTestCase):
         examples/by_feature/checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
         """.split()
-        output = subprocess.run(
-            self._launch_args + testargs, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        ).stdout
+        output = run_command(self._launch_args + testargs, return_stdout=True)
         self.assertNotIn("epoch 0:", output)
         self.assertNotIn("epoch 1:", output)
         self.assertIn("epoch 2:", output)
@@ -174,9 +171,7 @@ class FeatureExamplesTests(TempDirTestCase):
         examples/by_feature/checkpointing.py
         --resume_from_checkpoint {os.path.join(self.tmpdir, "step_5")}
         """.split()
-        output = subprocess.run(
-            self._launch_args + testargs, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        ).stdout
+        output = run_command(self._launch_args + testargs, return_stdout=True)
         if torch.cuda.is_available():
             num_processes = torch.cuda.device_count()
         else:
@@ -184,11 +179,10 @@ class FeatureExamplesTests(TempDirTestCase):
         if num_processes > 1:
             self.assertNotIn("epoch 0:", output)
             self.assertNotIn("epoch 1:", output)
-            self.assertIn("epoch 2:", output)
         else:
             self.assertNotIn("epoch 0:", output)
             self.assertIn("epoch 1:", output)
-            self.assertIn("epoch 2:", output)
+        self.assertIn("epoch 2:", output)
 
     @slow
     def test_cross_validation(self):
@@ -197,16 +191,16 @@ class FeatureExamplesTests(TempDirTestCase):
         --num_folds 2
         """.split()
         with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
-            output = subprocess.run(
-                self._launch_args + testargs, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).stdout
+            output = run_command(self._launch_args + testargs, return_stdout=True)
             results = ast.literal_eval(re.findall("({.+})", output)[-1])
             self.assertGreaterEqual(results["accuracy"], 0.75)
 
     def test_multi_process_metrics(self):
         testargs = ["examples/by_feature/multi_process_metrics.py"]
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
 
+    @require_trackers
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_tracking(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             testargs = f"""
@@ -214,9 +208,9 @@ class FeatureExamplesTests(TempDirTestCase):
             --with_tracking
             --logging_dir {tmpdir}
             """.split()
-            _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+            run_command(self._launch_args + testargs)
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
 
     def test_gradient_accumulation(self):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
-        _ = subprocess.run(self._launch_args + testargs, stdout=subprocess.PIPE)
+        run_command(self._launch_args + testargs)
