@@ -156,7 +156,6 @@ class Accelerator:
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
-        downcast_bf16: Optional[bool] = False,
         dispatch_batches: Optional[bool] = None,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
@@ -227,18 +226,20 @@ class Accelerator:
                         self.init_handler = handler
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
-        downcast_bf16 = os.environ.get("DOWNCAST_BF16", False)
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
             cpu=cpu,
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             _from_accelerator=True,
-            downcast_bf16=downcast_bf16,
             **kwargs,
         )
 
-        if (mixed_precision != "bf16") and downcast_bf16 and (self.state.distributedType != DistributedType.TPU):
+        if (
+            (mixed_precision != "bf16")
+            and self.state.downcast_bf16
+            and (self.state.distributedType != DistributedType.TPU)
+        ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
         if gradient_accumulation_steps > 1:

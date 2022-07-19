@@ -116,7 +116,7 @@ class AcceleratorState:
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
                 if mixed_precision == "bf16":
-                    if downcast_bf16:
+                    if os.environ.get("DOWNCAST_BF16"):
                         os.environ["XLA_USE_BF16"] = str(0)
                         os.environ["XLA_DOWNCAST_BF16"] = str(1)
                     else:
