@@ -326,6 +326,81 @@ def load_offloaded_weights(model, index, offload_folder):
         set_module_tensor_to_device(model, param_name, "cpu", value=torch.tensor(weight))
 
 
+def get_balanced_memory(
+    model: nn.Module,
+    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[List[str]] = None,
+    dtype: Optional[Union[str, torch.dtype]] = None,
+):
+    """
+    Compute a `max_memory` dictionary for [`infer_auto_device_map`] that will balance the use of each available GPU.
+
+    <Tip>
+
+    All computation is done analyzing sizes and dtypes of the model parameters. As a result, the model can be on the
+    meta device (as it would if initialized within the `init_empty_weights` context manager).
+
+    </Tip>
+
+    Args:
+        model (`torch.nn.Module`): The model to analyze.
+        max_memory (`Dict`, *optional*):
+            A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
+        no_split_module_classes (`List[str]`, *optional*):
+            A list of layer class names that should never be split across device (for instance any layer that has a
+            residual connection).
+        dtype (`str` or `torch.dtype`, *optional*):
+            If provided, the weights will be converted to that type when loaded.
+    """
+    if not torch.cuda.is_available():
+        return get_max_memory(max_memory)
+
+    num_devices = len([d for d in max_memory if torch.device(d).type == "cuda"])
+    module_sizes = compute_module_sizes(model, dtype=dtype)
+    per_gpu = module_sizes[""] // num_devices
+
+    # We can't just set the memory to model_size // num_devices as it will end being too small: each GPU will get
+    # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
+    # add which is the biggest of:
+    # - the size of no split block (if applicable)
+    # - the mean of the layer sizes
+    if no_split_module_classes is None:
+        no_split_module_classes = []
+    elif not isinstance(no_split_module_classes, (list, tuple)):
+        no_split_module_classes = [no_split_module_classes]
+
+    # Identify the size of the no_split_block modules
+    if len(no_split_module_classes) > 0:
+        no_split_children = {}
+        for name, size in module_sizes.items():
+            if name == "":
+                continue
+            submodule = model
+            for submodule_name in name.split("."):
+                submodule = getattr(submodule, submodule_name)
+            class_name = submodule.__class__.__name__
+            if class_name in no_split_module_classes and class_name not in no_split_children:
+                no_split_children[class_name] = size
+
+            if set(no_split_children.keys()) == set(no_split_module_classes):
+                break
+        buffer = max(no_split_children.values()) if len(no_split_children) > 0 else 0
+    else:
+        buffer = 0
+
+    # Compute mean of leaves.
+    leaves = [n for n in module_sizes if len([p for p in module_sizes if p.startswith(n) and len(p) > len(n)]) == 0]
+    mean_leaves = int(sum([module_sizes[n] for n in leaves]) / len(leaves))
+    buffer = int(1.25 * max(buffer, mean_leaves))
+
+    max_memory = get_max_memory(max_memory)
+    for i in range(num_devices):
+        # We still leave slightly more space on GPU 0 and only apply the buffer on the other devices.
+        max_memory[i] = min(per_gpu + (0 if i == 0 else buffer), max_memory[i])
+
+    return max_memory
+
+
 def infer_auto_device_map(
     model: nn.Module,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,

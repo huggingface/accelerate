@@ -24,6 +24,7 @@ from .utils import (
     OffloadedWeightsLoader,
     check_device_map,
     extract_submodules_state_dict,
+    get_balanced_memory,
     infer_auto_device_map,
     load_checkpoint_in_model,
     offload_state_dict,
@@ -302,6 +303,13 @@ def load_checkpoint_and_dispatch(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
+    if isinstance(device_map, str) and device_map not in ["auto", "balanced"]:
+        raise ValueError("If passing a string for `device_map`, please choose 'auto' or 'balanced'")
+    if device_map == "balanced":
+        max_memory = get_balanced_memory(
+            model, max_memory=max_memory, no_split_module_classes=no_split_module_classes, dtype=dtype
+        )
+        device_map = "auto"
     if device_map == "auto":
         device_map = infer_auto_device_map(
             model, max_memory=max_memory, no_split_module_classes=no_split_module_classes, dtype=dtype
