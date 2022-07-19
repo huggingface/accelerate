@@ -72,7 +72,6 @@ class AcceleratorState:
         deepspeed_plugin=None,
         fsdp_plugin=None,
         _from_accelerator: bool = False,
-        downcast_bf16: bool = False,
         **kwargs,
     ):
         self.__dict__ = self._shared_state
@@ -119,9 +118,11 @@ class AcceleratorState:
                     if os.environ.get("DOWNCAST_BF16"):
                         os.environ["XLA_USE_BF16"] = str(0)
                         os.environ["XLA_DOWNCAST_BF16"] = str(1)
+                        self.downcast_bfloat = True
                     else:
                         os.environ["XLA_USE_BF16"] = str(1)
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
+                        self.downcast_bfloat = False
                 self.mixed_precision = mixed_precision
             elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (

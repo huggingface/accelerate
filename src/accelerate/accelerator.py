@@ -237,7 +237,7 @@ class Accelerator:
 
         if (
             (mixed_precision != "bf16")
-            and self.state.downcast_bf16
+            and self.state.downcast_bfloat
             and (self.state.distributedType != DistributedType.TPU)
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
