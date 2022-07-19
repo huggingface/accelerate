@@ -69,6 +69,7 @@ class BaseConfig:
     compute_environment: ComputeEnvironment
     distributed_type: Union[DistributedType, SageMakerDistributedType]
     mixed_precision: str
+    downcast_bf16: bool
     use_cpu: bool
 
     def to_dict(self):
