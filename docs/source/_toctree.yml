@@ -42,7 +42,7 @@
     title: Gradient synchronization
   - local: concept_guides/metrics
     title: Calculating metrics
-  - local: concept_guides/defering_execution
+  - local: concept_guides/deferring_execution
     title: Executing and deferring jobs
   - local: concept_guides/training_tpu
     title: TPU best practices
