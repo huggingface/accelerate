@@ -512,7 +512,8 @@ class Accelerator:
             if model_count > 1 and optimizer_present:
                 raise ValueError(
                     "For FSDP to work with multiple models (>1), "
-                    "prepare must be called for all the models before optimizers are created"
+                    "prepare must be called for all the models before optimizers are created. "
+                    "Then pass the optimizers to the prepare call in the same order as corresponding models."
                 )
             elif model_count == 1 and optimizer_present:
                 logger.warn(
@@ -991,9 +992,8 @@ class Accelerator:
         output_dir = os.path.expanduser(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
-        weights = [self.get_state_dict(m, unwrap=False) for m in self._models]
         save_location = save_accelerator_state(
-            output_dir, weights, self._optimizers, self._schedulers, self.state.process_index, self.scaler
+            self, output_dir, self._models, self._optimizers, self._schedulers, self.state.process_index, self.scaler
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)
@@ -1013,7 +1013,7 @@ class Accelerator:
             raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         logger.info(f"Loading states from {input_dir}")
         load_accelerator_state(
-            input_dir, self._models, self._optimizers, self._schedulers, self.state.process_index, self.scaler
+            self, input_dir, self._models, self._optimizers, self._schedulers, self.state.process_index, self.scaler
         )
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):

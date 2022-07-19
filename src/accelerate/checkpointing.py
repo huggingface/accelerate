@@ -15,7 +15,6 @@
 import os
 import random
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import torch
@@ -31,6 +30,8 @@ from .utils import (
     is_tpu_available,
     save,
 )
+from .utils.dataclasses import DistributedType
+from .utils.deepspeed import DeepSpeedSchedulerWrapper
 
 
 if is_tpu_available(check_device=False):
@@ -43,8 +44,9 @@ logger = get_logger(__name__)
 
 
 def save_accelerator_state(
+    accelerator,
     output_dir: str,
-    model_states: List[dict],
+    models: list,
     optimizers: list,
     schedulers: list,
     process_index: int,
@@ -54,10 +56,12 @@ def save_accelerator_state(
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
 
     Args:
+        accelerator (`Accelerator`):
+            The Accelerator instance
         output_dir (`str` or `os.PathLike`):
             The name of the folder to save all relevant weights and states.
-        model_states (`List[torch.nn.Module]`):
-            A list of model states
+        models (`List[torch.nn.Module]`):
+            A list of models
         optimizers (`List[torch.optim.Optimizer]`):
             A list of optimizer instances
         schedulers (`List[torch.optim.lr_scheduler._LRScheduler]`):
@@ -68,20 +72,40 @@ def save_accelerator_state(
             An optional gradient scaler instance to save
     """
     # Model states
-    for i, state in enumerate(model_states):
-        weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
-        output_model_file = os.path.join(output_dir, weights_name)
-        save(state, output_model_file)
-        logger.info(f"Model weights saved in {output_model_file}")
+    for i, model in enumerate(models):
+        if accelerator.distributed_type == DistributedType.FSDP:
+            logger.info("Saving FSDP model")
+            accelerator.state.fsdp_plugin.save_model(accelerator, model, output_dir, i)
+            logger.info(f"FSDP Model saved to output dir {output_dir}")
+        elif accelerator.distributed_type == DistributedType.DEEPSPEED:
+            logger.info("Saving DeepSpeed Model and Optimizer")
+            ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
+            model.save_checkpoint(output_dir, ckpt_id)
+            logger.info(f"DeepSpeed Model and Optimizer saved to output dir {os.path.join(output_dir, ckpt_id)}")
+        else:
+            state = accelerator.get_state_dict(model, unwrap=False)
+            weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
+            output_model_file = os.path.join(output_dir, weights_name)
+            save(state, output_model_file)
+            logger.info(f"Model weights saved in {output_model_file}")
     # Optimizer states
     for i, opt in enumerate(optimizers):
-        state = opt.state_dict()
-        optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
-        output_optimizer_file = os.path.join(output_dir, optimizer_name)
-        save(state, output_optimizer_file)
-        logger.info(f"Optimizer state saved in {output_optimizer_file}")
+        if accelerator.distributed_type == DistributedType.FSDP:
+            logger.info("Saving FSDP Optimizer")
+            accelerator.state.fsdp_plugin.save_optimizer(accelerator, opt, models[i], output_dir, i)
+            logger.info(f"FSDP Optimizer saved to output dir {output_dir}")
+        elif accelerator.distributed_type == DistributedType.DEEPSPEED:
+            continue
+        else:
+            state = opt.state_dict()
+            optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
+            output_optimizer_file = os.path.join(output_dir, optimizer_name)
+            save(state, output_optimizer_file)
+            logger.info(f"Optimizer state saved in {output_optimizer_file}")
     # Scheduler states
     for i, scheduler in enumerate(schedulers):
+        if isinstance(scheduler, DeepSpeedSchedulerWrapper):
+            continue
         state = scheduler.state_dict()
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         output_scheduler_file = os.path.join(output_dir, scheduler_name)
@@ -109,11 +133,21 @@ def save_accelerator_state(
     return output_dir
 
 
-def load_accelerator_state(input_dir, models, optimizers, schedulers, process_index, scaler=None):
+def load_accelerator_state(
+    accelerator,
+    input_dir: str,
+    models: list,
+    optimizers: list,
+    schedulers: list,
+    process_index: int,
+    scaler: GradScaler = None,
+):
     """
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
 
     Args:
+        accelerator (`Accelerator`):
+            The Accelerator instance
         input_dir (`str` or `os.PathLike`):
             The name of the folder to load all relevant weights and states.
         models (`List[torch.nn.Module]`):
@@ -129,20 +163,39 @@ def load_accelerator_state(input_dir, models, optimizers, schedulers, process_in
     """
     # Model states
     for i, model in enumerate(models):
-        weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
-        input_model_file = os.path.join(input_dir, weights_name)
-        models[i].load_state_dict(torch.load(input_model_file, map_location="cpu"))
-    logger.info("All model weights loaded successfully")
+        if accelerator.distributed_type == DistributedType.FSDP:
+            logger.info("Loading FSDP model")
+            accelerator.state.fsdp_plugin.load_model(accelerator, model, input_dir, i)
+            logger.info(f"FSDP Model loaded from input dir {input_dir}")
+        elif accelerator.distributed_type == DistributedType.DEEPSPEED:
+            logger.info("Loading DeepSpeed Model and Optimizer")
+            ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
+            model.load_checkpoint(input_dir, ckpt_id)
+            logger.info(f"DeepSpeed Model and Optimizer loaded from input dir {os.path.join(input_dir, ckpt_id)}")
+        else:
+            weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
+            input_model_file = os.path.join(input_dir, weights_name)
+            models[i].load_state_dict(torch.load(input_model_file, map_location="cpu"))
+            logger.info("model weights loaded successfully")
 
     # Optimizer states
     for i, opt in enumerate(optimizers):
-        optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
-        input_optimizer_file = os.path.join(input_dir, optimizer_name)
-        optimizers[i].load_state_dict(torch.load(input_optimizer_file, map_location="cpu"))
-    logger.info("All optimizer states loaded successfully")
+        if accelerator.distributed_type == DistributedType.FSDP:
+            logger.info("Loading FSDP Optimizer")
+            accelerator.state.fsdp_plugin.load_optimizer(accelerator, opt, models[i], input_dir, i)
+            logger.info(f"FSDP Optimizer loaded from input dir {input_dir}")
+        elif accelerator.distributed_type == DistributedType.DEEPSPEED:
+            continue
+        else:
+            optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
+            input_optimizer_file = os.path.join(input_dir, optimizer_name)
+            optimizers[i].load_state_dict(torch.load(input_optimizer_file, map_location="cpu"))
+            logger.info("optimizer states loaded successfully")
 
     # Scheduler states
     for i, scheduler in enumerate(schedulers):
+        if isinstance(scheduler, DeepSpeedSchedulerWrapper):
+            continue
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         input_scheduler_file = os.path.join(input_dir, scheduler_name)
         scheduler.load_state_dict(torch.load(input_scheduler_file))
