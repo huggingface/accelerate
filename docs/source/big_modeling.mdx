@@ -215,7 +215,7 @@ You can derive all sizes of the model (and thus compute a `device_map`) on a mod
 
 First note that you can limit the memory used on each GPU by using the `max_memory` argument (available in [`infer_auto_device_map`] and in all functions using it). When setting `max_memory`, you should pass along a dictionary containing the GPU identifiers (for instance `0`, `1` etc.) and the `"cpu"` key for the maximum RAM you want used for CPU offload. The values can either be an integer (in bytes) or a string representing a number with its unit, such as `"10GiB"` or `"10GB"`.
 
-Here is an example where we don't want to use more than 10GiB on each of two GPUs and no more than 30GiB of CPU RAM:
+Here is an example where we don't want to use more than 10GiB on each of two GPUs and no more than 30GiB of CPU RAM for the model weights:
 
 ```python
 from accelerate import infer_auto_device_map
@@ -231,11 +231,13 @@ Therefore when you create memory maps with `max_memory` make sure to adjust the 
 
 </Tip>
 
-Additionally, it's important to know that the first GPU consumes more memory than the rest of the GPUs for managing activations, therefore if you would like to optimize the maximum batch size and you have many GPUs. Give the first GPU less memory. For example, with BLOOM-176B on 8x80 A100 setup the close to ideal map is:
-```
-    return {0: '30GIB', 1: '46GIB', 2: '46GIB', 3: '46GIB', 4: '46GIB', 5: '46GIB', 6: '46GIB', 7: '46GIB'}
+Additionally, if you do some additional operations with your outputs without placing them back on the CPU (for instance inside the `generate` method of Transformers) and if you placed your inputs on a GPU, that GPU will consume more memory than the others (Accelerate always place the output back to the device of the input). Therefore if you would like to optimize the maximum batch size and you have many GPUs, give the first GPU less memory. For example, with BLOOM-176B on 8x80 A100 setup the close to ideal map is:
+
+```python
+max_memory = {0: "30GIB", 1: "46GIB", 2: "46GIB", 3: "46GIB", 4: "46GIB", 5: "46GIB", 6: "46GIB", 7: "46GIB"}
 ```
 as you can see we gave the remaining 7 GPUs ~50% more memory than GPU 0.
+
 If you opt to fully design the `device_map` yourself, it should be a dictionary with keys being module names of your model and values being a valid device identifier (for instance an integer for the GPUs) or `"cpu"` for CPU offload, `"disk"` for disk offload. The keys need to cover the whole model, you can then define your device map as you wish: for instance if your model has two blocks (let's say `block1` and `block2`) which each contain three linear layers (let's say `linear1`, `linear2` and `linear3`), a valid device map can be:
 
 ```python
@@ -253,6 +255,12 @@ On the other hand, this one is not valid as it does not cover every parameter of
 ```python
 device_map = {"block1": 0, "block2.linear1": 1, "block2.linear2": 1}
 ```
+
+<Tip>
+
+To be the most efficient, make sure your device map puts the parameters on the GPUs in a sequential manner (e.g. don't put one of the first weights on GPU 0, then weights on GPU 1 and the last weight back to GPU 0) to avoid making many transfers of data between the GPUs.
+
+</Tip>
 
 ## Limits and further development
 
