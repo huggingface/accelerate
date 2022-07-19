@@ -70,7 +70,6 @@ class BaseConfig:
     distributed_type: Union[DistributedType, SageMakerDistributedType]
     mixed_precision: str
     use_cpu: bool
-    downcast_bf16: Optional[bool] = False
 
     def to_dict(self):
         result = self.__dict__
@@ -144,6 +143,8 @@ class ClusterConfig(BaseConfig):
     deepspeed_config: dict = None
     # args for fsdp
     fsdp_config: dict = None
+    # args for TPU
+    downcast_bf16: bool = False
 
     def __post_init__(self):
         if self.deepspeed_config is None:
