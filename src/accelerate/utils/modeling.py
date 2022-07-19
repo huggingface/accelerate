@@ -126,8 +126,10 @@ def set_module_tensor_to_device(
             new_value = torch.tensor(value, device=device)
     if is_buffer:
         module._buffers[tensor_name] = new_value
-    else:
-        new_value = nn.Parameter(new_value, requires_grad=old_value.requires_grad)
+    else:  
+        param_cls = type(module._parameters[tensor_name])
+        kwargs = module._parameters[tensor_name].__dict__
+        new_value = param_cls(data=new_value, requires_grad=old_value.requires_grad, **kwargs)
         module._parameters[tensor_name] = new_value
 
 
