@@ -126,7 +126,7 @@ def set_module_tensor_to_device(
             new_value = torch.tensor(value, device=device)
 
         if is_buffer:
-            module._parameters[tensor_name] = new_value
+            module._buffers[tensor_name] = new_value
         elif module._parameters[tensor_name].device.type != "cuda":
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
