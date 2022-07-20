@@ -132,6 +132,9 @@ def set_module_tensor_to_device(
             kwargs = module._parameters[tensor_name].__dict__
             new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             module._parameters[tensor_name] = new_value
+        else:
+            module._parameters[tensor_name] = module._parameters[tensor_name].to(device)
+
 
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
