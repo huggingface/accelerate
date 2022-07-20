@@ -888,14 +888,19 @@ class Accelerator:
         """
         tensor = self.gather(tensor)
         if self.use_distributed:
-            # Then see if we're on the last batch of our eval dataloader
-            if self.gradient_state.end_of_dataloader and dataloader.total_dataset_length:
-                # Last batch needs to be truncated on distributed systems as it contains additional samples
-                def _adjust_samples(tensor):
-                    return tensor[: dataloader.total_dataset_length - self.gradient_state.samples_seen]
+            try:
+                # Then see if we're on the last batch of our eval dataloader
+                if self.gradient_state.end_of_dataloader:
+                    # Last batch needs to be truncated on distributed systems as it contains additional samples
+                    def _adjust_samples(tensor):
+                        return tensor[: dataloader.total_dataset_length - self.gradient_state.samples_seen]
 
-                return recursively_apply(_adjust_samples, tensor)
-            else:
+                    return recursively_apply(_adjust_samples, tensor)
+                else:
+                    # Not at the end of the dataloader, no need to adjust the tensors
+                    return tensor
+            except:
+                # Dataset had no length or raised an error
                 return tensor
         return tensor
 
