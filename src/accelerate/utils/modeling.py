@@ -118,26 +118,20 @@ def set_module_tensor_to_device(
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
     with torch.no_grad():
-        if is_buffer:
-            if value is None:
-                new_value = old_value.to(device)
-            elif isinstance(value, torch.Tensor):
-                new_value = value.to(device)
-            else:
-                new_value = torch.tensor(value, device=device)
-            module._parameters[tensor_name] = new_value
+        if value is None:
+            new_value = old_value.to(device)
+        elif isinstance(value, torch.Tensor):
+            new_value = value.to(device)
         else:
-            if module._parameters[tensor_name].device.type != "cuda":
-                if value is None:
-                    new_value = old_value.to(device)
-                elif isinstance(value, torch.Tensor):
-                    new_value = value.to(device)
-                else:
-                    new_value = torch.tensor(value, device=device)
-                param_cls = type(module._parameters[tensor_name])
-                kwargs = module._parameters[tensor_name].__dict__
-                new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
-                module._parameters[tensor_name] = new_value
+            new_value = torch.tensor(value, device=device)
+
+        if is_buffer:
+            module._parameters[tensor_name] = new_value
+        elif module._parameters[tensor_name].device.type != "cuda":
+            param_cls = type(module._parameters[tensor_name])
+            kwargs = module._parameters[tensor_name].__dict__
+            new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+            module._parameters[tensor_name] = new_value
 
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
