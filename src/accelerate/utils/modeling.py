@@ -131,9 +131,9 @@ def set_module_tensor_to_device(
                 if value is None:
                     new_value = old_value.to(device)
                 elif isinstance(value, torch.Tensor):
-                    new_value = value.to("cpu")
+                    new_value = value.to(device)
                 else:
-                    new_value = torch.tensor(value, device="cpu")
+                    new_value = torch.tensor(value, device=device)
                 param_cls = type(module._parameters[tensor_name])
                 kwargs = module._parameters[tensor_name].__dict__
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
