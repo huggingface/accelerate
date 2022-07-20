@@ -488,12 +488,12 @@ class FullyShardedDataParallelPlugin:
                 self.cpu_offload = CPUOffload(offload_params=False)
 
         if self.backward_prefetch is None:
-            prefetch_policy = os.environ.get("FSDP_BACKWARD_PREFETCH", FSDP_BACKWARD_PREFETCH[-1])
+            prefetch_policy = os.environ.get("FSDP_BACKWARD_PREFETCH", "NO_PREFETCH")
             if prefetch_policy != FSDP_BACKWARD_PREFETCH[-1]:
                 self.backward_prefetch = BackwardPrefetch(FSDP_BACKWARD_PREFETCH.index(prefetch_policy) + 1)
 
         if self.state_dict_type is None:
-            state_dict_type_policy = os.environ.get("FSDP_STATE_DICT_TYPE", FSDP_STATE_DICT_TYPE[0])
+            state_dict_type_policy = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
             self.state_dict_type = StateDictType(FSDP_STATE_DICT_TYPE.index(state_dict_type_policy) + 1)
 
             if self.state_dict_type == StateDictType.FULL_STATE_DICT:
@@ -527,7 +527,7 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
         if self.auto_wrap_policy is None:
-            auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", FSDP_AUTO_WRAP_POLICY[-1])
+            auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", "NO_WRAP")
             if auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[0]:
                 transformer_cls_to_wrap = os.environ.get("FSDP_TRANSFORMER_CLS_TO_WRAP", "")
                 transformer_cls_to_wrap = FullyShardedDataParallelPlugin.get_module_class_from_name(

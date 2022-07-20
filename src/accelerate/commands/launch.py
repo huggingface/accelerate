@@ -184,6 +184,30 @@ def launch_command_parser(subparsers=None):
         help="FSDP's state dict type. (useful only when `use_fsdp` flag is passed).",
     )
     parser.add_argument(
+        "--offload_params",
+        default=None,
+        type=str,
+        help="This argument is deprecated. Use `fsdp_offload_params` instead.",
+    )
+    parser.add_argument(
+        "--min_num_params",
+        type=int,
+        default=None,
+        help="This argument is deprecated. Use `fsdp_min_num_params` instead.",
+    )
+    parser.add_argument(
+        "--sharding_strategy",
+        type=int,
+        default=None,
+        help="This argument is deprecated. Use `fsdp_sharding_strategy` instead.",
+    )
+    parser.add_argument(
+        "--transformer_layer_cls_to_wrap",
+        default=None,
+        type=str,
+        help="This argument is deprecated. Use `fsdp_transformer_layer_cls_to_wrap` instead.",
+    )
+    parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
     parser.add_argument(
@@ -354,6 +378,38 @@ def multi_gpu_launcher(args):
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
     if args.use_fsdp:
+        if args.sharding_strategy is not None:
+            warnings.warn(
+                "`sharding_strategy` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
+                " `fsdp_sharding_strategy` instead",
+                FutureWarning,
+            )
+            args.fsdp_sharding_strategy = args.sharding_strategy
+
+        if args.offload_params is not None:
+            warnings.warn(
+                "`offload_params` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
+                " `fsdp_offload_params` instead",
+                FutureWarning,
+            )
+            args.fsdp_offload_params = args.offload_params
+
+        if args.min_num_params is not None:
+            warnings.warn(
+                "`min_num_params` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
+                " `fsdp_min_num_params` instead",
+                FutureWarning,
+            )
+            args.fsdp_min_num_params = args.min_num_params
+
+        if args.transformer_layer_cls_to_wrap is not None:
+            warnings.warn(
+                "`transformer_layer_cls_to_wrap` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
+                " `fsdp_transformer_layer_cls_to_wrap` instead",
+                FutureWarning,
+            )
+            args.fsdp_transformer_layer_cls_to_wrap = args.transformer_layer_cls_to_wrap
+
         current_env["USE_FSDP"] = "true"
         current_env["FSDP_AUTO_WRAP_POLICY"] = str(args.fsdp_auto_wrap_policy)
         current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.fsdp_transformer_layer_cls_to_wrap)
@@ -665,7 +721,10 @@ def launch_command(args):
                         if getattr(args, k) is None:
                             setattr(args, k, defaults.deepspeed_config[k])
                     for k in defaults.fsdp_config:
-                        setattr(args, k, defaults.fsdp_config[k])
+                        arg_to_set = k
+                        if "fsdp" not in arg_to_set:
+                            arg_to_set = "fsdp_" + arg_to_set
+                        setattr(args, arg_to_set, defaults.fsdp_config[k])
                     continue
 
                 # Those args are handled separately

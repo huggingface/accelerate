@@ -31,6 +31,7 @@ from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, GradientState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
+    MODEL_NAME,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -992,8 +993,44 @@ class Accelerator:
         output_dir = os.path.expanduser(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
+
+        # Save the models taking care of FSDP and DeepSpeed nuances
+        weights = []
+        for i, model in enumerate(self._models):
+            if self.distributed_type == DistributedType.FSDP:
+                logger.info("Saving FSDP model")
+                self.state.fsdp_plugin.save_model(self, model, output_dir, i)
+                logger.info(f"FSDP Model saved to output dir {output_dir}")
+            elif self.distributed_type == DistributedType.DEEPSPEED:
+                logger.info("Saving DeepSpeed Model and Optimizer")
+                ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
+                model.save_checkpoint(output_dir, ckpt_id)
+                logger.info(f"DeepSpeed Model and Optimizer saved to output dir {os.path.join(output_dir, ckpt_id)}")
+            else:
+                weights.append(self.get_state_dict(model, unwrap=False))
+
+        # Save the optimizers taking care of FSDP and DeepSpeed nuances
+        optimizers = []
+        if self.distributed_type == DistributedType.FSDP:
+            for opt in self._optimizers:
+                logger.info("Saving FSDP Optimizer")
+                self.state.fsdp_plugin.save_optimizer(self, opt, self._models[i], output_dir, i)
+                logger.info(f"FSDP Optimizer saved to output dir {output_dir}")
+        elif self.distributed_type != DistributedType.DEEPSPEED:
+            optimizers = self._optimizers
+
+        # Save the lr schedulers taking care of DeepSpeed nuances
+        schedulers = []
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            for i, scheduler in enumerate(self._schedulers):
+                if isinstance(scheduler, DeepSpeedSchedulerWrapper):
+                    continue
+                schedulers.append(scheduler)
+        else:
+            schedulers = self._schedulers
+
         save_location = save_accelerator_state(
-            self, output_dir, self._models, self._optimizers, self._schedulers, self.state.process_index, self.scaler
+            output_dir, weights, optimizers, schedulers, self.state.process_index, self.scaler
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)
@@ -1012,9 +1049,43 @@ class Accelerator:
         if not os.path.isdir(input_dir):
             raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         logger.info(f"Loading states from {input_dir}")
-        load_accelerator_state(
-            self, input_dir, self._models, self._optimizers, self._schedulers, self.state.process_index, self.scaler
-        )
+
+        # Load the models taking care of FSDP and DeepSpeed nuances
+        models = []
+        for i, model in enumerate(self._models):
+            if self.distributed_type == DistributedType.FSDP:
+                logger.info("Loading FSDP model")
+                self.state.fsdp_plugin.load_model(self, model, input_dir, i)
+                logger.info(f"FSDP Model loaded from input dir {input_dir}")
+            elif self.distributed_type == DistributedType.DEEPSPEED:
+                logger.info("Loading DeepSpeed Model and Optimizer")
+                ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
+                model.load_checkpoint(input_dir, ckpt_id)
+                logger.info(f"DeepSpeed Model and Optimizer loaded from input dir {os.path.join(input_dir, ckpt_id)}")
+            else:
+                models.append(model)
+
+        # Load the optimizers taking care of FSDP and DeepSpeed nuances
+        optimizers = []
+        if self.distributed_type == DistributedType.FSDP:
+            for i, opt in enumerate(self._optimizers):
+                logger.info("Loading FSDP Optimizer")
+                self.state.fsdp_plugin.load_optimizer(self, opt, self._models[i], input_dir, i)
+                logger.info(f"FSDP Optimizer loaded from input dir {input_dir}")
+        elif self.distributed_type != DistributedType.DEEPSPEED:
+            optimizers = self._optimizers
+
+        # Load the lr schedulers taking care of DeepSpeed nuances
+        schedulers = []
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            for i, scheduler in enumerate(self._schedulers):
+                if isinstance(scheduler, DeepSpeedSchedulerWrapper):
+                    continue
+                schedulers.append(scheduler)
+        else:
+            schedulers = self._schedulers
+
+        load_accelerator_state(input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler)
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
             err = "Warning! Number of found checkpoints does not match the number of registered objects:"
