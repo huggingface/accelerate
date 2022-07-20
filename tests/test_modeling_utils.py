@@ -26,6 +26,7 @@ from accelerate.utils.modeling import (
     clean_device_map,
     compute_module_sizes,
     find_tied_parameters,
+    get_balanced_memory,
     infer_auto_device_map,
     load_checkpoint_in_model,
     named_module_tensors,
@@ -358,3 +359,12 @@ class ModelingUtilsTester(unittest.TestCase):
         device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
         expected = {"0": 0, "2.linear2": 0, "1": 1, "2.linear1": 1, "2.batchnorm": 1}
         self.assertDictEqual(device_map, expected)
+
+    def test_get_balanced_memory(self):
+        model = ModelForTest()
+        # model has size 236: linear1 64, batchnorm 72, linear2 100
+        max_memory = get_balanced_memory(model, max_memory={0: 200, 1: 200})
+        self.assertDictEqual({0: 118, 1: 200}, max_memory)
+
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 300})
+        self.assertDictEqual({0: 118, 1: 215}, max_memory)

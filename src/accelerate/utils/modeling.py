@@ -356,8 +356,11 @@ def get_balanced_memory(
             Minimizes the number of weights on GPU 0, which is convenient when it's used for other operations (like the
             Transformers generate function).
     """
+    # Get default / clean up max_memory
+    max_memory = get_max_memory(max_memory)
+
     if not torch.cuda.is_available():
-        return get_max_memory(max_memory)
+        return max_memory
 
     num_devices = len([d for d in max_memory if torch.device(d).type == "cuda"])
     module_sizes = compute_module_sizes(model, dtype=dtype)
@@ -392,7 +395,10 @@ def get_balanced_memory(
     else:
         buffer = 0
 
-    # Compute mean of leaves.
+    # Compute mean of final modules. In the first dict of module sizes, leaves are the parameters
+    leaves = [n for n in module_sizes if len([p for p in module_sizes if p.startswith(n) and len(p) > len(n)]) == 0]
+    module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
+    # Once removed, leaves are the final modules.
     leaves = [n for n in module_sizes if len([p for p in module_sizes if p.startswith(n) and len(p) > len(n)]) == 0]
     mean_leaves = int(sum([module_sizes[n] for n in leaves]) / len(leaves))
     buffer = int(1.25 * max(buffer, mean_leaves))
