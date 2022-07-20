@@ -927,7 +927,7 @@ class Accelerator:
         """
         wait_for_everyone()
 
-    def init_trackers(self, project_name: str, config: Optional[dict] = None):
+    def init_trackers(self, project_name: str, config: Optional[dict] = None, init_kwargs: Optional[dict] = {}):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
 
@@ -936,6 +936,12 @@ class Accelerator:
                 The name of the project. All trackers will save their data based on this
             config (`dict`, *optional*):
                 Optional starting configuration to be logged.
+            init_kwargs (`dict`, *optional*):
+                A nested dictionary of kwargs to be passed to a specific tracker's `__init__` function. Should be
+                formatted as {tracker_name:{kwarg_a:value_a}}, such as:
+                ```python
+                {"wandb": {"tags": ["tag_a", "tag_b"]}}
+                ```
         """
         self.trackers = []
         for tracker in self.log_with:
@@ -946,14 +952,16 @@ class Accelerator:
                 tracker_init = LOGGER_TYPE_TO_CLASS[str(tracker)]
                 if getattr(tracker_init, "requires_logging_directory"):
                     # We can skip this check since it was done in `__init__`
-                    self.trackers.append(tracker_init(project_name, self.logging_dir))
+                    self.trackers.append(
+                        tracker_init(project_name, self.logging_dir, **init_kwargs.get(str(tracker), {}))
+                    )
                 else:
-                    self.trackers.append(tracker_init(project_name))
+                    self.trackers.append(tracker_init(project_name, **init_kwargs.get(str(tracker), {})))
         if config is not None:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
-    def log(self, values: dict, step: Optional[int] = None):
+    def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
         """
         Logs `values` to all stored trackers in `self.trackers`.
 
@@ -962,10 +970,16 @@ class Accelerator:
                 Values should be a dictionary-like object containing only types `int`, `float`, or `str`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
+            log_kwargs (`dict`, *optional*):
+                A nested dictionary of kwargs to be passed to a specific tracker's `log` function. Should be formatted
+                as {tracker_name:{kwarg_a:value_a}}, such as:
+                ```python
+                {"wandb": {"tags": ["tag_a", "tag_b"]}}
+                ```
         """
         if self.is_main_process:
             for tracker in self.trackers:
-                tracker.log(values, step=step)
+                tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
 
     def end_training(self):
         """
