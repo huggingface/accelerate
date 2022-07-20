@@ -136,7 +136,6 @@ def set_module_tensor_to_device(
             module._parameters[tensor_name] = module._parameters[tensor_name].to(device)
 
 
-
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
     """
     A helper function that gathers all the tensors (parameters + buffers) of a given module. If `include_buffers=True`
