@@ -411,13 +411,18 @@ def multi_gpu_launcher(args):
             args.fsdp_transformer_layer_cls_to_wrap = args.transformer_layer_cls_to_wrap
 
         current_env["USE_FSDP"] = "true"
-        current_env["FSDP_AUTO_WRAP_POLICY"] = str(args.fsdp_auto_wrap_policy)
-        current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.fsdp_transformer_layer_cls_to_wrap)
+        current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
-        current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
-        current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch_policy)
-        current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
+        if args.fsdp_auto_wrap_policy is not None:
+            current_env["FSDP_AUTO_WRAP_POLICY"] = str(args.fsdp_auto_wrap_policy)
+        if args.fsdp_transformer_layer_cls_to_wrap is not None:
+            current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.fsdp_transformer_layer_cls_to_wrap)
+        if args.fsdp_backward_prefetch_policy is not None:
+            current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch_policy)
+        if args.fsdp_state_dict_type is not None:
+            current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
+
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()

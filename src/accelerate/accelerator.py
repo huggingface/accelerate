@@ -590,6 +590,7 @@ class Accelerator:
                 )
                 if not fsdp_plugin.cpu_offload.offload_params:
                     model.to(self.device)
+            self._models[-1] = model
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
