@@ -365,7 +365,9 @@ class DataLoaderShard(DataLoader):
 
     @property
     def total_dataset_length(self):
-        return len(self.dataset)
+        if hasattr(self.dataset, "__len__"):
+            return len(self.dataset)
+        return False
 
 
 class DataLoaderDispatcher(DataLoader):
@@ -513,7 +515,9 @@ class DataLoaderDispatcher(DataLoader):
 
     @property
     def total_dataset_length(self):
-        return len(self.dataset)
+        if hasattr(self.dataset, "__len__"):
+            return len(self.dataset)
+        return False
 
 
 def prepare_data_loader(
