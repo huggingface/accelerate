@@ -205,11 +205,24 @@ This only supports inference of your model, not training. Most of the computatio
 
 ## Designing a device map
 
-You can let 🤗 Accelerate handle the device map computation by setting `device_map="auto"` or create one yourself, if you want more control over where each layer should go.
+You can let 🤗 Accelerate handle the device map computation by setting `device_map` to one of the supported options (`"auto"`, `"balanced"`, `"balanced_low_0"`, `"sequential"`) or create one yourself, if you want more control over where each layer should go.
 
 <Tip>
 
 You can derive all sizes of the model (and thus compute a `device_map`) on a model that is on the meta device.
+
+</Tip>
+
+All the options will produce the same result when you don't have enough GPU memory to accomodate the whole model (which is to fit everything that can on the GPU, then offload weights on the CPU or even on the disk if there is not enough RAM). 
+
+When you have more GPU memory available than the model size, here the difference between each option:
+- `"auto"` and `"balanced"` evenly split the model on all available GPUs, making it possible for you to use a batch size greater than 1.
+- `"balanced_low_0"` evenly splits the model on all GPUs except the first one, and only puts on GPU 0 what does not fit on the others. This option is great when you need to use GPU 0 for some processing of the outputs, like when using the `generate` function for Transformers models
+- `"sequential"` will fit what it can on GPU 0, then move on GPU 1 and so forth (so won't use the last GPUs if it doesn't need to).
+
+<Tip>
+
+The options `"auto"` and `"balanced"` produce the same results for now, but the behavior of `"auto"` might change in the future if we find a strategy that makes more sense, while `"balanced"` will stay stable.
 
 </Tip>
 
