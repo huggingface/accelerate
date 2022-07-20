@@ -453,6 +453,7 @@ class DataLoaderDispatcher(DataLoader):
 
     def __iter__(self):
         self.gradient_state._set_end_of_dataloader(False)
+        self.gradient_state._set_samples_seen(0)
         main_iterator = None
         if self.state.process_index == 0:
             # We only iterate through the DataLoader on process 0.
