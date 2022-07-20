@@ -882,7 +882,7 @@ class Accelerator:
 
         Args:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
-                The tensors to reduce across all processes.
+                The tensors for calculating metrics across all processes.
             dataloader (`torch.utils.data.DataLoader`):
                 A dataloader prepared with `Accelerator.prepare`
         """
