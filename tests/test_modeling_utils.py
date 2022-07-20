@@ -360,6 +360,7 @@ class ModelingUtilsTester(unittest.TestCase):
         expected = {"0": 0, "2.linear2": 0, "1": 1, "2.linear1": 1, "2.batchnorm": 1}
         self.assertDictEqual(device_map, expected)
 
+    @require_cuda
     def test_get_balanced_memory(self):
         model = ModelForTest()
         # model has size 236: linear1 64, batchnorm 72, linear2 100
