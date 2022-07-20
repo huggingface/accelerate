@@ -211,7 +211,6 @@ def training_function(config, args):
                     accelerator.save_state(output_dir)
 
         model.eval()
-        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
@@ -219,15 +218,7 @@ def training_function(config, args):
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             # It is slightly faster to call this once, than multiple times
-            predictions, references = accelerator.gather(
-                (predictions, batch["labels"])
-            )  # If we are in a multiprocess environment, the last batch has duplicates
-            if accelerator.use_distributed:
-                if step == len(eval_dataloader) - 1:
-                    predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
-                    references = references[: len(eval_dataloader.dataset) - samples_seen]
-                else:
-                    samples_seen += references.shape[0]
+            predictions, references = accelerator.gather_metrics((predictions, batch["labels"]))
             metric.add_batch(
                 predictions=predictions,
                 references=references,

@@ -197,7 +197,7 @@ def training_function(config, args):
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             # It is slightly faster to call this once, than multiple times
-            predictions, references = accelerator.gather((predictions, batch["labels"]))
+            predictions, references = accelerator.gather_metrics((predictions, batch["labels"]))
             metric.add_batch(
                 predictions=predictions,
                 references=references,
