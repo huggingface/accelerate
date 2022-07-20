@@ -238,6 +238,13 @@ class Accelerator:
             **kwargs,
         )
 
+        if (
+            (mixed_precision != "bf16")
+            and getattr(self.state, "downcast_bfloat", False)
+            and (self.state.distributedType != DistributedType.TPU)
+        ):
+            raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
+
         if gradient_accumulation_steps > 1:
             if self.state.distributed_type == DistributedType.TPU:
                 raise NotImplementedError(
