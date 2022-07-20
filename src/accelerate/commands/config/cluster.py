@@ -229,7 +229,7 @@ def get_cluster_input():
             fsdp_config["fsdp_auto_wrap_policy"] = _ask_field(
                 fsdp_wrap_query,
                 lambda x: FSDP_AUTO_WRAP_POLICY[int(x)],
-                default=FSDP_AUTO_WRAP_POLICY[0],
+                default="TRANSFORMER_BASED_WRAP",
             )
             if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
                 fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
@@ -249,7 +249,7 @@ def get_cluster_input():
             fsdp_config["fsdp_backward_prefetch_policy"] = _ask_field(
                 fsdp_backward_prefetch_query,
                 lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
-                default=FSDP_BACKWARD_PREFETCH[0],
+                default="BACKWARD_PRE",
             )
             fsdp_state_dict_type_query = "What should be your FSDP's state dict type ("
             for i, state_dict_type in enumerate(FSDP_STATE_DICT_TYPE):
@@ -258,7 +258,7 @@ def get_cluster_input():
             fsdp_config["fsdp_state_dict_type"] = _ask_field(
                 fsdp_state_dict_type_query,
                 lambda x: FSDP_STATE_DICT_TYPE[int(x)],
-                default=FSDP_STATE_DICT_TYPE[0],
+                default="FULL_STATE_DICT",
             )
 
     if distributed_type == DistributedType.TPU:
