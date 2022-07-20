@@ -56,7 +56,7 @@ def test_torch_metrics():
         # Then do multiprocess
         with torch.no_grad():
             logits = ddp_model(ddp_input)
-            logits, target = accelerator.gather_metrics((logits, ddp_target), dataloader)
+            logits, target = accelerator.gather_for_metrics((logits, ddp_target), dataloader)
             accuracy_multi = accuracy(logits.argmax(dim=-1), target)
         assert torch.allclose(accuracy_single, accuracy_multi), "The two accuracies were not the same!"
 
@@ -76,7 +76,7 @@ def test_evaluate_metrics():
         # Then do multiprocess
         with torch.no_grad():
             logits = ddp_model(ddp_input)
-            logits, target = accelerator.gather_metrics((logits, ddp_target), dataloader)
+            logits, target = accelerator.gather_for_metrics((logits, ddp_target), dataloader)
             accuracy_multi = metric.compute(logits, target)
         assert torch.allclose(accuracy_single, accuracy_multi), "The two accuracies were not the same!"
 

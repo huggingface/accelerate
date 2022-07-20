@@ -120,13 +120,13 @@ validation_dataloader = accelerator.prepare(validation_dataloader)
 
 As for your training dataloader, it will mean that (should you run your script on multiple devices) each device will
 only see part of the evaluation data. This means you will need to group your predictions together. This is very easy to
-do with the [`~Accelerator.gather_metrics`] method.
+do with the [`~Accelerator.gather_for_metrics`] method.
 
 ```python
 for inputs, targets in validation_dataloader:
     predictions = model(inputs)
     # Gather all predictions and targets
-    all_predictions, all_targets = accelerator.gather_metrics((predictions, targets))
+    all_predictions, all_targets = accelerator.gather_for_metrics((predictions, targets))
     # Example of use with a *Datasets.Metric*
     metric.add_batch(all_predictions, all_targets)
 ```
@@ -141,13 +141,13 @@ Any instruction using your training dataloader length (for instance if you need 
 to create a learning rate scheduler) should go after the call to [`~Accelerator.prepare`].
 
 As some data at the end of the dataset may be duplicated so the batch can divide equally to all workers, metrics should be 
-calculated through the [`~Accelerator.gather_metrics`] method to automatically remove the duplicated data.
+calculated through the [`~Accelerator.gather_for_metrics`] method to automatically remove the duplicated data.
 
 </Tip>
 
 <Tip warning={true}>
 
-The [`~Accelerator.gather`] and [`~Accelerator.gather_metrics`] methods require the tensors to be all the same size on each process. If
+The [`~Accelerator.gather`] and [`~Accelerator.gather_for_metrics`] methods require the tensors to be all the same size on each process. If
 you have tensors of different sizes on each process (for instance when dynamically padding to the maximum length in
 a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad you tensor to the
 biggest size across processes.

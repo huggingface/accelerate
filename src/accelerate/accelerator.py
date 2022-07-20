@@ -875,7 +875,7 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_metrics(self, tensor, dataloader):
+    def gather_for_metrics(self, tensor, dataloader):
         """
         Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
         for gathering the inputs and targets for metric calculation.
