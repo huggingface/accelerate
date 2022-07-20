@@ -259,7 +259,11 @@ class GradientState:
         self.initialized = True
 
     def __repr__(self):
-        return f"Sync Gradients: {self.sync_gradients}\n" f"At end of current dataloader: {self.end_of_dataloader}\n" f"Samples seen: {self.samples_seen}"
+        return (
+            f"Sync Gradients: {self.sync_gradients}\n"
+            f"At end of current dataloader: {self.end_of_dataloader}\n"
+            f"Samples seen: {self.samples_seen}"
+        )
 
     def _set_sync_gradients(self, sync_gradients):
         "Private function that sets whether gradients should be synchronized. Users should not have to call this."
@@ -273,8 +277,6 @@ class GradientState:
         "Private function that sets the number of samples iterated over. Users should not have to call this."
         self.samples_seen = samples_seen
 
-    def _iterate_samples_seen(self, iteration:int=1):
+    def _iterate_samples_seen(self, iteration: int = 1):
         "Private function that iterates the number of samples seen by an iteration. Users should not have to call this."
         self._set_samples_seen(self.samples_seen + iteration)
-
-

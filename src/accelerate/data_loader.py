@@ -47,7 +47,7 @@ if is_tpu_available(check_device=False):
         - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
             Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
             number of processes
-        
+
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
         """
 
