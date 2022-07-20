@@ -47,11 +47,17 @@ if is_tpu_available(check_device=False):
         - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
             Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
             number of processes
+        
+        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
         """
 
         @property
         def total_batch_size(self):
             return self._loader.total_batch_size
+
+        @property
+        def total_dataset_length(self):
+            return self._loader.total_dataset_length
 
 
 logger = get_logger(__name__)
@@ -311,6 +317,8 @@ class DataLoaderShard(DataLoader):
         - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
             Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
             number of processes
+
+        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
     def __init__(self, dataset, device=None, rng_types=None, generator=None, **kwargs):
@@ -324,11 +332,13 @@ class DataLoaderShard(DataLoader):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
         self.gradient_state._set_end_of_dataloader(False)
+        self.gradient_state._set_samples_seen(0)
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
             current_batch = next(dataloader_iter)
         except StopIteration:
+            self.gradient_state._iterate_samples_seen(find_batch_size(current_batch))
             yield
         while True:
             try:
@@ -336,10 +346,12 @@ class DataLoaderShard(DataLoader):
                 if self.device is not None:
                     current_batch = send_to_device(current_batch, self.device)
                 next_batch = next(dataloader_iter)
+                self.gradient_state._iterate_samples_seen(find_batch_size(current_batch))
                 yield current_batch
                 current_batch = next_batch
             except StopIteration:
                 self.gradient_state._set_end_of_dataloader(True)
+                self.gradient_state._iterate_samples_seen(find_batch_size(current_batch))
                 yield current_batch
                 break
 
@@ -350,6 +362,10 @@ class DataLoaderShard(DataLoader):
             if self.batch_sampler.split_batches
             else (self.batch_sampler.batch_size * self.batch_sampler.num_processes)
         )
+
+    @property
+    def total_dataset_length(self):
+        return len(self.dataset)
 
 
 class DataLoaderDispatcher(DataLoader):
@@ -370,6 +386,8 @@ class DataLoaderDispatcher(DataLoader):
         - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
             Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
             number of processes
+
+        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
     def __init__(self, dataset, split_batches: bool = False, **kwargs):
@@ -466,12 +484,15 @@ class DataLoaderDispatcher(DataLoader):
 
             data_slice = slice(self.state.process_index * batch_size, (self.state.process_index + 1) * batch_size)
             next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+            batch = slice_tensors(batch, data_slice)
             if not self._stop_iteration:
-                yield slice_tensors(batch, data_slice)
+                self.gradient_state._iterate_samples_seen(batch_size)
+                yield batch
                 batch, batch_info, skip = next_batch, next_batch_info, next_skip
             else:
+                self.gradient_state._iterate_samples_seen(batch_size)
                 self.gradient_state._set_end_of_dataloader(True)
-                yield slice_tensors(batch, data_slice)
+                yield batch
                 break
 
     def __len__(self):
@@ -488,6 +509,10 @@ class DataLoaderDispatcher(DataLoader):
         return (
             self.dataset.batch_size if self.split_batches else (self.dataset.batch_size * self.dataset.num_processes)
         )
+
+    @property
+    def total_dataset_length(self):
+        return len(self.dataset)
 
 
 def prepare_data_loader(

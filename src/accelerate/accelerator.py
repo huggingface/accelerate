@@ -874,6 +874,19 @@ class Accelerator:
         """
         return gather(tensor)
 
+    def gather_metrics(self, tensor, dataloader):
+        """
+        Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system
+        """
+        tensor = self.gather(tensor)
+        if self.use_distributed:
+            # Then see if we're on the last batch of our eval dataloader
+            if self.gradient_state.end_of_dataloader:
+                # Last batch needs to be truncated on distributed systems as it contains additional samples
+                def _adjust_samples(tensor):
+                    return tensor[:dataloader.total_dataset_length - self.gradient_state.samples_seen]
+                return recursively_apply(_adjust_samples, tensor)
+
     def reduce(self, tensor, reduction="sum"):
         """
         Reduce the values in *tensor* across all processes based on *reduction*.
