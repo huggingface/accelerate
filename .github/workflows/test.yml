@@ -12,6 +12,7 @@ jobs:
     strategy:
       matrix:
         test-kind: [
+          test_prod,
           test,
           test_deepspeed,
           test_example_differences,
@@ -37,7 +38,8 @@ jobs:
     - name: Install the library
       run: |
         pip install --upgrade pip
-        pip install -e .[test,test_trackers]
+        if [ ${{ matrix.test-kind }} = test_prod]; then pip install -e .[test_prod]
+        if [ ${{ matrix.test-kind }} != test_prod]; then pip install -e .[test,test_trackers]
         if [ ${{ matrix.test-kind }} = test_rest ]; then pip uninstall comet_ml -y; fi
     
     - name: Run Tests

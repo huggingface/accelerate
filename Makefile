@@ -43,5 +43,9 @@ test_checkpoint_epoch:
 test_checkpoint_step:
 	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_step"
 
+# Same as test but used to install only the base dependencies
+test_prod:
+	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py
+
 test_rest:
 	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch"
