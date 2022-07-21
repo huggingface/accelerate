@@ -145,7 +145,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --output_dir {self.tmpdir}
         """.split()
         run_command(self._launch_args + testargs)
-        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_1")))
+        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_0")))
 
     def test_checkpointing_by_steps(self):
         testargs = f"""
@@ -153,18 +153,17 @@ class FeatureExamplesTests(TempDirTestCase):
         --checkpointing_steps 1
         --output_dir {self.tmpdir}
         """.split()
-        _ = run_command(self._launch_args + testargs)
-        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_5")))
+        run_command(self._launch_args + testargs)
+        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_2")))
 
     def test_load_states_by_epoch(self):
         testargs = f"""
         examples/by_feature/checkpointing.py
-        --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_1")}
+        --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_0")}
         """.split()
         output = run_command(self._launch_args + testargs, return_stdout=True)
         self.assertNotIn("epoch 0:", output)
-        self.assertNotIn("epoch 1:", output)
-        self.assertIn("epoch 2:", output)
+        self.assertIn("epoch 1:", output)
 
     def test_load_states_by_steps(self):
         testargs = f"""
