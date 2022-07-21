@@ -28,7 +28,7 @@ extras["test"] = [
     "scipy",
     "sklearn",
     "parameterized",
-    "deepspeed",
+    "deepspeed==0.6.5",
 ]
 
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]
