@@ -20,10 +20,10 @@ extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3", "hf-d
 extras["docs"] = []
 extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
 extras["test_dev"] = ["datasets<=2.2.2", "evaluate", "transformers", "scipy", "sklearn", "deepspeed"]
-extras["test"] = extras["test_prod"] + extras["test_dev"]
+extras["testing"] = extras["test_prod"] + extras["test_dev"]
 
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]
-extras["dev"] = extras["quality"] + extras["test"]
+extras["dev"] = extras["quality"] + extras["testing"]
 
 extras["sagemaker"] = [
     "sagemaker",  # boto3 is a required package in sagemaker
