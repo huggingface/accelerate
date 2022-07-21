@@ -51,6 +51,7 @@ from .utils import (
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
+    recursively_apply,
     reduce,
     save,
     wait_for_everyone,
@@ -873,6 +874,35 @@ class Accelerator:
             first dimension of the result is *num_processes* multiplied by the first dimension of the input tensors.
         """
         return gather(tensor)
+
+    def gather_for_metrics(self, tensor, dataloader):
+        """
+        Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
+        for gathering the inputs and targets for metric calculation.
+
+        Args:
+            tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
+                The tensors for calculating metrics across all processes.
+            dataloader (`torch.utils.data.DataLoader`):
+                A dataloader prepared with `Accelerator.prepare`
+        """
+        tensor = self.gather(tensor)
+        if self.use_distributed:
+            try:
+                # Then see if we're on the last batch of our eval dataloader
+                if self.gradient_state.end_of_dataloader:
+                    # Last batch needs to be truncated on distributed systems as it contains additional samples
+                    def _adjust_samples(tensor):
+                        return tensor[: dataloader.total_dataset_length - self.gradient_state.samples_seen]
+
+                    return recursively_apply(_adjust_samples, tensor)
+                else:
+                    # Not at the end of the dataloader, no need to adjust the tensors
+                    return tensor
+            except:
+                # Dataset had no length or raised an error
+                return tensor
+        return tensor
 
     def reduce(self, tensor, reduction="sum"):
         """
