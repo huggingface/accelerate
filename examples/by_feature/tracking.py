@@ -107,8 +107,10 @@ if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
 
 
 def training_function(config, args):
+    # For testing only
+    if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
+        config["num_epochs"] = 2
     # Initialize Accelerator
-
     # New Code #
     # We pass in "all" to `log_with` to grab all available trackers in the environment
     # Note: If using a custom `Tracker` class, should be passed in here such as:
