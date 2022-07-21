@@ -381,6 +381,36 @@ class Accelerator:
 
         return wrapper
 
+    def on_process(process_idx):
+        """
+        Run func on certain process only
+        """
+
+        def decorator(func):
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                if self.process_idx == process_idx or not self.use_distributed:
+                    return func(self, *args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+    def on_process(local_process_idx):
+        """
+        Run func on certain local process only
+        """
+
+        def decorator(func):
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                if self.local_process_idx == local_process_idx or not self.use_distributed:
+                    return func(self, *args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
     def _goes_first(self, is_main):
         if not is_main:
             self.wait_for_everyone()
