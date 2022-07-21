@@ -59,6 +59,7 @@ def test_torch_metrics():
             accuracy_multi = accuracy(logits.argmax(dim=-1), target)
         assert torch.allclose(accuracy_single, accuracy_multi), "The two accuracies were not the same!"
 
+
 def main():
     accelerator = Accelerator()
     state = accelerator.state
