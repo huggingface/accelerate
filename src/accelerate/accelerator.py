@@ -19,6 +19,7 @@ import os
 import sys
 import warnings
 from contextlib import contextmanager
+from functools import wraps
 from typing import List, Optional, Union
 
 import torch
@@ -356,14 +357,38 @@ class Accelerator:
             mixed_precision = self.state.mixed_precision
         return mixed_precision
 
-    @contextmanager
-    def local_main_process_first(self):
+    def on_main_process(func):
         """
-        Lets the local main process go inside a with block.
+        Run func on main process only
+        """
 
-        The other processes will enter the with block after the main process exits.
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if self.is_main_process or not self.use_distributed:
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    def on_local_main_process(func):
         """
-        yield from self._goes_first(self.is_local_main_process)
+        Run func on local main process only
+        """
+
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if self.is_local_main_process or not self.use_distributed:
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    def _goes_first(self, is_main):
+        if not is_main:
+            self.wait_for_everyone()
+
+        yield
+
+        if is_main:
+            self.wait_for_everyone()
 
     @contextmanager
     def main_process_first(self):
@@ -374,14 +399,14 @@ class Accelerator:
         """
         yield from self._goes_first(self.is_main_process)
 
-    def _goes_first(self, is_main):
-        if not is_main:
-            self.wait_for_everyone()
+    @contextmanager
+    def local_main_process_first(self):
+        """
+        Lets the local main process go inside a with block.
 
-        yield
-
-        if is_main:
-            self.wait_for_everyone()
+        The other processes will enter the with block after the main process exits.
+        """
+        yield from self._goes_first(self.is_local_main_process)
 
     @contextmanager
     def no_sync(self, model):
@@ -991,6 +1016,7 @@ class Accelerator:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
         """
         Logs `values` to all stored trackers in `self.trackers`.
@@ -1007,17 +1033,16 @@ class Accelerator:
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
         """
-        if self.is_main_process:
-            for tracker in self.trackers:
-                tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
+        for tracker in self.trackers:
+            tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
 
+    @on_main_process
     def end_training(self):
         """
         Runs any special end training behaviors, such as stopping trackers
         """
-        if self.is_main_process:
-            for tracker in self.trackers:
-                tracker.finish()
+        for tracker in self.trackers:
+            tracker.finish()
 
     def save(self, obj, f):
         """
