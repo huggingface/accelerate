@@ -32,7 +32,7 @@ extras["testing"] = [
 ]
 
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]
-extras["dev"] = extras["quality"] + extras["test"]
+extras["dev"] = extras["quality"] + extras["testing"]
 
 extras["sagemaker"] = [
     "sagemaker",  # boto3 is a required package in sagemaker
