@@ -396,7 +396,7 @@ class Accelerator:
 
         return decorator
 
-    def on_process(local_process_idx):
+    def on_local_process(local_process_idx):
         """
         Run func on certain local process only
         """
