@@ -17,7 +17,6 @@ from copy import deepcopy
 import torch
 from torch.utils.data import DataLoader
 
-import evaluate
 from accelerate import Accelerator
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import set_seed
@@ -58,26 +57,6 @@ def test_torch_metrics():
             logits = ddp_model(ddp_input)
             logits, target = accelerator.gather_for_metrics((logits, ddp_target), dataloader)
             accuracy_multi = accuracy(logits.argmax(dim=-1), target)
-        assert torch.allclose(accuracy_single, accuracy_multi), "The two accuracies were not the same!"
-
-
-def test_evaluate_metrics():
-    metric = evaluate.load("accuracy")
-    accelerator = Accelerator()
-    model, ddp_model, dataloader = get_setup(accelerator)
-    for batch in dataloader:
-        ddp_input, ddp_target = batch.values()
-        # First do single process
-        input, target = accelerator.gather((ddp_input, ddp_target))
-        input, target = input.to(accelerator.device), target.to(accelerator.device)
-        with torch.no_grad():
-            logits = model(input)
-            accuracy_single = metric.compute(logits, target)
-        # Then do multiprocess
-        with torch.no_grad():
-            logits = ddp_model(ddp_input)
-            logits, target = accelerator.gather_for_metrics((logits, ddp_target), dataloader)
-            accuracy_multi = metric.compute(logits, target)
         assert torch.allclose(accuracy_single, accuracy_multi), "The two accuracies were not the same!"
 
 

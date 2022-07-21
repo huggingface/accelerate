@@ -12,7 +12,9 @@ jobs:
     strategy:
       matrix:
         test-kind: [
-          test,
+          test_prod,
+          test_core,
+          test_big_modeling,
           test_deepspeed,
           test_example_differences,
           test_checkpoint_step,
@@ -37,8 +39,9 @@ jobs:
     - name: Install the library
       run: |
         pip install --upgrade pip
-        pip install -e .[testing,test_trackers]
-        if [ ${{ matrix.test-kind }} = test_rest ]; then pip uninstall comet_ml -y; fi
+        if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
+        if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
+        if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
     
     - name: Run Tests
       run: |
