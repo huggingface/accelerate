@@ -70,7 +70,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def store_init_configuration(self, values: dict, **kwargs):
+    def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Implementations should use the experiment configuration
         functionality of a tracking API.
@@ -96,7 +96,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
         """
         pass
 
-    def finish(self, **kwargs):
+    def finish(self):
         """
         Should run any finalizing functions within the tracking API. If the API should not have one, just don't
         overwrite that method.
