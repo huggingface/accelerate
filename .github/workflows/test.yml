@@ -34,7 +34,7 @@ jobs:
         path: |
           ${{ env.pythonLocation }}
           ${{ env.HF_HOME }}
-        key: ${{ env.pythonLocation }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
+        key: ${{ env.pythonLocation }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}-a
     
     - name: Install the library
       run: |
