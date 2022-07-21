@@ -187,7 +187,6 @@ class FeatureExamplesTests(TempDirTestCase):
         else:
             self.assertNotIn("epoch 0:", output)
             self.assertIn("epoch 1:", output)
-        # self.assertIn("epoch 2:", output)
 
     @slow
     def test_cross_validation(self):

@@ -219,7 +219,6 @@ def training_function(config, args):
                     "train_loss": total_loss.item() / len(train_dataloader),
                     "epoch": epoch,
                 },
-                step=epoch,
             )
 
     # New Code #
