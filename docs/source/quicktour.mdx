@@ -143,6 +143,9 @@ to create a learning rate scheduler) should go after the call to [`~Accelerator.
 As some data at the end of the dataset may be duplicated so the batch can divide equally to all workers, metrics should be 
 calculated through the [`~Accelerator.gather_for_metrics`] method to automatically remove the duplicated data.
 
+If for some reason you don't wish to have this automatically done, [`~Accelerator.gather`] can be used instead to gather 
+the data across all processes and this can manually be done instead.
+
 </Tip>
 
 <Tip warning={true}>
