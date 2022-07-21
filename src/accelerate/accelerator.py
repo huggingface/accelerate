@@ -938,7 +938,7 @@ class Accelerator:
                 Optional starting configuration to be logged.
             init_kwargs (`dict`, *optional*):
                 A nested dictionary of kwargs to be passed to a specific tracker's `__init__` function. Should be
-                formatted as {tracker_name:{kwarg_a:value_a}}, such as:
+                formatted like this:
                 ```python
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
@@ -972,7 +972,7 @@ class Accelerator:
                 The run step. If included, the log will be affiliated with this step.
             log_kwargs (`dict`, *optional*):
                 A nested dictionary of kwargs to be passed to a specific tracker's `log` function. Should be formatted
-                as {tracker_name:{kwarg_a:value_a}}, such as:
+                like this:
                 ```python
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
