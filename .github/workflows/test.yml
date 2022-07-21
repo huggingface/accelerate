@@ -14,6 +14,7 @@ jobs:
         test-kind: [
           test_prod,
           test_core,
+          test_big_modeling,
           test_deepspeed,
           test_example_differences,
           test_checkpoint_step,
