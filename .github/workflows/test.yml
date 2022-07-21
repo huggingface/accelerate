@@ -13,7 +13,7 @@ jobs:
       matrix:
         test-kind: [
           test_prod,
-          test,
+          test_core,
           test_deepspeed,
           test_example_differences,
           test_checkpoint_step,

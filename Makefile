@@ -27,6 +27,9 @@ style:
 test:
 	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py
 
+test_core:
+	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/deepspeed
+
 test_deepspeed:
 	python -m pytest -s -v ./tests/deepspeed
 
@@ -45,7 +48,7 @@ test_checkpoint_step:
 
 # Same as test but used to install only the base dependencies
 test_prod:
-	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py
+	test_core
 
 test_rest:
 	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch"
