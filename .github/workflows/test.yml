@@ -42,7 +42,7 @@ jobs:
         then 
           pip install -e .[test_prod]
         fi
-        if [[ ${{ matrix.test-kind }} != test_prod]]; 
+        if [[ ${{ matrix.test-kind }} != test_prod]]
         then 
           pip install -e .[test,test_trackers]
         fi
