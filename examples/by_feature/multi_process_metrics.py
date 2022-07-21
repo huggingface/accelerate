@@ -187,8 +187,8 @@ def training_function(config, args):
                 else:
                     # Otherwise we add the number of samples seen
                     samples_seen += references.shape[0]
-            # All of this can be avoided if you use `Accelerate.gather_for_metrics` instead of `Accelerate.gather`:
-            # accelerate.gather_for_metrics((predictions, references), eval_dataloader)
+            # All of this can be avoided if you use `Accelerator.gather_for_metrics` instead of `Accelerator.gather`:
+            # accelerator.gather_for_metrics((predictions, references), eval_dataloader)
             metric.add_batch(
                 predictions=predictions,
                 references=references,
