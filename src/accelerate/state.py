@@ -17,7 +17,7 @@ from distutils.util import strtobool
 
 import torch
 
-from .utils import DistributedType, is_ccl_available, is_deepspeed_available, is_tpu_available
+from .utils import DistributedType, compare_versions, is_ccl_available, is_deepspeed_available, is_tpu_available
 from .utils.dataclasses import SageMakerDistributedType
 
 
@@ -130,8 +130,14 @@ class AcceleratorState:
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend="nccl", **kwargs)
                     self.backend = "nccl"
+                    if compare_versions("deepspeed", ">", "0.6.5"):
+                        from deepspeed import comm as dist
+
+                        dist.init_distributed(dist_backend=self.backend)
+                    else:
+                        torch.distributed.init_process_group(backend="nccl", **kwargs)
+
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
