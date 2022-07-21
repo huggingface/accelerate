@@ -101,12 +101,18 @@ class ExampleDifferenceTests(unittest.TestCase):
                         self.assertEqual(diff, "")
 
     def test_nlp_examples(self):
-        self.one_complete_example("complete_nlp_example.py", True)
-        self.one_complete_example("complete_nlp_example.py", False)
+        special_strings = [
+            " " * 4 + 'if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":\n\n',
+            " " * 8 + 'config["num_epochs"] = 2\n'
+        ]
+        self.one_complete_example("complete_nlp_example.py", True, special_strings=special_strings)
+        self.one_complete_example("complete_nlp_example.py", False, special_strings=special_strings)
 
     def test_cv_examples(self):
         cv_path = os.path.abspath(os.path.join("examples", "cv_example.py"))
         special_strings = [
+            " " * 4 + 'if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":\n\n',
+            " " * 8 + 'config["num_epochs"] = 2\n',
             " " * 16 + "{\n\n",
             " " * 20 + '"accuracy": eval_metric["accuracy"],\n\n',
             " " * 20 + '"f1": eval_metric["f1"],\n\n',
