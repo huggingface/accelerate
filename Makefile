@@ -48,7 +48,7 @@ test_checkpoint_step:
 
 # Same as test but used to install only the base dependencies
 test_prod:
-	test_core
+	$(MAKE) test_core
 
 test_rest:
 	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch"
