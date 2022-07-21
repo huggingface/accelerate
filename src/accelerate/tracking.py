@@ -53,7 +53,8 @@ class GeneralTracker(object, metaclass=ABCMeta):
     """
     A base Tracker class to be used for all logging integration implementations.
 
-    Each function should take in `**kwargs` that will automatically be passed in from a base dictionary provided to [`Accelerator`]
+    Each function should take in `**kwargs` that will automatically be passed in from a base dictionary provided to
+    [`Accelerator`]
     """
 
     @abstractproperty
