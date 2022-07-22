@@ -15,6 +15,8 @@
     title: Launching distributed code
   - local: basic_tutorials/notebook
     title: Using Jupyter Notebooks
+  - local: basic_tutorials/quicktour
+    title: Quicktour of 🤗 Accelerate
   title: Tutorials
 - sections:
   - local: usage_guides/gradient_accumulation
