@@ -665,6 +665,7 @@ def launch_command(args):
         raise ValueError("You can only pick one between `--multi_gpu`, `--use_deepspeed`, `--tpu`, `--use_fsdp`.")
 
     defaults = None
+    warned = [False] * 4
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
@@ -696,27 +697,35 @@ def launch_command(args):
             else:
                 args.mixed_precision = defaults.mixed_precision
     else:
-        warned = False
         if args.num_processes is None:
-            logger.warn("`--num_processes` was not set, using a value of `1`.")
-            warned = True
+            warned[0] = True
             args.num_processes = 1
         if args.num_machines is None:
-            warned = True
-            logger.warn("`--num_machines` was not set, using a value of `1`.")
+            warned[1] = True
             args.num_machines = 1
         if args.mixed_precision is None:
-            warned = True
-            logger.warn("`--mixed_precision` was not set, using a value of `'no'`.")
+            warned[2] = True
             args.mixed_precision = "no"
         if not hasattr(args, "use_cpu"):
             args.use_cpu = args.cpu
-        if warned:
-            logger.warn("To avoid these warnings pass in values for each of the problematic parameters")
-
     if args.multi_gpu and args.num_processes == 1:
-        logger.warn("`--multi_gpu` was passed but `num_processes` was not set. Automatically using all available GPUs")
         args.num_processes = torch.cuda.device_count()
+        warned[3] = True
+
+    if any(warned):
+        message = "The following values were not passed to `accelerate launch` and had defaults used instead:\n"
+        if warned[0]:
+            message += "\t`--num_processes` was set to a value of `1`\n"
+        if warned[1]:
+            message += "\t`--num_machines` was set to a value of `1`\n"
+        if warned[2]:
+            message += "\t`--mixed_precision` was set to a value of `'no'`\n"
+        if warned[3]:
+            message += f"\t`--num_processes` was set to `{args.num_processes}`\n"
+        message += (
+            "To avoid this warning pass in values for each of the problematic parameters or run `accelerate config`."
+        )
+        logger.warn(message)
 
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
