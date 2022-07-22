@@ -15,7 +15,6 @@
 import argparse
 import json
 import os
-from functools import partial
 
 import torch
 from torch.optim import AdamW
@@ -77,13 +76,6 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: 
     )
 
     return train_dataloader, eval_dataloader
-
-
-# For testing only
-if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
-    from accelerate.test_utils.training import mocked_dataloaders
-
-    get_dataloaders = partial(mocked_dataloaders, n_train=32, n_val=32)  # noqa: F811
 
 
 def evaluation_loop(accelerator, model, eval_dataloader, metric):

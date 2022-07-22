@@ -14,7 +14,6 @@
 # limitations under the License.
 import argparse
 import os
-from functools import partial
 
 import torch
 from torch.optim import AdamW
@@ -99,7 +98,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
     from accelerate.test_utils.training import mocked_dataloaders
 
-    get_dataloaders = partial(mocked_dataloaders, model_name="bert-base-cased", n_train=32, n_val=32)  # noqa: F811
+    get_dataloaders = mocked_dataloaders  # noqa: F811
 
 
 def training_function(config, args):

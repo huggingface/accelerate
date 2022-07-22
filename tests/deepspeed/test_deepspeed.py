@@ -662,8 +662,62 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
-    def test_peak_memory_usage(self):
-        pass  # ToDo
-
     def test_checkpointing(self):
+        mod_file = inspect.getfile(accelerate.test_utils)
+        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_checkpointing.py"])
+        cmd = [
+            "accelerate",
+            "launch",
+            "--num_processes=2",
+            "--num_machines=1",
+            "--machine_rank=0",
+            "--mixed_precision=fp16",
+            "--use_deepspeed",
+            "--gradient_accumulation_steps=1",
+            "--gradient_clipping=1",
+            "--zero3_init_flag=True",
+            "--zero3_save_16bit_model=True",
+        ]
+        for stage in self.stages:
+            if stage == 1:
+                continue
+            cmd_stage = cmd.copy()
+            cmd_stage.extend([f"--zero_stage={stage}"])
+            if stage < 3:
+                cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
+            else:
+                if self.zero3_offload_config:
+                    with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                        ds_config = json.load(f)
+                        del ds_config["bf16"]
+                        del ds_config["optimizer"]["params"]["torch_adam"]
+                        del ds_config["optimizer"]["params"]["adam_w_mode"]
+                        ds_config["fp16"]["enabled"] = True
+                        ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
+                        with open(ds_config_path, "w") as out_file:
+                            json.dump(ds_config, out_file)
+
+                    cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
+
+            cmd_stage.extend(
+                [
+                    self.test_file_path,
+                    f"--output_dir={self.tmpdir}",
+                    f"--partial_train_epoch={stage}",
+                ]
+            )
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd_stage, env=os.environ.copy())
+
+            cmd_stage = cmd_stage[:-1]
+            resume_from_checkpoint = os.path.join(self.tmpdir, "epoch_" + str(stage - 1))
+            cmd_stage.extend(
+                [
+                    f"--resume_from_checkpoint={resume_from_checkpoint}",
+                ]
+            )
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd_stage, env=os.environ.copy())
+
+    def test_peak_memory_usage(self):
         pass  # ToDo
