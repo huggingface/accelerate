@@ -12,16 +12,16 @@ specific language governing permissions and limitations under the License.
 
 # Migrating your code to 🤗 Accelerate
 
-This tutorial will detail how to easily convert existing PyTorch code into utilizing 🤗 Accelerate!
-You'll be able to see that by just changing a few lines of code, 🤗 Accelerate can perform its magic and get you on 
+This tutorial will detail how to easily convert existing PyTorch code to use 🤗 Accelerate!
+You'll see that by just changing a few lines of code, 🤗 Accelerate can perform its magic and get you on 
 your way towards running your code on distributed systems with ease!
 
 ## The base training loop
 
-To begin, first write out a very basic PyTorch training loop. 
+To begin, write out a very basic PyTorch training loop. 
 
 <Tip>
-We are under the presumption that `training_dataloader`, `model`, `optimizer`, `scheduler`, and `loss_function` have been defined beforehand
+We are under the presumption that `training_dataloader`, `model`, `optimizer`, `scheduler`, and `loss_function` have been defined beforehand.
 </Tip>
 
 ```python
@@ -48,7 +48,7 @@ from accelerate import Accelerator
 
 accelerator = Accelerator()
 ```
-This class will be the main force helping you with utilizing everything possible for distributed training!
+[`Accelerator`] is the main force behind utilizing all the possible options for distributed training!
 
 ### Setting the right device
 
@@ -64,23 +64,23 @@ model.to(device)
 ### Preparing your objects
 
 Next you need to pass all of the important objects related to training into [`Accelerator.prepare`]. 🤗 Accelerate will
-then make sure that everything is setup for the environment you are currently in to start your training:
+make sure everything is setup in the current environment for you to start training:
 
 ```
 model, optimizer, training_dataloader, scheduler = accelerator.prepare(
     model, optimizer, training_dataloader, scheduler
 )
 ```
-These objects are returned in the same order they were sent in with. If `device_placement=True` is passed into the [`Accelerator`] object (the default), 
+These objects are returned in the same order they were sent in with. By default, `device_placement=True`, so your model is automatically moved to the proper device.
 performing this action will also automatically move your model to the proper device as well.
 
 <Tip warning={true}>
-Accelerate will only prepare objects that inherit from their respective PyTorch classes (such as `torch.optim.Optimizer`)
+Accelerate will only prepare objects that inherit from their respective PyTorch classes (such as `torch.optim.Optimizer`).
 </Tip>
 
 ### Modifying the training loop
 
-Finally, three lines of code need changing in our training loop. 🤗 Accelerate's DataLoader classes will automatically handle the device placement by default,
+Finally, three lines of code need to be changed in the training loop. 🤗 Accelerate's DataLoader classes will automatically handle the device placement by default,
 and [`Accelerator.backward`] should be used for performing the backward pass:
 
 ```diff

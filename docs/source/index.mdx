@@ -14,11 +14,15 @@ specific language governing permissions and limitations under the License.
 
 🤗 Accelerate is a library that enables the same PyTorch code to be run across any distributed configuration by adding just four lines of code! In short, training and inference at scale made simple, efficient and adaptable.
 
-Built on `torch_xla` and `torch.distributed`, Accelerate wraps around the tough and problematic code changes that need to occur on each of these
-platforms separately so you don't have to. In minutes, existing codebases can be converted to utilize [DeepSpeed](https://huggingface.co/docs/accelerate/deepspeed), perform [fully sharded data parallelism](https://huggingface.co/docs/accelerate/fsdp), and have automatic support for mixed-precision training! 
+Built on `torch_xla` and `torch.distributed`, 🤗 Accelerate takes care of the heavy lifting, so you don't have to write any custom code to adapt to these platforms.
+platforms separately so you don't have to. Convert existing codebases to utilize [DeepSpeed](https://huggingface.co/docs/accelerate/deepspeed), perform [fully sharded data parallelism](https://huggingface.co/docs/accelerate/fsdp), and have automatic support for mixed-precision training! 
 
 For an idea of just how easy it can be, here's a brief example of the changes needed on a basic PyTorch script:
-<Tip> To get a better idea of this process, make sure to check out the [Tutorials](https://huggingface.co/docs/accelerate/basic_tutorials/overview) ! </Tip>
+<Tip> 
+
+To get a better idea of this process, make sure to check out the [Tutorials](https://huggingface.co/docs/accelerate/basic_tutorials/overview)! 
+
+</Tip>
 
 ```diff
 +from accelerate import Accelerator
@@ -31,7 +35,7 @@ For an idea of just how easy it can be, here's a brief example of the changes ne
 for batch in training_dataloader:
     optimizer.zero_grad()
     inputs, targets = batch
--    inputs = inputs.to(device)
+-   inputs = inputs.to(device)
 -    targets = targets.to(device)
     outputs = model(inputs)
     loss = loss_function(outputs, targets)

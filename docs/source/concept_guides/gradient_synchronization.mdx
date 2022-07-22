@@ -42,15 +42,15 @@ model = nn.Linear(10,10)
 ## The slowdown in gradient accumulation
 
 You now understand that PyTorch adds hooks to the `forward` and `backward` method of your PyTorch model when 
-training in a distributed setup. But how does this automatically cause a risk of slowing down your code?
+training in a distributed setup. But how does this risk slowing down your code?
 
 In DDP (distributed data parallel), the specific order in which processes are performed and ran are expected
 at specific points and these must also occur at roughly the same time before moving on.
 
-The most direct example is when you update all of the parameters in a model through `.backward()`, all instances of the model
-need to have updated their gradients collated and updated before moving onto the next batch of data. But when performing 
-gradient accumulation, you accumulate `n` losses and skipping `.backward()` until `n` batches has been reached. This 
-can cause a significant slowdown since all the processes need to communicate with them more times than needed. But how 
+The most direct example is when you update all of the parameters in a model through `.backward()`. All instances of the model
+need to have updated their gradients, collated, and updated again before moving onto the next batch of data. But when performing 
+gradient accumulation, you accumulate `n` losses and skip `.backward()` until `n` batches have been reached. This 
+can cause a significant slowdown since all the processes need to communicate with them more times than needed. How 
 can you avoid this overhead?
 
 ## Solving the slowdown problem
