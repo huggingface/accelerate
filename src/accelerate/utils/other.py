@@ -154,3 +154,17 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
     if not path.exists():
         config = ClusterConfig(**config)
         config.to_json_file(path)
+
+
+@contextmanager
+def clean_traceback():
+    """
+    A context manager that uses `rich` to provide a clean traceback when dealing with multiprocessed logs
+    """
+    from rich.console import Console
+
+    console = Console()
+    try:
+        yield
+    except:
+        console.print_exception()
