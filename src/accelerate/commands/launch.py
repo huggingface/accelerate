@@ -16,6 +16,7 @@
 
 import argparse
 import importlib
+import logging
 import os
 import subprocess
 import sys
@@ -40,6 +41,9 @@ from accelerate.utils import (
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
+
+
+logger = logging.getLogger(__name__)
 
 
 def launch_command_parser(subparsers=None):
@@ -692,16 +696,26 @@ def launch_command(args):
             else:
                 args.mixed_precision = defaults.mixed_precision
     else:
+        warned = False
         if args.num_processes is None:
+            logger.warn("`--num_processes` was not set, using a value of `1`.")
+            warned = True
             args.num_processes = 1
         if args.num_machines is None:
+            warned = True
+            logger.warn("`--num_machines` was not set, using a value of `1`.")
             args.num_machines = 1
         if args.mixed_precision is None:
+            warned = True
+            logger.warn("`--mixed_precision` was not set, using a value of `'no'`.")
             args.mixed_precision = "no"
         if not hasattr(args, "use_cpu"):
-            args.use_cpu = torch.cuda.is_available()
+            args.use_cpu = args.cpu
+        if warned:
+            logger.warn("To avoid these warnings pass in values for each of the problematic parameters")
 
     if args.multi_gpu and args.num_processes == 1:
+        logger.warn("`--multi_gpu` was passed but `num_processes` was not set. Automatically using all available GPUs")
         args.num_processes = torch.cuda.device_count()
 
     # Use the proper launcher
