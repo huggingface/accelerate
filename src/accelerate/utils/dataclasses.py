@@ -594,7 +594,9 @@ class FullyShardedDataParallelPlugin:
         if self.state_dict_type == StateDictType.FULL_STATE_DICT:
             weights_name = f"{MODEL_NAME}.bin" if model_index == 0 else f"{MODEL_NAME}_{model_index}.bin"
             input_model_file = os.path.join(input_dir, weights_name)
+            print(f"Loading model from {input_model_file}")
             state_dict = torch.load(input_model_file)
+            print(f"Model loaded from {input_model_file}")
         else:
             weights_name = (
                 f"{MODEL_NAME}_rank{accelerator.process_index}.bin"
@@ -602,7 +604,9 @@ class FullyShardedDataParallelPlugin:
                 else f"{MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
             )
             input_model_file = os.path.join(input_dir, weights_name)
+            print(f"Loading model from {input_model_file}")
             state_dict = torch.load(input_model_file)
+            print(f"Model loaded from {input_model_file}")
         with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config):
             model.load_state_dict(state_dict)
 
@@ -629,7 +633,9 @@ class FullyShardedDataParallelPlugin:
                 f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
             )
             input_optimizer_file = os.path.join(input_dir, optimizer_name)
+            print(f"Loading Optimizer state from {input_optimizer_file}")
             full_osd = torch.load(input_optimizer_file)
+            print(f"Optimizer state loaded from {input_optimizer_file}")
         # called from all ranks, though only rank0 has a valid param for full_osd
         sharded_osd = FSDP.scatter_full_optim_state_dict(full_osd, model)
         optimizer.load_state_dict(sharded_osd)

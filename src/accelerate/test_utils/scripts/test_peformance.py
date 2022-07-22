@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import json
 import os
 from functools import partial
 
@@ -22,51 +23,27 @@ from torch.utils.data import DataLoader
 
 import evaluate
 from accelerate import Accelerator, DistributedType
+from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
-
-
-########################################################################
-# This is a fully working simple example to use Accelerate,
-# specifically showcasing how to properly calculate the metrics on the
-# validation dataset when in a distributed system, and builds off the
-# `nlp_example.py` script.
-#
-# This example trains a Bert base model on GLUE MRPC
-# in any of the following settings (with the same script):
-#   - single CPU or single GPU
-#   - multi GPUS (using PyTorch distributed mode)
-#   - (multi) TPUs
-#   - fp16 (mixed-precision) or fp32 (normal precision)
-#
-# To help focus on the differences in the code, building `DataLoaders`
-# was refactored into its own function.
-# New additions from the base script can be found quickly by
-# looking for the # New Code # tags
-#
-# To run it in each of these various modes, follow the instructions
-# in the readme for examples:
-# https://github.com/huggingface/accelerate/tree/main/examples
-#
-########################################################################
 
 
 MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
 
-def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
+def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: str = "bert-base-cased"):
     """
-    Creates a set of `DataLoader`s for the `glue` dataset,
-    using "bert-base-cased" as the tokenizer.
+    Creates a set of `DataLoader`s for the `glue` dataset.
 
     Args:
         accelerator (`Accelerator`):
             An `Accelerator` object
         batch_size (`int`, *optional*):
             The batch size for the train and validation DataLoaders.
+        model_name (`str`, *optional*):
     """
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
     datasets = load_dataset("glue", "mrpc")
 
     def tokenize_function(examples):
@@ -106,45 +83,55 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
     from accelerate.test_utils.training import mocked_dataloaders
 
-    get_dataloaders = partial(mocked_dataloaders, model_name="bert-base-cased", n_train=32, n_val=32)  # noqa: F811
+    get_dataloaders = partial(mocked_dataloaders, n_train=32, n_val=32)  # noqa: F811
 
 
 def training_function(config, args):
     # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    accelerator = Accelerator()
+
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
-
-    metric = evaluate.load("glue", "mrpc")
-
-    # If the batch size is too big we use gradient accumulation
-    gradient_accumulation_steps = 1
-    if batch_size > MAX_GPU_BATCH_SIZE and accelerator.distributed_type != DistributedType.TPU:
-        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
-        batch_size = MAX_GPU_BATCH_SIZE
+    model_name = args.model_name_or_path
 
     set_seed(seed)
-    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
-    # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
+    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size, model_name)
 
-    # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
-    # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
-    # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
-    model = model.to(accelerator.device)
+    # Instantiate the model (we build the model here so that the seed also control new weights initialization)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, return_dict=True)
 
     # Instantiate optimizer
-    optimizer = AdamW(params=model.parameters(), lr=lr)
+    optimizer_cls = (
+        AdamW
+        if accelerator.state.deepspeed_plugin is None
+        or "optimizer" not in accelerator.state.deepspeed_plugin.deepspeed_config
+        else DummyOptim
+    )
+    optimizer = optimizer_cls(params=model.parameters(), lr=lr)
+
+    if accelerator.state.deepspeed_plugin is not None:
+        gradient_accumulation_steps = accelerator.state.deepspeed_plugin.deepspeed_config[
+            "gradient_accumulation_steps"
+        ]
+    else:
+        gradient_accumulation_steps = 1
+    max_training_steps = (len(train_dataloader) * num_epochs) // gradient_accumulation_steps
 
     # Instantiate scheduler
-    lr_scheduler = get_linear_schedule_with_warmup(
-        optimizer=optimizer,
-        num_warmup_steps=100,
-        num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
-    )
+    if (
+        accelerator.state.deepspeed_plugin is None
+        or "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config
+    ):
+        lr_scheduler = get_linear_schedule_with_warmup(
+            optimizer=optimizer,
+            num_warmup_steps=0,
+            num_training_steps=max_training_steps,
+        )
+    else:
+        lr_scheduler = DummyScheduler(optimizer, total_num_steps=max_training_steps, warmup_num_steps=0)
 
     # Prepare everything
     # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
@@ -153,12 +140,18 @@ def training_function(config, args):
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
+    # We need to keep track of how many total steps we have iterated over
+    overall_step = 0
+    # We also need to keep track of the stating epoch so files are named properly
+    starting_epoch = 0
+
     # Now we train the model
-    for epoch in range(num_epochs):
+    metric = evaluate.load("glue", "mrpc")
+    best_performance = 0
+    performance_metric = {}
+    for epoch in range(starting_epoch, num_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
-            batch.to(accelerator.device)
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / gradient_accumulation_steps
@@ -168,6 +161,8 @@ def training_function(config, args):
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
+            overall_step += 1
+
         model.eval()
         samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
@@ -176,17 +171,15 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
-            predictions, references = accelerator.gather((predictions, batch["labels"]))
-            # New Code #
-            # First we check if it's a distributed system
+            # It is slightly faster to call this once, than multiple times
+            predictions, references = accelerator.gather(
+                (predictions, batch["labels"])
+            )  # If we are in a multiprocess environment, the last batch has duplicates
             if accelerator.use_distributed:
-                # Then see if we're on the last batch of our eval dataloader
                 if step == len(eval_dataloader) - 1:
-                    # Last batch needs to be truncated on distributed systems as it contains additional samples
                     predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
                     references = references[: len(eval_dataloader.dataset) - samples_seen]
                 else:
-                    # Otherwise we add the number of samples seen
                     samples_seen += references.shape[0]
             metric.add_batch(
                 predictions=predictions,
@@ -196,20 +189,41 @@ def training_function(config, args):
         eval_metric = metric.compute()
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
+        performance_metric[f"epoch-{epoch}"] = eval_metric["accuracy"]
+
+        if best_performance < eval_metric["accuracy"]:
+            best_performance = eval_metric["accuracy"]
+
+    if args.performance_lower_bound is not None:
+        assert (
+            args.performance_lower_bound <= best_performance
+        ), f"Best performance metric {best_performance} is lower than the lower bound {args.performance_lower_bound}"
+
+    with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+        json.dump(performance_metric, f)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Simple example of training script.")
+    parser = argparse.ArgumentParser(description="Simple example of training script tracking peak GPU memory usage.")
     parser.add_argument(
-        "--mixed_precision",
+        "--model_name_or_path",
         type=str,
-        default="no",
-        choices=["no", "fp16", "bf16"],
-        help="Whether to use mixed precision. Choose"
-        "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
-        "and an Nvidia Ampere GPU.",
+        default="bert-base-cased",
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+        required=False,
     )
-    parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=".",
+        help="Optional save directory where all checkpoint folders will be stored. Default is the current working directory.",
+    )
+    parser.add_argument(
+        "--performance_lower_bound",
+        type=float,
+        default=None,
+        help="Optional lower bound for the performance metric. If set, the training will throw error when the performance metric drops below this value.",
+    )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
     training_function(config, args)

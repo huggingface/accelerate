@@ -48,32 +48,35 @@ class RegressionModel(torch.nn.Module):
         return x * self.a + self.b
 
 
-def mocked_dataloaders(accelerator, batch_size: int = 16):
+def mocked_dataloaders(
+    accelerator, batch_size: int = 8, model_name: str = "bert-base-cased", n_train: int = None, n_val: int = None
+):
     from datasets import load_dataset
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    data_files = {"train": "tests/test_samples/MRPC/train.csv", "validation": "tests/test_samples/MRPC/dev.csv"}
-    datasets = load_dataset("csv", data_files=data_files)
-    label_list = datasets["train"].unique("label")
-
-    label_to_id = {v: i for i, v in enumerate(label_list)}
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    if n_train is None or n_val is None:
+        datasets = load_dataset("glue", "mrpc", split={"train": "train", "validation": "validation"})
+    else:
+        datasets = load_dataset(
+            "glue", "mrpc", split={"train": f"train[:{n_train}]", "validation": f"validation[:{n_val}]"}
+        )
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
-        outputs = tokenizer(
-            examples["sentence1"], examples["sentence2"], truncation=True, max_length=None, padding="max_length"
-        )
-        if "label" in examples:
-            outputs["labels"] = [label_to_id[l] for l in examples["label"]]
+        outputs = tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=None)
         return outputs
 
     # Apply the method we just defined to all the examples in all the splits of the dataset
     tokenized_datasets = datasets.map(
         tokenize_function,
         batched=True,
-        remove_columns=["sentence1", "sentence2", "label"],
+        remove_columns=["idx", "sentence1", "sentence2"],
     )
+
+    # We also rename the 'label' column to 'labels' which is the expected name for labels by the models of the
+    # transformers library
+    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
 
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
@@ -82,7 +85,11 @@ def mocked_dataloaders(accelerator, batch_size: int = 16):
         return tokenizer.pad(examples, padding="longest", return_tensors="pt")
 
     # Instantiate dataloaders.
-    train_dataloader = DataLoader(tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=2)
-    eval_dataloader = DataLoader(tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=1)
+    train_dataloader = DataLoader(
+        tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size
+    )
+    eval_dataloader = DataLoader(
+        tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=batch_size
+    )
 
     return train_dataloader, eval_dataloader
