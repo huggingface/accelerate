@@ -209,6 +209,8 @@ accelerate launch --config_file path_to_config.yaml path_to_script.py --args_for
 
 You can also override any of the arguments determined by your config file, see TODO: insert ref here.
 
+Check out the [Launch tutorial](https://huggingface.co/docs/accelerate/basic_tutorials/launch) for more information about launching your scripts. 
+
 
 ## Launching training from a notebook
 
@@ -231,6 +233,9 @@ Your `Accelerator` object should only be defined inside the training function. T
 initialization should be done inside the launcher only.
 
 </Tip>
+
+Check out the [Notebook Launcher tutorial](https://huggingface.co/docs/accelerate/basic_tutorials/notebook) for more information about training on TPUs. 
+
 
 ## Training on TPU
 
@@ -270,6 +275,8 @@ of the embedding matrix with the weights of the decoder), moving this model to t
 passed your model to [`~Accelerator.prepare`]) will break the tying. You will need to retie the weights
 after. You can find an example of this in the [run_clm_no_trainer](https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_clm.py) script in
 the Transformers repository.
+
+Check out the [TPU tutorial](https://huggingface.co/docs/accelerate/concept_guides/training_tpu) for more information about training on TPUs. 
 
 
 ## Other caveats
@@ -395,6 +402,26 @@ this:
 ```
 if not accelerator.optimizer_step_was_skipped:
     lr_scheduler.step()
+```
+
+### Gradient Accumulation 
+
+To perform gradient accumulation use [`~Accelerator.accumulate`] and specify a `gradient_accumulation_steps`. 
+This will also automatically ensure the gradients are synced or unsynced when on multi-device training, check if the step should
+actually be performed, and auto-scale the loss:
+
+```python
+accelerator = Accelerator(gradient_accumulation_steps=2)
+model, optimizer, training_dataloader = accelerator.prepare(model, optimizer, training_dataloader)
+
+for input, label in training_dataloader:
+    with accelerator.accumulate(model):
+        predictions = model(input)
+        loss = loss_function(predictions, label)
+        accelerator.backward(loss)
+        optimizer.step()
+        scheduler.step()
+        optimizer.zero_grad()
 ```
 
 ### DeepSpeed
