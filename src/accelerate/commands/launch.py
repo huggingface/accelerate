@@ -710,7 +710,12 @@ def launch_command(args):
             args.use_cpu = args.cpu
     if args.multi_gpu and args.num_processes == 1:
         args.num_processes = torch.cuda.device_count()
-        warned.append(f"\t`--num_processes` was set to `{args.num_processes}`")
+        if not any("--num_processes" in warn for warn in warned):
+            warned.append(f"\t`--num_processes` was set to `{args.num_processes}`")
+        else:
+            for i, warn in enumerate(warned):
+                if "--num_processes" in warn:
+                    warned[i] = warn.replace("`1`", f"`{args.num_processes}`")
 
     if any(warned):
         message = "The following values were not passed to `accelerate launch` and had defaults used instead:\n"
