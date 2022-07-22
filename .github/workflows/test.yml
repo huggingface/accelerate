@@ -32,8 +32,10 @@ jobs:
     - name: Activate python cache
       uses: actions/cache@v3
       with:
-        path: ${{ env.pythonLocation }}/site-packages
-        key: ${{ env.pythonLocation }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}-c
+        path: |
+          ${{ env.pythonLocation }}
+          ${{ env.HF_HOME }}
+        key: ${{ env.pythonLocation }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
     
     - name: Install the library
       run: |
