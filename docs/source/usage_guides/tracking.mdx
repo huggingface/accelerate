@@ -19,12 +19,9 @@ There are a large number of experiment tracking API's available, however getting
 
 Currently `Accelerate` supports three trackers out-of-the-box:
 
-
-[[autodoc]] tracking.TensorBoardTracker
-
-[[autodoc]] tracking.WandBTracker
-
-[[autodoc]] tracking.CometMLTracker
+- TensorBoard
+- WandB
+- CometML
 
 To use any of them, pass in the selected type(s) to the `log_with` parameter in [`Accelerate`]:
 ```python
@@ -107,6 +104,9 @@ import wandb
 
 
 class MyCustomTracker(GeneralTracker):
+    name = "wandb"
+    requires_logging_directory = False
+
     def __init__(self, run_name: str):
         self.run_name = run_name
         wandb.init(self.run_name)
