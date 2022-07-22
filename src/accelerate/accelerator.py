@@ -383,7 +383,7 @@ class Accelerator:
 
     def on_process(process_idx):
         """
-        Run func on certain process only
+        A decorator that will run the decorated function on a given process index only.
         """
 
         def decorator(func):
