@@ -693,6 +693,10 @@ def launch_command(args):
     else:
         if args.num_processes is None:
             args.num_processes = 1
+    if not hasattr(args, "use_cpu"):
+        raise ValueError(
+            "Tried to run `accelerate launch` without running `accelerate config` first. Please configure Accelerate and rerun this command"
+        )
 
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
