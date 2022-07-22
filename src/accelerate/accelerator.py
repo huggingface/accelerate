@@ -371,7 +371,7 @@ class Accelerator:
 
     def on_local_main_process(func):
         """
-        Run func on local main process only
+        A decorator that will run the decorated function on the local main process only.
         """
 
         @wraps(func)
