@@ -97,7 +97,7 @@ You just wrap it around the entire training part of our code:
         outputs = model(inputs)
 ```
 
-and you can remove all the special checks for the step number and the loss adjustment:
+You can remove all the special checks for the step number and the loss adjustment:
 
 ```diff
 -loss = loss / gradient_accumulation_steps
