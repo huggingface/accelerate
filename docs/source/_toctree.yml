@@ -36,8 +36,6 @@
 - sections:
   - local: concept_guides/gradient_synchronization
     title: Gradient synchronization
-  - local: concept_guides/metrics
-    title: Calculating metrics
   - local: concept_guides/deferring_execution
     title: Executing and deferring jobs
   - local: concept_guides/training_tpu

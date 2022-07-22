@@ -32,8 +32,10 @@ on Google Colaboratory.
 Below is an example of a training function passed to the `notebook_launcher` if training on CPUs or GPUs:
 
 <Tip>
+
 This code snippet is based off the one from the `simple_nlp_example` notebook found [here](https://github.com/huggingface/notebooks/blob/main/examples/accelerate/simple_nlp_example.ipynb) with slight 
 modifications for the sake of simplicity
+
 </Tip>
 
 ```python
@@ -73,8 +75,11 @@ from accelerate import notebook_launcher
 
 notebook_launcher(training_function)
 ```
+
 <Tip>
+
 The `notebook_launcher` will default to 8 processes if 🤗 Accelerate has been configured for a TPU
+
 </Tip>
 
 If you use this example and declare the model *inside* the training loop, then on a low-resource system you will potentially see an error 
@@ -141,6 +146,9 @@ memory allocation extremely efficiently.
 If you notice that your evaluation code to calculate the metrics of your model takes longer due to a larger batch size being used, 
 it is recommended to keep the batch size the same as the training data if it is too slow. Otherwise the memory will reallocate to this 
 new batch size after the first few iterations. 
+
 <Tip>
+
 Just because the memory is allocated does not mean it will be used or that the batch size will increase when going back to your training dataloader.
+
 </Tip>

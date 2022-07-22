@@ -12,8 +12,6 @@ specific language governing permissions and limitations under the License.
 
 # Gradient Synchronization
 
-## Background into PyTorch distributed
-
 PyTorch's distributed module operates by communicating back and forth between all of the GPUs in your system.
 This communication takes time, and ensuring all processes know the states of each other happens at particular triggerpoints
 when using the `ddp` module. 
