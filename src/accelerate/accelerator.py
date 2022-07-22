@@ -52,6 +52,7 @@ from .utils import (
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
+    recursively_apply,
     reduce,
     save,
     wait_for_everyone,
@@ -238,6 +239,13 @@ class Accelerator:
             _from_accelerator=True,
             **kwargs,
         )
+
+        if (
+            (mixed_precision != "bf16")
+            and getattr(self.state, "downcast_bfloat", False)
+            and (self.state.distributedType != DistributedType.TPU)
+        ):
+            raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
         if gradient_accumulation_steps > 1:
             if self.state.distributed_type == DistributedType.TPU:
@@ -870,6 +878,35 @@ class Accelerator:
         """
         return gather(tensor)
 
+    def gather_for_metrics(self, tensor, dataloader):
+        """
+        Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
+        for gathering the inputs and targets for metric calculation.
+
+        Args:
+            tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
+                The tensors for calculating metrics across all processes.
+            dataloader (`torch.utils.data.DataLoader`):
+                A dataloader prepared with `Accelerator.prepare`
+        """
+        tensor = self.gather(tensor)
+        if self.use_distributed:
+            try:
+                # Then see if we're on the last batch of our eval dataloader
+                if self.gradient_state.end_of_dataloader:
+                    # Last batch needs to be truncated on distributed systems as it contains additional samples
+                    def _adjust_samples(tensor):
+                        return tensor[: dataloader.total_dataset_length - self.gradient_state.samples_seen]
+
+                    return recursively_apply(_adjust_samples, tensor)
+                else:
+                    # Not at the end of the dataloader, no need to adjust the tensors
+                    return tensor
+            except:
+                # Dataset had no length or raised an error
+                return tensor
+        return tensor
+
     def reduce(self, tensor, reduction="sum"):
         """
         Reduce the values in *tensor* across all processes based on *reduction*.
@@ -923,7 +960,7 @@ class Accelerator:
         """
         wait_for_everyone()
 
-    def init_trackers(self, project_name: str, config: Optional[dict] = None):
+    def init_trackers(self, project_name: str, config: Optional[dict] = None, init_kwargs: Optional[dict] = {}):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
 
@@ -932,6 +969,12 @@ class Accelerator:
                 The name of the project. All trackers will save their data based on this
             config (`dict`, *optional*):
                 Optional starting configuration to be logged.
+            init_kwargs (`dict`, *optional*):
+                A nested dictionary of kwargs to be passed to a specific tracker's `__init__` function. Should be
+                formatted like this:
+                ```python
+                {"wandb": {"tags": ["tag_a", "tag_b"]}}
+                ```
         """
         self.trackers = []
         for tracker in self.log_with:
@@ -942,14 +985,16 @@ class Accelerator:
                 tracker_init = LOGGER_TYPE_TO_CLASS[str(tracker)]
                 if getattr(tracker_init, "requires_logging_directory"):
                     # We can skip this check since it was done in `__init__`
-                    self.trackers.append(tracker_init(project_name, self.logging_dir))
+                    self.trackers.append(
+                        tracker_init(project_name, self.logging_dir, **init_kwargs.get(str(tracker), {}))
+                    )
                 else:
-                    self.trackers.append(tracker_init(project_name))
+                    self.trackers.append(tracker_init(project_name, **init_kwargs.get(str(tracker), {})))
         if config is not None:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
-    def log(self, values: dict, step: Optional[int] = None):
+    def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
         """
         Logs `values` to all stored trackers in `self.trackers`.
 
@@ -958,10 +1003,16 @@ class Accelerator:
                 Values should be a dictionary-like object containing only types `int`, `float`, or `str`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
+            log_kwargs (`dict`, *optional*):
+                A nested dictionary of kwargs to be passed to a specific tracker's `log` function. Should be formatted
+                like this:
+                ```python
+                {"wandb": {"tags": ["tag_a", "tag_b"]}}
+                ```
         """
         if self.is_main_process:
             for tracker in self.trackers:
-                tracker.log(values, step=step)
+                tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
 
     def end_training(self):
         """

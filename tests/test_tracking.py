@@ -100,7 +100,8 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         project_name = "test_project_with_config"
         accelerator = Accelerator(log_with="wandb")
         config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
-        accelerator.init_trackers(project_name, config)
+        kwargs = {"wandb": {"tags": ["my_tag"]}}
+        accelerator.init_trackers(project_name, config, kwargs)
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
         for child in Path(f"{self.tmpdir}/wandb/latest-run").glob("*"):
@@ -116,6 +117,7 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         self.assertEqual(self.get_value_from_log("learning_rate", cleaned_log), "0.01")
         self.assertEqual(self.get_value_from_log("some_boolean", cleaned_log), "false")
         self.assertEqual(self.get_value_from_log("some_string", cleaned_log), "some_value")
+        self.assertIn("my_tag", cleaned_log)
 
     def test_log(self):
         project_name = "test_project_with_log"
@@ -214,6 +216,7 @@ class MyCustomTracker(GeneralTracker):
         "some_string",
     ]
 
+    name = "my_custom_tracker"
     requires_logging_directory = False
 
     def __init__(self, dir: str):

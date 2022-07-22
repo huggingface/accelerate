@@ -115,7 +115,14 @@ class AcceleratorState:
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
                 if mixed_precision == "bf16":
-                    os.environ["XLA_USE_BF16"] = str(1)
+                    if os.environ.get("DOWNCAST_BF16"):
+                        os.environ["XLA_USE_BF16"] = str(0)
+                        os.environ["XLA_DOWNCAST_BF16"] = str(1)
+                        self.downcast_bfloat = True
+                    else:
+                        os.environ["XLA_USE_BF16"] = str(1)
+                        os.environ["XLA_DOWNCAST_BF16"] = str(0)
+                        self.downcast_bfloat = False
                 self.mixed_precision = mixed_precision
             elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (
@@ -123,8 +130,16 @@ class AcceleratorState:
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend="nccl", **kwargs)
+                    from .utils import compare_versions
+
                     self.backend = "nccl"
+                    if compare_versions("deepspeed", ">", "0.6.5"):
+                        from deepspeed import comm as dist
+
+                        dist.init_distributed(dist_backend=self.backend)
+                    else:
+                        torch.distributed.init_process_group(backend="nccl", **kwargs)
+
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
@@ -248,10 +263,15 @@ class GradientState:
         if not getattr(self, "initialized", False):
             self.sync_gradients = True
             self.end_of_dataloader = False
+            self.samples_seen = 0
         self.initialized = True
 
     def __repr__(self):
-        return f"Sync Gradients: {self.sync_gradients}\n" f"At end of current dataloader: {self.end_of_dataloader}\n"
+        return (
+            f"Sync Gradients: {self.sync_gradients}\n"
+            f"At end of current dataloader: {self.end_of_dataloader}\n"
+            f"Samples seen: {self.samples_seen}"
+        )
 
     def _set_sync_gradients(self, sync_gradients):
         "Private function that sets whether gradients should be synchronized. Users should not have to call this."
@@ -260,3 +280,11 @@ class GradientState:
     def _set_end_of_dataloader(self, end_of_dataloader):
         "Private function that sets whether the end of the current dataloader has been reached. Users should not have to call this."
         self.end_of_dataloader = end_of_dataloader
+
+    def _set_samples_seen(self, samples_seen):
+        "Private function that sets the number of samples iterated over. Users should not have to call this."
+        self.samples_seen = samples_seen
+
+    def _iterate_samples_seen(self, iteration: int = 1):
+        "Private function that iterates the number of samples seen by an iteration. Users should not have to call this."
+        self._set_samples_seen(self.samples_seen + iteration)
