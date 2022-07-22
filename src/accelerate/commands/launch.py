@@ -24,6 +24,8 @@ from ast import literal_eval
 from pathlib import Path
 from typing import Dict, List
 
+import torch
+
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.utils import (
@@ -693,10 +695,12 @@ def launch_command(args):
     else:
         if args.num_processes is None:
             args.num_processes = 1
-    if not hasattr(args, "use_cpu"):
-        raise ValueError(
-            "Tried to run `accelerate launch` without running `accelerate config` first. Please configure Accelerate and rerun this command"
-        )
+        if args.num_machines is None:
+            args.num_machines = 1
+        if args.mixed_precision is None:
+            args.mixed_precision = "no"
+        if not hasattr(args, "use_cpu"):
+            args.use_cpu = torch.cuda.is_available()
 
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
