@@ -1,6 +1,8 @@
 - sections:
   - local: index
     title: 🤗 Accelerate
+  - local: quicktour
+    title: Quicktour of 🤗 Accelerate
   title: Getting started
 - sections:
   - local: basic_tutorials/overview
@@ -11,10 +13,6 @@
     title: Migrating to 🤗 Accelerate
   - local: basic_tutorials/launch
     title: Launching distributed code
-  - local: basic_tutorials/notebook
-    title: Using Jupyter Notebooks
-  - local: basic_tutorials/quicktour
-    title: Quicktour of 🤗 Accelerate
   title: Tutorials
 - sections:
   - local: usage_guides/gradient_accumulation
@@ -23,14 +21,10 @@
     title: Fully Sharded Data Parallelism
   - local: usage_guides/checkpoint
     title: Saving and loading training states
-  - local: usage_guides/mixed_precision
-    title: Using Mixed Precision
   - local: usage_guides/deepspeed
     title: How to use DeepSpeed
   - local: usage_guides/tracking
     title: Using experiment trackers
-  - local: usage_guides/logging
-    title: Logging in distributed systems
   - local: usage_guides/big_modeling
     title: How to use large models with small resources
   - local: usage_guides/memory
