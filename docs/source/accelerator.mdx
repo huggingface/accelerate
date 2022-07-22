@@ -44,9 +44,7 @@ actually be performed, and auto-scale the loss:
 
 ```python
 accelerator = Accelerator(gradient_accumulation_steps=2)
-model, optimizer, training_dataloader = accelerator.prepare(
-    model, optimizer, training_dataloader
-)
+model, optimizer, training_dataloader = accelerator.prepare(model, optimizer, training_dataloader)
 
 for input, label in training_dataloader:
     with accelerator.accumulate(model):
