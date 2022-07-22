@@ -98,13 +98,13 @@ class ExampleDifferenceTests(unittest.TestCase):
                         if special_strings is not None:
                             for string in special_strings:
                                 diff = diff.replace(string, "")
-                        diff = diff.replace('\n', '')
+                        diff = diff.replace("\n", "")
                         self.assertEqual(diff, "")
 
     def test_nlp_examples(self):
         special_strings = [
             " " * 4 + 'if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":\n\n',
-            " " * 8 + 'config["num_epochs"] = 2\n'
+            " " * 8 + 'config["num_epochs"] = 2\n',
         ]
         self.one_complete_example("complete_nlp_example.py", True, special_strings=special_strings)
         self.one_complete_example("complete_nlp_example.py", False, special_strings=special_strings)
