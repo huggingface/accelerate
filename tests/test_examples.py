@@ -98,6 +98,7 @@ class ExampleDifferenceTests(unittest.TestCase):
                         if special_strings is not None:
                             for string in special_strings:
                                 diff = diff.replace(string, "")
+                        diff = diff.replace('\n', '')
                         self.assertEqual(diff, "")
 
     def test_nlp_examples(self):
@@ -115,7 +116,7 @@ class ExampleDifferenceTests(unittest.TestCase):
             " " * 8 + 'config["num_epochs"] = 2\n',
             " " * 16 + "{\n\n",
             " " * 20 + '"accuracy": eval_metric["accuracy"],\n\n',
-            " " * 20 + '"f1": eval_metric["f1"],\n\n',
+            " " * 20 + '"f1": eval_metric["f1"],\n',
             " " * 20 + '"train_loss": total_loss.item() / len(train_dataloader),\n\n',
             " " * 20 + '"epoch": epoch,\n\n',
             " " * 16 + "},\n\n",
