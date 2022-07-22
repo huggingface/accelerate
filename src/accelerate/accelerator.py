@@ -446,7 +446,6 @@ class Accelerator:
             if isinstance(obj, torch.utils.data.DataLoader):
                 return self.prepare_data_loader(obj)
             elif isinstance(obj, torch.nn.Module):
-                self._models.append(obj)
                 return self.prepare_model(obj)
             elif isinstance(obj, torch.optim.Optimizer):
                 optimizer = self.prepare_optimizer(obj)
@@ -570,6 +569,7 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model):
+        self._models.append(model)
         if self.device_placement and self.distributed_type != DistributedType.FSDP:
             model = model.to(self.device)
         if self.distributed_type == DistributedType.MULTI_GPU:
