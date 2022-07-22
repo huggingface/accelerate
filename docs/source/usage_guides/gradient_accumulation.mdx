@@ -71,7 +71,9 @@ for index, batch in enumerate(training_dataloader):
 ```
 
 <Tip warning={true}>
-In its current state, this code is not going to perform gradient accumulation efficiently due to a process called gradient synchronization. Read more about that in the Concepts tutorial!
+
+In its current state, this code is not going to perform gradient accumulation efficiently due to a process called gradient synchronization. Read more about that in the [Concepts tutorial](https://huggingface.co/docs/accelerate/concept_guides/gradient_synchronization)!
+
 </Tip>
 
 ## Letting 🤗 Accelerate handle gradient accumulation
@@ -108,10 +110,6 @@ scheduler.step()
 ```
 
 As you can see the [`Accelerator`] is able to keep track of the batch number you are on and it will automatically know whether to step through the prepared optimizer and how to adjust the loss. 
-
-<Tip warning={true}>
-Currently this method only works with non-streaming datasets (`DataLoaders` that have a length). While support for this is being worked on, you can check out the Gradient Synchronization concept tutorial to see how to do this yourself!
-</Tip>
 
 ## The finished code
 

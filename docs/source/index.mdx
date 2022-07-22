@@ -14,37 +14,37 @@ specific language governing permissions and limitations under the License.
 
 🤗 Accelerate is a library that enables the same PyTorch code to be run across any distributed configuration by adding just four lines of code! In short, training and inference at scale made simple, efficient and adaptable.
 
+```diff
++ from accelerate import Accelerator
++ accelerator = Accelerator()
+
++ model, optimizer, training_dataloader, scheduler = accelerator.prepare(
++     model, optimizer, training_dataloader, scheduler
++ )
+
+  for batch in training_dataloader:
+    optimizer.zero_grad()
+    inputs, targets = batch
+-   inputs = inputs.to(device)
+-   targets = targets.to(device)
+    outputs = model(inputs)
+    loss = loss_function(outputs, targets)
++   accelerator.backward(loss)
+    optimizer.step()
+    scheduler.step()
+```
+
 Built on `torch_xla` and `torch.distributed`, 🤗 Accelerate takes care of the heavy lifting, so you don't have to write any custom code to adapt to these platforms.
 platforms separately so you don't have to. Convert existing codebases to utilize [DeepSpeed](https://huggingface.co/docs/accelerate/deepspeed), perform [fully sharded data parallelism](https://huggingface.co/docs/accelerate/fsdp), and have automatic support for mixed-precision training! 
 
-For an idea of just how easy it can be, here's a brief example of the changes needed on a basic PyTorch script:
 <Tip> 
 
 To get a better idea of this process, make sure to check out the [Tutorials](https://huggingface.co/docs/accelerate/basic_tutorials/overview)! 
 
 </Tip>
 
-```diff
-+from accelerate import Accelerator
-+accelerator = Accelerator()
 
-+model, optimizer, training_dataloader, scheduler = accelerator.prepare(
-+    model, optimizer, training_dataloader, scheduler
-+)
-
-for batch in training_dataloader:
-    optimizer.zero_grad()
-    inputs, targets = batch
--   inputs = inputs.to(device)
--    targets = targets.to(device)
-    outputs = model(inputs)
-    loss = loss_function(outputs, targets)
-+    accelerator.backward(loss)
-    optimizer.step()
-    scheduler.step()
-```
-
-Which can then be launched on any system through Accelerate's CLI interface:
+This code can then be launched on any system through Accelerate's CLI interface:
 ```bash
 accelerate launch {my_script.py}
 ```

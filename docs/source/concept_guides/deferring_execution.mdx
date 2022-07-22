@@ -18,8 +18,10 @@ point (if you run your script on just one GPU or CPU, this won't do anything).
 A few example cases for when to use this utility are listed below:
 
 <Tip>
+
 Some of these are utilized with the [`Accelerator.main_process_first`] context manager, which utilizes [`Accelerator.wait_for_everyone`] to 
 run a particular set of code on the main process beforehand before triggering and launching the other processes
+
 </Tip>
 
 - Downloading a dataset on the main process first and then loading the cached dataset in afterwards
