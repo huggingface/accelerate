@@ -137,16 +137,21 @@ As for the training dataloader, passing your validation dataloader through
 [`~Accelerator.prepare`] may change it: if you run on X GPUs, it will have its length divided by X
 (since your actual batch size will be multiplied by X), unless you set `split_batches=True`.
 
-Any instruction using your training dataloader length (for instance if you need the number of total training steps
-to create a learning rate scheduler) should go after the call to [`~Accelerator.prepare`].
+</Tip>
 
-As some data at the end of the dataset may be duplicated so the batch can divide equally to all workers, metrics should be 
-calculated through the [`~Accelerator.gather_for_metrics`] method to automatically remove the duplicated data.
+Any instruction using your training dataloader length (for instance if you need the number of total training steps
+to create a learning rate scheduler) should go after the call to [`~Accelerator.prepare`]. 
+
+Some data at the end of the dataset may be duplicated so the batch can divide equally to all workers. As a result metrics
+should be calculated through the [`~Accelerator.gather_for_metrics`] method to automatically remove the duplicated data while gathering.
+
+<Tip>
 
 If for some reason you don't wish to have this automatically done, [`~Accelerator.gather`] can be used instead to gather 
 the data across all processes and this can manually be done instead.
 
 </Tip>
+
 
 <Tip warning={true}>
 
