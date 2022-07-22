@@ -686,7 +686,6 @@ def launch_command(args):
                     and getattr(args, name, None) is None
                 ):
                     setattr(args, name, attr)
-
         if not args.mixed_precision:
             if args.fp16:
                 args.mixed_precision = "fp16"
@@ -701,6 +700,9 @@ def launch_command(args):
             args.mixed_precision = "no"
         if not hasattr(args, "use_cpu"):
             args.use_cpu = torch.cuda.is_available()
+
+    if args.multi_gpu and args.num_processes == 1:
+        args.num_processes = torch.cuda.device_count()
 
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
