@@ -359,7 +359,7 @@ class Accelerator:
 
     def on_main_process(func):
         """
-        Run func on main process only
+        A decorator that will run the decorated function on the main process only.
         """
 
         @wraps(func)
