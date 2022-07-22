@@ -87,8 +87,14 @@ For example, here is how to use `accelerate launch` but only use a single GPU:
 CUDA_VISIBLE_DEVICES="0" accelerate launch {script_name.py} --arg1 --arg2 ...
 ```
 
-You can also use `accelerate launch` without performing `accelerate config` first, but you will need to manually pass in all of the right configuration parameters.
-For example here is how you would launch a script on two GPUs with mixed precision, without doing `accelerate config` first:
+You can also use `accelerate launch` without performing `accelerate config` first, but you may need to manually pass in the right configuration parameters.
+Accelerate can take some liberties towards a few hyperparameters, such as if a GPU is available it will use all of them by default, and no mixed precision will be used. 
+Here is how you would use all GPUs and train on no mixed precision:
+```bash
+accelerate launch --multi_gpu {script_name.py} --arg1 --arg2 ...
+```
+To get more specific you should pass in the needed parameters yourself. For instance, here is how you 
+would also launch that same script on two GPUs using mixed precision, but also avoiding all of the warnings: 
 ```bash
 accelerate launch --multi_gpu --mixed_precision=fp16 --num_processes=2 {script_name.py} --arg1 --arg2 ...
 ```
