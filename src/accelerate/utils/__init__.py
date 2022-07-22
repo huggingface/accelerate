@@ -37,6 +37,7 @@ from .modeling import (
     convert_file_size_to_int,
     dtype_byte_size,
     find_tied_parameters,
+    get_balanced_memory,
     get_max_layer_size,
     get_max_memory,
     infer_auto_device_map,

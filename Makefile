@@ -27,6 +27,12 @@ style:
 test:
 	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py
 
+test_big_modeling:
+	python -m pytest -s -v ./tests/test_big_modeling.py
+
+test_core:
+	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/deepspeed --ignore=./tests/test_big_modeling.py
+
 test_deepspeed:
 	python -m pytest -s -v ./tests/deepspeed
 
@@ -42,6 +48,10 @@ test_checkpoint_epoch:
 
 test_checkpoint_step:
 	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_step"
+
+# Same as test but used to install only the base dependencies
+test_prod:
+	$(MAKE) test_core
 
 test_rest:
 	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch"

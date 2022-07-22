@@ -52,7 +52,15 @@ def get_available_trackers():
 class GeneralTracker(object, metaclass=ABCMeta):
     """
     A base Tracker class to be used for all logging integration implementations.
+
+    Each function should take in `**kwargs` that will automatically be passed in from a base dictionary provided to
+    [`Accelerator`]
     """
+
+    @abstractproperty
+    def name(self):
+        "String representation of the python class name"
+        pass
 
     @abstractproperty
     def requires_logging_directory(self):
@@ -75,7 +83,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def log(self, values: dict, step: Optional[int]):
+    def log(self, values: dict, step: Optional[int], **kwargs):
         """
         Logs `values` to the current run. Base `log` implementations of a tracking API should go in here, along with
         special behavior for the `step parameter.
@@ -105,14 +113,17 @@ class TensorBoardTracker(GeneralTracker):
             The name of the experiment run
         logging_dir (`str`, `os.PathLike`):
             Location for TensorBoard logs to be stored.
+        kwargs:
+            Additional key word arguments passed along to the `tensorboard.SummaryWriter.__init__` method.
     """
 
+    name = "tensorboard"
     requires_logging_directory = True
 
-    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]]):
+    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]], **kwargs):
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
-        self.writer = tensorboard.SummaryWriter(self.logging_dir)
+        self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
         logger.info(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -131,7 +142,7 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.flush()
         logger.info("Stored initial configuration hyperparameters to TensorBoard")
 
-    def log(self, values: dict, step: Optional[int] = None):
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
 
@@ -141,14 +152,17 @@ class TensorBoardTracker(GeneralTracker):
                 `str` to `float`/`int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to either `SummaryWriter.add_scaler`,
+                `SummaryWriter.add_text`, or `SummaryWriter.add_scalers` method based on the contents of `values`.
         """
         for k, v in values.items():
             if isinstance(v, (int, float)):
-                self.writer.add_scalar(k, v, global_step=step)
+                self.writer.add_scalar(k, v, global_step=step, **kwargs)
             elif isinstance(v, str):
-                self.writer.add_text(k, v, global_step=step)
+                self.writer.add_text(k, v, global_step=step, **kwargs)
             elif isinstance(v, dict):
-                self.writer.add_scalars(k, v, global_step=step)
+                self.writer.add_scalars(k, v, global_step=step, **kwargs)
         self.writer.flush()
         logger.info("Successfully logged to TensorBoard")
 
@@ -167,13 +181,16 @@ class WandBTracker(GeneralTracker):
     Args:
         run_name (`str`):
             The name of the experiment run.
+        kwargs:
+            Additional key word arguments passed along to the `wandb.init` method.
     """
 
+    name = "wandb"
     requires_logging_directory = False
 
-    def __init__(self, run_name: str):
+    def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
-        self.run = wandb.init(project=self.run_name)
+        self.run = wandb.init(project=self.run_name, **kwargs)
         logger.info(f"Initialized WandB project {self.run_name}")
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -191,7 +208,7 @@ class WandBTracker(GeneralTracker):
         wandb.config.update(values)
         logger.info("Stored initial configuration hyperparameters to WandB")
 
-    def log(self, values: dict, step: Optional[int] = None):
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
 
@@ -201,8 +218,10 @@ class WandBTracker(GeneralTracker):
                 `str` to `float`/`int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `wandb.log` method.
         """
-        self.run.log(values, step=step)
+        self.run.log(values, step=step, **kwargs)
         logger.info("Successfully logged to WandB")
 
     def finish(self):
@@ -222,13 +241,16 @@ class CometMLTracker(GeneralTracker):
     Args:
         run_name (`str`):
             The name of the experiment run.
+        kwargs:
+            Additional key word arguments passed along to the `Experiment.__init__` method.
     """
 
+    name = "comet_ml"
     requires_logging_directory = False
 
-    def __init__(self, run_name: str):
+    def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
-        self.writer = Experiment(project_name=run_name)
+        self.writer = Experiment(project_name=run_name, **kwargs)
         logger.info(f"Initialized CometML project {self.run_name}")
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -246,7 +268,7 @@ class CometMLTracker(GeneralTracker):
         self.writer.log_parameters(values)
         logger.info("Stored initial configuration hyperparameters to CometML")
 
-    def log(self, values: dict, step: Optional[int] = None):
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
 
@@ -256,16 +278,19 @@ class CometMLTracker(GeneralTracker):
                 `str` to `float`/`int`.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to either `Experiment.log_metric`, `Experiment.log_other`,
+                or `Experiment.log_metrics` method based on the contents of `values`.
         """
         if step is not None:
             self.writer.set_step(step)
         for k, v in values.items():
             if isinstance(v, (int, float)):
-                self.writer.log_metric(k, v, step=step)
+                self.writer.log_metric(k, v, step=step, **kwargs)
             elif isinstance(v, str):
-                self.writer.log_other(k, v)
+                self.writer.log_other(k, v, **kwargs)
             elif isinstance(v, dict):
-                self.writer.log_metrics(v, step=step)
+                self.writer.log_metrics(v, step=step, **kwargs)
         logger.info("Successfully logged to CometML")
 
     def finish(self):

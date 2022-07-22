@@ -143,6 +143,8 @@ class ClusterConfig(BaseConfig):
     deepspeed_config: dict = None
     # args for fsdp
     fsdp_config: dict = None
+    # args for TPU
+    downcast_bf16: bool = False
 
     def __post_init__(self):
         if self.deepspeed_config is None:

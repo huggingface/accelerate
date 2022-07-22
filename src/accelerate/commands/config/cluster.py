@@ -293,11 +293,18 @@ def get_cluster_input():
     else:
         mixed_precision = "no"
 
+    downcast_bf16 = "no"
+    if distributed_type == DistributedType.TPU and mixed_precision == "bf16":
+        downcast_bf16 = _ask_field(
+            "Should `torch.float` be cast as `bfloat16` and `torch.double` remain `float32` on TPUs?", default="no"
+        )
+
     return ClusterConfig(
         compute_environment=ComputeEnvironment.LOCAL_MACHINE,
         distributed_type=distributed_type,
         num_processes=num_processes,
         mixed_precision=mixed_precision,
+        downcast_bf16=downcast_bf16,
         machine_rank=machine_rank,
         num_machines=num_machines,
         main_process_ip=main_process_ip,
