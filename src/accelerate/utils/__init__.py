@@ -92,7 +92,6 @@ if is_deepspeed_available():
 from .launch import PrepareForLaunch, get_launch_prefix
 from .memory import find_executable_batch_size
 from .other import (
-    clean_traceback,
     extract_model_from_parallel,
     get_pretty_name,
     patch_environment,
@@ -101,3 +100,4 @@ from .other import (
     write_basic_config,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
+from .rich import clean_traceback
