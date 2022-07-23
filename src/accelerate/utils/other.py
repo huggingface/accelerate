@@ -20,7 +20,7 @@ import torch
 
 from ..commands.config.cluster import ClusterConfig
 from ..commands.config.config_args import default_json_config_file
-from ..state import AcceleratorState, get_int_from_env
+from ..state import AcceleratorState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
 
@@ -155,32 +155,3 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
     if not path.exists():
         config = ClusterConfig(**config)
         config.to_json_file(path)
-
-
-def _is_local_main_process():
-    if is_tpu_available():
-        return xm.get_local_ordinal() == 0
-    elif torch.distributed.is_initialized():
-        return (
-            get_int_from_env(
-                ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"], 0
-            )
-            == 0
-        )
-    else:
-        return True
-
-
-@contextmanager
-def clean_traceback():
-    """
-    A context manager that uses `rich` to provide a clean traceback when dealing with multiprocessed logs
-    """
-    from rich.console import Console
-
-    console = Console()
-    try:
-        yield
-    except:
-        if _is_local_main_process():
-            console.print_exception()
