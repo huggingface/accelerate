@@ -143,7 +143,6 @@ def training_function(config, args):
         for step, batch in enumerate(train_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
-            batch = batch[:1]
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / gradient_accumulation_steps
