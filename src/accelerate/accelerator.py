@@ -449,12 +449,10 @@ class Accelerator:
                 return self.prepare_model(obj)
             elif isinstance(obj, torch.optim.Optimizer):
                 optimizer = self.prepare_optimizer(obj)
-                self._optimizers.append(optimizer)
                 return optimizer
         # Second pass of preparation: LR scheduler (which need the full list of optimizers)
         elif isinstance(obj, torch.optim.lr_scheduler._LRScheduler):
             scheduler = self.prepare_scheduler(obj)
-            self._schedulers.append(scheduler)
             return scheduler
         # Return the unprocessed object if previous criteria was not met
         return obj
@@ -782,7 +780,9 @@ class Accelerator:
         )
 
     def prepare_optimizer(self, optimizer):
-        return AcceleratedOptimizer(optimizer, device_placement=self.device_placement, scaler=self.scaler)
+        optimizer = AcceleratedOptimizer(optimizer, device_placement=self.device_placement, scaler=self.scaler)
+        self._optimizers.append(optimizer)
+        return optimizer
 
     def prepare_scheduler(self, scheduler):
         # We try to find the optimizer associated with `scheduler`, the default is the full list.
@@ -791,13 +791,14 @@ class Accelerator:
             if getattr(scheduler, "optimizer", None) == opt.optimizer:
                 optimizer = opt
                 break
-
-        return AcceleratedScheduler(
+        scheduler = AcceleratedScheduler(
             scheduler,
             optimizer,
             step_with_optimizer=self.step_scheduler_with_optimizer,
             split_batches=self.split_batches,
         )
+        self._schedulers.append(scheduler)
+        return scheduler
 
     def backward(self, loss, **kwargs):
         """
