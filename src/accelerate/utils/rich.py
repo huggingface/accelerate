@@ -41,9 +41,13 @@ def _is_local_main_process():
 
 
 @contextmanager
-def clean_traceback(verbose=False):
+def clean_traceback(show_locals:bool=False):
     """
-    A context manager that uses `rich` to provide a clean traceback when dealing with multiprocessed logs
+    A context manager that uses `rich` to provide a clean traceback when dealing with multiprocessed logs.
+
+    Args:
+        show_locals (`bool`, *optional*, defaults to False):
+            Whether to show local objects as part of the final traceback
     """
 
     console = Console()
