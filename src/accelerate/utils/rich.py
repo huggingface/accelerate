@@ -16,7 +16,7 @@ from contextlib import contextmanager
 
 import torch
 
-from rich import Console
+from rich.console import Console
 
 from ..state import get_int_from_env
 from .imports import is_tpu_available
@@ -41,7 +41,7 @@ def _is_local_main_process():
 
 
 @contextmanager
-def clean_traceback(show_locals:bool=False):
+def clean_traceback(show_locals: bool = False):
     """
     A context manager that uses `rich` to provide a clean traceback when dealing with multiprocessed logs.
 
@@ -55,4 +55,4 @@ def clean_traceback(show_locals:bool=False):
         yield
     except:
         if _is_local_main_process():
-            console.print_exception(suppress=[__file__], show_locals=verbose)
+            console.print_exception(suppress=[__file__], show_locals=show_locals)
