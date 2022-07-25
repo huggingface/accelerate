@@ -52,10 +52,18 @@ def training_function(config, args):
     # Initialize accelerator
     if args.with_tracking:
         accelerator = Accelerator(
-            cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all", logging_dir=args.logging_dir
+            cpu=args.cpu,
+            mixed_precision=args.mixed_precision,
+            log_with="all",
+            logging_dir=args.logging_dir,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
         )
     else:
-        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+        accelerator = Accelerator(
+            cpu=args.cpu,
+            mixed_precision=args.mixed_precision,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+        )
 
     if hasattr(args.checkpointing_steps, "isdigit"):
         if args.checkpointing_steps == "epoch":
@@ -103,9 +111,12 @@ def training_function(config, args):
     tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
 
     # If the batch size is too big we use gradient accumulation
-    gradient_accumulation_steps = 1
-    if batch_size > MAX_GPU_BATCH_SIZE and accelerator.distributed_type != DistributedType.TPU:
-        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
+    if (
+        batch_size > MAX_GPU_BATCH_SIZE
+        and accelerator.distributed_type != DistributedType.TPU
+        and accelerator.gradient_accumulation_steps == 1
+    ):
+        accelerator.gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
         batch_size = MAX_GPU_BATCH_SIZE
 
     def collate_fn(examples):
@@ -139,7 +150,7 @@ def training_function(config, args):
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer=optimizer,
         num_warmup_steps=100,
-        num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
+        num_training_steps=(len(train_dataloader) * num_epochs),
     )
 
     # Prepare everything
@@ -187,16 +198,16 @@ def training_function(config, args):
                 if resume_step is not None and step < resume_step:
                     overall_step += 1
                     continue
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
-            batch.to(accelerator.device)
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss = loss / gradient_accumulation_steps
-            # We keep track of the loss at each epoch
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            accelerator.backward(loss)
-            if step % gradient_accumulation_steps == 0:
+            # We use the `accumulate` wrapper to perform gradient accumulation
+            with accelerator.accumulate(model):
+                # We could avoid this line since we set the accelerator with `device_placement=True`.
+                batch.to(accelerator.device)
+                outputs = model(**batch)
+                loss = outputs.loss
+                # We keep track of the loss at each epoch
+                if args.with_tracking:
+                    total_loss += loss.detach().float()
+                accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -234,8 +245,7 @@ def training_function(config, args):
                     "f1": eval_metric["f1"],
                     "train_loss": total_loss.item() / len(train_dataloader),
                     "epoch": epoch,
-                },
-                step=epoch,
+                }
             )
 
         if checkpointing_steps == "epoch":
@@ -271,6 +281,12 @@ def main():
         type=str,
         default=None,
         help="If the training should continue from a checkpoint folder.",
+    )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="Number of steps to perform before accumulating gradients.",
     )
     parser.add_argument(
         "--with_tracking",
