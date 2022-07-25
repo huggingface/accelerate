@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tqdm as _tqdm
+import tqdm.auto as _tqdm
 
 from ..accelerator import Accelerator
 
@@ -29,4 +29,4 @@ def tqdm(accelerator: Accelerator, main_process_only: bool = True, *args, **kwar
     disable = False
     if main_process_only:
         disable = accelerator.is_local_main_process
-    return _tqdm.tqdm(*args, **kwargs, disable=disable)
+    return _tqdm(*args, **kwargs, disable=disable)
