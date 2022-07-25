@@ -14,19 +14,18 @@
 
 import tqdm.auto as _tqdm
 
-from ..accelerator import Accelerator
+from .state import AcceleratorState
 
 
-def tqdm(accelerator: Accelerator, main_process_only: bool = True, *args, **kwargs):
+def tqdm(main_process_only: bool = True, *args, **kwargs):
     """
     Wrapper around `tqdm.tqdm` that optionally displays only on the main process.
 
     Args:
-        accelerator (`Accelerator`): An Accelerator object
         main_process_only (`bool`, *optional*):
             Whether to display the progress bar only on the main process
     """
     disable = False
     if main_process_only:
-        disable = accelerator.is_local_main_process
+        disable = AcceleratorState().local_process_index == 0
     return _tqdm(*args, **kwargs, disable=disable)
