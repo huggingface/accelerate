@@ -14,7 +14,7 @@
 
 import tqdm.auto as _tqdm
 
-from .state import AcceleratorState
+from ..state import AcceleratorState
 
 
 def tqdm(main_process_only: bool = True, *args, **kwargs):
