@@ -31,7 +31,7 @@ test_big_modeling:
 	python -m pytest -s -v ./tests/test_big_modeling.py
 
 test_core:
-	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/deepspeed --ignore=./tests/test_big_modeling.py\
+	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/deepspeed --ignore=./tests/test_big_modeling.py \
 	--ignore=./tests/fsdp
 
 test_deepspeed:
