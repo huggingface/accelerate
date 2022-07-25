@@ -36,6 +36,9 @@ test_core:
 test_deepspeed:
 	python -m pytest -s -v ./tests/deepspeed
 
+test_fsdp:
+	python -m pytest -s -v ./tests/fsdp
+
 test_examples:
 	python -m pytest -s -v ./tests/test_examples.py
 

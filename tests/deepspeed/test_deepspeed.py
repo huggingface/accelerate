@@ -611,15 +611,21 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         self.stages = [1, 2, 3]
         self.zero3_offload_config = True
         self.performance_lower_bound = 0.83
+        self.peak_memory_usage_upper_bound = {
+            "multi_gpu_fp16": 3200,
+            "deepspeed_stage_1_fp16": 1600,
+            "deepspeed_stage_2_fp16": 2500,
+            "deepspeed_stage_3_zero_init_fp16": 2800,
+            "deepspeed_stage_3_cpu_offload_fp16": 1900,
+        }
+        self.n_train = 320
+        self.n_val = 160
 
-    def tearDown(self):
-        pass
-
-    def test_performance(
-        self,
-    ):
         mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_performance.py"])
+        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts"])
+
+    def test_performance(self):
+        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
         cmd = [
             "accelerate",
             "launch",
@@ -663,8 +669,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_checkpointing(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_checkpointing.py"])
+        self.test_file_path = os.path.join(self.test_scripts_folder, "test_checkpointing.py")
         cmd = [
             "accelerate",
             "launch",
@@ -720,4 +725,59 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_peak_memory_usage(self):
-        pass  # ToDo
+        self.test_file_path = os.path.join(self.test_scripts_folder, "test_peak_memory_usage.py")
+        cmd = [
+            "accelerate",
+            "launch",
+            "--num_processes=2",
+            "--num_machines=1",
+            "--machine_rank=0",
+        ]
+        for spec, peak_mem_upper_bound in self.peak_memory_usage_upper_bound.items():
+            cmd_stage = cmd.copy()
+            if "fp16" in spec:
+                cmd_stage.extend(["--mixed_precision=fp16"])
+
+            if "multi_gpu" in spec:
+                cmd_stage.extend(["--multi_gpu"])
+            else:
+                cmd_stage.extend(
+                    [
+                        "--use_deepspeed",
+                        "--gradient_accumulation_steps=1",
+                        "--gradient_clipping=1",
+                        "--zero3_init_flag=True",
+                        "--zero3_save_16bit_model=True",
+                    ]
+                )
+                for i in range(3):
+                    if f"stage_{i}" in spec:
+                        cmd_stage.extend([f"--zero_stage={i}"])
+                        break
+                if i + 1 < 3:
+                    cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
+                else:
+                    if "cpu_offload" in spec:
+                        with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                            ds_config = json.load(f)
+                            del ds_config["bf16"]
+                            del ds_config["fp16"]
+                            del ds_config["optimizer"]["params"]["torch_adam"]
+                            del ds_config["optimizer"]["params"]["adam_w_mode"]
+                            ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
+                            with open(ds_config_path, "w") as out_file:
+                                json.dump(ds_config, out_file)
+
+                        cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
+
+            cmd_stage.extend(
+                [
+                    self.test_file_path,
+                    f"--output_dir={self.tmpdir}",
+                    f"--peak_memory_upper_bound={peak_mem_upper_bound}",
+                    f"--n_train={self.n_train}",
+                    f"--n_val={self.n_val}",
+                ]
+            )
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd_stage, env=os.environ.copy())

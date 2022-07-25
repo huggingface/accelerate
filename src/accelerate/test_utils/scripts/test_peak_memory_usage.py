@@ -55,7 +55,13 @@ class TorchTracemalloc:
         # print(f"delta used/peak {self.used:4d}/{self.peaked:4d}")
 
 
-def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: str = "bert-base-cased"):
+def get_dataloaders(
+    accelerator: Accelerator,
+    batch_size: int = 16,
+    model_name: str = "bert-base-cased",
+    n_train: int = 320,
+    n_val: int = 160,
+):
     """
     Creates a set of `DataLoader`s for the `glue` dataset.
 
@@ -65,9 +71,16 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: 
         batch_size (`int`, *optional*):
             The batch size for the train and validation DataLoaders.
         model_name (`str`, *optional*):
+            The name of the model to use.
+        n_train (`int`, *optional*):
+            The number of training examples to use.
+        n_val (`int`, *optional*):
+            The number of validation examples to use.
     """
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    datasets = load_dataset("glue", "mrpc")
+    datasets = load_dataset(
+        "glue", "mrpc", split={"train": f"train[:{n_train}]", "validation": f"validation[:{n_val}]"}
+    )
 
     def tokenize_function(examples):
         # max_length=None => use the model max length (it's actually the default)
@@ -114,7 +127,7 @@ def training_function(config, args):
     model_name = args.model_name_or_path
 
     set_seed(seed)
-    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size, model_name)
+    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size, model_name, args.n_train, args.n_val)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained(model_name, return_dict=True)
@@ -217,6 +230,18 @@ def main():
         type=float,
         default=None,
         help="The upper bound of peak memory usage in MB. If set, the training will throw an error if the peak memory usage exceeds this value.",
+    )
+    parser.add_argument(
+        "--n_train",
+        type=int,
+        default=320,
+        help="Number of training examples to use.",
+    )
+    parser.add_argument(
+        "--n_val",
+        type=int,
+        default=160,
+        help="Number of validation examples to use.",
     )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
