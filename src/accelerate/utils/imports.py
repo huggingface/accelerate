@@ -32,7 +32,12 @@ try:
 
     _ccl_available = True
 except ImportError:
-    _ccl_available = False
+    try:
+        import oneccl_bindings_for_pytorch  # noqa: F401
+
+        _ccl_available = True
+    except ImportError:
+        _ccl_available = False
 
 
 try:

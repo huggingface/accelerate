@@ -19,6 +19,7 @@ import os
 import sys
 import warnings
 from contextlib import contextmanager
+from functools import wraps
 from typing import List, Optional, Union
 
 import torch
@@ -31,6 +32,7 @@ from .scheduler import AcceleratedScheduler
 from .state import AcceleratorState, GradientState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
+    MODEL_NAME,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -356,14 +358,68 @@ class Accelerator:
             mixed_precision = self.state.mixed_precision
         return mixed_precision
 
-    @contextmanager
-    def local_main_process_first(self):
+    def on_main_process(func):
         """
-        Lets the local main process go inside a with block.
+        A decorator that will run the decorated function on the main process only.
+        """
 
-        The other processes will enter the with block after the main process exits.
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if self.is_main_process or not self.use_distributed:
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    def on_local_main_process(func):
         """
-        yield from self._goes_first(self.is_local_main_process)
+        A decorator that will run the decorated function on the local main process only.
+        """
+
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if self.is_local_main_process or not self.use_distributed:
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    def on_process(process_idx):
+        """
+        A decorator that will run the decorated function on a given process index only.
+        """
+
+        def decorator(func):
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                if self.process_idx == process_idx or not self.use_distributed:
+                    return func(self, *args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+    def on_local_process(local_process_idx):
+        """
+        Run func on certain local process only
+        """
+
+        def decorator(func):
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                if self.local_process_idx == local_process_idx or not self.use_distributed:
+                    return func(self, *args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+    def _goes_first(self, is_main):
+        if not is_main:
+            self.wait_for_everyone()
+
+        yield
+
+        if is_main:
+            self.wait_for_everyone()
 
     @contextmanager
     def main_process_first(self):
@@ -374,14 +430,14 @@ class Accelerator:
         """
         yield from self._goes_first(self.is_main_process)
 
-    def _goes_first(self, is_main):
-        if not is_main:
-            self.wait_for_everyone()
+    @contextmanager
+    def local_main_process_first(self):
+        """
+        Lets the local main process go inside a with block.
 
-        yield
-
-        if is_main:
-            self.wait_for_everyone()
+        The other processes will enter the with block after the main process exits.
+        """
+        yield from self._goes_first(self.is_local_main_process)
 
     @contextmanager
     def no_sync(self, model):
@@ -446,16 +502,13 @@ class Accelerator:
             if isinstance(obj, torch.utils.data.DataLoader):
                 return self.prepare_data_loader(obj)
             elif isinstance(obj, torch.nn.Module):
-                self._models.append(obj)
                 return self.prepare_model(obj)
             elif isinstance(obj, torch.optim.Optimizer):
                 optimizer = self.prepare_optimizer(obj)
-                self._optimizers.append(optimizer)
                 return optimizer
         # Second pass of preparation: LR scheduler (which need the full list of optimizers)
         elif isinstance(obj, torch.optim.lr_scheduler._LRScheduler):
             scheduler = self.prepare_scheduler(obj)
-            self._schedulers.append(scheduler)
             return scheduler
         # Return the unprocessed object if previous criteria was not met
         return obj
@@ -520,7 +573,8 @@ class Accelerator:
             if model_count > 1 and optimizer_present:
                 raise ValueError(
                     "For FSDP to work with multiple models (>1), "
-                    "prepare must be called for all the models before optimizers are created"
+                    "prepare must be called for all the models before optimizers are created. "
+                    "Then pass the optimizers to the prepare call in the same order as corresponding models."
                 )
             elif model_count == 1 and optimizer_present:
                 logger.warn(
@@ -570,6 +624,7 @@ class Accelerator:
         return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model):
+        self._models.append(model)
         if self.device_placement and self.distributed_type != DistributedType.FSDP:
             model = model.to(self.device)
         if self.distributed_type == DistributedType.MULTI_GPU:
@@ -596,6 +651,7 @@ class Accelerator:
                 )
                 if not fsdp_plugin.cpu_offload.offload_params:
                     model.to(self.device)
+            self._models[-1] = model
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
@@ -782,7 +838,9 @@ class Accelerator:
         )
 
     def prepare_optimizer(self, optimizer):
-        return AcceleratedOptimizer(optimizer, device_placement=self.device_placement, scaler=self.scaler)
+        optimizer = AcceleratedOptimizer(optimizer, device_placement=self.device_placement, scaler=self.scaler)
+        self._optimizers.append(optimizer)
+        return optimizer
 
     def prepare_scheduler(self, scheduler):
         # We try to find the optimizer associated with `scheduler`, the default is the full list.
@@ -791,13 +849,14 @@ class Accelerator:
             if getattr(scheduler, "optimizer", None) == opt.optimizer:
                 optimizer = opt
                 break
-
-        return AcceleratedScheduler(
+        scheduler = AcceleratedScheduler(
             scheduler,
             optimizer,
             step_with_optimizer=self.step_scheduler_with_optimizer,
             split_batches=self.split_batches,
         )
+        self._schedulers.append(scheduler)
+        return scheduler
 
     def backward(self, loss, **kwargs):
         """
@@ -991,6 +1050,7 @@ class Accelerator:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
         """
         Logs `values` to all stored trackers in `self.trackers`.
@@ -1007,17 +1067,16 @@ class Accelerator:
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
         """
-        if self.is_main_process:
-            for tracker in self.trackers:
-                tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
+        for tracker in self.trackers:
+            tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
 
+    @on_main_process
     def end_training(self):
         """
         Runs any special end training behaviors, such as stopping trackers
         """
-        if self.is_main_process:
-            for tracker in self.trackers:
-                tracker.finish()
+        for tracker in self.trackers:
+            tracker.finish()
 
     def save(self, obj, f):
         """
@@ -1042,9 +1101,44 @@ class Accelerator:
         output_dir = os.path.expanduser(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
-        weights = [self.get_state_dict(m, unwrap=False) for m in self._models]
+
+        # Save the models taking care of FSDP and DeepSpeed nuances
+        weights = []
+        for i, model in enumerate(self._models):
+            if self.distributed_type == DistributedType.FSDP:
+                logger.info("Saving FSDP model")
+                self.state.fsdp_plugin.save_model(self, model, output_dir, i)
+                logger.info(f"FSDP Model saved to output dir {output_dir}")
+            elif self.distributed_type == DistributedType.DEEPSPEED:
+                logger.info("Saving DeepSpeed Model and Optimizer")
+                ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
+                model.save_checkpoint(output_dir, ckpt_id)
+                logger.info(f"DeepSpeed Model and Optimizer saved to output dir {os.path.join(output_dir, ckpt_id)}")
+            else:
+                weights.append(self.get_state_dict(model, unwrap=False))
+
+        # Save the optimizers taking care of FSDP and DeepSpeed nuances
+        optimizers = []
+        if self.distributed_type == DistributedType.FSDP:
+            for opt in self._optimizers:
+                logger.info("Saving FSDP Optimizer")
+                self.state.fsdp_plugin.save_optimizer(self, opt, self._models[i], output_dir, i)
+                logger.info(f"FSDP Optimizer saved to output dir {output_dir}")
+        elif self.distributed_type != DistributedType.DEEPSPEED:
+            optimizers = self._optimizers
+
+        # Save the lr schedulers taking care of DeepSpeed nuances
+        schedulers = []
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            for i, scheduler in enumerate(self._schedulers):
+                if isinstance(scheduler, DeepSpeedSchedulerWrapper):
+                    continue
+                schedulers.append(scheduler)
+        else:
+            schedulers = self._schedulers
+
         save_location = save_accelerator_state(
-            output_dir, weights, self._optimizers, self._schedulers, self.state.process_index, self.scaler
+            output_dir, weights, optimizers, schedulers, self.state.process_index, self.scaler
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)
@@ -1063,9 +1157,43 @@ class Accelerator:
         if not os.path.isdir(input_dir):
             raise ValueError(f"Tried to find {input_dir} but folder does not exist")
         logger.info(f"Loading states from {input_dir}")
-        load_accelerator_state(
-            input_dir, self._models, self._optimizers, self._schedulers, self.state.process_index, self.scaler
-        )
+
+        # Load the models taking care of FSDP and DeepSpeed nuances
+        models = []
+        for i, model in enumerate(self._models):
+            if self.distributed_type == DistributedType.FSDP:
+                logger.info("Loading FSDP model")
+                self.state.fsdp_plugin.load_model(self, model, input_dir, i)
+                logger.info(f"FSDP Model loaded from input dir {input_dir}")
+            elif self.distributed_type == DistributedType.DEEPSPEED:
+                logger.info("Loading DeepSpeed Model and Optimizer")
+                ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
+                model.load_checkpoint(input_dir, ckpt_id)
+                logger.info(f"DeepSpeed Model and Optimizer loaded from input dir {os.path.join(input_dir, ckpt_id)}")
+            else:
+                models.append(model)
+
+        # Load the optimizers taking care of FSDP and DeepSpeed nuances
+        optimizers = []
+        if self.distributed_type == DistributedType.FSDP:
+            for i, opt in enumerate(self._optimizers):
+                logger.info("Loading FSDP Optimizer")
+                self.state.fsdp_plugin.load_optimizer(self, opt, self._models[i], input_dir, i)
+                logger.info(f"FSDP Optimizer loaded from input dir {input_dir}")
+        elif self.distributed_type != DistributedType.DEEPSPEED:
+            optimizers = self._optimizers
+
+        # Load the lr schedulers taking care of DeepSpeed nuances
+        schedulers = []
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            for i, scheduler in enumerate(self._schedulers):
+                if isinstance(scheduler, DeepSpeedSchedulerWrapper):
+                    continue
+                schedulers.append(scheduler)
+        else:
+            schedulers = self._schedulers
+
+        load_accelerator_state(input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler)
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
             err = "Warning! Number of found checkpoints does not match the number of registered objects:"

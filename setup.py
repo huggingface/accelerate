@@ -19,7 +19,7 @@ extras = {}
 extras["quality"] = ["black ~= 22.0", "isort >= 5.5.4", "flake8 >= 3.8.3", "hf-doc-builder >= 0.3.0"]
 extras["docs"] = []
 extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
-extras["test_dev"] = ["datasets<=2.2.2", "evaluate", "transformers", "scipy", "sklearn", "deepspeed", "tqdm"]
+extras["test_dev"] = ["datasets", "evaluate", "transformers", "scipy", "sklearn", "deepspeed", "tqdm"]
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
 
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]

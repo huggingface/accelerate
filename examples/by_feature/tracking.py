@@ -162,10 +162,9 @@ def training_function(config, args):
 
     # New Code #
     # We need to initalize the trackers we use. Overall configurations can also be stored
-    if args.with_tracking:
-        if accelerator.is_main_process:
-            run = os.path.split(__file__)[-1].split(".")[0]
-            accelerator.init_trackers(run, config)
+    if args.with_tracking and accelerator.is_main_process:
+        run = os.path.split(__file__)[-1].split(".")[0]
+        accelerator.init_trackers(run, config)
 
     # Now we train the model
     for epoch in range(num_epochs):

@@ -110,10 +110,9 @@ def training_function(config, args):
     batch_size = int(config["batch_size"])
 
     # We need to initialize the trackers we use, and also store our configuration
-    if args.with_tracking:
-        if accelerator.is_main_process:
-            experiment_config = vars(args)
-            accelerator.init_trackers("fsdp_glue_no_trainer", experiment_config)
+    if args.with_tracking and accelerator.is_main_process:
+        experiment_config = vars(args)
+        accelerator.init_trackers("fsdp_glue_no_trainer", experiment_config)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     datasets = load_dataset("glue", "mrpc")
