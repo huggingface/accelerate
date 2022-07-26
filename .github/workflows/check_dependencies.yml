@@ -1,4 +1,4 @@
-name: Trigger docker images and run slow tests
+name: Trigger docker images and run tests
 
 on:
   push:

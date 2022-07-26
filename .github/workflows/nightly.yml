@@ -1,4 +1,4 @@
-name: Self-hosted runner (scheduled)
+name: Self-hosted runner with slow tests (scheduled)
 
 on:
   workflow_dispatch:
