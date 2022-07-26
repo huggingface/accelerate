@@ -34,7 +34,7 @@ except ImportError:
     try: 
         import oneccl_bindings_for_pytorch
         _ccl_available = True
-     except ImportError:
+    except ImportError:
         _ccl_available = False
 
 
