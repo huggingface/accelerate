@@ -592,6 +592,30 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                 accelerator.deepspeed_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
             )
 
+    def test_basic_run(self):
+        mod_file = inspect.getfile(accelerate.test_utils)
+        test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_performance.py"])
+        with tempfile.TemporaryDirectory() as dirpath:
+            cmd = [
+                "accelerate",
+                "launch",
+                "--num_processes=1",
+                "--num_machines=1",
+                "--machine_rank=0",
+                "--mixed_precision=fp16",
+                "--use_deepspeed",
+                "--gradient_accumulation_steps=1",
+                "--zero_stage=2",
+                "--offload_optimizer_device=none",
+                "--offload_param_device=none",
+                test_file_path,
+                "--model_name_or_path=distilbert-base-uncased",
+                "--num_epochs=1",
+                f"--output_dir={dirpath}",
+            ]
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd, env=os.environ.copy())
+
 
 @require_deepspeed
 @require_multi_gpu
