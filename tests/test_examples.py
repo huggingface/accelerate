@@ -17,9 +17,10 @@ import os
 import re
 import shutil
 import tempfile
-import torch
 import unittest
 from unittest import mock
+
+import torch
 
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import TempDirTestCase, require_trackers, run_command, slow
