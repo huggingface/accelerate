@@ -346,8 +346,8 @@ def simple_launcher(args):
         args.num_cpu_threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
         if args.num_cpu_threads_per_process == 0:
             args.num_cpu_threads_per_process = 1
-        logger.warn(
-            f"num_cpu_threads_per_process unset, we pick as {args.num_cpu_threads_per_process} to improve oob performance"
+        logger.info(
+            f"num_cpu_threads_per_process unset, we set it at {args.num_cpu_threads_per_process} to improve oob performance."
         )
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
@@ -449,7 +449,7 @@ def multi_gpu_launcher(args):
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
     if args.num_cpu_threads_per_process is None:
         args.num_cpu_threads_per_process = 1
-        logger.warn(f"num_cpu_threads_per_process unset, we pick as {args.num_cpu_threads_per_process}")
+        logger.info(f"num_cpu_threads_per_process unset, we set it at {args.num_cpu_threads_per_process}.")
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
