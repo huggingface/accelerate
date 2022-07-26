@@ -594,9 +594,9 @@ class FullyShardedDataParallelPlugin:
         if self.state_dict_type == StateDictType.FULL_STATE_DICT:
             weights_name = f"{MODEL_NAME}.bin" if model_index == 0 else f"{MODEL_NAME}_{model_index}.bin"
             input_model_file = os.path.join(input_dir, weights_name)
-            print(f"Loading model from {input_model_file}")
+            accelerator.print(f"Loading model from {input_model_file}")
             state_dict = torch.load(input_model_file)
-            print(f"Model loaded from {input_model_file}")
+            accelerator.print(f"Model loaded from {input_model_file}")
         else:
             weights_name = (
                 f"{MODEL_NAME}_rank{accelerator.process_index}.bin"

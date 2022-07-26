@@ -186,7 +186,6 @@ class FSDPIntegrationTest(TempDirTestCase):
         self.performance_configs = [
             "fsdp_shard_grad_op_transformer_based_wrap",
             "fsdp_full_shard_transformer_based_wrap",
-            "fsdp_full_shard_cpu_offload_transformer_based_wrap_fp32",  # fp16 was leading to indefinite hang
         ]
         self.peak_memory_usage_upper_bound = {
             "multi_gpu_fp16": 3200,

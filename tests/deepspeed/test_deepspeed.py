@@ -609,7 +609,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         )
 
         self.stages = [1, 2, 3]
-        self.zero3_offload_config = True
+        self.zero3_offload_config = False
         self.performance_lower_bound = 0.83
         self.peak_memory_usage_upper_bound = {
             "multi_gpu_fp16": 3200,
@@ -644,21 +644,19 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 continue
             cmd_stage = cmd.copy()
             cmd_stage.extend([f"--zero_stage={stage}"])
-            if stage < 3:
-                cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
-            else:
-                if self.zero3_offload_config:
-                    with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
-                        ds_config = json.load(f)
-                        del ds_config["bf16"]
-                        del ds_config["optimizer"]["params"]["torch_adam"]
-                        del ds_config["optimizer"]["params"]["adam_w_mode"]
-                        ds_config["fp16"]["enabled"] = True
-                        ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
-                        with open(ds_config_path, "w") as out_file:
-                            json.dump(ds_config, out_file)
+            cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
+            if self.zero3_offload_config:
+                with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                    ds_config = json.load(f)
+                    del ds_config["bf16"]
+                    del ds_config["optimizer"]["params"]["torch_adam"]
+                    del ds_config["optimizer"]["params"]["adam_w_mode"]
+                    ds_config["fp16"]["enabled"] = True
+                    ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
+                    with open(ds_config_path, "w") as out_file:
+                        json.dump(ds_config, out_file)
 
-                    cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
+                cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
 
             cmd_stage.extend(
                 [
@@ -690,21 +688,19 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 continue
             cmd_stage = cmd.copy()
             cmd_stage.extend([f"--zero_stage={stage}"])
-            if stage < 3:
-                cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
-            else:
-                if self.zero3_offload_config:
-                    with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
-                        ds_config = json.load(f)
-                        del ds_config["bf16"]
-                        del ds_config["optimizer"]["params"]["torch_adam"]
-                        del ds_config["optimizer"]["params"]["adam_w_mode"]
-                        ds_config["fp16"]["enabled"] = True
-                        ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
-                        with open(ds_config_path, "w") as out_file:
-                            json.dump(ds_config, out_file)
+            cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
+            if self.zero3_offload_config:
+                with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                    ds_config = json.load(f)
+                    del ds_config["bf16"]
+                    del ds_config["optimizer"]["params"]["torch_adam"]
+                    del ds_config["optimizer"]["params"]["adam_w_mode"]
+                    ds_config["fp16"]["enabled"] = True
+                    ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
+                    with open(ds_config_path, "w") as out_file:
+                        json.dump(ds_config, out_file)
 
-                    cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
+                cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
 
             cmd_stage.extend(
                 [
@@ -756,21 +752,19 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                     if f"stage_{i+1}" in spec:
                         cmd_stage.extend([f"--zero_stage={i+1}"])
                         break
-                if i + 1 < 3:
-                    cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
-                else:
-                    if "cpu_offload" in spec:
-                        with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
-                            ds_config = json.load(f)
-                            del ds_config["bf16"]
-                            del ds_config["fp16"]
-                            del ds_config["optimizer"]["params"]["torch_adam"]
-                            del ds_config["optimizer"]["params"]["adam_w_mode"]
-                            ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
-                            with open(ds_config_path, "w") as out_file:
-                                json.dump(ds_config, out_file)
+                cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
+                if "cpu_offload" in spec:
+                    with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                        ds_config = json.load(f)
+                        del ds_config["bf16"]
+                        del ds_config["fp16"]
+                        del ds_config["optimizer"]["params"]["torch_adam"]
+                        del ds_config["optimizer"]["params"]["adam_w_mode"]
+                        ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
+                        with open(ds_config_path, "w") as out_file:
+                            json.dump(ds_config, out_file)
 
-                        cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
+                    cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
 
             cmd_stage.extend(
                 [
