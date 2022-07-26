@@ -124,6 +124,7 @@ def compare_against_test(base_filename: str, feature_filename: str, parser_only:
                     new_feature_code.append(line)
                     passed_idxs.append(i)
                 else:
+                    # Skip over the `config['num_epochs'] = 2` statement
                     _ = next(it)
 
     # Extract out just the new parts from the full_file_training_func
