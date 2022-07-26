@@ -113,3 +113,7 @@ def is_boto3_available():
 
 def is_sagemaker_available():
     return importlib.util.find_spec("sagemaker") is not None
+
+
+def is_tqdm_available():
+    return importlib.util.find_spec("tqdm") is not None
