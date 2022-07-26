@@ -27,8 +27,10 @@ from typing import Dict, List
 
 import torch
 
+import psutil
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
+from accelerate.state import get_int_from_env
 from accelerate.utils import (
     ComputeEnvironment,
     DistributedType,
@@ -273,7 +275,7 @@ def launch_command_parser(subparsers=None):
     parser.add_argument(
         "--num_cpu_threads_per_process",
         type=int,
-        default=1,
+        default=None,
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
     )
     parser.add_argument(
@@ -337,6 +339,17 @@ def simple_launcher(args):
         mixed_precision = "fp16"
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
+    if args.num_cpu_threads_per_process is None:
+        local_size = get_int_from_env(
+            ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
+        )
+        args.num_cpu_threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
+        if args.num_cpu_threads_per_process == 0:
+            args.num_cpu_threads_per_process = 1
+        logger.info(
+            f"num_cpu_threads_per_process unset, we set it at {args.num_cpu_threads_per_process} to improve oob performance."
+        )
+
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
     process = subprocess.Popen(cmd, env=current_env)
@@ -434,7 +447,9 @@ def multi_gpu_launcher(args):
             current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch_policy)
         if args.fsdp_state_dict_type is not None:
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
-
+    if args.num_cpu_threads_per_process is None:
+        args.num_cpu_threads_per_process = 1
+        logger.info(f"num_cpu_threads_per_process unset, we set it at {args.num_cpu_threads_per_process}.")
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
