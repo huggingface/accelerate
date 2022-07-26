@@ -1,4 +1,4 @@
-name: Self-hosted runner (scheduled)
+name: Self-hosted runner with slow tests (scheduled)
 
 on:
   workflow_dispatch:
@@ -13,7 +13,6 @@ jobs:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     env:
       CUDA_VISIBLE_DEVICES: "0"
-      ALL_SLOW: "1"
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
@@ -43,7 +42,6 @@ jobs:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     env:
       CUDA_VISIBLE_DEVICES: "0,1"
-      ALL_SLOW: "1"
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
