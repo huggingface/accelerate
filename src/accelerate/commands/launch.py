@@ -148,19 +148,19 @@ def launch_command_parser(subparsers=None):
         help="Whether to use fsdp.",
     )
     parser.add_argument(
-        "--offload_params",
+        "--fsdp_offload_params",
         default="false",
         type=str,
         help="Decides Whether (true|false) to offload parameters and gradients to CPU. (useful only when `use_fsdp` flag is passed).",
     )
     parser.add_argument(
-        "--min_num_params",
+        "--fsdp_min_num_params",
         type=int,
         default=1e8,
         help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
     )
     parser.add_argument(
-        "--sharding_strategy",
+        "--fsdp_sharding_strategy",
         type=int,
         default=1,
         help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
@@ -172,7 +172,7 @@ def launch_command_parser(subparsers=None):
         help="FSDP's auto wrap policy. (useful only when `use_fsdp` flag is passed).",
     )
     parser.add_argument(
-        "--transformer_layer_cls_to_wrap",
+        "--fsdp_transformer_layer_cls_to_wrap",
         default=None,
         type=str,
         help="Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
@@ -183,6 +183,36 @@ def launch_command_parser(subparsers=None):
         default=None,
         type=str,
         help="FSDP's backward prefetch policy. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--fsdp_state_dict_type",
+        default=None,
+        type=str,
+        help="FSDP's state dict type. (useful only when `use_fsdp` flag is passed).",
+    )
+    parser.add_argument(
+        "--offload_params",
+        default=None,
+        type=str,
+        help="This argument is deprecated. Use `fsdp_offload_params` instead.",
+    )
+    parser.add_argument(
+        "--min_num_params",
+        type=int,
+        default=None,
+        help="This argument is deprecated. Use `fsdp_min_num_params` instead.",
+    )
+    parser.add_argument(
+        "--sharding_strategy",
+        type=int,
+        default=None,
+        help="This argument is deprecated. Use `fsdp_sharding_strategy` instead.",
+    )
+    parser.add_argument(
+        "--transformer_layer_cls_to_wrap",
+        default=None,
+        type=str,
+        help="This argument is deprecated. Use `fsdp_transformer_layer_cls_to_wrap` instead.",
     )
     parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
@@ -360,13 +390,51 @@ def multi_gpu_launcher(args):
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
     if args.use_fsdp:
+        if args.sharding_strategy is not None:
+            warnings.warn(
+                "`sharding_strategy` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
+                " `fsdp_sharding_strategy` instead",
+                FutureWarning,
+            )
+            args.fsdp_sharding_strategy = args.sharding_strategy
+
+        if args.offload_params is not None:
+            warnings.warn(
+                "`offload_params` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
+                " `fsdp_offload_params` instead",
+                FutureWarning,
+            )
+            args.fsdp_offload_params = args.offload_params
+
+        if args.min_num_params is not None:
+            warnings.warn(
+                "`min_num_params` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
+                " `fsdp_min_num_params` instead",
+                FutureWarning,
+            )
+            args.fsdp_min_num_params = args.min_num_params
+
+        if args.transformer_layer_cls_to_wrap is not None:
+            warnings.warn(
+                "`transformer_layer_cls_to_wrap` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
+                " `fsdp_transformer_layer_cls_to_wrap` instead",
+                FutureWarning,
+            )
+            args.fsdp_transformer_layer_cls_to_wrap = args.transformer_layer_cls_to_wrap
+
         current_env["USE_FSDP"] = "true"
-        current_env["FSDP_AUTO_WRAP_POLICY"] = str(args.fsdp_auto_wrap_policy)
-        current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.transformer_layer_cls_to_wrap)
-        current_env["FSDP_OFFLOAD_PARAMS"] = str(args.offload_params).lower()
-        current_env["FSDP_MIN_NUM_PARAMS"] = str(args.min_num_params)
-        current_env["FSDP_SHARDING_STRATEGY"] = str(args.sharding_strategy)
-        current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch_policy)
+        current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
+        current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
+        current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
+        if args.fsdp_auto_wrap_policy is not None:
+            current_env["FSDP_AUTO_WRAP_POLICY"] = str(args.fsdp_auto_wrap_policy)
+        if args.fsdp_transformer_layer_cls_to_wrap is not None:
+            current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.fsdp_transformer_layer_cls_to_wrap)
+        if args.fsdp_backward_prefetch_policy is not None:
+            current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch_policy)
+        if args.fsdp_state_dict_type is not None:
+            current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
+
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
@@ -682,7 +750,10 @@ def launch_command(args):
                         if getattr(args, k) is None:
                             setattr(args, k, defaults.deepspeed_config[k])
                     for k in defaults.fsdp_config:
-                        setattr(args, k, defaults.fsdp_config[k])
+                        arg_to_set = k
+                        if "fsdp" not in arg_to_set:
+                            arg_to_set = "fsdp_" + arg_to_set
+                        setattr(args, arg_to_set, defaults.fsdp_config[k])
                     continue
 
                 # Those args are handled separately

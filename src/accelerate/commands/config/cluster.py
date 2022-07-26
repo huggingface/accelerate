@@ -20,6 +20,7 @@ from ...utils.constants import (
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
+    FSDP_STATE_DICT_TYPE,
 )
 from .config_args import ClusterConfig
 from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
@@ -210,12 +211,12 @@ def get_cluster_input():
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
                 sharding_strategy_query += f"[{i+1}] {strategy}, "
             sharding_strategy_query = sharding_strategy_query[:-2] + ")? [1]: "
-            fsdp_config["sharding_strategy"] = _ask_field(
+            fsdp_config["fsdp_sharding_strategy"] = _ask_field(
                 sharding_strategy_query,
                 lambda x: int(x),
                 default=1,
             )
-            fsdp_config["offload_params"] = _ask_field(
+            fsdp_config["fsdp_offload_params"] = _ask_field(
                 "Do you want to offload parameters and gradients to CPU? [yes/NO]: ",
                 _convert_yes_no_to_bool,
                 default=False,
@@ -228,15 +229,15 @@ def get_cluster_input():
             fsdp_config["fsdp_auto_wrap_policy"] = _ask_field(
                 fsdp_wrap_query,
                 lambda x: FSDP_AUTO_WRAP_POLICY[int(x)],
-                default=FSDP_AUTO_WRAP_POLICY[0],
+                default="TRANSFORMER_BASED_WRAP",
             )
             if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
-                fsdp_config["transformer_layer_cls_to_wrap"] = _ask_field(
+                fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
                     "What is the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ...? : ",
                     lambda x: str(x),
                 )
             elif fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[1]:
-                fsdp_config["min_num_params"] = _ask_field(
+                fsdp_config["fsdp_min_num_params"] = _ask_field(
                     "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
                     lambda x: int(x),
                     default=1e8,
@@ -248,7 +249,16 @@ def get_cluster_input():
             fsdp_config["fsdp_backward_prefetch_policy"] = _ask_field(
                 fsdp_backward_prefetch_query,
                 lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
-                default=FSDP_BACKWARD_PREFETCH[0],
+                default="BACKWARD_PRE",
+            )
+            fsdp_state_dict_type_query = "What should be your FSDP's state dict type ("
+            for i, state_dict_type in enumerate(FSDP_STATE_DICT_TYPE):
+                fsdp_state_dict_type_query += f"[{i}] {state_dict_type}, "
+            fsdp_state_dict_type_query = fsdp_state_dict_type_query[:-2] + ")? [0]: "
+            fsdp_config["fsdp_state_dict_type"] = _ask_field(
+                fsdp_state_dict_type_query,
+                lambda x: FSDP_STATE_DICT_TYPE[int(x)],
+                default="FULL_STATE_DICT",
             )
 
     if distributed_type == DistributedType.TPU:
