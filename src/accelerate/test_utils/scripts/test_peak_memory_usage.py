@@ -243,8 +243,14 @@ def main():
         default=160,
         help="Number of validation examples to use.",
     )
+    parser.add_argument(
+        "--num_epochs",
+        type=int,
+        default=1,
+        help="Number of train epochs.",
+    )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}
     training_function(config, args)
 
 

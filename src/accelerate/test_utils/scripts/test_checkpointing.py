@@ -252,8 +252,14 @@ def main():
         default=None,
         help="If passed, the training will stop after this number of epochs.",
     )
+    parser.add_argument(
+        "--num_epochs",
+        type=int,
+        default=2,
+        help="Number of train epochs.",
+    )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}
 
     training_function(config, args)
 

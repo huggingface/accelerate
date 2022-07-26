@@ -216,8 +216,14 @@ def main():
         default=None,
         help="Optional lower bound for the performance metric. If set, the training will throw error when the performance metric drops below this value.",
     )
+    parser.add_argument(
+        "--num_epochs",
+        type=int,
+        default=3,
+        help="Number of train epochs.",
+    )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": args.num_epochs, "seed": 42, "batch_size": 16}
     training_function(config, args)
 
 

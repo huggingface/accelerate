@@ -618,7 +618,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             "deepspeed_stage_3_zero_init_fp16": 2800,
             "deepspeed_stage_3_cpu_offload_fp16": 1900,
         }
-        self.n_train = 320
+        self.n_train = 160
         self.n_val = 160
 
         mod_file = inspect.getfile(accelerate.test_utils)
@@ -708,14 +708,14 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 [
                     self.test_file_path,
                     f"--output_dir={self.tmpdir}",
-                    f"--partial_train_epoch={stage}",
+                    "--partial_train_epoch=1",
                 ]
             )
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
             cmd_stage = cmd_stage[:-1]
-            resume_from_checkpoint = os.path.join(self.tmpdir, "epoch_" + str(stage - 1))
+            resume_from_checkpoint = os.path.join(self.tmpdir, "epoch_0")
             cmd_stage.extend(
                 [
                     f"--resume_from_checkpoint={resume_from_checkpoint}",
@@ -751,8 +751,8 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                     ]
                 )
                 for i in range(3):
-                    if f"stage_{i}" in spec:
-                        cmd_stage.extend([f"--zero_stage={i}"])
+                    if f"stage_{i+1}" in spec:
+                        cmd_stage.extend([f"--zero_stage={i+1}"])
                         break
                 if i + 1 < 3:
                     cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
