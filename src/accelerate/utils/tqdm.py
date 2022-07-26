@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tqdm.auto as _tqdm
+from .imports import is_tqdm_available
+
+
+if is_tqdm_available():
+    import tqdm.auto as _tqdm
 
 from ..state import AcceleratorState
 
@@ -25,6 +29,8 @@ def tqdm(main_process_only: bool = True, *args, **kwargs):
         main_process_only (`bool`, *optional*):
             Whether to display the progress bar only on the main process
     """
+    if not is_tqdm_available():
+        raise ImportError("Accelerate's `tqdm` module requires `tqdm` to be installed. Please run `pip install tqdm`.")
     disable = False
     if main_process_only:
         disable = AcceleratorState().local_process_index == 0
