@@ -115,11 +115,17 @@ def compare_against_test(base_filename: str, feature_filename: str, parser_only:
     # Specific code in our script that differs from the full version, aka what is new
     new_feature_code = []
     passed_idxs = []  # We keep track of the idxs just in case it's a repeated statement
-    for i, line in enumerate(feature_file_func):
+    it = iter(feature_file_func)
+    for i in range(len(feature_file_func) - 1):
         if i not in passed_idxs:
+            line = next(it)
             if (line not in full_file_func) and (line.lstrip() != _dl_line):
-                new_feature_code.append(line)
-                passed_idxs.append(i)
+                if "TESTING_MOCKED_DATALOADERS" not in line:
+                    new_feature_code.append(line)
+                    passed_idxs.append(i)
+                else:
+                    # Skip over the `config['num_epochs'] = 2` statement
+                    _ = next(it)
 
     # Extract out just the new parts from the full_file_training_func
     new_full_example_parts = []
@@ -127,8 +133,9 @@ def compare_against_test(base_filename: str, feature_filename: str, parser_only:
     for i, line in enumerate(base_file_func):
         if i not in passed_idxs:
             if (line not in full_file_func) and (line.lstrip() != _dl_line):
-                new_full_example_parts.append(line)
-                passed_idxs.append(i)
+                if "TESTING_MOCKED_DATALOADERS" not in line:
+                    new_full_example_parts.append(line)
+                    passed_idxs.append(i)
 
     # Finally, get the overall diff
     diff_from_example = [line for line in new_feature_code if line not in new_full_example_parts]

@@ -83,6 +83,9 @@ if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
 
 
 def training_function(config, args):
+    # For testing only
+    if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
+        config["num_epochs"] = 2
     # Initialize accelerator
     if args.with_tracking:
         accelerator = Accelerator(
