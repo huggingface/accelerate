@@ -206,8 +206,10 @@ def training_function(config, args):
                 train_total_peak_memory[f"epoch-{epoch}"] <= args.peak_memory_upper_bound
             ), "Peak memory usage exceeded the upper bound"
 
-    with open(os.path.join(args.output_dir, "peak_memory_utilization.json"), "w") as f:
-        json.dump(train_total_peak_memory, f)
+    accelerator.wait_for_everyone()
+    if accelerator.is_main_process:
+        with open(os.path.join(args.output_dir, "peak_memory_utilization.json"), "w") as f:
+            json.dump(train_total_peak_memory, f)
 
 
 def main():

@@ -221,8 +221,10 @@ def training_function(config, args):
         state["step"] = overall_step
         accelerator.print(f"epoch {epoch}:", state)
 
-        with open(os.path.join(args.output_dir, f"state_{epoch}.json"), "w") as f:
-            json.dump(state, f)
+        accelerator.wait_for_everyone()
+        if accelerator.is_main_process:
+            with open(os.path.join(args.output_dir, f"state_{epoch}.json"), "w") as f:
+                json.dump(state, f)
 
 
 def main():

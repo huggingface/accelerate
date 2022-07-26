@@ -191,8 +191,10 @@ def training_function(config, args):
             args.performance_lower_bound <= best_performance
         ), f"Best performance metric {best_performance} is lower than the lower bound {args.performance_lower_bound}"
 
-    with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-        json.dump(performance_metric, f)
+    accelerator.wait_for_everyone()
+    if accelerator.is_main_process:
+        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            json.dump(performance_metric, f)
 
 
 def main():
