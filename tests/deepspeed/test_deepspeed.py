@@ -640,6 +640,8 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             "--zero3_save_16bit_model=True",
         ]
         for stage in self.stages:
+            if stage == 1:
+                continue
             cmd_stage = cmd.copy()
             cmd_stage.extend([f"--zero_stage={stage}"])
             if stage < 3:
@@ -739,7 +741,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 cmd_stage.extend(["--mixed_precision=fp16"])
 
             if "multi_gpu" in spec:
-                cmd_stage.extend(["--multi_gpu"])
+                continue
             else:
                 cmd_stage.extend(
                     [

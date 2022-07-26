@@ -194,6 +194,7 @@ def training_function(config, args):
                 resumed_state["optimizer_lr"] == optimizer.param_groups[0]["lr"]
             ), "Optimizer learning rate mismatch, loading from checkpoint failed"
             assert resumed_state["epoch"] == starting_epoch - 1, "Epoch mismatch, loading from checkpoint failed"
+            return
 
     # Now we train the model
     state = {}

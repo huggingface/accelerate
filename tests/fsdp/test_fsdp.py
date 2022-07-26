@@ -254,7 +254,7 @@ class FSDPIntegrationTest(TempDirTestCase):
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             cmd_config = cmd.copy()
             cmd_config.append(f"--fsdp_sharding_strategy={i+1}")
-            if strategy == "NO_SHARD":
+            if strategy != "FULL_SHARD":
                 continue
             state_dict_config_index = len(cmd_config)
             for state_dict_type in FSDP_STATE_DICT_TYPE:
