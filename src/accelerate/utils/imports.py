@@ -29,10 +29,12 @@ else:
 
 try:
     import torch_ccl  # noqa: F401
+
     _ccl_available = True
 except ImportError:
-    try: 
-        import oneccl_bindings_for_pytorch
+    try:
+        import oneccl_bindings_for_pytorch  # noqa: F401
+
         _ccl_available = True
     except ImportError:
         _ccl_available = False
