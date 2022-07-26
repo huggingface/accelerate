@@ -17,7 +17,7 @@ from distutils.util import strtobool
 
 import torch
 
-from .utils import DistributedType, is_ccl_available, is_deepspeed_available, is_tpu_available
+from .utils import DistributedType, get_ccl_version, is_ccl_available, is_deepspeed_available, is_tpu_available
 from .utils.dataclasses import SageMakerDistributedType
 
 
@@ -166,6 +166,10 @@ class AcceleratorState:
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
+                    if get_ccl_version() >= "1.12":
+                        import oneccl_bindings_for_pytorch  # noqa: F401
+                    else:
+                        import torch_ccl  # noqa: F401
                     backend = "ccl"
                 elif torch.distributed.is_mpi_available():
                     backend = "mpi"

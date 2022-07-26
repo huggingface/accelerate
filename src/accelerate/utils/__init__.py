@@ -19,6 +19,7 @@ from .dataclasses import (
     TensorInformation,
 )
 from .imports import (
+    get_ccl_version,
     is_apex_available,
     is_bf16_available,
     is_boto3_available,
