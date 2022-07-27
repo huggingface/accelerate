@@ -934,7 +934,7 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_for_metrics(self, tensor, dataloader):
+    def gather_for_metrics(self, tensor):
         """
         Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
         for gathering the inputs and targets for metric calculation.
@@ -942,17 +942,20 @@ class Accelerator:
         Args:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors for calculating metrics across all processes.
-            dataloader (`torch.utils.data.DataLoader`):
-                A dataloader prepared with `Accelerator.prepare`
         """
         tensor = self.gather(tensor)
         if self.use_distributed:
+            if self.gradient_state.remainder == -1:
+                logger.info(
+                    "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
+                )
+                return tensor
             try:
                 # Then see if we're on the last batch of our eval dataloader
                 if self.gradient_state.end_of_dataloader:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
-                        return tensor[: dataloader.total_dataset_length - self.gradient_state.samples_seen]
+                        return tensor[: self.gradient_state.remainder]
 
                     return recursively_apply(_adjust_samples, tensor)
                 else:

@@ -258,6 +258,7 @@ class GradientState:
 
         - **sync_gradients** (`bool`) -- Whether the gradients should be synced
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
+        - **remainder** (`int`) -- The number of extra samples that were added from padding the dataloader
     """
 
     _shared_state = {}
@@ -267,14 +268,14 @@ class GradientState:
         if not getattr(self, "initialized", False):
             self.sync_gradients = True
             self.end_of_dataloader = False
-            self.samples_seen = 0
+            self.remainder = -1
         self.initialized = True
 
     def __repr__(self):
         return (
             f"Sync Gradients: {self.sync_gradients}\n"
             f"At end of current dataloader: {self.end_of_dataloader}\n"
-            f"Samples seen: {self.samples_seen}"
+            f"Extra samples added: {self.remainder}"
         )
 
     def _set_sync_gradients(self, sync_gradients):
@@ -285,10 +286,6 @@ class GradientState:
         "Private function that sets whether the end of the current dataloader has been reached. Users should not have to call this."
         self.end_of_dataloader = end_of_dataloader
 
-    def _set_samples_seen(self, samples_seen):
-        "Private function that sets the number of samples iterated over. Users should not have to call this."
-        self.samples_seen = samples_seen
-
-    def _iterate_samples_seen(self, iteration: int = 1):
-        "Private function that iterates the number of samples seen by an iteration. Users should not have to call this."
-        self._set_samples_seen(self.samples_seen + iteration)
+    def _set_remainder(self, remainder):
+        "Private function that sets the number of remaining samples at the end of the dataloader"
+        self.remainder = remainder
