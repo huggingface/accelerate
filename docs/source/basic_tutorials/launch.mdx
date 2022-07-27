@@ -64,6 +64,12 @@ First you should rewrite the above code into a function, and make it callable as
 
 Next you need to launch it with `accelerate launch`. 
 
+<Tip warning={true}>
+  It's recommended you run `accelerate config` before using `accelerate launch` to configure your environment to your liking. 
+  Otherwise 🤗 Accelerate will use very basic defaults depending on your system setup.
+</Tip>
+
+
 ## Using accelerate launch
 
 🤗 Accelerate has a special CLI command to help you launch your code in your system through `accelerate launch`.
