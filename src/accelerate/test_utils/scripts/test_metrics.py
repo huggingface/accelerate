@@ -27,7 +27,7 @@ def get_setup(accelerator):
     set_seed(42)
     model = RegressionModel()
     ddp_model = deepcopy(model)
-    dset = RegressionDataset(length=80)
+    dset = RegressionDataset(length=82)
     dataloader = DataLoader(dset, batch_size=16)
     model.to(accelerator.device)
     ddp_model, dataloader = accelerator.prepare(ddp_model, dataloader)
@@ -44,20 +44,21 @@ def accuracy(predictions, labels) -> float:
 def test_torch_metrics():
     accelerator = Accelerator()
     model, ddp_model, dataloader = get_setup(accelerator)
+    single_device_logs_and_targs = []
+    multi_device_logs_and_targs = []
     for batch in dataloader:
         ddp_input, ddp_target = batch.values()
-        # First do single process
-        input, target = accelerator.gather((ddp_input, ddp_target))
-        input, target = input.to(accelerator.device), target.to(accelerator.device)
-        with torch.no_grad():
-            logits = model(input)
-            accuracy_single = accuracy(logits.argmax(dim=-1), target)
-        # Then do multiprocess
         with torch.no_grad():
             logits = ddp_model(ddp_input)
             logits, target = accelerator.gather_for_metrics((logits, ddp_target), dataloader)
-            accuracy_multi = accuracy(logits.argmax(dim=-1), target)
-        assert torch.allclose(accuracy_single, accuracy_multi), "The two accuracies were not the same!"
+            multi_device_logs_and_targs.append((logits, target))
+    inps, targs = [], []
+    for (inp, targ) in multi_device_logs_and_targs:
+        inps.append(inp)
+        targs.append(targ)
+    inps, targs = torch.cat(inps), torch.cat(targs)
+    # inps, targs = inps[:dataloader.total_dataset_length], targs[:dataloader.total_dataset_length]
+    assert len(inps) == 82, f'seen_logits: {len(inps)}\ntargs: \n{targs}'
 
 
 def main():
