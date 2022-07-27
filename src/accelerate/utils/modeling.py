@@ -127,7 +127,7 @@ def set_module_tensor_to_device(
 
         if is_buffer:
             module._buffers[tensor_name] = new_value
-        elif torch.device(device) != module._parameters[tensor_name].device:
+        elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
             new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
