@@ -25,7 +25,7 @@ which can total to adding just one new line of code!
 This example will use a very simplistic PyTorch training loop that performs gradient accumulation every two batches:
 
 ```python
-device = 'cuda'
+device = "cuda"
 model.to(device)
 
 gradient_accumulation_steps = 2
@@ -39,7 +39,7 @@ for index, batch in enumerate(training_dataloader):
     loss = loss_function(outputs, targets)
     loss = loss / gradient_accumulation_steps
     loss.backward()
-    if (index+1) % gradient_accumulation_steps == 0:
+    if (index + 1) % gradient_accumulation_steps == 0:
         optimizer.step()
         scheduler.step()
 ```
