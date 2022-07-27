@@ -268,7 +268,7 @@ class GradientState:
         if not getattr(self, "initialized", False):
             self.sync_gradients = True
             self.end_of_dataloader = False
-            self.remainder = 0
+            self.remainder = -1
         self.initialized = True
 
     def __repr__(self):

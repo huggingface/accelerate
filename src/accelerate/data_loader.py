@@ -338,9 +338,10 @@ class DataLoaderShard(DataLoader):
         self.gradient_state._set_end_of_dataloader(False)
         try:
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-            self.gradient_state._set_remainder(length % self.batch_size)
+            self.gradient_state._set_remainder(length % self.total_batch_size)
         except:
-            self.gradient_state._set_remainder(-1)
+            # We can safely pass because the default is -1
+            pass
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:

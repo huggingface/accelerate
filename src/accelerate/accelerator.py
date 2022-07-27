@@ -946,7 +946,7 @@ class Accelerator:
         tensor = self.gather(tensor)
         if self.use_distributed:
             if self.gradient_state.remainder == -1:
-                logger.warn(
+                logger.info(
                     "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
                 )
                 return tensor
