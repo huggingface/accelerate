@@ -339,7 +339,7 @@ class DataLoaderShard(DataLoader):
         try:
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
             self.gradient_state._set_remainder(length % self.total_batch_size)
-        except:
+        except Exception:
             # We can safely pass because the default is -1
             pass
         dataloader_iter = super().__iter__()
