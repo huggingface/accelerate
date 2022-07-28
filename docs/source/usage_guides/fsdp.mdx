@@ -84,19 +84,18 @@ Currently, `Accelerate` supports the following config through the CLI:
 However, below is the recommended way to prepare model and optimizer while using FSDP:
 
 ```diff
-model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
+  model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
 + model = accelerator.prepare(model)
 
-optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr)
+  optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr)
 
-- model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(model,
--        optimizer, train_dataloader, eval_dataloader, lr_scheduler
+- model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
 -    )
 
 + optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
 +         optimizer, train_dataloader, eval_dataloader, lr_scheduler
-+        )
-
++    )
 ```
 
 - In case of a single model, if you have created the optimizer with multiple parameter groups and called prepare with them together,

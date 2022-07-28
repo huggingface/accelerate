@@ -15,10 +15,10 @@ specific language governing permissions and limitations under the License.
 Accelerate has its own logging utility to handle logging while in a distributed system.
 To utilize this replace cases of `logging` with `accelerate.logging`:
 ```diff
--import logging
-+from accelerate.logging import get_logger
--logger = logging.getLogger(__name__)
-+logger = get_logger(__name__)
+- import logging
++ from accelerate.logging import get_logger
+- logger = logging.getLogger(__name__)
++ logger = get_logger(__name__)
 ```
 
 [[autodoc]] logging.get_logger
