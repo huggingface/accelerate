@@ -24,7 +24,9 @@ run a particular set of code on the main process beforehand before triggering an
 
 </Tip>
 
-- Downloading a dataset on the main process first and then loading the cached dataset in afterwards
+## Downloading a Dataset 
+
+When downloading a dataset, you should download it first on the main process and then loading the cached dataset in afterwards
 
 <Tip>
     `load_dataset` will perform a lock under the hood to stop multiple downloads from happening at once, but if you are downloading something 
@@ -51,7 +53,10 @@ with accelerator.main_process_first():
     datasets = load_dataset("glue", "mrpc")
 ```
 
-- Saving the `state_dict` of the model, since you would normally save one file on just the main process
+## Saving the `state_dict`
+
+When saving the `state_dict` of the model, since you would normally save one file on just the main process
+you should specify that:
 
 ```python
 if accelerator.is_main_process:
@@ -59,7 +64,10 @@ if accelerator.is_main_process:
     torch.save(model.state_dict(), "weights.pth")
 ```
 
-- Loading in the `state_dict` to a model, optimizer, or scheduler before moving on to training
+## Loading in the `state_dict`
+
+When loading in the `state_dict` to a model, optimizer, or scheduler, you should wait 
+for all workers to have the weights loaded in before moving on to training
 
 ```python
 with accelerator.main_process_first():
@@ -67,7 +75,10 @@ with accelerator.main_process_first():
     model.load_state_dict(state)
 ```
 
-- Applying a `map()` operation on multiple workers, such as tokenizing:
+## Applying a multi-workerCPU operation 
+
+Applying a `map()` operation on multiple workers, such as tokenizing should be done on the 
+main process first, and then propagated to each one. 
 
 ```python
 datasets = load_dataset("glue", "mrpc")
