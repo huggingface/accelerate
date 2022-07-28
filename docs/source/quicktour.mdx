@@ -18,7 +18,7 @@ Let's have a look at the 🤗 Accelerate main features and traps to avoid.
 
 To use 🤗 Accelerate in your own script, you have to change four things:
 
-1. Import the [`Accelerator`] main class instantiate one in an `accelerator` object:
+1. Import the [`Accelerator`] main class and instantiate one in an `accelerator` object:
 
 ```python
 from accelerate import Accelerator
@@ -28,7 +28,7 @@ accelerator = Accelerator()
 
 This should happen as early as possible in your training script as it will initialize everything necessary for
 distributed training. You don't need to indicate the kind of environment you are in (just one machine with a GPU, one
-match with several GPUs, several machines with multiple GPUs or a TPU), the library will detect this automatically.
+machines with several GPUs, several machines with multiple GPUs or a TPU), the library will detect this automatically.
 
 2. Remove the call `.to(device)` or `.cuda()` for your model and input data. The `accelerator` object
 will handle this for you and place all those objects on the right device for you. If you know what you're doing, you
@@ -133,7 +133,7 @@ for inputs, targets in validation_dataloader:
 
 <Tip warning={true}>
 
-As for the training dataloader, passing your validation dataloader through
+similar to the training dataloader, passing your validation dataloader through
 [`~Accelerator.prepare`] may change it: if you run on X GPUs, it will have its length divided by X
 (since your actual batch size will be multiplied by X), unless you set `split_batches=True`.
 
@@ -168,7 +168,7 @@ You can use the regular commands to launch your distributed training (like `torc
 PyTorch), they are fully compatible with 🤗 Accelerate. The only caveat here is that 🤗 Accelerate uses the environment
 to determine all useful information, so `torch.distributed.launch` should be used with the flag `--use_env`.
 
-🤗 Accelerate also provides a CLI tool that unifies all launcher, so you only have to remember one command. To use it,
+🤗 Accelerate also provides a CLI tool that unifies all launchers, so you only have to remember one command. To use it,
 just run:
 
 ```bash
@@ -212,7 +212,8 @@ If you stored the config file in a non-default location, you can indicate it to 
 accelerate launch --config_file path_to_config.yaml path_to_script.py --args_for_the_script
 ```
 
-You can also override any of the arguments determined by your config file, see TODO: insert ref here.
+You can also override any of the arguments determined by your config file. 
+To see the complete list of parameters that you can pass in, run `accelerate launch -h`. 
 
 Check out the [Launch tutorial](https://huggingface.co/docs/accelerate/basic_tutorials/launch) for more information about launching your scripts. 
 
@@ -252,7 +253,7 @@ optimizations takes some time.
 The good news is that this compilation will be cached so the second step and all the following will be much faster. The
 bad news is that it only applies if all of your steps do exactly the same operations, which implies:
 
-- having all tensors of the same length in all your lengths
+- having all tensors of the same length in all your batches
 - having static code (i.e., not a for loop of length that could change from step to step)
 
 Having any of the things above change between two steps will trigger a new compilation which will, once again, take a
@@ -372,7 +373,7 @@ When training your model, you may want to save the current state of the model, o
 You can use `accelerator.save_state` and `accelerator.load_state` respectively to do so, just by simply passing in a save location. 
 If you have registered any other stateful items to be stored through `accelerator.register_for_checkpointing` they will also be saved and/or loaded.
 <Tip>
-    Every object passed to `register_for_checkpointing` must have a `load_state_dict` and `save_dict` function to be stored
+    Every object passed to `register_for_checkpointing` must have a `load_state_dict` and `state_dict` function to be stored
 </Tip>
 
 
