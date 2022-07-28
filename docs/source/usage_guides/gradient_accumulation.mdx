@@ -66,8 +66,8 @@ First the code shown earlier will be converted to utilize 🤗 Accelerate withou
       loss = loss / gradient_accumulation_steps
 +     accelerator.backward(loss)
       if (index+1) % gradient_accumulation_steps == 0:
-        optimizer.step()
-        scheduler.step()
+          optimizer.step()
+          scheduler.step()
 ```
 
 <Tip warning={true}>
@@ -93,10 +93,10 @@ You just wrap it around the entire training part of our code:
 ```diff
 - for index, batch in enumerate(training_dataloader):
 + for batch in training_dataloader:
-+    with accelerator.accumulate(model):
-       optimizer.zero_grad()
-       inputs, targets = batch
-       outputs = model(inputs)
++     with accelerator.accumulate(model):
+          optimizer.zero_grad()
+          inputs, targets = batch
+          outputs = model(inputs)
 ```
 
 You can remove all the special checks for the step number and the loss adjustment:
