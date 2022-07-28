@@ -34,6 +34,14 @@ When downloading a dataset, you should download it first on the main process and
 </Tip>
 
 ```python
+with accelerator.main_process_first():
+    datasets = load_dataset("glue", "mrpc")
+```
+
+Under the hood this is the same as calling: 
+
+```python
+# First do something on the main process
 if accelerator.is_main_process:
     datasets = load_dataset("glue", "mrpc")
 else:
@@ -44,13 +52,6 @@ if not accelerator.is_main_process:
     datasets = load_dataset("glue", "mrpc")
 else:
     accelerator.wait_for_everyone()
-```
-
-Which is the same as calling:
-
-```python
-with accelerator.main_process_first():
-    datasets = load_dataset("glue", "mrpc")
 ```
 
 ## Saving the `state_dict`
@@ -75,7 +76,7 @@ with accelerator.main_process_first():
     model.load_state_dict(state)
 ```
 
-## Applying a multi-workerCPU operation 
+## Applying a multi-worker CPU operation 
 
 Applying a `map()` operation on multiple workers, such as tokenizing should be done on the 
 main process first, and then propagated to each one. 
