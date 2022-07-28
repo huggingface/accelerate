@@ -365,7 +365,11 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest()
         # model has size 236: linear1 64, batchnorm 72, linear2 100
         max_memory = get_balanced_memory(model, max_memory={0: 200, 1: 200})
-        self.assertDictEqual({0: 118, 1: 200}, max_memory)
+        self.assertDictEqual({0: 200, 1: 200}, max_memory)
 
         max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 300})
-        self.assertDictEqual({0: 118, 1: 215}, max_memory)
+        self.assertDictEqual({0: 215, 1: 300}, max_memory)
+
+        # Last device always get max memory to give more buffer and avoid accidental CPU offload
+        max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 500})
+        self.assertDictEqual({0: 215, 1: 500}, max_memory)

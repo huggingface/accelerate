@@ -405,17 +405,12 @@ def get_balanced_memory(
     leaves = [n for n in module_sizes if len([p for p in module_sizes if p.startswith(n) and len(p) > len(n)]) == 0]
     mean_leaves = int(sum([module_sizes[n] for n in leaves]) / len(leaves))
     buffer = int(1.25 * max(buffer, mean_leaves))
-    if low_zero:
-        per_gpu += buffer
-        gpu_zero = 0
-    else:
-        gpu_zero = per_gpu
-        per_gpu += buffer
+    per_gpu += buffer
 
     max_memory = get_max_memory(max_memory)
-    for i in range(num_devices):
-        # We still leave slightly more space on GPU 0 and only apply the buffer on the other devices.
-        max_memory[i] = min(gpu_zero if i == 0 else per_gpu, max_memory[i])
+    # The last device is left with max_memory just in case the buffer is not enough.
+    for i in range(num_devices - 1):
+        max_memory[i] = min(0 if low_zero and i == 0 else per_gpu, max_memory[i])
 
     if low_zero:
         min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
