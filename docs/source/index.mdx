@@ -23,15 +23,15 @@ specific language governing permissions and limitations under the License.
 + )
 
   for batch in training_dataloader:
-    optimizer.zero_grad()
-    inputs, targets = batch
--   inputs = inputs.to(device)
--   targets = targets.to(device)
-    outputs = model(inputs)
-    loss = loss_function(outputs, targets)
-+   accelerator.backward(loss)
-    optimizer.step()
-    scheduler.step()
+      optimizer.zero_grad()
+      inputs, targets = batch
+-     inputs = inputs.to(device)
+-     targets = targets.to(device)
+      outputs = model(inputs)
+      loss = loss_function(outputs, targets)
++     accelerator.backward(loss)
+      optimizer.step()
+      scheduler.step()
 ```
 
 Built on `torch_xla` and `torch.distributed`, 🤗 Accelerate takes care of the heavy lifting, so you don't have to write any custom code to adapt to these platforms.
