@@ -752,7 +752,7 @@ def launch_command(args):
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
-        if not args.multi_gpu and not args.tpu and not args.use_deepspeed:
+        if not args.multi_gpu and not args.tpu and not args.use_deepspeed and not args.use_fsdp:
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
