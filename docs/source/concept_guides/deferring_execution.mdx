@@ -26,6 +26,11 @@ run a particular set of code on the main process beforehand before triggering an
 
 - Downloading a dataset on the main process first and then loading the cached dataset in afterwards
 
+<Tip>
+    `load_dataset` will perform a lock under the hood to stop multiple downloads from happening at once, but if you are downloading something 
+    not using this library you should use this method.
+</Tip>
+
 ```python
 if accelerator.is_main_process:
     datasets = load_dataset("glue", "mrpc")
@@ -60,4 +65,17 @@ if accelerator.is_main_process:
 with accelerator.main_process_first():
     state = torch.load("weights.pth")
     model.load_state_dict(state)
+```
+
+- Applying a `map()` operation on multiple workers, such as tokenizing:
+
+```python
+datasets = load_dataset("glue", "mrpc")
+
+with accelerator.main_process_first():
+    tokenized_datasets = datasets.map(
+        tokenize_function,
+        batched=True,
+        remove_columns=["idx", "sentence1", "sentence2"],
+    )
 ```
