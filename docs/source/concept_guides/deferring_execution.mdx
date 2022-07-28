@@ -25,5 +25,39 @@ run a particular set of code on the main process beforehand before triggering an
 </Tip>
 
 - Downloading a dataset on the main process first and then loading the cached dataset in afterwards
+
+```python
+if accelerator.is_main_process:
+    datasets = load_dataset("glue", "mrpc")
+else:
+    accelerator.wait_for_everyone()
+
+# And then send it to the rest of them
+if not accelerator.is_main_process:
+    datasets = load_dataset("glue", "mrpc")
+else:
+    accelerator.wait_for_everyone()
+```
+
+Which is the same as calling:
+
+```python
+with accelerator.main_process_first():
+    datasets = load_dataset("glue", "mrpc")
+```
+
 - Saving the `state_dict` of the model, since you would normally save one file on just the main process
+
+```python
+if accelerator.is_main_process:
+    model = accelerator.unwrap_model(model)
+    torch.save(model.state_dict(), "weights.pth")
+```
+
 - Loading in the `state_dict` to a model, optimizer, or scheduler before moving on to training
+
+```python
+with accelerator.main_process_first():
+    state = torch.load("weights.pth")
+    model.load_state_dict(state)
+```
