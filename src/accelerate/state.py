@@ -17,7 +17,7 @@ from distutils.util import strtobool
 
 import torch
 
-from .utils import DistributedType, is_ccl_available, is_deepspeed_available, is_tpu_available
+from .utils import DistributedType, get_ccl_version, is_ccl_available, is_deepspeed_available, is_tpu_available
 from .utils.dataclasses import SageMakerDistributedType
 
 
@@ -164,6 +164,10 @@ class AcceleratorState:
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
+                    if get_ccl_version() >= "1.12":
+                        import oneccl_bindings_for_pytorch  # noqa: F401
+                    else:
+                        import torch_ccl  # noqa: F401
                     backend = "ccl"
                 elif torch.distributed.is_mpi_available():
                     backend = "mpi"
@@ -249,7 +253,7 @@ class GradientState:
     **Attributes:**
 
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
-        - **sync_gradients** (`bool`) -- Whether the gradients should be synced
+        - **remainder** (`int`) -- The number of extra samples that were added from padding the dataloader
     """
 
     _shared_state = {}
@@ -259,14 +263,14 @@ class GradientState:
         if not getattr(self, "initialized", False):
             self.sync_gradients = True
             self.end_of_dataloader = False
-            self.samples_seen = 0
+            self.remainder = -1
         self.initialized = True
 
     def __repr__(self):
         return (
             f"Sync Gradients: {self.sync_gradients}\n"
             f"At end of current dataloader: {self.end_of_dataloader}\n"
-            f"Samples seen: {self.samples_seen}"
+            f"Extra samples added: {self.remainder}"
         )
 
     def _set_sync_gradients(self, sync_gradients):
@@ -277,10 +281,6 @@ class GradientState:
         "Private function that sets whether the end of the current dataloader has been reached. Users should not have to call this."
         self.end_of_dataloader = end_of_dataloader
 
-    def _set_samples_seen(self, samples_seen):
-        "Private function that sets the number of samples iterated over. Users should not have to call this."
-        self.samples_seen = samples_seen
-
-    def _iterate_samples_seen(self, iteration: int = 1):
-        "Private function that iterates the number of samples seen by an iteration. Users should not have to call this."
-        self._set_samples_seen(self.samples_seen + iteration)
+    def _set_remainder(self, remainder):
+        "Private function that sets the number of remaining samples at the end of the dataloader"
+        self.remainder = remainder

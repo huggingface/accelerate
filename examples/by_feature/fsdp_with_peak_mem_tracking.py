@@ -83,6 +83,9 @@ if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
 
 
 def training_function(config, args):
+    # For testing only
+    if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
+        config["num_epochs"] = 2
     # Initialize accelerator
     if args.with_tracking:
         accelerator = Accelerator(
@@ -110,10 +113,9 @@ def training_function(config, args):
     batch_size = int(config["batch_size"])
 
     # We need to initialize the trackers we use, and also store our configuration
-    if args.with_tracking:
-        if accelerator.is_main_process:
-            experiment_config = vars(args)
-            accelerator.init_trackers("fsdp_glue_no_trainer", experiment_config)
+    if args.with_tracking and accelerator.is_main_process:
+        experiment_config = vars(args)
+        accelerator.init_trackers("fsdp_glue_no_trainer", experiment_config)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     datasets = load_dataset("glue", "mrpc")
@@ -277,9 +279,7 @@ def training_function(config, args):
                     outputs = model(**batch)
                 predictions = outputs.logits.argmax(dim=-1)
                 # It is slightly faster to call this once, than multiple times
-                predictions, references = accelerator.gather_for_metrics(
-                    (predictions, batch["labels"]), eval_dataloader
-                )
+                predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
                 metric.add_batch(
                     predictions=predictions,
                     references=references,

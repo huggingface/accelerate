@@ -71,8 +71,8 @@ model, optimizer, training_dataloader, scheduler = accelerator.prepare(
     model, optimizer, training_dataloader, scheduler
 )
 ```
-These objects are returned in the same order they were sent in with. By default, `device_placement=True`, so your model is automatically moved to the proper device.
-performing this action will also automatically move your model to the proper device as well.
+These objects are returned in the same order they were sent in with. By default when using `device_placement=True`, all of the objects that can be sent to the right device will be.
+If you need to work with data that isn't passed to [~Accelerator.prepare] but should be on the active device, you should pass in the `device` you made earlier. 
 
 <Tip warning={true}>
 Accelerate will only prepare objects that inherit from their respective PyTorch classes (such as `torch.optim.Optimizer`).

@@ -22,50 +22,63 @@ from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import set_seed
 
 
-def get_setup(accelerator):
+def get_setup(accelerator, num_samples=82):
     "Returns everything needed to perform basic training"
     set_seed(42)
     model = RegressionModel()
     ddp_model = deepcopy(model)
-    dset = RegressionDataset(length=80)
+    dset = RegressionDataset(length=num_samples)
     dataloader = DataLoader(dset, batch_size=16)
     model.to(accelerator.device)
     ddp_model, dataloader = accelerator.prepare(ddp_model, dataloader)
     return model, ddp_model, dataloader
 
 
-def accuracy(predictions, labels) -> float:
-    """
-    Get the accuracy with respect to the most likely label
-    """
-    return (predictions == labels).float().mean()
-
-
-def test_torch_metrics():
-    accelerator = Accelerator()
-    model, ddp_model, dataloader = get_setup(accelerator)
+def generate_predictions(model, dataloader, accelerator):
+    logits_and_targets = []
     for batch in dataloader:
-        ddp_input, ddp_target = batch.values()
-        # First do single process
-        input, target = accelerator.gather((ddp_input, ddp_target))
-        input, target = input.to(accelerator.device), target.to(accelerator.device)
+        input, target = batch.values()
         with torch.no_grad():
             logits = model(input)
-            accuracy_single = accuracy(logits.argmax(dim=-1), target)
-        # Then do multiprocess
-        with torch.no_grad():
-            logits = ddp_model(ddp_input)
-            logits, target = accelerator.gather_for_metrics((logits, ddp_target), dataloader)
-            accuracy_multi = accuracy(logits.argmax(dim=-1), target)
-        assert torch.allclose(accuracy_single, accuracy_multi), "The two accuracies were not the same!"
+            logits, target = accelerator.gather_for_metrics((logits, target))
+            logits_and_targets.append((logits, target))
+    inps, targs = [], []
+    for (inp, targ) in logits_and_targets:
+        inps.append(inp)
+        targs.append(targ)
+    inps, targs = torch.cat(inps), torch.cat(targs)
+    return inps, targs
+
+
+def test_torch_metrics(accelerator: Accelerator, num_samples=82):
+    model, ddp_model, dataloader = get_setup(accelerator, num_samples)
+    inps, targs = generate_predictions(ddp_model, dataloader, accelerator)
+    assert (
+        len(inps) == num_samples
+    ), f"Unexpected number of inputs:\n    Expected: {num_samples}\n    Actual: {len(inps)}"
 
 
 def main():
-    accelerator = Accelerator()
-    state = accelerator.state
-    if state.local_process_index == 0:
+    accelerator = Accelerator(split_batches=False, dispatch_batches=False)
+    if accelerator.is_local_main_process:
         print("**Test torch metrics**")
-    test_torch_metrics()
+        print("With: `split_batches=False`, `dispatch_batches=False`")
+    test_torch_metrics(accelerator)
+    accelerator.state._reset_state()
+    accelerator = Accelerator(split_batches=True, dispatch_batches=False)
+    if accelerator.is_local_main_process:
+        print("With: `split_batches=True`, `dispatch_batches=False`")
+    test_torch_metrics(accelerator)
+    accelerator.state._reset_state()
+    accelerator = Accelerator(split_batches=False, dispatch_batches=True)
+    if accelerator.is_local_main_process:
+        print("With: `split_batches=False`, `dispatch_batches=True`")
+    test_torch_metrics(accelerator)
+    accelerator.state._reset_state()
+    accelerator = Accelerator(split_batches=True, dispatch_batches=True)
+    if accelerator.is_local_main_process:
+        print("With: `split_batches=True`, `dispatch_batches=True`")
+    test_torch_metrics(accelerator)
 
 
 def _mp_fn(index):

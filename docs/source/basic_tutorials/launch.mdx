@@ -64,15 +64,20 @@ First you should rewrite the above code into a function, and make it callable as
 
 Next you need to launch it with `accelerate launch`. 
 
+<Tip warning={true}>
+  It's recommended you run `accelerate config` before using `accelerate launch` to configure your environment to your liking. 
+  Otherwise 🤗 Accelerate will use very basic defaults depending on your system setup.
+</Tip>
+
+
 ## Using accelerate launch
 
 🤗 Accelerate has a special CLI command to help you launch your code in your system through `accelerate launch`.
-This command wraps around all of the different commands needed to launch your script on various platforms, without you
-having to remember what each of them are.
+This command wraps around all of the different commands needed to launch your script on various platforms, without you having to remember what each of them are.
 
 <Tip>
 
-If you are familiar with launching scripts in PyTorch yourself such as with `torchrun`, you can still do this. It is not required to use `accelerate launch`
+If you are familiar with launching scripts in PyTorch yourself such as with `torchrun`, you can still do this. It is not required to use `accelerate launch`.
 
 </Tip>
 
@@ -90,8 +95,8 @@ CUDA_VISIBLE_DEVICES="0" accelerate launch {script_name.py} --arg1 --arg2 ...
 ```
 
 You can also use `accelerate launch` without performing `accelerate config` first, but you may need to manually pass in the right configuration parameters.
-In this case, 🤗 Accelerate will make some hyperparameter decisions for you, such as if a GPU is available, it will use all of them by default, and no mixed precision will be used. 
-Here is how you would use all GPUs and train on no mixed precision:
+In this case, 🤗 Accelerate will make some hyperparameter decisions for you, e.g., if GPUs are available, it will use all of them by default without the mixed precision.
+Here is how you would use all GPUs and train with mixed precision disabled:
 ```bash
 accelerate launch --multi_gpu {script_name.py} --arg1 --arg2 ...
 ```

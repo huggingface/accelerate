@@ -19,6 +19,7 @@ from .dataclasses import (
     TensorInformation,
 )
 from .imports import (
+    get_ccl_version,
     is_apex_available,
     is_bf16_available,
     is_boto3_available,
@@ -100,3 +101,4 @@ from .other import (
     write_basic_config,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
+from .tqdm import tqdm

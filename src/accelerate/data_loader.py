@@ -138,6 +138,10 @@ class BatchSamplerShard(BatchSampler):
         self.batch_size = batch_sampler.batch_size
         self.drop_last = batch_sampler.drop_last
 
+    @property
+    def total_length(self):
+        return len(self.batch_sampler)
+
     def __len__(self):
         if self.split_batches:
             return len(self.batch_sampler)
@@ -332,7 +336,12 @@ class DataLoaderShard(DataLoader):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.generator)
         self.gradient_state._set_end_of_dataloader(False)
-        self.gradient_state._set_samples_seen(0)
+        try:
+            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+            self.gradient_state._set_remainder(length % self.total_batch_size)
+        except Exception:
+            # We can safely pass because the default is -1
+            pass
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
@@ -346,12 +355,10 @@ class DataLoaderShard(DataLoader):
                 if self.device is not None:
                     current_batch = send_to_device(current_batch, self.device)
                 next_batch = next(dataloader_iter)
-                self.gradient_state._iterate_samples_seen(find_batch_size(current_batch))
                 yield current_batch
                 current_batch = next_batch
             except StopIteration:
                 self.gradient_state._set_end_of_dataloader(True)
-                self.gradient_state._iterate_samples_seen(find_batch_size(current_batch))
                 yield current_batch
                 break
 
@@ -365,7 +372,10 @@ class DataLoaderShard(DataLoader):
 
     @property
     def total_dataset_length(self):
-        return len(self.dataset)
+        if hasattr("total_length", self.dataset):
+            return self.dataset.total_length
+        else:
+            return len(self.dataset)
 
 
 class DataLoaderDispatcher(DataLoader):
@@ -453,7 +463,11 @@ class DataLoaderDispatcher(DataLoader):
 
     def __iter__(self):
         self.gradient_state._set_end_of_dataloader(False)
-        self.gradient_state._set_samples_seen(0)
+        try:
+            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+            self.gradient_state._set_remainder(length % self.batch_size)
+        except:
+            self.gradient_state._set_remainder(-1)
         main_iterator = None
         if self.state.process_index == 0:
             # We only iterate through the DataLoader on process 0.
@@ -487,11 +501,9 @@ class DataLoaderDispatcher(DataLoader):
             next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
             batch = slice_tensors(batch, data_slice)
             if not self._stop_iteration:
-                self.gradient_state._iterate_samples_seen(batch_size)
                 yield batch
                 batch, batch_info, skip = next_batch, next_batch_info, next_skip
             else:
-                self.gradient_state._iterate_samples_seen(batch_size)
                 self.gradient_state._set_end_of_dataloader(True)
                 yield batch
                 break

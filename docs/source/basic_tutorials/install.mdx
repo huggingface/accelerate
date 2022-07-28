@@ -40,6 +40,14 @@ New features are added every day that haven't been released yet. To try them out
 from the GitHub repository:
 
 ```bash
+pip install git+https://github.com/huggingface/accelerate
+```
+
+If you're working on contributing to the library or wish to play with the source code and see live 
+results as you run the code, an editable version can be installed from a locally-cloned version of the 
+repository:
+
+```bash
 git clone https://github.com/huggingface/accelerate
 cd accelerate
 pip install -e .
@@ -67,7 +75,7 @@ To check that your configuration looks fine, run:
 accelerate env
 ```
 
-An example output is shown below:
+An example output is shown below, which describes two GPUs on a single machine with no mixed precision being used:
 
 ```bash
 - `Accelerate` version: 0.11.0.dev0

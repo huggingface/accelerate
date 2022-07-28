@@ -103,12 +103,11 @@ def training_function(config, args):
         checkpointing_steps = None
 
     # We need to initialize the trackers we use, and also store our configuration
-    if args.with_tracking:
-        if accelerator.is_main_process:
-            run = os.path.split(__file__)[-1].split(".")[0]
-            if args.logging_dir:
-                run = os.path.join(args.logging_dir, run)
-            accelerator.init_trackers(run, config)
+    if args.with_tracking and accelerator.is_main_process:
+        run = os.path.split(__file__)[-1].split(".")[0]
+        if args.logging_dir:
+            run = os.path.join(args.logging_dir, run)
+        accelerator.init_trackers(run, config)
 
     # Grab all the image filenames
     file_names = [os.path.join(args.data_dir, fname) for fname in os.listdir(args.data_dir) if fname.endswith(".jpg")]
@@ -240,7 +239,7 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(inputs)
             predictions = outputs.argmax(dim=-1)
-            predictions, labels = accelerator.gather_for_metrics((predictions, batch["label"]), eval_dataloader)
+            predictions, labels = accelerator.gather_for_metrics((predictions, batch["label"]))
             accurate_preds = predictions == labels
             accurate += accurate_preds.long().sum()
 

@@ -25,10 +25,18 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
+import accelerate
 from accelerate.accelerator import Accelerator
 from accelerate.scheduler import AcceleratedScheduler
 from accelerate.state import AcceleratorState
-from accelerate.test_utils.testing import require_cuda, require_deepspeed
+from accelerate.test_utils.testing import (
+    TempDirTestCase,
+    execute_subprocess_async,
+    require_cuda,
+    require_deepspeed,
+    require_multi_gpu,
+    slow,
+)
 from accelerate.test_utils.training import RegressionDataset
 from accelerate.utils.dataclasses import DeepSpeedPlugin
 from accelerate.utils.deepspeed import (
@@ -38,6 +46,7 @@ from accelerate.utils.deepspeed import (
     DummyOptim,
     DummyScheduler,
 )
+from accelerate.utils.other import patch_environment
 from parameterized import parameterized
 from transformers import AutoModel, AutoModelForCausalLM, get_scheduler
 from transformers.testing_utils import mockenv_context
@@ -117,6 +126,10 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             LOCAL_RANK="0",
             WORLD_SIZE="1",
         )
+
+    def tearDown(self):
+        super().tearDown()
+        AcceleratorState._reset_state()
 
     def get_config_dict(self, stage):
         # As some tests modify the dict, always make a copy
@@ -260,11 +273,10 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
         )
 
         with mockenv_context(**self.dist_env):
-            accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+            accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)  # noqa: F841
             from transformers.deepspeed import is_deepspeed_zero3_enabled
 
             self.assertTrue(is_deepspeed_zero3_enabled())
-            accelerator.state.initialized = False
 
     @parameterized.expand(optim_scheduler_params, name_func=parameterized_custom_name_func)
     def test_prepare_deepspeed(self, optim_type, scheduler_type):
@@ -479,7 +491,6 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                     "You can only specify `accelerate.utils.DummyScheduler` in the code when using `accelerate.utils.DummyOptim`."
                     in str(cm.exception)
                 )
-        accelerator.state.initialized = False
 
     def test_save_checkpoints(self):
         deepspeed_plugin = DeepSpeedPlugin(
@@ -533,7 +544,6 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
                 "To save the full checkpoint, run `model.save_checkpoint(save_dir)` and use `zero_to_fp32.py` to recover weights."
             )
             self.assertTrue(msg in str(cm.exception))
-        accelerator.state.initialized = False
 
     def test_autofill_dsconfig(self):
         deepspeed_plugin = DeepSpeedPlugin(
@@ -581,4 +591,213 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             self.assertFalse(
                 accelerator.deepspeed_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
             )
-        accelerator.state.initialized = False
+
+    def test_basic_run(self):
+        mod_file = inspect.getfile(accelerate.test_utils)
+        test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_performance.py"])
+        with tempfile.TemporaryDirectory() as dirpath:
+            cmd = [
+                "accelerate",
+                "launch",
+                "--num_processes=1",
+                "--num_machines=1",
+                "--machine_rank=0",
+                "--mixed_precision=fp16",
+                "--use_deepspeed",
+                "--gradient_accumulation_steps=1",
+                "--zero_stage=2",
+                "--offload_optimizer_device=none",
+                "--offload_param_device=none",
+                test_file_path,
+                "--model_name_or_path=distilbert-base-uncased",
+                "--num_epochs=1",
+                f"--output_dir={dirpath}",
+            ]
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd, env=os.environ.copy())
+
+
+@require_deepspeed
+@require_multi_gpu
+@slow
+class DeepSpeedIntegrationTest(TempDirTestCase):
+    def setUp(self):
+        super().setUp()
+        self._test_file_path = inspect.getfile(self.__class__)
+        path = Path(self._test_file_path).resolve()
+        self.test_file_dir_str = str(path.parents[0])
+
+        self.ds_config_file = dict(
+            zero2=f"{self.test_file_dir_str}/ds_config_zero2.json",
+            zero3=f"{self.test_file_dir_str}/ds_config_zero3.json",
+        )
+
+        self.stages = [1, 2, 3]
+        self.zero3_offload_config = False
+        self.performance_lower_bound = 0.83
+        self.peak_memory_usage_upper_bound = {
+            "multi_gpu_fp16": 3200,
+            "deepspeed_stage_1_fp16": 1600,
+            "deepspeed_stage_2_fp16": 2500,
+            "deepspeed_stage_3_zero_init_fp16": 2800,
+            "deepspeed_stage_3_cpu_offload_fp16": 1900,
+        }
+        self.n_train = 160
+        self.n_val = 160
+
+        mod_file = inspect.getfile(accelerate.test_utils)
+        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts"])
+
+    def test_performance(self):
+        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
+        cmd = [
+            "accelerate",
+            "launch",
+            "--num_processes=2",
+            "--num_machines=1",
+            "--machine_rank=0",
+            "--mixed_precision=fp16",
+            "--use_deepspeed",
+            "--gradient_accumulation_steps=1",
+            "--gradient_clipping=1",
+            "--zero3_init_flag=True",
+            "--zero3_save_16bit_model=True",
+        ]
+        for stage in self.stages:
+            if stage == 1:
+                continue
+            cmd_stage = cmd.copy()
+            cmd_stage.extend([f"--zero_stage={stage}"])
+            cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
+            if self.zero3_offload_config:
+                with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                    ds_config = json.load(f)
+                    del ds_config["bf16"]
+                    del ds_config["optimizer"]["params"]["torch_adam"]
+                    del ds_config["optimizer"]["params"]["adam_w_mode"]
+                    ds_config["fp16"]["enabled"] = True
+                    ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
+                    with open(ds_config_path, "w") as out_file:
+                        json.dump(ds_config, out_file)
+
+                cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
+
+            cmd_stage.extend(
+                [
+                    self.test_file_path,
+                    f"--output_dir={self.tmpdir}",
+                    f"--performance_lower_bound={self.performance_lower_bound}",
+                ]
+            )
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd_stage, env=os.environ.copy())
+
+    def test_checkpointing(self):
+        self.test_file_path = os.path.join(self.test_scripts_folder, "test_checkpointing.py")
+        cmd = [
+            "accelerate",
+            "launch",
+            "--num_processes=2",
+            "--num_machines=1",
+            "--machine_rank=0",
+            "--mixed_precision=fp16",
+            "--use_deepspeed",
+            "--gradient_accumulation_steps=1",
+            "--gradient_clipping=1",
+            "--zero3_init_flag=True",
+            "--zero3_save_16bit_model=True",
+        ]
+        for stage in self.stages:
+            if stage == 1:
+                continue
+            cmd_stage = cmd.copy()
+            cmd_stage.extend([f"--zero_stage={stage}"])
+            cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
+            if self.zero3_offload_config:
+                with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                    ds_config = json.load(f)
+                    del ds_config["bf16"]
+                    del ds_config["optimizer"]["params"]["torch_adam"]
+                    del ds_config["optimizer"]["params"]["adam_w_mode"]
+                    ds_config["fp16"]["enabled"] = True
+                    ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
+                    with open(ds_config_path, "w") as out_file:
+                        json.dump(ds_config, out_file)
+
+                cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
+
+            cmd_stage.extend(
+                [
+                    self.test_file_path,
+                    f"--output_dir={self.tmpdir}",
+                    "--partial_train_epoch=1",
+                ]
+            )
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd_stage, env=os.environ.copy())
+
+            cmd_stage = cmd_stage[:-1]
+            resume_from_checkpoint = os.path.join(self.tmpdir, "epoch_0")
+            cmd_stage.extend(
+                [
+                    f"--resume_from_checkpoint={resume_from_checkpoint}",
+                ]
+            )
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd_stage, env=os.environ.copy())
+
+    def test_peak_memory_usage(self):
+        self.test_file_path = os.path.join(self.test_scripts_folder, "test_peak_memory_usage.py")
+        cmd = [
+            "accelerate",
+            "launch",
+            "--num_processes=2",
+            "--num_machines=1",
+            "--machine_rank=0",
+        ]
+        for spec, peak_mem_upper_bound in self.peak_memory_usage_upper_bound.items():
+            cmd_stage = cmd.copy()
+            if "fp16" in spec:
+                cmd_stage.extend(["--mixed_precision=fp16"])
+
+            if "multi_gpu" in spec:
+                continue
+            else:
+                cmd_stage.extend(
+                    [
+                        "--use_deepspeed",
+                        "--gradient_accumulation_steps=1",
+                        "--gradient_clipping=1",
+                        "--zero3_init_flag=True",
+                        "--zero3_save_16bit_model=True",
+                    ]
+                )
+                for i in range(3):
+                    if f"stage_{i+1}" in spec:
+                        cmd_stage.extend([f"--zero_stage={i+1}"])
+                        break
+                cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
+                if "cpu_offload" in spec:
+                    with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                        ds_config = json.load(f)
+                        del ds_config["bf16"]
+                        del ds_config["fp16"]
+                        del ds_config["optimizer"]["params"]["torch_adam"]
+                        del ds_config["optimizer"]["params"]["adam_w_mode"]
+                        ds_config_path = os.path.join(self.tmpdir, "ds_config.json")
+                        with open(ds_config_path, "w") as out_file:
+                            json.dump(ds_config, out_file)
+
+                    cmd_stage.extend([f"--deepspeed_config_file={ds_config_path}"])
+
+            cmd_stage.extend(
+                [
+                    self.test_file_path,
+                    f"--output_dir={self.tmpdir}",
+                    f"--peak_memory_upper_bound={peak_mem_upper_bound}",
+                    f"--n_train={self.n_train}",
+                    f"--n_val={self.n_val}",
+                ]
+            )
+            with patch_environment(omp_num_threads=1):
+                execute_subprocess_async(cmd_stage, env=os.environ.copy())

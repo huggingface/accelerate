@@ -124,11 +124,14 @@ def set_module_tensor_to_device(
             new_value = value.to(device)
         else:
             new_value = torch.tensor(value, device=device)
-    if is_buffer:
-        module._buffers[tensor_name] = new_value
-    else:
-        new_value = nn.Parameter(new_value, requires_grad=old_value.requires_grad)
-        module._parameters[tensor_name] = new_value
+
+        if is_buffer:
+            module._buffers[tensor_name] = new_value
+        elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
+            param_cls = type(module._parameters[tensor_name])
+            kwargs = module._parameters[tensor_name].__dict__
+            new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+            module._parameters[tensor_name] = new_value
 
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):

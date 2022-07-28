@@ -107,6 +107,9 @@ if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
 
 
 def training_function(config, args):
+    # For testing only
+    if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
+        config["num_epochs"] = 2
     # Initialize Accelerator
 
     # New Code #
@@ -162,10 +165,9 @@ def training_function(config, args):
 
     # New Code #
     # We need to initalize the trackers we use. Overall configurations can also be stored
-    if args.with_tracking:
-        if accelerator.is_main_process:
-            run = os.path.split(__file__)[-1].split(".")[0]
-            accelerator.init_trackers(run, config)
+    if args.with_tracking and accelerator.is_main_process:
+        run = os.path.split(__file__)[-1].split(".")[0]
+        accelerator.init_trackers(run, config)
 
     # Now we train the model
     for epoch in range(num_epochs):
@@ -197,7 +199,7 @@ def training_function(config, args):
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             # It is slightly faster to call this once, than multiple times
-            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]), eval_dataloader)
+            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
             metric.add_batch(
                 predictions=predictions,
                 references=references,

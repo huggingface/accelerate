@@ -28,14 +28,6 @@ else:
 
 
 try:
-    import torch_ccl  # noqa: F401
-
-    _ccl_available = True
-except ImportError:
-    _ccl_available = False
-
-
-try:
     import torch_xla.core.xla_model as xm  # noqa: F401
 
     _tpu_available = True
@@ -44,7 +36,14 @@ except ImportError:
 
 
 def is_ccl_available():
-    return _ccl_available
+    return (
+        importlib.util.find_spec("torch_ccl") is not None
+        or importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None
+    )
+
+
+def get_ccl_version():
+    return importlib_metadata.version("oneccl_bind_pt")
 
 
 def is_apex_available():
@@ -108,3 +107,7 @@ def is_boto3_available():
 
 def is_sagemaker_available():
     return importlib.util.find_spec("sagemaker") is not None
+
+
+def is_tqdm_available():
+    return importlib.util.find_spec("tqdm") is not None

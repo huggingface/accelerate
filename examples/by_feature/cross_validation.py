@@ -207,9 +207,7 @@ def training_function(config, args):
                 with torch.no_grad():
                     outputs = model(**batch)
                 predictions = outputs.logits.argmax(dim=-1)
-                predictions, references = accelerator.gather_for_metrics(
-                    (predictions, batch["labels"]), eval_dataloader
-                )
+                predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
                 metric.add_batch(
                     predictions=predictions,
                     references=references,
@@ -228,7 +226,7 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits
-            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]), test_dataloader)
+            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
             fold_predictions.append(predictions.cpu())
             if i == 0:
                 # We need all of the test predictions

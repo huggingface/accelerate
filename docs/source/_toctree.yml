@@ -1,14 +1,14 @@
 - sections:
   - local: index
     title: 🤗 Accelerate
+  - local: basic_tutorials/install
+    title: Installation
   - local: quicktour
-    title: Quicktour of 🤗 Accelerate
+    title: Quicktour
   title: Getting started
 - sections:
   - local: basic_tutorials/overview
     title: Overview
-  - local: basic_tutorials/install
-    title: Installation
   - local: basic_tutorials/migration
     title: Migrating to 🤗 Accelerate
   - local: basic_tutorials/launch
@@ -31,7 +31,6 @@
     title: How to avoid CUDA Out-of-Memory
   - local: usage_guides/sagemaker
     title: Using Accelerate on SageMaker
-
   title: How-To Guides
 - sections:
   - local: concept_guides/gradient_synchronization

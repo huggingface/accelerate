@@ -65,6 +65,7 @@ def wait_for_everyone():
         AcceleratorState().distributed_type == DistributedType.MULTI_GPU
         or AcceleratorState().distributed_type == DistributedType.MULTI_CPU
         or AcceleratorState().distributed_type == DistributedType.DEEPSPEED
+        or AcceleratorState().distributed_type == DistributedType.FSDP
     ):
         torch.distributed.barrier()
     elif AcceleratorState().distributed_type == DistributedType.TPU:
