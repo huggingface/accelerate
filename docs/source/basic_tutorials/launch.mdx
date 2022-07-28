@@ -131,7 +131,7 @@ This cache folder is located at (with decreasing order of priority):
 To have multiple configurations, the flag `--config_file` can be passed to the `accelerate launch` command paired 
 with the location of the custom yaml. 
 
-An example yaml may look something like the following:
+An example yaml may look something like the following for two GPUs on a single machine using `fp16` for mixed precision:
 ```yaml
 compute_environment: LOCAL_MACHINE
 deepspeed_config: {}
@@ -149,5 +149,5 @@ use_cpu: false
 
 An example of launching a script with a yaml located in a custom location would look something like so:
 ```bash
-accelerate launch --config_file path/to/config/my_config_file.yaml path_to_script.py --args_for_the_script
+accelerate launch --config_file {path/to/config/my_config_file.yaml} {script_name.py} --args_for_the_script
 ```
