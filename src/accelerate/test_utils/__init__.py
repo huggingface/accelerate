@@ -10,6 +10,7 @@ from .testing import (
     require_multi_gpu,
     require_single_gpu,
     require_tpu,
+    skip,
     slow,
 )
 from .training import RegressionDataset, RegressionModel
