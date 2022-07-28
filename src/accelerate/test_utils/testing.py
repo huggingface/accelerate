@@ -57,6 +57,11 @@ def parse_flag_from_env(key, default=False):
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
 
 
+def skip(test_case):
+    "Decorator that skips a test unconditionally"
+    return unittest.skip("Test was skipped")(test_case)
+
+
 def slow(test_case):
     """
     Decorator marking a test as slow. Slow tests are skipped by default. Set the RUN_SLOW environment variable to a

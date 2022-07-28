@@ -53,7 +53,6 @@ from .utils import (
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
-    recursively_apply,
     reduce,
     save,
     wait_for_everyone,
@@ -943,28 +942,31 @@ class Accelerator:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors for calculating metrics across all processes.
         """
-        tensor = self.gather(tensor)
-        if self.use_distributed:
-            if self.gradient_state.remainder == -1:
-                logger.info(
-                    "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
-                )
-                return tensor
-            try:
-                # Then see if we're on the last batch of our eval dataloader
-                if self.gradient_state.end_of_dataloader:
-                    # Last batch needs to be truncated on distributed systems as it contains additional samples
-                    def _adjust_samples(tensor):
-                        return tensor[: self.gradient_state.remainder]
+        raise NotImplementedError(
+            "Currently there are a number of bugs with this method. You should use `Accelerator.gather()` and drop the samples yourself for the time being."
+        )
+        # tensor = self.gather(tensor)
+        # if self.use_distributed:
+        #     if self.gradient_state.remainder == -1:
+        #         logger.info(
+        #             "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
+        #         )
+        #         return tensor
+        #     try:
+        #         # Then see if we're on the last batch of our eval dataloader
+        #         if self.gradient_state.end_of_dataloader:
+        #             # Last batch needs to be truncated on distributed systems as it contains additional samples
+        #             def _adjust_samples(tensor):
+        #                 return tensor[: self.gradient_state.remainder]
 
-                    return recursively_apply(_adjust_samples, tensor)
-                else:
-                    # Not at the end of the dataloader, no need to adjust the tensors
-                    return tensor
-            except:
-                # Dataset had no length or raised an error
-                return tensor
-        return tensor
+        #             return recursively_apply(_adjust_samples, tensor)
+        #         else:
+        #             # Not at the end of the dataloader, no need to adjust the tensors
+        #             return tensor
+        #     except:
+        #         # Dataset had no length or raised an error
+        #         return tensor
+        # return tensor
 
     def reduce(self, tensor, reduction="sum"):
         """
