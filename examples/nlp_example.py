@@ -165,9 +165,14 @@ def training_function(config, args):
             predictions, references = accelerator.gather((predictions, batch["labels"]))
             if accelerator.use_distributed:
                 if step == len(eval_dataloader) - 1:
+                    samples_seen += references.shape[0]
+                    assert samples_seen >= len(eval_dataloader.dataset), "Not all samples were seen"
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
                     references = references[: len(eval_dataloader.dataset) - samples_seen]
+                    assert (
+                        len(predictions) == len(eval_dataloader.total_dataset_len) % eval_dataloader.total_batch_size
+                    ), "The number of predicitons in last batch aren't equal to the remaining number of samples"
                 else:
                     # Otherwise we add the number of samples seen
                     samples_seen += references.shape[0]
