@@ -198,14 +198,14 @@ First you should set the seed and create an [`Accelerator`] object as early in t
 
 Next you should build your dataloaders and create your model:
 
-<Tip>
-    You build the model here so that the seed also controls the new weight initialization
-</Tip>
-
 ```python
     train_dataloader, eval_dataloader = get_dataloaders(batch_size)
     model = create_model("resnet50d", pretrained=True, num_classes=len(label_to_id))
 ```
+
+<Tip>
+    You build the model here so that the seed also controls the new weight initialization
+</Tip>
 
 As you are performing transfer learning in this example, the encoder of the model starts out frozen so the head of the model can be 
 trained only initially:
@@ -231,7 +231,7 @@ To make these constants available on the active device, you should set it to the
     std = std.to(accelerator.device)
 ```
 
-Next you should instantiate the rest of the PyTorch classes used for training:
+Next instantiate the rest of the PyTorch classes used for training:
 
 ```python
     optimizer = torch.optim.Adam(params=model.parameters(), lr=3e-2 / 25)
@@ -239,6 +239,7 @@ Next you should instantiate the rest of the PyTorch classes used for training:
 ```
 
 Before passing everything to [`Accelerator.prepare`].
+
 <Tip>
     There is no specific order to remember, you just need to unpack the objects in the same order you gave them to the prepare method.
 </Tip>
@@ -249,7 +250,7 @@ Before passing everything to [`Accelerator.prepare`].
     )
 ```
 
-Now you can train the model:
+Now train the model:
 
 ```python
     for epoch in range(5):
@@ -283,7 +284,9 @@ Next you have the rest of your standard PyTorch loop:
             predictions = outputs.argmax(dim=-1)
 ```
 
-Before finally the last major difference. When performing distributed evaluation, the predictions and labels need to be passed through 
+Before finally the last major difference. 
+
+When performing distributed evaluation, the predictions and labels need to be passed through 
 [`Accelerator.gather`] so that all of the data is available on the current device and a properly calculated metric can be achieved:
 
 ```python
@@ -367,6 +370,8 @@ def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}: {100 * eval_metric:.2f}")
 ```
+
+## Using the notebook_launcher
 
 All that's left is to use the [`notebook_launcher`].
 
