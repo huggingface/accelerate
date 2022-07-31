@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Launching Multi-Node Training from a Jupyter Environment
 
-This tutorial teaches you how to fine tune a computer vision model with Accelerate from a Jupyter Notebook on a distributed system.
+This tutorial teaches you how to fine tune a computer vision model with 🤗 Accelerate from a Jupyter Notebook on a distributed system.
 You will also learn how to setup a few requirements needed for ensuring your environment is configured properly, your data has been prepared properly, and finally how to launch training.
 
 <Tip>
@@ -21,15 +21,19 @@ You will also learn how to setup a few requirements needed for ensuring your env
 
 ## Configuring the Environment
 
-Before any training can be performed, an accelerate config file must exist in the system. Usually this can be done by running the following in a terminal:
+Before any training can be performed, a 🤗 Accelerate config file must exist in the system. Usually this can be done by running the following in a terminal and answering the prompts:
 
 ```bash
 accelerate config
 ```
 
-However, if general defaults are fine and you are *not* running on a TPU, accelerate has a utility to quickly write your GPU configuration into a config file via `write_basic_config`.
+However, if general defaults are fine and you are *not* running on a TPU, 🤗Accelerate has a utility to quickly write your GPU configuration into a config file via [`utils.write_basic_config`].
 
-The following code will restart Jupyter after writing the configuration, as CUDA code was called to perform this. CUDA can't be initialized more than once (once for the single-GPU's notebooks use by default, and then what would be again when `notebook_launcher` is called). It's fine to debug in the notebook and have calls to CUDA, but remember that in order to finally train a full cleanup and restart will need to be performed, such as what is shown below:
+The following code will restart Jupyter after writing the configuration, as CUDA code was called to perform this. 
+
+<Tip warning={true}>
+    CUDA can't be initialized more than once on a multi-node system. It's fine to debug in the notebook and have calls to CUDA, but in order to finally train a full cleanup and restart will need to be performed.
+</Tip>
 
 ```python
 import os
@@ -60,7 +64,7 @@ from accelerate.utils import set_seed
 from timm import create_model
 ```
 
-First we'll create a function to extract the class name based on a file:
+First you need to create a function to extract the class name based on a filename:
 
 ```python
 import os
@@ -75,7 +79,7 @@ print(fname)
 beagle_32.jpg
 ```
 
-In the case here, the label is `beagle`:
+In the case here, the label is `beagle`. Using regex you can extract the label from the filename:
 
 ```python
 import re
@@ -90,11 +94,13 @@ def extract_label(fname):
 extract_label(fname)
 ```
 
+And you can see it properly returned the right name for our file:
+
 ```python out
 "beagle"
 ```
 
-Next we'll create a `Dataset` class:
+Next a `Dataset` class should be made to handle grabbing the image and the label:
 
 ```python
 class PetsDataset(Dataset):
@@ -118,22 +124,24 @@ class PetsDataset(Dataset):
         return {"image": image, "label": label}
 ```
 
-And build our dataset
+Now to build the dataset. Outside the training function you can find and declare all the filenames and labels and use them as references inside the 
+launched function:
 
 ```python
-# Grab all the image filenames
 fnames = [os.path.join("../../images", fname) for fname in fnames if fname.endswith(".jpg")]
+```
 
-# Build the labels
+Next gather all the labels:
+
+```python
 all_labels = [extract_label(fname) for fname in fnames]
 id_to_label = list(set(all_labels))
 id_to_label.sort()
 label_to_id = {lbl: i for i, lbl in enumerate(id_to_label)}
 ```
 
-<Tip>
-    This will be stored inside of a function as you will set your seed during training.
-</Tip>
+Next, you should make a `get_dataloaders` function that will return your built dataloaders for you. As mentioned earlier, if data is automatically 
+sent to the GPU or a TPU device when building your `DataLoaders`, they must be built using this method. 
 
 ```python
 def get_dataloaders(batch_size: int = 64):
@@ -143,11 +151,11 @@ def get_dataloaders(batch_size: int = 64):
     train_split = random_perm[:cut]
     eval_split = random_perm[:cut]
 
-    # For training we use a simple RandomResizedCrop
+    # For training a simple RandomResizedCrop will be used
     train_tfm = Compose([RandomResizedCrop((224, 224), scale=(0.5, 1.0)), ToTensor()])
     train_dataset = PetsDataset([fnames[i] for i in train_split], image_transform=train_tfm, label_to_id=label_to_id)
 
-    # For evaluation we use a deterministic Resize
+    # For evaluation a deterministic Resize will be used
     eval_tfm = Compose([Resize((224, 224)), ToTensor()])
     eval_dataset = PetsDataset([fnames[i] for i in eval_split], image_transform=eval_tfm, label_to_id=label_to_id)
 
@@ -155,6 +163,12 @@ def get_dataloaders(batch_size: int = 64):
     train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, num_workers=4)
     eval_dataloader = DataLoader(eval_dataset, shuffle=False, batch_size=batch_size * 2, num_workers=4)
     return train_dataloader, eval_dataloader
+```
+
+Finally, you should import the scheduler to be used later:
+
+```python
+from torch.optim.lr_scheduler import CosineAnnealingLR
 ```
 
 ## Writing the Training Function
@@ -167,18 +181,14 @@ Here is a basic training loop for the animal classification problem:
     The code has been split up to allow for explainations on each section. A full version that can be copy and pasted will be available at the end
 </Tip>
 
-```python
-from torch.optim.lr_scheduler import CosineAnnealingLR
-```
 
 ```python
 def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
     set_seed(seed)
-    # Initialize accelerator
     accelerator = Accelerator(mixed_precision=mixed_precision)
 ```
 
-First you should create an [`Accelerator`] object as early in the training loop as possible, and set the seed.
+First you should set the seed and create an [`Accelerator`] object as early in the training loop as possible.
 
 <Tip warning={true}>
     If training on the TPU, your training loop should take in the model as a parameter and it should be instantiated 
@@ -221,7 +231,7 @@ To make these constants available on the active device, you should set it to the
     std = std.to(accelerator.device)
 ```
 
-Next you should instantiate the rest of the PyTorch classes:
+Next you should instantiate the rest of the PyTorch classes used for training:
 
 ```python
     optimizer = torch.optim.Adam(params=model.parameters(), lr=3e-2 / 25)
@@ -230,7 +240,7 @@ Next you should instantiate the rest of the PyTorch classes:
 
 Before passing everything to [`Accelerator.prepare`].
 <Tip>
-    There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the prepare method.
+    There is no specific order to remember, you just need to unpack the objects in the same order you gave them to the prepare method.
 </Tip>
 
 ```python
@@ -239,7 +249,7 @@ Before passing everything to [`Accelerator.prepare`].
     )
 ```
 
-Now you can train the model.
+Now you can train the model:
 
 ```python
     for epoch in range(5):
@@ -256,6 +266,7 @@ Now you can train the model.
 
 The evaluation loop will look slightly different compared to the training loop. The number of elements passed as well as the overall 
 total accuracy of each batch will be added to two constants:
+
 ```python
         model.eval()
         accurate = 0
@@ -263,6 +274,7 @@ total accuracy of each batch will be added to two constants:
 ```
 
 Next you have the rest of your standard PyTorch loop:
+
 ```python
         for batch in eval_dataloader:
             inputs = (batch["image"] - mean) / std
@@ -297,7 +309,7 @@ def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
     # Build dataloaders
     train_dataloader, eval_dataloader = get_dataloaders(batch_size)
 
-    # instantiate the model (you build the model here so that the seed also controls new weight initaliziations)
+    # Instantiate the model (you build the model here so that the seed also controls new weight initaliziations)
     model = create_model("resnet50d", pretrained=True, num_classes=len(label_to_id))
 
     # Freeze the base model
@@ -356,7 +368,7 @@ def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
         accelerator.print(f"epoch {epoch}: {100 * eval_metric:.2f}")
 ```
 
-All that's left is to use the `notebook_launcher`.
+All that's left is to use the [`notebook_launcher`].
 
 You pass in the function, the arguments (as a tuple), and the number of processes to train on. (See the [documentation](https://huggingface.co/docs/accelerate/launcher) for more information)
 
@@ -395,6 +407,6 @@ And that's it!
 
 This notebook showed how to perform distributed training from inside of a Jupyter Notebook. Some key notes to remember:
 
-- Make sure to save any code that use CUDA (or CUDA imports) for the function passed to `notebook_launcher`
+- Make sure to save any code that use CUDA (or CUDA imports) for the function passed to [`notebook_launcher`]
 - Set the `num_processes` to be the number of devices used for training (such as number of GPUs, CPUs, TPUs, etc)
 - If using the TPU, declare your model outside the training loop function
