@@ -295,7 +295,7 @@ When performing distributed evaluation, the predictions and labels need to be pa
             accurate += accurate_preds.long().sum()
 ```
 
-Now you just need to calculate the actual metric for this problem, and you can print it on the main process using [`Accelerator.print]:
+Now you just need to calculate the actual metric for this problem, and you can print it on the main process using [`Accelerator.print`]:
 
 ```python
         eval_metric = accurate.item() / num_elems
