@@ -39,11 +39,18 @@ you should search for and replace by the corresponding methods of your `accelera
 
 ## Advanced recommendations
 
-### `print`
+### Printing
 
-Print statements should be replaced by `Accelerator.print` to be printed once per process
+`print` statements should be replaced by [`Accelerator.print`] to be printed once per process
+
+```diff
+- print("My thing I want to print!")
++ accelerator.print("My thing I want to print!")
+```
 
 ### Executing processes
+
+#### Once on a single server
 
 For statements that should be executed once per server, use [`Accelerator.is_local_main_process`]:
 
@@ -62,6 +69,8 @@ def do_my_thing():
     do_thing_once_per_server()
 ```
 
+#### Only ever once across all servers
+
 For statements that should only ever be executed once, use [`Accelerator.is_main_process`]:
 
 ```python
@@ -78,6 +87,8 @@ def do_my_thing():
     "Something done once per server"
     do_thing_once()
 ```
+
+#### On specific processes
 
 If a function should be ran on a specific overall or local process index, there are similar decorators 
 to achieve this:
