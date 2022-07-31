@@ -30,7 +30,7 @@ To quickly adapt your script to work on any kind of setup with 🤗 Accelerate j
 4. Replace `loss.backward()` in your code with `accelerator.backward(loss)`
 5. Gather your predictions and labels before storing them or using them for metric computation using [`Accelerator.gather`]
 
-<Tip>
+<Tip warning={true}>
     Step five is mandatory when using distributed evaluation
 </Tip>
 
