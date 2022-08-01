@@ -161,7 +161,7 @@ def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
-        step_model(model, input, target, accelerator)
+        step_model(model, input, target, accelerator, False)
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
