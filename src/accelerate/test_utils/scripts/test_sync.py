@@ -245,7 +245,7 @@ def main():
                         "**Test `accumulate` gradient accumulation, ",
                         f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
                     )
-                test_gradient_accumulation(split_batch)
+                test_gradient_accumulation(split_batch, dispatch_batches)
     if state.local_process_index == 0:
         print(
             "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
