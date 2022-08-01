@@ -161,7 +161,7 @@ def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
-        step_model(model, input, target, accelerator, False)
+        step_model(model, input, target, accelerator)
         # Do "gradient accumulation" (noop)
         with accelerator.accumulate(ddp_model):
             step_model(ddp_model, ddp_input, ddp_target, accelerator)
@@ -245,7 +245,7 @@ def main():
                         "**Test `accumulate` gradient accumulation, ",
                         f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
                     )
-                test_gradient_accumulation(split_batch)
+                test_gradient_accumulation(split_batch, dispatch_batches)
     if state.local_process_index == 0:
         print(
             "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",

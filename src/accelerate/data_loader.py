@@ -479,10 +479,12 @@ class DataLoaderDispatcher(DataLoader):
         if self.state.process_index == 0:
             # We only iterate through the DataLoader on process 0.
             main_iterator = super().__iter__()
+        stop_iteration = False
         self._stop_iteration = False
         first_batch = None
-        while not self._stop_iteration:
-            batch, batch_info, skip = self._fetch_batches(main_iterator)
+        next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+        while not stop_iteration:
+            batch, batch_info, skip = next_batch, next_batch_info, next_skip
             if skip:
                 continue
             if self.state.process_index != 0:
@@ -508,7 +510,16 @@ class DataLoaderDispatcher(DataLoader):
             data_slice = slice(self.state.process_index * batch_size, (self.state.process_index + 1) * batch_size)
             batch = slice_tensors(batch, data_slice)
 
-            if self._stop_iteration:
+            stop_iteration = self._stop_iteration
+            if not stop_iteration:
+                # We may still be at the end of the dataloader without knowing it yet: if there is nothing left
+                # because by change the dataset had a round multiple of samples.
+                next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+                # next_batch_info[0] is None when there are no more batches, otherwise we still need to process them.
+                if self._stop_iteration and next_batch_info[0] is None:
+                    stop_iteration = True
+
+            if stop_iteration:
                 self.gradient_state._set_end_of_dataloader(True)
             yield batch
 
