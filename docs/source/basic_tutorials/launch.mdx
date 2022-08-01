@@ -64,8 +64,10 @@ First you should rewrite the above code into a function, and make it callable as
 Next you need to launch it with `accelerate launch`. 
 
 <Tip warning={true}>
+
   It's recommended you run `accelerate config` before using `accelerate launch` to configure your environment to your liking. 
   Otherwise 🤗 Accelerate will use very basic defaults depending on your system setup.
+
 </Tip>
 
 
@@ -76,7 +78,7 @@ This command wraps around all of the different commands needed to launch your sc
 
 <Tip>
 
-If you are familiar with launching scripts in PyTorch yourself such as with `torchrun`, you can still do this. It is not required to use `accelerate launch`.
+  If you are familiar with launching scripts in PyTorch yourself such as with `torchrun`, you can still do this. It is not required to use `accelerate launch`.
 
 </Tip>
 
@@ -118,7 +120,7 @@ accelerate launch -h
 
 <Tip>
 
-Even if you are not using 🤗 Accelerate in your code, you can still use the launcher for starting your scripts!
+  Even if you are not using 🤗 Accelerate in your code, you can still use the launcher for starting your scripts!
 
 </Tip>
 

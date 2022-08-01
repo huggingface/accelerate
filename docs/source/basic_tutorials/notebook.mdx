@@ -34,7 +34,9 @@ However, if general defaults are fine and you are *not* running on a TPU, 🤗Ac
 The following code will restart Jupyter after writing the configuration, as CUDA code was called to perform this. 
 
 <Tip warning={true}>
+
     CUDA can't be initialized more than once on a multi-node system. It's fine to debug in the notebook and have calls to CUDA, but in order to finally train a full cleanup and restart will need to be performed.
+    
 </Tip>
 
 ```python
@@ -180,7 +182,9 @@ Now you can build the training loop. [`notebook_launcher`] works by passing in a
 Here is a basic training loop for the animal classification problem:
 
 <Tip>
+
     The code has been split up to allow for explainations on each section. A full version that can be copy and pasted will be available at the end
+
 </Tip>
 
 
@@ -208,7 +212,9 @@ Next you should build your dataloaders and create your model:
 ```
 
 <Tip>
+
     You build the model here so that the seed also controls the new weight initialization
+
 </Tip>
 
 As you are performing transfer learning in this example, the encoder of the model starts out frozen so the head of the model can be 
@@ -245,7 +251,9 @@ Next instantiate the rest of the PyTorch classes used for training:
 Before passing everything to [`~Accelerator.prepare`].
 
 <Tip>
+
     There is no specific order to remember, you just need to unpack the objects in the same order you gave them to the prepare method.
+
 </Tip>
 
 ```python

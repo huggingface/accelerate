@@ -24,14 +24,18 @@ To quickly adapt your script to work on any kind of setup with 🤗 Accelerate j
 3. Remove all the `.cuda()` or `.to(device)` from your code and let the `accelerator` handle the device placement for you. 
 
 <Tip>
+
     Step three is optional, but considered a best practice.
+
 </Tip>
 
 4. Replace `loss.backward()` in your code with `accelerator.backward(loss)`
 5. Gather your predictions and labels before storing them or using them for metric computation using [`~Accelerator.gather`]
 
 <Tip warning={true}>
+
     Step five is mandatory when using distributed evaluation
+    
 </Tip>
 
 In most cases this is all that is needed. The next section lists a few more advanced use cases and nice features

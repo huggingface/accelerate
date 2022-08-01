@@ -21,7 +21,9 @@ your way towards running your code on distributed systems with ease!
 To begin, write out a very basic PyTorch training loop. 
 
 <Tip>
-We are under the presumption that `training_dataloader`, `model`, `optimizer`, `scheduler`, and `loss_function` have been defined beforehand.
+
+    We are under the presumption that `training_dataloader`, `model`, `optimizer`, `scheduler`, and `loss_function` have been defined beforehand.
+
 </Tip>
 
 ```python
@@ -75,7 +77,9 @@ These objects are returned in the same order they were sent in with. By default 
 If you need to work with data that isn't passed to [~Accelerator.prepare] but should be on the active device, you should pass in the `device` you made earlier. 
 
 <Tip warning={true}>
-Accelerate will only prepare objects that inherit from their respective PyTorch classes (such as `torch.optim.Optimizer`).
+
+    Accelerate will only prepare objects that inherit from their respective PyTorch classes (such as `torch.optim.Optimizer`).
+
 </Tip>
 
 ### Modifying the training loop

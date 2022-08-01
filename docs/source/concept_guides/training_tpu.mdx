@@ -33,8 +33,8 @@ Below is an example of a training function passed to the [`notebook_launcher`] i
 
 <Tip>
 
-This code snippet is based off the one from the `simple_nlp_example` notebook found [here](https://github.com/huggingface/notebooks/blob/main/examples/accelerate/simple_nlp_example.ipynb) with slight 
-modifications for the sake of simplicity
+    This code snippet is based off the one from the `simple_nlp_example` notebook found [here](https://github.com/huggingface/notebooks/blob/main/examples/accelerate/simple_nlp_example.ipynb) with slight 
+    modifications for the sake of simplicity
 
 </Tip>
 
@@ -78,7 +78,7 @@ notebook_launcher(training_function)
 
 <Tip>
 
-The `notebook_launcher` will default to 8 processes if 🤗 Accelerate has been configured for a TPU
+    The `notebook_launcher` will default to 8 processes if 🤗 Accelerate has been configured for a TPU
 
 </Tip>
 
@@ -117,8 +117,10 @@ And finally calling the training function with:
 ```
 
 <Tip>
+
     The above workaround is only needed when launching a TPU instance from a Jupyter Notebook on a low-resource server such as Google Colaboratory or Kaggle. If 
     using a script or launching on a much beefier server declaring the model beforehand is not needed.
+
 </Tip>
 
 ## Mixed Precision and Global Variables 
@@ -157,6 +159,6 @@ new batch size after the first few iterations.
 
 <Tip>
 
-Just because the memory is allocated does not mean it will be used or that the batch size will increase when going back to your training dataloader.
+    Just because the memory is allocated does not mean it will be used or that the batch size will increase when going back to your training dataloader.
 
 </Tip>

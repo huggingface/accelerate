@@ -40,8 +40,8 @@ To fully deactivate the automatic device placement, pass along `device_placement
 
 <Tip warning={true}>
 
-If you place your objects manually on the proper device, be careful to create your optimizer after putting your
-model on `accelerator.device` or your training will fail on TPU.
+    If you place your objects manually on the proper device, be careful to create your optimizer after putting your
+    model on `accelerator.device` or your training will fail on TPU.
 
 </Tip>
 
@@ -61,9 +61,9 @@ use `shuffle=True` or any kind of random sampler).
 
 <Tip>
 
-The actual batch size for your training will be the number of devices used multiplied by the batch size you set in
-your script: for instance training on 4 GPUs with a batch size of 16 set when creating the training dataloader will
-train at an actual batch size of 64.
+    The actual batch size for your training will be the number of devices used multiplied by the batch size you set in
+    your script: for instance training on 4 GPUs with a batch size of 16 set when creating the training dataloader will
+    train at an actual batch size of 64.
 
 </Tip>
 
@@ -76,16 +76,16 @@ training loop.
 
 <Tip warning={true}>
 
-You should only pass the learning rate scheduler to [`~Accelerator.prepare`] when the scheduler needs to be stepped
-at each optimizer step.
+    You should only pass the learning rate scheduler to [`~Accelerator.prepare`] when the scheduler needs to be stepped
+    at each optimizer step.
 
 </Tip>
 
 <Tip warning={true}>
 
-Your training dataloader may change length when going through this method: if you run on X GPUs, it will have its
-length divided by X (since your actual batch size will be multiplied by X), unless you set
-`split_batches=True`.
+    Your training dataloader may change length when going through this method: if you run on X GPUs, it will have its
+    length divided by X (since your actual batch size will be multiplied by X), unless you set
+    `split_batches=True`.
 
 </Tip>
 
@@ -133,9 +133,9 @@ for inputs, targets in validation_dataloader:
 
 <Tip warning={true}>
 
-similar to the training dataloader, passing your validation dataloader through
-[`~Accelerator.prepare`] may change it: if you run on X GPUs, it will have its length divided by X
-(since your actual batch size will be multiplied by X), unless you set `split_batches=True`.
+    Similar to the training dataloader, passing your validation dataloader through
+    [`~Accelerator.prepare`] may change it: if you run on X GPUs, it will have its length divided by X
+    (since your actual batch size will be multiplied by X), unless you set `split_batches=True`.
 
 </Tip>
 
@@ -147,18 +147,18 @@ should be calculated through the [`~Accelerator.gather_for_metrics`] method to a
 
 <Tip>
 
-If for some reason you don't wish to have this automatically done, [`~Accelerator.gather`] can be used instead to gather 
-the data across all processes and this can manually be done instead.
+    If for some reason you don't wish to have this automatically done, [`~Accelerator.gather`] can be used instead to gather 
+    the data across all processes and this can manually be done instead.
 
 </Tip>
 
 
 <Tip warning={true}>
 
-The [`~Accelerator.gather`] and [`~Accelerator.gather_for_metrics`] methods require the tensors to be all the same size on each process. If
-you have tensors of different sizes on each process (for instance when dynamically padding to the maximum length in
-a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad you tensor to the
-biggest size across processes.
+    The [`~Accelerator.gather`] and [`~Accelerator.gather_for_metrics`] methods require the tensors to be all the same size on each process. If
+    you have tensors of different sizes on each process (for instance when dynamically padding to the maximum length in
+    a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad you tensor to the
+    biggest size across processes.
 
 </Tip>
 
@@ -235,8 +235,8 @@ notebook_launcher(training_function)
 
 <Tip warning={true}>
 
-Your `Accelerator` object should only be defined inside the training function. This is because the
-initialization should be done inside the launcher only.
+    Your [`Accelerator`] object should only be defined inside the training function. This is because the
+    initialization should be done inside the launcher only.
 
 </Tip>
 
@@ -372,6 +372,7 @@ Note that since all the model parameters are references to tensors, this will lo
 When training your model, you may want to save the current state of the model, optimizer, random generators, and potentially LR schedulers to be restored in the _same script_.
 You can use [`~Accelerator.save_state`] and [`~Accelerator.load_state`] respectively to do so, just by simply passing in a save location. 
 If you have registered any other stateful items to be stored through [`~Accelerator.register_for_checkpointing`] they will also be saved and/or loaded.
+
 <Tip>
 
     Every object passed to [`~Accelerator.register_for_checkpointing`] must have a `load_state_dict` and `state_dict` function to be stored
@@ -440,7 +441,7 @@ will be added in a next version.
 
 <Tip warning={true}>
 
-The [`notebook_launcher`] does not support the DeepSpeed integration yet.
+    The [`notebook_launcher`] does not support the DeepSpeed integration yet.
 
 </Tip>
 
@@ -483,17 +484,17 @@ setting the same seed in the main random number generator in all processes.
 
 <Tip warning={true}>
 
-Synchronization of the main torch (or CUDA or XLA) random number generator will affect any other potential random
-artifacts you could have in your dataset (like random data augmentation) in the sense that all processes will get
-the same random numbers from the torch random modules (so will apply the same random data augmentation if it's
-controlled by torch).
+    Synchronization of the main torch (or CUDA or XLA) random number generator will affect any other potential random
+    artifacts you could have in your dataset (like random data augmentation) in the sense that all processes will get
+    the same random numbers from the torch random modules (so will apply the same random data augmentation if it's
+    controlled by torch).
 
 </Tip>
 
 <Tip>
 
-The randomization part of your custom sampler, batch sampler or iterable dataset should be done using a local
-`torch.Generator` object (in PyTorch >= 1.6), see the traditional `RandomSampler`, as an example.
+    The randomization part of your custom sampler, batch sampler or iterable dataset should be done using a local
+    `torch.Generator` object (in PyTorch >= 1.6), see the traditional `RandomSampler`, as an example.
 
 </Tip>
 
