@@ -412,7 +412,7 @@ class Accelerator:
 
     def on_local_process(local_process_idx):
         """
-        Run func on certain local process only
+        A decorator that will run the decorated function on a given local process index only.
         """
 
         def decorator(func):
