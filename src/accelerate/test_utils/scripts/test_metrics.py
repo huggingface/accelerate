@@ -62,23 +62,13 @@ def main():
     accelerator = Accelerator(split_batches=False, dispatch_batches=False)
     if accelerator.is_local_main_process:
         print("**Test torch metrics**")
-        print("With: `split_batches=False`, `dispatch_batches=False`")
-    test_torch_metrics(accelerator)
-    accelerator.state._reset_state()
-    accelerator = Accelerator(split_batches=True, dispatch_batches=False)
-    if accelerator.is_local_main_process:
-        print("With: `split_batches=True`, `dispatch_batches=False`")
-    test_torch_metrics(accelerator)
-    accelerator.state._reset_state()
-    accelerator = Accelerator(split_batches=False, dispatch_batches=True)
-    if accelerator.is_local_main_process:
-        print("With: `split_batches=False`, `dispatch_batches=True`")
-    test_torch_metrics(accelerator)
-    accelerator.state._reset_state()
-    accelerator = Accelerator(split_batches=True, dispatch_batches=True)
-    if accelerator.is_local_main_process:
-        print("With: `split_batches=True`, `dispatch_batches=True`")
-    test_torch_metrics(accelerator)
+    for split_batches in [True, False]:
+        for dispatch_batches in [True, False]:
+            accelerator = Accelerator(split_batches=split_batches, dispatch_batches=dispatch_batches)
+            if accelerator.is_local_main_process:
+                print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
+            test_torch_metrics(accelerator)
+            accelerator.state._reset_state()
 
 
 def _mp_fn(index):

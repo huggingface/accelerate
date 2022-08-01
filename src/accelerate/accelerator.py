@@ -956,9 +956,6 @@ class Accelerator:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors for calculating metrics across all processes.
         """
-        raise NotImplementedError(
-            "Currently there are a number of bugs with this method. You should use `Accelerator.gather()` and drop the samples yourself for the time being."
-        )
         tensor = self.gather(tensor)
         if self.use_distributed:
             if self.gradient_state.remainder == -1:

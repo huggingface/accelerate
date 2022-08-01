@@ -25,13 +25,11 @@ from accelerate.test_utils import (
     require_cpu,
     require_multi_gpu,
     require_single_gpu,
-    skip,
     test_metrics,
 )
 from accelerate.utils import get_launch_prefix, patch_environment
 
 
-@skip
 class MetricTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
