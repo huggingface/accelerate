@@ -17,7 +17,7 @@ where you should be careful and why, as well as the best practices in general.
 
 ## Training in a Notebook
 
-The main carepoint when training on TPUs comes from the [`notebook_launcher`]. As mentioned in the [notebook tutorial](https://huggingface.co/docs/accelerate/usage_guides/notebook), you need to 
+The main carepoint when training on TPUs comes from the [`notebook_launcher`]. As mentioned in the [notebook tutorial](../usage_guides/notebook), you need to 
 restructure your training code into a function that can get passed to the [`notebook_launcher`] function and be careful about not declaring any tensors on the GPU.
 
 While on a TPU that last part is not as important, a critical part to understand is that when you launch code from a notebook you do so through a process called **forking**. 
@@ -123,7 +123,7 @@ And finally calling the training function with:
 
 ## Mixed Precision and Global Variables 
 
-As mentioned in the [mixed precision tutorial](https://huggingface.co/docs/accelerate/usage_guides/mixed_precision), 🤗 Accelerate supports fp16 and bf16, both of which can be used on TPUs.
+As mentioned in the [mixed precision tutorial](../usage_guides/mixed_precision), 🤗 Accelerate supports fp16 and bf16, both of which can be used on TPUs.
 That being said, ideally `bf16` should be utilized as it is extremely efficient to use.
 
 There are two "layers" when using `bf16` and 🤗 Accelerate on TPUs, at the base level and at the operation level. 

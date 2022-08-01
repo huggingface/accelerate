@@ -16,7 +16,9 @@ This tutorial teaches you how to fine tune a computer vision model with 🤗 Acc
 You will also learn how to setup a few requirements needed for ensuring your environment is configured properly, your data has been prepared properly, and finally how to launch training.
 
 <Tip>
+
     This tutorial is also available as a Jupyter Notebook [here](https://github.com/huggingface/notebooks/blob/main/examples/accelerate_examples/simple_cv_example.ipynb)
+
 </Tip>
 
 ## Configuring the Environment
@@ -191,9 +193,11 @@ def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
 First you should set the seed and create an [`Accelerator`] object as early in the training loop as possible.
 
 <Tip warning={true}>
+
     If training on the TPU, your training loop should take in the model as a parameter and it should be instantiated 
-    outside of the training loop function. See the [TPU best practices](https://huggingface.co/docs/accelerate/concept_guides/training_tpu) 
+    outside of the training loop function. See the [TPU best practices](../concept_guides/training_tpu) 
     to learn why
+
 </Tip>
 
 Next you should build your dataloaders and create your model:
@@ -238,7 +242,7 @@ Next instantiate the rest of the PyTorch classes used for training:
     lr_scheduler = OneCycleLR(optimizer=optimizer, max_lr=3e-2, epochs=5, steps_per_epoch=len(train_dataloader))
 ```
 
-Before passing everything to [`Accelerator.prepare`].
+Before passing everything to [`~Accelerator.prepare`].
 
 <Tip>
     There is no specific order to remember, you just need to unpack the objects in the same order you gave them to the prepare method.
@@ -287,7 +291,7 @@ Next you have the rest of your standard PyTorch loop:
 Before finally the last major difference. 
 
 When performing distributed evaluation, the predictions and labels need to be passed through 
-[`Accelerator.gather`] so that all of the data is available on the current device and a properly calculated metric can be achieved:
+[`~Accelerator.gather`] so that all of the data is available on the current device and a properly calculated metric can be achieved:
 
 ```python
             accurate_preds = accelerator.gather(predictions) == accelerator.gather(batch["label"])
@@ -295,7 +299,7 @@ When performing distributed evaluation, the predictions and labels need to be pa
             accurate += accurate_preds.long().sum()
 ```
 
-Now you just need to calculate the actual metric for this problem, and you can print it on the main process using [`Accelerator.print`]:
+Now you just need to calculate the actual metric for this problem, and you can print it on the main process using [`~Accelerator.print`]:
 
 ```python
         eval_metric = accurate.item() / num_elems
@@ -375,7 +379,7 @@ def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
 
 All that's left is to use the [`notebook_launcher`].
 
-You pass in the function, the arguments (as a tuple), and the number of processes to train on. (See the [documentation](https://huggingface.co/docs/accelerate/launcher) for more information)
+You pass in the function, the arguments (as a tuple), and the number of processes to train on. (See the [documentation](../package_reference/launchers) for more information)
 
 ```python
 from accelerate import notebook_launcher

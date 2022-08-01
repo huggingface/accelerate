@@ -25,7 +25,7 @@ from torch.nn.parallel import DistributedDataParallel
 model = nn.Linear(10, 10)
 ddp_model = DistributedDataParallel(model)
 ```
-In 🤗 Accelerate this conversion happens automatically when calling [`Accelerator.prepare`] and passing in your model.
+In 🤗 Accelerate this conversion happens automatically when calling [`~Accelerator.prepare`] and passing in your model.
 
 ```diff
 + from accelerate import Accelerator
@@ -79,7 +79,7 @@ for index, batch in enumerate(dataloader):
 ```
 
 In 🤗 Accelerate to make this an API that can be called no matter the training device (though it may not do anything if you are not in a distributed system!),
-`ddp_model.no_sync` gets replaced with [`Accelerator.no_sync`] and operates the same way:
+`ddp_model.no_sync` gets replaced with [`~Accelerator.no_sync`] and operates the same way:
 
 ```diff
   ddp_model, dataloader = accelerator.prepare(model, dataloader)
@@ -101,7 +101,7 @@ In 🤗 Accelerate to make this an API that can be called no matter the training
           accelerator.backward(loss)
 ```
 
-As you may expect, the [`Accelerator.accumulate`] function wraps around this conditional check by keeping track of the current batch number, leaving you with the final
+As you may expect, the [`~Accelerator.accumulate`] function wraps around this conditional check by keeping track of the current batch number, leaving you with the final
 gradient accumulation API:
 
 ```python

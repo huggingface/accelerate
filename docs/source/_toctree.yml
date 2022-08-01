@@ -13,10 +13,10 @@
     title: Migrating to 🤗 Accelerate
   - local: basic_tutorials/launch
     title: Launching distributed code
+  - local: basic_tutorials/notebook
+    title: Launching distributed training from Jupyter Notebooks
   title: Tutorials
 - sections:
-  - local: usage_guides/notebook
-    title: Launching distributed training from Jupyter Notebooks
   - local: usage_guides/gradient_accumulation
     title: Performing gradient accumulation
   - local: usage_guides/fsdp

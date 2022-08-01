@@ -20,7 +20,7 @@ It serves at the main entrypoint for the API.
 To quickly adapt your script to work on any kind of setup with 🤗 Accelerate just:
 
 1. Initialize an [`Accelerator`] object (that we will call `accelerator` throughout this page) as early as possible in your script.
-2. Pass your dataloader(s), model(s), optimizer(s), and scheduler(s) to the [`Accelerator.prepare`] method.
+2. Pass your dataloader(s), model(s), optimizer(s), and scheduler(s) to the [`~Accelerator.prepare`] method.
 3. Remove all the `.cuda()` or `.to(device)` from your code and let the `accelerator` handle the device placement for you. 
 
 <Tip>
@@ -28,7 +28,7 @@ To quickly adapt your script to work on any kind of setup with 🤗 Accelerate j
 </Tip>
 
 4. Replace `loss.backward()` in your code with `accelerator.backward(loss)`
-5. Gather your predictions and labels before storing them or using them for metric computation using [`Accelerator.gather`]
+5. Gather your predictions and labels before storing them or using them for metric computation using [`~Accelerator.gather`]
 
 <Tip warning={true}>
     Step five is mandatory when using distributed evaluation
@@ -41,7 +41,7 @@ you should search for and replace by the corresponding methods of your `accelera
 
 ### Printing
 
-`print` statements should be replaced by [`Accelerator.print`] to be printed once per process
+`print` statements should be replaced by [`~Accelerator.print`] to be printed once per process
 
 ```diff
 - print("My thing I want to print!")
@@ -52,14 +52,14 @@ you should search for and replace by the corresponding methods of your `accelera
 
 #### Once on a single server
 
-For statements that should be executed once per server, use [`Accelerator.is_local_main_process`]:
+For statements that should be executed once per server, use [`~Accelerator.is_local_main_process`]:
 
 ```python
 if accelerator.is_local_main_process:
     do_thing_once_per_server()
 ```
 
-A function can be wrapped using the [`Accelerator.on_local_main_process`] function to achieve the same 
+A function can be wrapped using the [`~Accelerator.on_local_main_process`] function to achieve the same 
 behavior on a function's execution:
 
 ```python
@@ -71,14 +71,14 @@ def do_my_thing():
 
 #### Only ever once across all servers
 
-For statements that should only ever be executed once, use [`Accelerator.is_main_process`]:
+For statements that should only ever be executed once, use [`~Accelerator.is_main_process`]:
 
 ```python
 if accelerator.is_main_process:
     do_thing_once()
 ```
 
-A function can be wrapped using the [`Accelerator.on_main_process`] function to achieve the same 
+A function can be wrapped using the [`~Accelerator.on_main_process`] function to achieve the same 
 behavior on a function's execution:
 
 ```python
@@ -109,11 +109,11 @@ def do_my_thing():
 
 ### Synchronicity control
 
-Use [`Accelerator.wait_for_everyone`] to make sure all processes join that point before continuing. (Useful before a model save for instance)
+Use [`~Accelerator.wait_for_everyone`] to make sure all processes join that point before continuing. (Useful before a model save for instance)
 
 ### Saving and loading
 
-Use [`Accelerator.unwrap_model`] before saving to remove all special model wrappers added during the distributed process. 
+Use [`~Accelerator.unwrap_model`] before saving to remove all special model wrappers added during the distributed process. 
 
 ```python
 model = MyModel()
@@ -122,7 +122,7 @@ model = accelerator.prepare(model)
 model = accelerator.unwrap_model(model)
 ```
 
-Use [`Accelerator.save`] instead of `torch.save`:
+Use [`~Accelerator.save`] instead of `torch.save`:
 
 ```diff
   state_dict = model.state_dict()
@@ -132,11 +132,11 @@ Use [`Accelerator.save`] instead of `torch.save`:
 
 ### Operations
 
-Use [`Accelerator.clip_grad_norm_`] instead of ``torch.nn.utils.clip_grad_norm_`` and [`Accelerator.clip_grad_value_`] instead of ``torch.nn.utils.clip_grad_value``
+Use [`~Accelerator.clip_grad_norm_`] instead of ``torch.nn.utils.clip_grad_norm_`` and [`~Accelerator.clip_grad_value_`] instead of ``torch.nn.utils.clip_grad_value``
 
 ### Gradient Accumulation
 
-To perform gradient accumulation use [`Accelerator.accumulate`] and specify a gradient_accumulation_steps. 
+To perform gradient accumulation use [`~Accelerator.accumulate`] and specify a gradient_accumulation_steps. 
 This will also automatically ensure the gradients are synced or unsynced when on 
 multi-device training, check if the step should actually be performed, and auto-scale the loss:
 

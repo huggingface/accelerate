@@ -63,7 +63,7 @@ change the definition of `device` to come from [`Accelerator`]:
 
 ### Preparing your objects
 
-Next you need to pass all of the important objects related to training into [`Accelerator.prepare`]. 🤗 Accelerate will
+Next you need to pass all of the important objects related to training into [`~Accelerator.prepare`]. 🤗 Accelerate will
 make sure everything is setup in the current environment for you to start training:
 
 ```
@@ -81,7 +81,7 @@ Accelerate will only prepare objects that inherit from their respective PyTorch 
 ### Modifying the training loop
 
 Finally, three lines of code need to be changed in the training loop. 🤗 Accelerate's DataLoader classes will automatically handle the device placement by default,
-and [`Accelerator.backward`] should be used for performing the backward pass:
+and [`~Accelerator.backward`] should be used for performing the backward pass:
 
 ```diff
 -   inputs = inputs.to(device)

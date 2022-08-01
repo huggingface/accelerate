@@ -19,7 +19,7 @@ A few example cases for when to use this utility are listed below:
 
 <Tip>
 
-Some of these are utilized with the [`Accelerator.main_process_first`] context manager, which utilizes [`Accelerator.wait_for_everyone`] to 
+Some of these are utilized with the [`~Accelerator.main_process_first`] context manager, which utilizes [`~Accelerator.wait_for_everyone`] to 
 run a particular set of code on the main process beforehand before triggering and launching the other processes
 
 </Tip>
@@ -29,8 +29,10 @@ run a particular set of code on the main process beforehand before triggering an
 When downloading a dataset, you should download it first on the main process and then loading the cached dataset in afterwards
 
 <Tip>
+
     `load_dataset` will perform a lock under the hood to stop multiple downloads from happening at once, but if you are downloading something 
     not using this library you should use this method.
+    
 </Tip>
 
 ```python

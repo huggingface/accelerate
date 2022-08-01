@@ -215,7 +215,7 @@ accelerate launch --config_file path_to_config.yaml path_to_script.py --args_for
 You can also override any of the arguments determined by your config file. 
 To see the complete list of parameters that you can pass in, run `accelerate launch -h`. 
 
-Check out the [Launch tutorial](https://huggingface.co/docs/accelerate/basic_tutorials/launch) for more information about launching your scripts. 
+Check out the [Launch tutorial](basic_tutorials/launch) for more information about launching your scripts. 
 
 
 ## Launching training from a notebook
@@ -240,7 +240,7 @@ initialization should be done inside the launcher only.
 
 </Tip>
 
-Check out the [Notebook Launcher tutorial](https://huggingface.co/docs/accelerate/basic_tutorials/notebook) for more information about training on TPUs. 
+Check out the [Notebook Launcher tutorial](basic_tutorials/notebook) for more information about training on TPUs. 
 
 
 ## Training on TPU
@@ -282,7 +282,7 @@ passed your model to [`~Accelerator.prepare`]) will break the tying. You will ne
 after. You can find an example of this in the [run_clm_no_trainer](https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_clm.py) script in
 the Transformers repository.
 
-Check out the [TPU tutorial](https://huggingface.co/docs/accelerate/concept_guides/training_tpu) for more information about training on TPUs. 
+Check out the [TPU tutorial](concept_guides/training_tpu) for more information about training on TPUs. 
 
 
 ## Other caveats
@@ -370,18 +370,20 @@ Note that since all the model parameters are references to tensors, this will lo
 ## Saving/loading entire states
 
 When training your model, you may want to save the current state of the model, optimizer, random generators, and potentially LR schedulers to be restored in the _same script_.
-You can use `accelerator.save_state` and `accelerator.load_state` respectively to do so, just by simply passing in a save location. 
-If you have registered any other stateful items to be stored through `accelerator.register_for_checkpointing` they will also be saved and/or loaded.
+You can use [`~Accelerator.save_state`] and [`~Accelerator.load_state`] respectively to do so, just by simply passing in a save location. 
+If you have registered any other stateful items to be stored through [`~Accelerator.register_for_checkpointing`] they will also be saved and/or loaded.
 <Tip>
-    Every object passed to `register_for_checkpointing` must have a `load_state_dict` and `state_dict` function to be stored
+
+    Every object passed to [`~Accelerator.register_for_checkpointing`] must have a `load_state_dict` and `state_dict` function to be stored
+
 </Tip>
 
 
 ### Gradient clipping
 
 If you are using gradient clipping in your script, you should replace the calls to
-`torch.nn.utils.clip_grad_norm_` or `torch.nn.utils.clip_grad_value_` with `accelerator.clip_grad_norm_`
-and `accelerator.clip_grad_value_` respectively.
+`torch.nn.utils.clip_grad_norm_` or `torch.nn.utils.clip_grad_value_` with [`~Accelerator.clip_grad_norm_`]
+and [`~Accelerator.clip_grad_value_`] respectively.
 
 
 ### Mixed Precision training
@@ -448,7 +450,7 @@ Internally, the library works by first analyzing the environment in which the sc
 kind of distributed setup is used, how many different processes there are and which one the current script is in. All
 that information is stored in the [`~AcceleratorState`].
 
-This class is initialized the first time you instantiate a [`Accelerator`] as well as performing any
+This class is initialized the first time you instantiate an [`~Accelerator`] as well as performing any
 specific initialization your distributed setup needs. Its state is then uniquely shared through all instances of
 [`~state.AcceleratorState`].
 
@@ -495,4 +497,4 @@ The randomization part of your custom sampler, batch sampler or iterable dataset
 
 </Tip>
 
-For more details about the internals, see the [Internals page](internal).
+For more details about the internals, see the [Internals page](package_reference/torch_wrappers).
