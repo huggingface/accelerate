@@ -400,7 +400,7 @@ class DataLoaderDispatcher(DataLoader):
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
-    def __init__(self, dataset, split_batches: bool = False, **kwargs):
+    def __init__(self, dataset, split_batches: bool = False, _drop_last: bool = False, **kwargs):
         shuffle = False
         if is_torch_version(">=", "1.11.0"):
             from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
@@ -419,6 +419,13 @@ class DataLoaderDispatcher(DataLoader):
 
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
+        self._drop_last = _drop_last
+        try:
+            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+            self.gradient_state._set_remainder(length % self.total_batch_size)
+        except Exception:
+            # We can safely pass because the default is -1
+            pass
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
@@ -448,7 +455,7 @@ class DataLoaderDispatcher(DataLoader):
         self._stop_iteration = batch_info[1]
         if self._stop_iteration:
             # If drop_last is False and split_batches is False, we may have a remainder to take care of.
-            if not self.split_batches and not self.drop_last:
+            if not self.split_batches and not self._drop_last:
                 if self.state.process_index == 0 and len(batches) > 0:
                     batch = concatenate(batches, dim=0)
                     batch_info = [get_data_structure(batch), False]
@@ -474,8 +481,8 @@ class DataLoaderDispatcher(DataLoader):
             main_iterator = super().__iter__()
         self._stop_iteration = False
         first_batch = None
-        batch, batch_info, skip = self._fetch_batches(main_iterator)
-        while True:
+        while not self._stop_iteration:
+            batch, batch_info, skip = self._fetch_batches(main_iterator)
             if skip:
                 continue
             if self.state.process_index != 0:
@@ -485,34 +492,31 @@ class DataLoaderDispatcher(DataLoader):
             # Broadcast the batch before splitting it.
             batch = broadcast(batch, from_process=0)
 
-            if not self.drop_last and first_batch is None:
+            if not self._drop_last and first_batch is None:
                 # We keep at least num processes elements of the first batch to be able to complete the last batch
                 first_batch = slice_tensors(batch, slice(0, self.state.num_processes))
 
             observed_batch_size = find_batch_size(batch)
             batch_size = observed_batch_size // self.state.num_processes
 
-            if not self.drop_last and self._stop_iteration and observed_batch_size % self.state.num_processes != 0:
+            if not self._drop_last and self._stop_iteration and observed_batch_size % self.state.num_processes != 0:
                 # If the last batch is not complete, let's add the first batch to it.
                 batch = concatenate([batch, first_batch], dim=0)
+                # Batch size computation above is wrong, it's off by 1 so we fix it.
                 batch_size += 1
 
             data_slice = slice(self.state.process_index * batch_size, (self.state.process_index + 1) * batch_size)
-            next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
             batch = slice_tensors(batch, data_slice)
-            if not self._stop_iteration:
-                yield batch
-                batch, batch_info, skip = next_batch, next_batch_info, next_skip
-            else:
+
+            if self._stop_iteration:
                 self.gradient_state._set_end_of_dataloader(True)
-                yield batch
-                break
+            yield batch
 
     def __len__(self):
         whole_length = super().__len__()
         if self.split_batches:
             return whole_length
-        elif self.drop_last:
+        elif self._drop_last:
             return whole_length // self.state.num_processes
         else:
             return math.ceil(whole_length / self.state.num_processes)
@@ -675,6 +679,7 @@ def prepare_data_loader(
             new_dataset,
             split_batches=split_batches,
             batch_sampler=new_batch_sampler,
+            _drop_last=dataloader.drop_last,
             **kwargs,
         )
     else:
