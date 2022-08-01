@@ -1,38 +1,68 @@
-- sections: 
+- sections:
   - local: index
     title: 🤗 Accelerate
-  - local: quicktour
-    title: Quick tour
-  - local: installation
+  - local: basic_tutorials/install
     title: Installation
-  title: Get started
+  - local: quicktour
+    title: Quicktour
+  title: Getting started
 - sections:
-  - local: big_modeling
-    title: Handling big models
-  - local: gradient_accumulation
-    title: Gradient accumulation
-  - local: sagemaker
-    title: Amazon SageMaker
-  title: Guides
+  - local: basic_tutorials/overview
+    title: Overview
+  - local: basic_tutorials/migration
+    title: Migrating to 🤗 Accelerate
+  - local: basic_tutorials/launch
+    title: Launching distributed code
+  - local: basic_tutorials/notebook
+    title: Launching distributed training from Jupyter Notebooks
+  title: Tutorials
 - sections:
-  - local: accelerator
-    title: Accelerator
-  - local: launcher
-    title: Notebook Launcher
-  - local: kwargs
-    title: Kwargs Handlers
-  - local: checkpoint
-    title: Checkpointing
-  - local: internal
-    title: Internals
-  - local: tracking
-    title: Experiment Tracking
-  - local: fsdp
-    title: Fully Sharded Data Parallel
-  - local: memory
-    title: Memory Utilities
-  - local: deepspeed
-    title: DeepSpeed
-  - local: utilities
-    title: General Utilities
-  title: API Reference
+  - local: usage_guides/gradient_accumulation
+    title: Performing gradient accumulation
+  - local: usage_guides/fsdp
+    title: Fully Sharded Data Parallelism
+  - local: usage_guides/checkpoint
+    title: Saving and loading training states
+  - local: usage_guides/deepspeed
+    title: How to use DeepSpeed
+  - local: usage_guides/tracking
+    title: Using experiment trackers
+  - local: usage_guides/big_modeling
+    title: How to use large models with small resources
+  - local: usage_guides/memory
+    title: How to avoid CUDA Out-of-Memory
+  - local: usage_guides/sagemaker
+    title: Using Accelerate on SageMaker
+  title: How-To Guides
+- sections:
+  - local: concept_guides/gradient_synchronization
+    title: Gradient synchronization
+  - local: concept_guides/deferring_execution
+    title: Executing and deferring jobs
+  - local: concept_guides/training_tpu
+    title: TPU best practices
+  title: Concepts and fundamentals
+- sections: 
+  - local: package_reference/accelerator
+    title: Main Accelerator class
+  - local: package_reference/state
+    title: Stateful configuration classes
+  - local: package_reference/cli
+    title: The Command Line
+  - local: package_reference/torch_wrappers
+    title: Torch wrapper classes
+  - local: package_reference/tracking
+    title: Experiment trackers
+  - local: package_reference/launchers
+    title: Distributed launchers
+  - local: package_reference/deepspeed
+    title: DeepSpeed utilities
+  - local: package_reference/logging
+    title: Logging
+  - local: package_reference/big_modeling
+    title: Working with large models
+  - local: package_reference/kwargs
+    title: Kwargs handlers
+  - local: package_reference/utilities
+    title: Utility functions and classes
+  title: "Reference"

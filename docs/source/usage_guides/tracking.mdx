@@ -19,12 +19,9 @@ There are a large number of experiment tracking API's available, however getting
 
 Currently `Accelerate` supports three trackers out-of-the-box:
 
-
-[[autodoc]] tracking.TensorBoardTracker
-
-[[autodoc]] tracking.WandBTracker
-
-[[autodoc]] tracking.CometMLTracker
+- TensorBoard
+- WandB
+- CometML
 
 To use any of them, pass in the selected type(s) to the `log_with` parameter in [`Accelerate`]:
 ```python
@@ -107,6 +104,9 @@ import wandb
 
 
 class MyCustomTracker(GeneralTracker):
+    name = "wandb"
+    requires_logging_directory = False
+
     def __init__(self, run_name: str):
         self.run_name = run_name
         wandb.init(self.run_name)
@@ -137,27 +137,27 @@ accelerator = Accelerator(log_with=[tracker, "all"])
 
 If a library has an API that does not follow a strict `.log` with an overall dictionary such as Neptune.AI, logging can be done manually under an `if accelerator.is_main_process` statement:
 ```diff
-from accelerate import Accelerator
+  from accelerate import Accelerator
 + import neptune.new as neptune
 
-accelerator = Accelerator()
+  accelerator = Accelerator()
 + run = neptune.init(...)
 
-my_model, my_optimizer, my_training_dataloader = accelerate.prepare(my_model, my_optimizer, my_training_dataloader)
-device = accelerator.device
-my_model.to(device)
+  my_model, my_optimizer, my_training_dataloader = accelerate.prepare(my_model, my_optimizer, my_training_dataloader)
+  device = accelerator.device
+  my_model.to(device)
 
-for iteration in config["num_iterations"]:
-    for batch in my_training_dataloader:
-        my_optimizer.zero_grad()
-        inputs, targets = batch
-        inputs = inputs.to(device)
-        targets = targets.to(device)
-        outputs = my_model(inputs)
-        loss = my_loss_function(outputs, targets)
-        total_loss += loss
-        accelerator.backward(loss)
-        my_optimizer.step()
-+       if accelerator.is_main_process:
-+           run["logs/training/batch/loss"].log(loss)
+  for iteration in config["num_iterations"]:
+      for batch in my_training_dataloader:
+          my_optimizer.zero_grad()
+          inputs, targets = batch
+          inputs = inputs.to(device)
+          targets = targets.to(device)
+          outputs = my_model(inputs)
+          loss = my_loss_function(outputs, targets)
+          total_loss += loss
+          accelerator.backward(loss)
+          my_optimizer.step()
++         if accelerator.is_main_process:
++             run["logs/training/batch/loss"].log(loss)
 ```

@@ -54,7 +54,7 @@ accelerate config
 
 <Tip>
 
-🤗 Accelerate is not saving any of your credentials.
+    🤗 Accelerate is not saving any of your credentials.
 
 </Tip>
 
@@ -72,8 +72,8 @@ directory. After training, artifacts in this directory are uploaded to S3:
 
 <Tip warning={true}>
 
-SageMaker doesn’t support argparse actions. If you want to use, for example, boolean hyperparameters, you need to
-specify type as bool in your script and provide an explicit True or False value for this hyperparameter. [[REF]](https://sagemaker.readthedocs.io/en/stable/frameworks/pytorch/using_pytorch.html#prepare-a-pytorch-training-script).
+    SageMaker doesn’t support argparse actions. If you want to use, for example, boolean hyperparameters, you need to
+    specify type as bool in your script and provide an explicit True or False value for this hyperparameter. [[REF]](https://sagemaker.readthedocs.io/en/stable/frameworks/pytorch/using_pytorch.html#prepare-a-pytorch-training-script).
 
 </Tip>
 
@@ -92,7 +92,7 @@ arguments needed by your training script as named arguments.
 
 <Tip>
 
-If you run one of the example scripts, don't forget to add `accelerator.save('/opt/ml/model')` to it.
+    If you run one of the example scripts, don't forget to add `accelerator.save('/opt/ml/model')` to it.
 
 </Tip>
 
