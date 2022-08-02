@@ -154,7 +154,7 @@ def main():
         for dispatch_batches in [True, False]:
             accelerator = Accelerator(split_batches=split_batches, dispatch_batches=dispatch_batches)
             if accelerator.is_local_main_process:
-                print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
+                print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`, length=99")
             test_torch_metrics(accelerator, 99)
             accelerator.state._reset_state()
 
