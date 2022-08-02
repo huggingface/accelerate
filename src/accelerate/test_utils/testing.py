@@ -30,10 +30,12 @@ from ..state import AcceleratorState
 from ..utils import (
     gather,
     is_comet_ml_available,
+    is_datasets_available,
     is_deepspeed_available,
     is_tensorboard_available,
     is_torch_version,
     is_tpu_available,
+    is_transformers_available,
     is_wandb_available,
 )
 
@@ -82,6 +84,15 @@ def require_cuda(test_case):
     Decorator marking a test that requires CUDA. These tests are skipped when there are no GPU available.
     """
     return unittest.skipUnless(torch.cuda.is_available(), "test requires a GPU")(test_case)
+
+
+def require_huggingface_suite(test_case):
+    """
+    Decorator marking a test that requires transformers and datasets. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(
+        is_transformers_available() and is_datasets_available(), "test requires the Hugging Face suite"
+    )(test_case)
 
 
 def require_tpu(test_case):

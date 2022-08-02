@@ -25,6 +25,7 @@ from .imports import (
     is_boto3_available,
     is_ccl_available,
     is_comet_ml_available,
+    is_datasets_available,
     is_deepspeed_available,
     is_sagemaker_available,
     is_tensorboard_available,

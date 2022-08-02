@@ -470,11 +470,6 @@ class DataLoaderDispatcher(DataLoader):
 
     def __iter__(self):
         self.gradient_state._set_end_of_dataloader(False)
-        try:
-            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-            self.gradient_state._set_remainder(length % self.batch_size)
-        except:
-            self.gradient_state._set_remainder(-1)
         main_iterator = None
         if self.state.process_index == 0:
             # We only iterate through the DataLoader on process 0.
@@ -501,7 +496,16 @@ class DataLoaderDispatcher(DataLoader):
             observed_batch_size = find_batch_size(batch)
             batch_size = observed_batch_size // self.state.num_processes
 
-            if not self._drop_last and self._stop_iteration and observed_batch_size % self.state.num_processes != 0:
+            stop_iteration = self._stop_iteration
+            if not stop_iteration:
+                # We may still be at the end of the dataloader without knowing it yet: if there is nothing left in
+                # the dataloader since the number of batches is a round multiple of the number of processes.
+                next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+                # next_batch_info[0] is None when there are no more batches, otherwise we still need to process them.
+                if self._stop_iteration and next_batch_info[0] is None:
+                    stop_iteration = True
+
+            if not self._drop_last and stop_iteration and observed_batch_size % self.state.num_processes != 0:
                 # If the last batch is not complete, let's add the first batch to it.
                 batch = concatenate([batch, first_batch], dim=0)
                 # Batch size computation above is wrong, it's off by 1 so we fix it.
@@ -510,16 +514,8 @@ class DataLoaderDispatcher(DataLoader):
             data_slice = slice(self.state.process_index * batch_size, (self.state.process_index + 1) * batch_size)
             batch = slice_tensors(batch, data_slice)
 
-            stop_iteration = self._stop_iteration
-            if not stop_iteration:
-                # We may still be at the end of the dataloader without knowing it yet: if there is nothing left
-                # because by change the dataset had a round multiple of samples.
-                next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
-                # next_batch_info[0] is None when there are no more batches, otherwise we still need to process them.
-                if self._stop_iteration and next_batch_info[0] is None:
-                    stop_iteration = True
-
             if stop_iteration:
+                self.gradient_state._set_remainder(observed_batch_size)
                 self.gradient_state._set_end_of_dataloader(True)
             yield batch
 

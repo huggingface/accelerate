@@ -23,31 +23,36 @@ from accelerate import debug_launcher
 from accelerate.test_utils import (
     execute_subprocess_async,
     require_cpu,
+    require_huggingface_suite,
     require_multi_gpu,
     require_single_gpu,
-    skip,
-    test_metrics,
 )
 from accelerate.utils import get_launch_prefix, patch_environment
 
 
-@skip
+@require_huggingface_suite
 class MetricTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_metrics.py"])
+        self.test_file_path = os.path.sep.join(
+            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_metrics.py"]
+        )
+
+        from accelerate.test_utils.scripts.external_deps import test_metrics  # noqa: F401
+
+        self.test_metrics = test_metrics
 
     @require_cpu
     def test_metric_cpu_noop(self):
-        debug_launcher(test_metrics.main, num_processes=1)
+        debug_launcher(self.test_metrics.main, num_processes=1)
 
     @require_cpu
     def test_metric_cpu_multi(self):
-        debug_launcher(test_metrics.main)
+        debug_launcher(self.test_metrics.main)
 
     @require_single_gpu
     def test_metric_gpu(self):
-        test_metrics.main()
+        self.test_metrics.main()
 
     @require_multi_gpu
     def test_metric_gpu_multi(self):
