@@ -1081,6 +1081,7 @@ class Accelerator:
         for tracker in self.trackers:
             if tracker.name == name:
                 return tracker.tracker
+        raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
 
     @on_main_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
