@@ -44,7 +44,8 @@ and answer the questions asked, specifically choose `MPS` for the query:
  Which type of machine are you using?. 
  ```
 
-This will generate a config file that will be used automatically to properly set the default options when doing `accelerate launch`, such as the one shown below:
+This will generate a config file that will be used automatically to properly set 
+the default options when doing `accelerate launch`, such as the one shown below:
 
 ```bash
 compute_environment: LOCAL_MACHINE
@@ -62,7 +63,8 @@ num_processes: 1
 use_cpu: false
 ```
 
-After this configuration has been made, here is how you run the CV example (from the root of the repo) with MPS enabled:
+After this configuration has been made, here is how you run the CV example 
+(from the root of the repo) with MPS enabled:
 
 ```bash
 accelerate launch /examples/cv_example.py --data_dir images
