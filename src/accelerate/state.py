@@ -206,12 +206,14 @@ class AcceleratorState:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
-                if os.environ.get("USE_MPS_DEVICE", "false") == "true" and not cpu:
+                if parse_flag_from_env("USE_MPS_DEVICE") and not cpu:
                     if not torch.backends.mps.is_available():
                         if not torch.backends.mps.is_built():
                             raise AssertionError(
                                 "MPS not available because the current PyTorch install was not "
-                                "built with MPS enabled."
+                                "built with MPS enabled. Please install torch version >=1.12.0 on "
+                                "your Apple silicon Mac running macOS 12.3 or later with a native "
+                                "version (arm64) of Python"
                             )
                         else:
                             raise AssertionError(

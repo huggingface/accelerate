@@ -326,7 +326,7 @@ def simple_launcher(args):
 
     current_env = os.environ.copy()
     current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
-    current_env["USE_MPS_DEVICE"] = str(args.use_mps_device).lower()
+    current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
