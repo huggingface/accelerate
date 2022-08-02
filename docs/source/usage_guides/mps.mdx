@@ -11,22 +11,26 @@ specific language governing permissions and limitations under the License.
 -->
 
 # Accelerated PyTorch Training on Mac
+
 With PyTorch v1.12 release, developers and researchers can take advantage of Apple silicon GPUs for significantly faster model training. 
 This unlocks the ability to perform machine learning workflows like prototyping and fine-tuning locally, right on Mac.
 Apple's Metal Performance Shaders (MPS) as a backend for PyTorch enables this. 
 New device `mps` maps computational graphs and primitives on the MPS Graph framework and tuned kernels provided by MPS.
-For more information please refer Official documents [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
+For more information please refer official documents [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
 and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html).
 
 ### Benefits of Training and Inference using Apple M1 Chips
+
 1. Enables users to train larger networks or batch sizes locally
 2. Reduces data retrieval latency and provides the GPU with direct access to the full memory store due to unified memory architecture. 
 Therefore, improving end-to-end performance.
 3. Reduces costs associated with cloud-based development or the need for additional local GPUs.
 
 ### Pre-requisites: Installing torch with mps support
+
 Following this great medium article [GPU-Acceleration Comes to PyTorch on M1 Macs](https://medium.com/towards-data-science/gpu-acceleration-comes-to-pytorch-on-m1-macs-195c399efcc1),
-below are the steps to make sure torch is installed with `mps` support
+below are the steps to make sure torch is installed with `mps` support.
+
 ```
 # installing torch with m1 support on mac
 # install latest python from https://www.python.org/downloads/release/python-3106/
@@ -49,6 +53,7 @@ tensor([10.0000, 11.0000], device='mps:0')
 ```
 
 ## How it works out of the box
+
 On your machine(s) just run:
 
 ```bash
@@ -84,6 +89,7 @@ accelerate launch /examples/cv_example.py --data_dir images
 ```
 
 ## A few caveats to be aware of
+
 1. For `nlp_example.py` the metrics are too bad when compared to CPU-only training. 
 This means certain operations in BERT model are going wrong using mps device and this needs to be fixed by PyTorch.
 2. Distributed setups `gloo` and `nccl` are not working with `mps` device. 
