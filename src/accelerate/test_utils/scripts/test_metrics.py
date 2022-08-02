@@ -12,26 +12,67 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from copy import deepcopy
 
 import torch
 from torch.utils.data import DataLoader
 
+import datasets
+import evaluate
+import transformers
 from accelerate import Accelerator
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import set_seed
+from datasets import load_dataset
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 
-def get_setup(accelerator, num_samples=82):
+def get_basic_setup(accelerator, num_samples=82, drop_last=False):
     "Returns everything needed to perform basic training"
     set_seed(42)
     model = RegressionModel()
     ddp_model = deepcopy(model)
     dset = RegressionDataset(length=num_samples)
-    dataloader = DataLoader(dset, batch_size=16)
+    dataloader = DataLoader(dset, batch_size=16, drop_last=drop_last)
     model.to(accelerator.device)
     ddp_model, dataloader = accelerator.prepare(ddp_model, dataloader)
     return model, ddp_model, dataloader
+
+
+def get_dataloader(accelerator: Accelerator, drop_last=False, longest=True):
+    tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/mrpc-bert-base-cased")
+    dataset = load_dataset("glue", "mrpc", split="validation")
+
+    def tokenize_function(examples):
+        outputs = tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=None)
+        return outputs
+
+    with accelerator.main_process_first():
+        tokenized_datasets = dataset.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=["idx", "sentence1", "sentence2"],
+        )
+
+    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
+
+    def collate_fn(examples):
+        if not longest:
+            return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
+        return tokenizer.pad(examples, padding="longest", return_tensors="pt")
+
+    return DataLoader(tokenized_datasets, shuffle=False, collate_fn=collate_fn, batch_size=16, drop_last=drop_last)
+
+
+def get_mrpc_setup(dispatch_batches, split_batches, drop_last):
+    accelerator = Accelerator(dispatch_batches=dispatch_batches, split_batches=split_batches)
+    dataloader = get_dataloader(accelerator, drop_last)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        "hf-internal-testing/mrpc-bert-base-cased", return_dict=True
+    )
+    ddp_model, ddp_dataloader = accelerator.prepare(model, dataloader)
+    return {"ddp": [ddp_model, ddp_dataloader, "cuda:0"], "no": [model, dataloader, accelerator.device]}, accelerator
 
 
 def generate_predictions(model, dataloader, accelerator):
@@ -50,63 +91,21 @@ def generate_predictions(model, dataloader, accelerator):
     return inps, targs
 
 
-def test_torch_metrics(accelerator: Accelerator, num_samples=82):
-    model, ddp_model, dataloader = get_setup(accelerator, num_samples)
+def test_torch_metrics(accelerator: Accelerator, num_samples=82, dispatch_batches=False, split_batches=False):
+    drop_last = dispatch_batches or split_batches
+    model, ddp_model, dataloader = get_basic_setup(accelerator, num_samples)
     inps, targs = generate_predictions(ddp_model, dataloader, accelerator)
-    assert (
-        len(inps) == num_samples
-    ), f"Unexpected number of inputs:\n    Expected: {num_samples}\n    Actual: {len(inps)}"
-
-
-import math
-
-import torch
-from torch.utils.data import DataLoader
-
-import evaluate
-from accelerate import Accelerator
-from datasets import load_dataset
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-
-def get_dataloader(accelerator: Accelerator, drop_last=False):
-    tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/mrpc-bert-base-cased")
-    dataset = load_dataset("glue", "mrpc", split="validation")
-
-    def tokenize_function(examples):
-        outputs = tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=None)
-        return outputs
-
-    with accelerator.main_process_first():
-        tokenized_datasets = dataset.map(
-            tokenize_function,
-            batched=True,
-            remove_columns=["idx", "sentence1", "sentence2"],
-        )
-
-    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
-
-    def collate_fn(examples):
-        return tokenizer.pad(examples, padding="longest", return_tensors="pt")
-
-    return DataLoader(tokenized_datasets, shuffle=False, collate_fn=collate_fn, batch_size=16, drop_last=drop_last)
-
-
-def get_setup(dispatch_batches, split_batches, drop_last):
-    accelerator = Accelerator(dispatch_batches=dispatch_batches, split_batches=split_batches)
-    dataloader = get_dataloader(accelerator, drop_last)
-    model = AutoModelForSequenceClassification.from_pretrained("hf-internal-testing/mrpc-bert-base-cased", return_dict=True)
-    ddp_model, ddp_dataloader = accelerator.prepare(model, dataloader)
-    return {"ddp": [ddp_model, ddp_dataloader, "cuda:0"], "no": [model, dataloader, accelerator.device]}, accelerator
+    if not len(inps) == num_samples:
+        print(f"Unexpected number of inputs:\n    Expected: {num_samples}\n    Actual: {len(inps)}")
 
 
 def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
-    drop_last = False if not dispatch_batches else True
+    drop_last = dispatch_batches or split_batches
     metric = evaluate.load("glue", "mrpc")
-    setup, accelerator = get_setup(dispatch_batches, split_batches, drop_last)
+    setup, accelerator = get_mrpc_setup(dispatch_batches, split_batches, drop_last)
     # First do baseline
     if accelerator.is_local_main_process:
-        print("Running baseline")
+        print("--- Baseline ---")
     model, dataloader, device = setup["no"]
     if accelerator.is_local_main_process:
         print(f"Len dl: {len(dataloader)}\nLen dset: {len(dataloader.dataset)}\n")
@@ -122,7 +121,7 @@ def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
 
     # Then do distributed
     if accelerator.is_local_main_process:
-        print("Running with Gradient State")
+        print("--- gather_for_metrics ---")
     model, dataloader, device = setup["ddp"]
     model.eval()
     for batch in dataloader:
@@ -135,22 +134,27 @@ def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
     distributed = metric.compute()
 
     for key in "accuracy f1".split():
-        if not math.isclose(baseline[key], distributed[key]) and accelerator.is_local_main_process:
+        if not math.isclose(baseline[key], distributed[key]):
             print(
                 f"Baseline and Distributed are not the same for key {key}:\n\tBaseline: {baseline[key]}\n\tDistributed: {distributed[key]}\n"
             )
 
 
-
 def main():
     accelerator = Accelerator(split_batches=False, dispatch_batches=False)
+    if accelerator.is_local_main_process:
+        datasets.utils.logging.set_verbosity_warning()
+        transformers.utils.logging.set_verbosity_warning()
+    else:
+        datasets.utils.logging.set_verbosity_error()
+        transformers.utils.logging.set_verbosity_error()
     if accelerator.is_local_main_process:
         print("**Testing gather_for_metrics**")
     for split_batches in [True, False]:
         for dispatch_batches in [True, False]:
             if accelerator.is_local_main_process:
                 print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
-            test_mrpc(split_batches, dispatch_batches)
+            test_mrpc(dispatch_batches, split_batches)
             accelerator.state._reset_state()
     if accelerator.is_local_main_process:
         print("**Test torch metrics**")
@@ -159,7 +163,7 @@ def main():
             accelerator = Accelerator(split_batches=split_batches, dispatch_batches=dispatch_batches)
             if accelerator.is_local_main_process:
                 print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
-            test_torch_metrics(accelerator)
+            test_torch_metrics(accelerator, 99)
             accelerator.state._reset_state()
 
 
