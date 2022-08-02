@@ -86,7 +86,7 @@ accelerator.end_training()
 ## Implementing Custom Trackers
 
 To implement a new tracker to be used in `Accelerator`, a new one can be made through implementing the [`GeneralTracker`] class.
-Every tracker must implement three functions:
+Every tracker must implement three functions and have three properties:
   - `__init__`: 
     - Should store a `run_name` and initialize the tracker API of the integrated library. 
     - If a tracker stores their data locally (such as TensorBoard), a `logging_dir` parameter can be added.
@@ -94,6 +94,15 @@ Every tracker must implement three functions:
     - Should take in a `values` dictionary and store them as a one-time experiment configuration
   - `log`: 
     - Should take in a `values` dictionary and a `step`, and should log them to the run
+
+  - `name` (`str`):
+    - A unique string name for the tracker, such as `"wandb"` for the wandb tracker. 
+    - This will be used for interacting with this tracker specifically
+  - `requires_logging_directory` (`bool`):
+    - Whether a `logging_dir` is needed for this particular tracker and if it uses one.
+  - `tracker`: 
+    - This should be implemented as a `@property` function 
+    - Should return the internal tracking mechanism the library uses, such as the `run` object for `wandb`.
 
 A brief example can be seen below with an integration with Weights and Biases, containing only the relevent information:
 ```python
@@ -109,7 +118,11 @@ class MyCustomTracker(GeneralTracker):
 
     def __init__(self, run_name: str):
         self.run_name = run_name
-        wandb.init(self.run_name)
+        run = wandb.init(self.run_name)
+
+    @property
+    def tracker(self):
+        return self.run.run
 
     def store_init_configuration(self, values: dict):
         wandb.config(values)
