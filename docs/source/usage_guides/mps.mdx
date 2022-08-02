@@ -60,7 +60,12 @@ On your machine(s) just run:
 accelerate config
 ```
 
-and answer the questions asked, specifically choose `MPS` for the query `Which type of machine are you using?` . 
+and answer the questions asked, specifically choose `MPS` for the query:
+
+```
+ Which type of machine are you using?. 
+ ```
+
 This will generate a config file that will be used automatically to properly set the
 default options when doing
 
@@ -68,7 +73,7 @@ default options when doing
 accelerate launch my_script.py --args_to_my_script
 ```
 
-For instance, here is how you would run the CV example (from the root of the repo) with MPS enabled:
+For instance, here is how you would run the CV example (from the root of the repo) with MPS enabled with below config:
 ```bash
 compute_environment: LOCAL_MACHINE
 deepspeed_config: {}
