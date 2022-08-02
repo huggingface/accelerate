@@ -23,7 +23,7 @@ import evaluate
 import transformers
 from accelerate import Accelerator
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import set_seed
+from accelerate.utils import is_tpu_available, set_seed
 from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
@@ -140,14 +140,16 @@ def main():
     else:
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
-    if accelerator.is_local_main_process:
-        print("**Testing gather_for_metrics**")
-    for split_batches in [True, False]:
-        for dispatch_batches in [True, False]:
-            if accelerator.is_local_main_process:
-                print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
-            test_mrpc(dispatch_batches, split_batches)
-            accelerator.state._reset_state()
+    # These are a bit slower so they should only be ran on the GPU or TPU
+    if torch.cuda.is_available() or is_tpu_available():
+        if accelerator.is_local_main_process:
+            print("**Testing gather_for_metrics**")
+        for split_batches in [True, False]:
+            for dispatch_batches in [True, False]:
+                if accelerator.is_local_main_process:
+                    print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
+                test_mrpc(dispatch_batches, split_batches)
+                accelerator.state._reset_state()
     if accelerator.is_local_main_process:
         print("**Test torch metrics**")
     for split_batches in [True, False]:
