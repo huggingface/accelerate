@@ -133,6 +133,30 @@ tracker = MyCustomTracker("some_run_name")
 accelerator = Accelerator(log_with=[tracker, "all"])
 ```
 
+## Accessing the internal tracker 
+
+If some custom interactions with a tracker might be wanted directly, you can quickly access one using the 
+[`~Accelerator.get_tracker`] method. Just pass in the string corresponding to a tracker's `.name` attribute 
+and it will return that tracker on the main process.
+
+This example shows doing so with wandb:
+
+```python
+wandb_tracker = accelerator.get_tracker("wandb")
+```
+
+From there you can interact with `wandb`'s `run` object like normal:
+
+<Tip warning={true}>
+  Make sure to only interact with trackers on the main process!
+</Tip>
+
+
+```python
+if accelerator.is_main_process:
+    wandb_run.log_artifact(some_artifact_to_log)
+```
+
 ## When a wrapper cannot work
 
 If a library has an API that does not follow a strict `.log` with an overall dictionary such as Neptune.AI, logging can be done manually under an `if accelerator.is_main_process` statement:
