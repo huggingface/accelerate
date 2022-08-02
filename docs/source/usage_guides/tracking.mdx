@@ -33,7 +33,7 @@ accelerator = Accelerator(log_with="wandb")
 accelerator = Accelerator(log_with=["wandb", LoggerType.TENSORBOARD])
 ```
 
-At the start of your experiment [`~Accelerator.init_trackers`] should be used to setup your project, and potentially add any experiment hyperparameters to be logged:
+At the start of your experiment [`Accelerator.init_trackers`] should be used to setup your project, and potentially add any experiment hyperparameters to be logged:
 ```python
 hps = {"num_iterations": 5, "learning_rate": 1e-2}
 accelerator.init_trackers("my_project", config=hps)
