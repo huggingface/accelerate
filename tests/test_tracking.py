@@ -224,6 +224,10 @@ class MyCustomTracker(GeneralTracker):
         self.writer = csv.DictWriter(self.f, fieldnames=self._col_names)
         self.writer.writeheader()
 
+    @property
+    def tracker(self):
+        return self.writer
+
     def store_init_configuration(self, values: dict):
         logger.info("Call init")
         self.writer.writerow(values)

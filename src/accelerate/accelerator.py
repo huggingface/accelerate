@@ -1070,9 +1070,22 @@ class Accelerator:
                 tracker.store_init_configuration(config)
 
     @on_main_process
+    def get_tracker(self, name: str):
+        """
+        Returns a `tracker` from `self.trackers` based on `name` on the main process only.
+
+        Args:
+            name (`str`):
+                The name of a tracker, corresponding to the `.name` property.
+        """
+        for tracker in self.trackers:
+            if tracker.name == name:
+                return tracker.tracker
+
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
         """
-        Logs `values` to all stored trackers in `self.trackers`.
+        Logs `values` to all stored trackers in `self.trackers` on the main process only.
 
         Args:
             values (`dict`):
@@ -1092,7 +1105,7 @@ class Accelerator:
     @on_main_process
     def end_training(self):
         """
-        Runs any special end training behaviors, such as stopping trackers
+        Runs any special end training behaviors, such as stopping trackers on the main process only.
         """
         for tracker in self.trackers:
             tracker.finish()

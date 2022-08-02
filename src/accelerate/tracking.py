@@ -103,6 +103,13 @@ class GeneralTracker(object, metaclass=ABCMeta):
         """
         pass
 
+    @abstractproperty
+    def tracker(self):
+        """
+        Should return internal tracking mechanism used by a tracker class (such as the `run` for wandb)
+        """
+        pass
+
 
 class TensorBoardTracker(GeneralTracker):
     """
@@ -128,6 +135,10 @@ class TensorBoardTracker(GeneralTracker):
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
+
+    @property
+    def tracker(self):
+        return self.writer
 
     def store_init_configuration(self, values: dict):
         """
@@ -196,6 +207,10 @@ class WandBTracker(GeneralTracker):
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
 
+    @property
+    def tracker(self):
+        return self.run.run
+
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
@@ -255,6 +270,10 @@ class CometMLTracker(GeneralTracker):
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
+
+    @property
+    def tracker(self):
+        return self.writer
 
     def store_init_configuration(self, values: dict):
         """
