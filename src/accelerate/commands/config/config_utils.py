@@ -37,7 +37,7 @@ def _convert_compute_environment(value):
 
 def _convert_distributed_mode(value):
     value = int(value)
-    return DistributedType(["NO", "MULTI_CPU", "MULTI_GPU", "TPU"][value])
+    return DistributedType(["NO", "MULTI_CPU", "MULTI_GPU", "TPU", "MPS"][value])
 
 
 def _convert_sagemaker_distributed_mode(value):

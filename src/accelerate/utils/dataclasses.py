@@ -123,6 +123,7 @@ class DistributedType(str, enum.Enum):
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
     TPU = "TPU"
+    MPS = "MPS"
 
 
 class SageMakerDistributedType(str, enum.Enum):

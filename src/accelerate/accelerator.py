@@ -272,7 +272,7 @@ class Accelerator:
             self.native_amp = is_torch_version(">=", "1.6")
             if not self.native_amp:
                 raise ValueError(err.format(mode="fp16", requirement="PyTorch >= 1.6"))
-            if not torch.cuda.is_available():
+            if not torch.cuda.is_available() and os.environ.get("USE_MPS_DEVICE", "false") == "false":
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:

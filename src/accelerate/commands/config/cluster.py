@@ -28,9 +28,9 @@ from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no
 
 def get_cluster_input():
     distributed_type = _ask_field(
-        "Which type of machine are you using? ([0] No distributed training, [1] multi-CPU, [2] multi-GPU, [3] TPU): ",
+        "Which type of machine are you using? ([0] No distributed training, [1] multi-CPU, [2] multi-GPU, [3] TPU [4] MPS): ",
         _convert_distributed_mode,
-        error_message="Please enter 0, 1, 2 or 3.",
+        error_message="Please enter 0, 1, 2, 3 or 4.",
     )
 
     machine_rank = 0
