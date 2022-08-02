@@ -27,10 +27,10 @@ from accelerate.test_utils import (
     require_multi_gpu,
     require_single_gpu,
 )
-from accelerate.test_utils.scripts.external_deps import test_metrics
 from accelerate.utils import get_launch_prefix, patch_environment
 
 
+@require_huggingface_suite
 class MetricTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
@@ -38,23 +38,23 @@ class MetricTester(unittest.TestCase):
             mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_metrics.py"]
         )
 
-    @require_cpu
-    @require_huggingface_suite
-    def test_metric_cpu_noop(self):
-        debug_launcher(test_metrics.main, num_processes=1)
+        from accelerate.test_utils.scripts.external_deps import test_metrics  # noqa: F401
+
+        self.test_metrics = test_metrics
 
     @require_cpu
-    @require_huggingface_suite
+    def test_metric_cpu_noop(self):
+        debug_launcher(self.test_metrics.main, num_processes=1)
+
+    @require_cpu
     def test_metric_cpu_multi(self):
-        debug_launcher(test_metrics.main)
+        debug_launcher(self.test_metrics.main)
 
     @require_single_gpu
-    @require_huggingface_suite
     def test_metric_gpu(self):
-        test_metrics.main()
+        self.test_metrics.main()
 
     @require_multi_gpu
-    @require_huggingface_suite
     def test_metric_gpu_multi(self):
         print(f"Found {torch.cuda.device_count()} devices.")
         cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}", self.test_file_path]
