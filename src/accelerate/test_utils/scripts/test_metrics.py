@@ -40,7 +40,7 @@ def get_basic_setup(accelerator, num_samples=82, drop_last=False):
     return model, ddp_model, dataloader
 
 
-def get_dataloader(accelerator: Accelerator, drop_last=False, longest=True):
+def get_dataloader(accelerator: Accelerator, drop_last=False, use_longest=False):
     tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/mrpc-bert-base-cased")
     dataset = load_dataset("glue", "mrpc", split="validation")
 
@@ -58,16 +58,16 @@ def get_dataloader(accelerator: Accelerator, drop_last=False, longest=True):
     tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
 
     def collate_fn(examples):
-        if not longest:
-            return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
-        return tokenizer.pad(examples, padding="longest", return_tensors="pt")
+        if use_longest:
+            return tokenizer.pad(examples, padding="longest", return_tensors="pt")
+        return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
 
     return DataLoader(tokenized_datasets, shuffle=False, collate_fn=collate_fn, batch_size=16, drop_last=drop_last)
 
 
 def get_mrpc_setup(dispatch_batches, split_batches, drop_last):
     accelerator = Accelerator(dispatch_batches=dispatch_batches, split_batches=split_batches)
-    dataloader = get_dataloader(accelerator, drop_last)
+    dataloader = get_dataloader(accelerator, drop_last, not dispatch_batches)
     model = AutoModelForSequenceClassification.from_pretrained(
         "hf-internal-testing/mrpc-bert-base-cased", return_dict=True
     )
