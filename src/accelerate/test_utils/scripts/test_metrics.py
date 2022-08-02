@@ -28,13 +28,13 @@ from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 
-def get_basic_setup(accelerator, num_samples=82, drop_last=False):
+def get_basic_setup(accelerator, num_samples=82):
     "Returns everything needed to perform basic training"
     set_seed(42)
     model = RegressionModel()
     ddp_model = deepcopy(model)
     dset = RegressionDataset(length=num_samples)
-    dataloader = DataLoader(dset, batch_size=16, drop_last=drop_last)
+    dataloader = DataLoader(dset, batch_size=16)
     model.to(accelerator.device)
     ddp_model, dataloader = accelerator.prepare(ddp_model, dataloader)
     return model, ddp_model, dataloader
@@ -92,7 +92,6 @@ def generate_predictions(model, dataloader, accelerator):
 
 
 def test_torch_metrics(accelerator: Accelerator, num_samples=82, dispatch_batches=False, split_batches=False):
-    drop_last = dispatch_batches or split_batches
     model, ddp_model, dataloader = get_basic_setup(accelerator, num_samples)
     inps, targs = generate_predictions(ddp_model, dataloader, accelerator)
     if not len(inps) == num_samples:
