@@ -39,13 +39,13 @@ hps = {"num_iterations": 5, "learning_rate": 1e-2}
 accelerator.init_trackers("my_project", config=hps)
 ```
 
-When you are ready to log any data, [`~Accelerator.log`] should be used.
+When you are ready to log any data, [`Accelerator.log`] should be used.
 A `step` can also be passed in to correlate the data with a particular step in the training loop.
 ```python
 accelerator.log({"train_loss": 1.12, "valid_loss": 0.8}, step=1)
 ```
 
-Once you've finished training, make sure to run [`~Accelerator.end_training`] so that all the trackers can run their finish functionalities if they have any.
+Once you've finished training, make sure to run [`Accelerator.end_training`] so that all the trackers can run their finish functionalities if they have any.
 ```python
 accelerator.end_training()
 ```
@@ -85,7 +85,7 @@ accelerator.end_training()
 
 ## Implementing Custom Trackers
 
-To implement a new tracker to be used in `Accelerator`, a new one can be made through implementing the [`~GeneralTracker`] class.
+To implement a new tracker to be used in `Accelerator`, a new one can be made through implementing the [`GeneralTracker`] class.
 Every tracker must implement three functions:
   - `__init__`: 
     - Should store a `run_name` and initialize the tracker API of the integrated library. 
@@ -118,7 +118,7 @@ class MyCustomTracker(GeneralTracker):
         wandb.log(values, step=step)
 ```
 
-When you are ready to build your `Accelerator` object, pass in an **instance** of your tracker to [`~Accelerator.log_with`] to have it automatically
+When you are ready to build your `Accelerator` object, pass in an **instance** of your tracker to [`Accelerator.log_with`] to have it automatically
 be used with the API:
 
 ```python
@@ -136,7 +136,7 @@ accelerator = Accelerator(log_with=[tracker, "all"])
 ## Accessing the internal tracker 
 
 If some custom interactions with a tracker might be wanted directly, you can quickly access one using the 
-[`~Accelerator.get_tracker`] method. Just pass in the string corresponding to a tracker's `.name` attribute 
+[`Accelerator.get_tracker`] method. Just pass in the string corresponding to a tracker's `.name` attribute 
 and it will return that tracker on the main process.
 
 This example shows doing so with wandb:
