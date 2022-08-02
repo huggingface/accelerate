@@ -71,13 +71,15 @@ First the code shown earlier will be converted to utilize 🤗 Accelerate withou
 ```
 
 <Tip warning={true}>
-In its current state, this code is not going to perform gradient accumulation efficiently due to a process called gradient synchronization.
+
+  In its current state, this code is not going to perform gradient accumulation efficiently due to a process called gradient synchronization. Read more about that in the [Concepts tutorial](concept_guides/gradient_synchronization)!
+
 </Tip>
 
 ## Letting 🤗 Accelerate handle gradient accumulation
 
 All that is left now is to let 🤗 Accelerate handle the gradient accumulation for us. To do so you should pass in a `gradient_accumulation_steps` parameter to [`Accelerator`], dictating the number 
-of steps to perform before each call to `step()` and how to automatically adjust the loss during the call to [`Accelerator.backward`]:
+of steps to perform before each call to `step()` and how to automatically adjust the loss during the call to [`~Accelerator.backward`]:
 
 ```diff
   from accelerate import Accelerator
@@ -85,19 +87,19 @@ of steps to perform before each call to `step()` and how to automatically adjust
 + accelerator = Accelerator(gradient_accumulation_steps=2)
 ```
 
-From here you can use the [`Accelerator.accumulate`] context manager from inside your training loop to automatically perform the gradient accumulation for you!
-You just wrap it around the entire training part of your code: 
+From here you can use the [`~Accelerator.accumulate`] context manager from inside your training loop to automatically perform the gradient accumulation for you!
+You just wrap it around the entire training part of our code: 
 
 ```diff
 - for index, batch in enumerate(training_dataloader):
 + for batch in training_dataloader:
-+    with accelerator.accumulate(model):
++     with accelerator.accumulate(model):
           optimizer.zero_grad()
           inputs, targets = batch
           outputs = model(inputs)
 ```
 
-and you can remove all the special checks for the step number and the loss adjustment:
+You can remove all the special checks for the step number and the loss adjustment:
 
 ```diff
 - loss = loss / gradient_accumulation_steps

@@ -18,7 +18,7 @@ Let's have a look at the 🤗 Accelerate main features and traps to avoid.
 
 To use 🤗 Accelerate in your own script, you have to change four things:
 
-1. Import the [`Accelerator`] main class instantiate one in an `accelerator` object:
+1. Import the [`Accelerator`] main class and instantiate one in an `accelerator` object:
 
 ```python
 from accelerate import Accelerator
@@ -28,7 +28,7 @@ accelerator = Accelerator()
 
 This should happen as early as possible in your training script as it will initialize everything necessary for
 distributed training. You don't need to indicate the kind of environment you are in (just one machine with a GPU, one
-match with several GPUs, several machines with multiple GPUs or a TPU), the library will detect this automatically.
+machines with several GPUs, several machines with multiple GPUs or a TPU), the library will detect this automatically.
 
 2. Remove the call `.to(device)` or `.cuda()` for your model and input data. The `accelerator` object
 will handle this for you and place all those objects on the right device for you. If you know what you're doing, you
@@ -40,8 +40,8 @@ To fully deactivate the automatic device placement, pass along `device_placement
 
 <Tip warning={true}>
 
-If you place your objects manually on the proper device, be careful to create your optimizer after putting your
-model on `accelerator.device` or your training will fail on TPU.
+    If you place your objects manually on the proper device, be careful to create your optimizer after putting your
+    model on `accelerator.device` or your training will fail on TPU.
 
 </Tip>
 
@@ -61,9 +61,9 @@ use `shuffle=True` or any kind of random sampler).
 
 <Tip>
 
-The actual batch size for your training will be the number of devices used multiplied by the batch size you set in
-your script: for instance training on 4 GPUs with a batch size of 16 set when creating the training dataloader will
-train at an actual batch size of 64.
+    The actual batch size for your training will be the number of devices used multiplied by the batch size you set in
+    your script: for instance training on 4 GPUs with a batch size of 16 set when creating the training dataloader will
+    train at an actual batch size of 64.
 
 </Tip>
 
@@ -76,16 +76,16 @@ training loop.
 
 <Tip warning={true}>
 
-You should only pass the learning rate scheduler to [`~Accelerator.prepare`] when the scheduler needs to be stepped
-at each optimizer step.
+    You should only pass the learning rate scheduler to [`~Accelerator.prepare`] when the scheduler needs to be stepped
+    at each optimizer step.
 
 </Tip>
 
 <Tip warning={true}>
 
-Your training dataloader may change length when going through this method: if you run on X GPUs, it will have its
-length divided by X (since your actual batch size will be multiplied by X), unless you set
-`split_batches=True`.
+    Your training dataloader may change length when going through this method: if you run on X GPUs, it will have its
+    length divided by X (since your actual batch size will be multiplied by X), unless you set
+    `split_batches=True`.
 
 </Tip>
 
@@ -133,27 +133,32 @@ for inputs, targets in validation_dataloader:
 
 <Tip warning={true}>
 
-As for the training dataloader, passing your validation dataloader through
-[`~Accelerator.prepare`] may change it: if you run on X GPUs, it will have its length divided by X
-(since your actual batch size will be multiplied by X), unless you set `split_batches=True`.
-
-Any instruction using your training dataloader length (for instance if you need the number of total training steps
-to create a learning rate scheduler) should go after the call to [`~Accelerator.prepare`].
-
-As some data at the end of the dataset may be duplicated so the batch can divide equally to all workers, metrics should be 
-calculated through the [`~Accelerator.gather_for_metrics`] method to automatically remove the duplicated data.
-
-If for some reason you don't wish to have this automatically done, [`~Accelerator.gather`] can be used instead to gather 
-the data across all processes and this can manually be done instead.
+    Similar to the training dataloader, passing your validation dataloader through
+    [`~Accelerator.prepare`] may change it: if you run on X GPUs, it will have its length divided by X
+    (since your actual batch size will be multiplied by X), unless you set `split_batches=True`.
 
 </Tip>
 
+Any instruction using your training dataloader length (for instance if you need the number of total training steps
+to create a learning rate scheduler) should go after the call to [`~Accelerator.prepare`]. 
+
+Some data at the end of the dataset may be duplicated so the batch can be divided equally among all workers. As a result, metrics
+should be calculated through the [`~Accelerator.gather_for_metrics`] method to automatically remove the duplicated data while gathering.
+
+<Tip>
+
+    If for some reason you don't wish to have this automatically done, [`~Accelerator.gather`] can be used instead to gather 
+    the data across all processes and this can manually be done instead.
+
+</Tip>
+
+
 <Tip warning={true}>
 
-The [`~Accelerator.gather`] and [`~Accelerator.gather_for_metrics`] methods require the tensors to be all the same size on each process. If
-you have tensors of different sizes on each process (for instance when dynamically padding to the maximum length in
-a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad you tensor to the
-biggest size across processes.
+    The [`~Accelerator.gather`] and [`~Accelerator.gather_for_metrics`] methods require the tensors to be all the same size on each process. If
+    you have tensors of different sizes on each process (for instance when dynamically padding to the maximum length in
+    a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad you tensor to the
+    biggest size across processes.
 
 </Tip>
 
@@ -163,7 +168,7 @@ You can use the regular commands to launch your distributed training (like `torc
 PyTorch), they are fully compatible with 🤗 Accelerate. The only caveat here is that 🤗 Accelerate uses the environment
 to determine all useful information, so `torch.distributed.launch` should be used with the flag `--use_env`.
 
-🤗 Accelerate also provides a CLI tool that unifies all launcher, so you only have to remember one command. To use it,
+🤗 Accelerate also provides a CLI tool that unifies all launchers, so you only have to remember one command. To use it,
 just run:
 
 ```bash
@@ -207,7 +212,10 @@ If you stored the config file in a non-default location, you can indicate it to 
 accelerate launch --config_file path_to_config.yaml path_to_script.py --args_for_the_script
 ```
 
-You can also override any of the arguments determined by your config file, see TODO: insert ref here.
+You can also override any of the arguments determined by your config file. 
+To see the complete list of parameters that you can pass in, run `accelerate launch -h`. 
+
+Check out the [Launch tutorial](basic_tutorials/launch) for more information about launching your scripts. 
 
 
 ## Launching training from a notebook
@@ -227,10 +235,13 @@ notebook_launcher(training_function)
 
 <Tip warning={true}>
 
-Your `Accelerator` object should only be defined inside the training function. This is because the
-initialization should be done inside the launcher only.
+    Your [`Accelerator`] object should only be defined inside the training function. This is because the
+    initialization should be done inside the launcher only.
 
 </Tip>
+
+Check out the [Notebook Launcher tutorial](basic_tutorials/notebook) for more information about training on TPUs. 
+
 
 ## Training on TPU
 
@@ -242,7 +253,7 @@ optimizations takes some time.
 The good news is that this compilation will be cached so the second step and all the following will be much faster. The
 bad news is that it only applies if all of your steps do exactly the same operations, which implies:
 
-- having all tensors of the same length in all your lengths
+- having all tensors of the same length in all your batches
 - having static code (i.e., not a for loop of length that could change from step to step)
 
 Having any of the things above change between two steps will trigger a new compilation which will, once again, take a
@@ -270,6 +281,8 @@ of the embedding matrix with the weights of the decoder), moving this model to t
 passed your model to [`~Accelerator.prepare`]) will break the tying. You will need to retie the weights
 after. You can find an example of this in the [run_clm_no_trainer](https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_clm.py) script in
 the Transformers repository.
+
+Check out the [TPU tutorial](concept_guides/training_tpu) for more information about training on TPUs. 
 
 
 ## Other caveats
@@ -357,18 +370,21 @@ Note that since all the model parameters are references to tensors, this will lo
 ## Saving/loading entire states
 
 When training your model, you may want to save the current state of the model, optimizer, random generators, and potentially LR schedulers to be restored in the _same script_.
-You can use `accelerator.save_state` and `accelerator.load_state` respectively to do so, just by simply passing in a save location. 
-If you have registered any other stateful items to be stored through `accelerator.register_for_checkpointing` they will also be saved and/or loaded.
+You can use [`~Accelerator.save_state`] and [`~Accelerator.load_state`] respectively to do so, just by simply passing in a save location. 
+If you have registered any other stateful items to be stored through [`~Accelerator.register_for_checkpointing`] they will also be saved and/or loaded.
+
 <Tip>
-    Every object passed to `register_for_checkpointing` must have a `load_state_dict` and `save_dict` function to be stored
+
+    Every object passed to [`~Accelerator.register_for_checkpointing`] must have a `load_state_dict` and `state_dict` function to be stored
+
 </Tip>
 
 
 ### Gradient clipping
 
 If you are using gradient clipping in your script, you should replace the calls to
-`torch.nn.utils.clip_grad_norm_` or `torch.nn.utils.clip_grad_value_` with `accelerator.clip_grad_norm_`
-and `accelerator.clip_grad_value_` respectively.
+`torch.nn.utils.clip_grad_norm_` or `torch.nn.utils.clip_grad_value_` with [`~Accelerator.clip_grad_norm_`]
+and [`~Accelerator.clip_grad_value_`] respectively.
 
 
 ### Mixed Precision training
@@ -397,6 +413,26 @@ if not accelerator.optimizer_step_was_skipped:
     lr_scheduler.step()
 ```
 
+### Gradient Accumulation 
+
+To perform gradient accumulation use [`~Accelerator.accumulate`] and specify a `gradient_accumulation_steps`. 
+This will also automatically ensure the gradients are synced or unsynced when on multi-device training, check if the step should
+actually be performed, and auto-scale the loss:
+
+```python
+accelerator = Accelerator(gradient_accumulation_steps=2)
+model, optimizer, training_dataloader = accelerator.prepare(model, optimizer, training_dataloader)
+
+for input, label in training_dataloader:
+    with accelerator.accumulate(model):
+        predictions = model(input)
+        loss = loss_function(predictions, label)
+        accelerator.backward(loss)
+        optimizer.step()
+        scheduler.step()
+        optimizer.zero_grad()
+```
+
 ### DeepSpeed
 
 DeepSpeed support is experimental, so the underlying API will evolve in the near future and may have some slight
@@ -405,7 +441,7 @@ will be added in a next version.
 
 <Tip warning={true}>
 
-The [`notebook_launcher`] does not support the DeepSpeed integration yet.
+    The [`notebook_launcher`] does not support the DeepSpeed integration yet.
 
 </Tip>
 
@@ -415,7 +451,7 @@ Internally, the library works by first analyzing the environment in which the sc
 kind of distributed setup is used, how many different processes there are and which one the current script is in. All
 that information is stored in the [`~AcceleratorState`].
 
-This class is initialized the first time you instantiate a [`Accelerator`] as well as performing any
+This class is initialized the first time you instantiate an [`~Accelerator`] as well as performing any
 specific initialization your distributed setup needs. Its state is then uniquely shared through all instances of
 [`~state.AcceleratorState`].
 
@@ -448,18 +484,18 @@ setting the same seed in the main random number generator in all processes.
 
 <Tip warning={true}>
 
-Synchronization of the main torch (or CUDA or XLA) random number generator will affect any other potential random
-artifacts you could have in your dataset (like random data augmentation) in the sense that all processes will get
-the same random numbers from the torch random modules (so will apply the same random data augmentation if it's
-controlled by torch).
+    Synchronization of the main torch (or CUDA or XLA) random number generator will affect any other potential random
+    artifacts you could have in your dataset (like random data augmentation) in the sense that all processes will get
+    the same random numbers from the torch random modules (so will apply the same random data augmentation if it's
+    controlled by torch).
 
 </Tip>
 
 <Tip>
 
-The randomization part of your custom sampler, batch sampler or iterable dataset should be done using a local
-`torch.Generator` object (in PyTorch >= 1.6), see the traditional `RandomSampler`, as an example.
+    The randomization part of your custom sampler, batch sampler or iterable dataset should be done using a local
+    `torch.Generator` object (in PyTorch >= 1.6), see the traditional `RandomSampler`, as an example.
 
 </Tip>
 
-For more details about the internals, see the [Internals page](internal).
+For more details about the internals, see the [Internals page](package_reference/torch_wrappers).

@@ -44,8 +44,6 @@ These include data operations that mimic the same `torch` ops but can be used on
 
 These functionalities check the state of the current working environment including information about the operating system itself, what it can support, and if particular dependencies are installed. 
 
-[[autodoc]] utils.get_max_memory
-
 [[autodoc]] utils.is_bf16_available
 
 [[autodoc]] utils.is_torch_version
@@ -57,6 +55,12 @@ These functionalities check the state of the current working environment includi
 [[autodoc]] utils.write_basic_config
 
 When setting up 🤗 Accelerate for the first time, rather than running `accelerate config` [~utils.write_basic_config] can be used as an alternative for quick configuration.
+
+## Memory
+
+[[autodoc]] utils.get_max_memory
+
+[[autodoc]] utils.find_executable_batch_size
 
 ## Modeling
 

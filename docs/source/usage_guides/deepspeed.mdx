@@ -472,25 +472,11 @@ model, eval_dataloader = accelerator.prepare(model, eval_dataloader)
 
 1. Current integration doesn’t support Pipeline Parallelism of DeepSpeed.
 2. Current integration doesn’t support `mpu`, limiting the tensor parallelism which is supported in Megatron-LM. 
-3. Current integration doesn’t support multiple models for a given `accelerator` object. 
+3. Current integration doesn’t support multiple models. 
 
+## DeepSpeed Resources
 
-## Internals
-
-[[autodoc]] utils.DeepSpeedPlugin
-
-[[autodoc]] utils.DummyOptim
-
-[[autodoc]] utils.DummyScheduler
-
-[[autodoc]] utils.DeepSpeedEngineWrapper
-
-[[autodoc]] utils.DeepSpeedOptimizerWrapper
-
-[[autodoc]] utils.DeepSpeedSchedulerWrapper
-
-
-## Main DeepSpeed Resources
+The documentation for the internals related to deepspeed can be found [here](../package_reference/deepspeed).
 
 - [Project's github](https://github.com/microsoft/deepspeed)
 - [Usage docs](https://www.deepspeed.ai/getting-started/)

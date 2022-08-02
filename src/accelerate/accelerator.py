@@ -140,10 +140,20 @@ class Accelerator:
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
 
-    Attributes
+    **Attributes:**
 
         - **device** (`torch.device`) -- The device to use.
+        - **distributed_type** ([`~utils.DistributedType`]) -- The distributed training configuration.
+        - **local_process_index** (`int`) -- The process index on the current machine.
+        - **mixed_precision** (`str`) -- The configured mixed precision mode.
+        - **num_processes** (`int`) -- The total number of processes used for training.
+        - **optimizer_step_was_skipped** (`bool`) -- Whether or not the optimizer update was skipped (because of
+          gradient overflow in mixed precision), in which
+        case the learning rate should not be changed.
+        - **process_index** (`int`) -- The overall index of the current process among all processes.
         - **state** ([`~state.AcceleratorState`]) -- The distributed setup state.
+        - **sync_gradients** (`bool`) -- Whether the gradients are currently being synced across all processes.
+        - **use_distributed** (`bool`) -- Whether the current configuration is for distributed training.
     """
 
     def __init__(
@@ -308,6 +318,9 @@ class Accelerator:
 
     @property
     def use_distributed(self):
+        """
+        Whether the Accelerator is configured for distributed training
+        """
         return self.distributed_type != DistributedType.NO and self.num_processes > 1
 
     @property
@@ -399,7 +412,7 @@ class Accelerator:
 
     def on_local_process(local_process_idx):
         """
-        Run func on certain local process only
+        A decorator that will run the decorated function on a given local process index only.
         """
 
         def decorator(func):
@@ -1057,9 +1070,23 @@ class Accelerator:
                 tracker.store_init_configuration(config)
 
     @on_main_process
+    def get_tracker(self, name: str):
+        """
+        Returns a `tracker` from `self.trackers` based on `name` on the main process only.
+
+        Args:
+            name (`str`):
+                The name of a tracker, corresponding to the `.name` property.
+        """
+        for tracker in self.trackers:
+            if tracker.name == name:
+                return tracker.tracker
+        raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
+
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
         """
-        Logs `values` to all stored trackers in `self.trackers`.
+        Logs `values` to all stored trackers in `self.trackers` on the main process only.
 
         Args:
             values (`dict`):
@@ -1079,7 +1106,7 @@ class Accelerator:
     @on_main_process
     def end_training(self):
         """
-        Runs any special end training behaviors, such as stopping trackers
+        Runs any special end training behaviors, such as stopping trackers on the main process only.
         """
         for tracker in self.trackers:
             tracker.finish()
