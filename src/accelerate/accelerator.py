@@ -1032,7 +1032,13 @@ class Accelerator:
         """
         wait_for_everyone()
 
-    def init_trackers(self, project_name: str, config: Optional[dict] = None, init_kwargs: Optional[dict] = {}):
+    def init_trackers(
+        self,
+        project_name: str,
+        config: Optional[dict] = None,
+        init_kwargs: Optional[dict] = {},
+        config_kwargs: Optional[dict] = {},
+    ):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
 
@@ -1044,6 +1050,12 @@ class Accelerator:
             init_kwargs (`dict`, *optional*):
                 A nested dictionary of kwargs to be passed to a specific tracker's `__init__` function. Should be
                 formatted like this:
+                ```python
+                {"wandb": {"allow_val_change": True}}
+                ```
+            config_kwargs (`dict`, *optional*):
+                A nested dictionary of kwargs to be passed to a specific tracker's experiment configuration function
+                (if supported). Should be formatted like this:
                 ```python
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
@@ -1064,7 +1076,7 @@ class Accelerator:
                     self.trackers.append(tracker_init(project_name, **init_kwargs.get(str(tracker), {})))
         if config is not None:
             for tracker in self.trackers:
-                tracker.store_init_configuration(config)
+                tracker.store_init_configuration(config, **config_kwargs.get(str(tracker), {}))
 
     @on_main_process
     def get_tracker(self, name: str):

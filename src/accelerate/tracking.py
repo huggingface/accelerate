@@ -70,7 +70,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def store_init_configuration(self, values: dict):
+    def store_init_configuration(self, values: dict, **kwargs):
         """
         Logs `values` as hyperparameters for the run. Implementations should use the experiment configuration
         functionality of a tracking API.
@@ -140,7 +140,7 @@ class TensorBoardTracker(GeneralTracker):
     def tracker(self):
         return self.writer
 
-    def store_init_configuration(self, values: dict):
+    def store_init_configuration(self, values: dict, **kwargs):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
 
@@ -211,7 +211,7 @@ class WandBTracker(GeneralTracker):
     def tracker(self):
         return self.run.run
 
-    def store_init_configuration(self, values: dict):
+    def store_init_configuration(self, values: dict, **kwargs):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
 
@@ -219,8 +219,10 @@ class WandBTracker(GeneralTracker):
             values (Dictionary `str` to `bool`, `str`, `float` or `int`):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
+            kwargs:
+                Additional key word arguments passed along to the `wandb.config.update` method.
         """
-        wandb.config.update(values)
+        wandb.config.update(values, **kwargs)
         logger.info("Stored initial configuration hyperparameters to WandB")
 
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
@@ -275,7 +277,7 @@ class CometMLTracker(GeneralTracker):
     def tracker(self):
         return self.writer
 
-    def store_init_configuration(self, values: dict):
+    def store_init_configuration(self, values: dict, **kwargs):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
 
