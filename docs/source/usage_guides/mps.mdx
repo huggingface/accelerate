@@ -26,31 +26,9 @@ and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html).
 Therefore, improving end-to-end performance.
 3. Reduces costs associated with cloud-based development or the need for additional local GPUs.
 
-### Pre-requisites: Installing torch with mps support
+**Pre-requisites**: To install torch with mps support, 
+please follow this nice medium article [GPU-Acceleration Comes to PyTorch on M1 Macs](https://medium.com/towards-data-science/gpu-acceleration-comes-to-pytorch-on-m1-macs-195c399efcc1).
 
-Following this great medium article [GPU-Acceleration Comes to PyTorch on M1 Macs](https://medium.com/towards-data-science/gpu-acceleration-comes-to-pytorch-on-m1-macs-195c399efcc1),
-below are the steps to make sure torch is installed with `mps` support.
-
-```
-# installing torch with m1 support on mac
-# install latest python from https://www.python.org/downloads/release/python-3106/
-# check the platform
-import platform
-platform.platform()
-'macOS-12.5-arm64-arm-64bit' 
-# This is compatible as the macOS version is above 12.3 and it is the ARM64 native version of Python
-# install torch 1.12 via the below command
-# pip3 install torch torchvision torchaudio
-# test the `mps` device support
-import torch
-torch.has_mps
-True
-a = torch.Tensor([10,11])
-a.to("mps")
-/Users/mac/ml/lib/python3.10/site-packages/torch/_tensor_str.py:103: UserWarning: The operator 'aten::bitwise_and.Tensor_out' is not currently supported on the MPS backend and will fall back to run on the CPU. This may have performance implications. (Triggered internally at  /Users/runner/work/pytorch/pytorch/pytorch/aten/src/ATen/mps/MPSFallback.mm:11.)
-  nonzero_finite_vals = torch.masked_select(tensor_view, torch.isfinite(tensor_view) & tensor_view.ne(0))
-tensor([10.0000, 11.0000], device='mps:0')
-```
 
 ## How it works out of the box
 
