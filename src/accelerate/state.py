@@ -208,7 +208,7 @@ class AcceleratorState:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
-                if os.environ.get("USE_MPS_DEVICE", "false") == "true":
+                if os.environ.get("USE_MPS_DEVICE", "false") == "true" and not cpu:
                     if not torch.backends.mps.is_available():
                         if not torch.backends.mps.is_built():
                             raise AssertionError(
