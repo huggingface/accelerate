@@ -20,11 +20,18 @@ import torch
 
 import accelerate
 from accelerate import debug_launcher
-from accelerate.test_utils import execute_subprocess_async, require_cpu, require_multi_gpu, require_single_gpu
+from accelerate.test_utils import (
+    execute_subprocess_async,
+    require_cpu,
+    require_huggingface_suite,
+    require_multi_gpu,
+    require_single_gpu,
+)
 from accelerate.test_utils.scripts.external_deps import test_metrics
 from accelerate.utils import get_launch_prefix, patch_environment
 
 
+@require_huggingface_suite
 class MetricTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)

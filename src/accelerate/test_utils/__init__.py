@@ -7,6 +7,7 @@ from .testing import (
     execute_subprocess_async,
     require_cpu,
     require_cuda,
+    require_huggingface_suite,
     require_multi_gpu,
     require_single_gpu,
     require_tpu,
