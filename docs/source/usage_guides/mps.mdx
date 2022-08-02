@@ -14,7 +14,8 @@ specific language governing permissions and limitations under the License.
 
 With PyTorch v1.12 release, developers and researchers can take advantage of Apple silicon GPUs for significantly faster model training. 
 This unlocks the ability to perform machine learning workflows like prototyping and fine-tuning locally, right on Mac.
-Apple's Metal Performance Shaders (MPS) as a backend for PyTorch enables this and can be used via the new `"mps"` device. This will map computational graphs and primitives on the MPS Graph framework and tuned kernels provided by MPS.
+Apple's Metal Performance Shaders (MPS) as a backend for PyTorch enables this and can be used via the new `"mps"` device. 
+This will map computational graphs and primitives on the MPS Graph framework and tuned kernels provided by MPS.
 For more information please refer official documents [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
 and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html).
 
@@ -59,7 +60,8 @@ On your machine(s) just run:
 accelerate config
 ```
 
-and answer the questions asked. This will generate a config file that will be used automatically to properly set the
+and answer the questions asked, specifically choose `MPS` for the query `Which type of machine are you using?` . 
+This will generate a config file that will be used automatically to properly set the
 default options when doing
 
 ```bash
