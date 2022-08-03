@@ -383,7 +383,7 @@ class DeepSpeedPlugin:
     def set_mixed_precision(self, mixed_precision):
         ds_config = self.deepspeed_config
         if mixed_precision == "fp16" and "fp16" not in ds_config and "bf16" not in ds_config:
-            ds_config.update({"fp16": {"enabled": True}})
+            ds_config.update({"fp16": {"enabled": True, "auto_cast": True}})
         elif mixed_precision == "bf16" and "fp16" not in ds_config and "bf16" not in ds_config:
             ds_config.update({"bf16": {"enabled": True}})
 
