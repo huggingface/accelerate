@@ -182,7 +182,7 @@ class FSDPPluginIntegration(unittest.TestCase):
 class FSDPIntegrationTest(TempDirTestCase):
     def setUp(self):
         super().setUp()
-        self.performance_lower_bound = 0.83
+        self.performance_lower_bound = 0.82
         self.performance_configs = [
             "fsdp_shard_grad_op_transformer_based_wrap",
             "fsdp_full_shard_transformer_based_wrap",
@@ -197,7 +197,7 @@ class FSDPIntegrationTest(TempDirTestCase):
         self.n_val = 160
 
         mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts"])
+        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps"])
 
     def test_performance(self):
         self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
