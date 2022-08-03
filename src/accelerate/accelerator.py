@@ -29,7 +29,7 @@ from .data_loader import prepare_data_loader
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, GradientState
+from .state import AcceleratorState, GradientState, parse_flag_from_env
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
@@ -282,7 +282,7 @@ class Accelerator:
             self.native_amp = is_torch_version(">=", "1.6")
             if not self.native_amp:
                 raise ValueError(err.format(mode="fp16", requirement="PyTorch >= 1.6"))
-            if not torch.cuda.is_available():
+            if not torch.cuda.is_available() and not parse_flag_from_env("USE_MPS_DEVICE"):
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:

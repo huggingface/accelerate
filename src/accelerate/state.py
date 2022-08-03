@@ -206,7 +206,26 @@ class AcceleratorState:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
-                self.device = torch.device("cuda" if torch.cuda.is_available() and not cpu else "cpu")
+                if parse_flag_from_env("USE_MPS_DEVICE") and not cpu:
+                    if not torch.backends.mps.is_available():
+                        if not torch.backends.mps.is_built():
+                            raise AssertionError(
+                                "MPS not available because the current PyTorch install was not "
+                                "built with MPS enabled. Please install torch version >=1.12.0 on "
+                                "your Apple silicon Mac running macOS 12.3 or later with a native "
+                                "version (arm64) of Python"
+                            )
+                        else:
+                            raise AssertionError(
+                                "MPS not available because the current MacOS version is not 12.3+ "
+                                "and/or you do not have an MPS-enabled device on this machine."
+                            )
+                    else:
+                        self.device = torch.device("mps")
+                elif cpu or not torch.cuda.is_available():
+                    self.device = torch.device("cpu")
+                else:
+                    self.device = torch.device("cuda")
                 self.mixed_precision = mixed_precision
             self.initialized = True
 

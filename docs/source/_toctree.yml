@@ -33,6 +33,8 @@
     title: How to avoid CUDA Out-of-Memory
   - local: usage_guides/sagemaker
     title: Using Accelerate on SageMaker
+  - local: usage_guides/mps
+    title: How to use Apple Silicon M1 GPUs
   title: How-To Guides
 - sections:
   - local: concept_guides/gradient_synchronization

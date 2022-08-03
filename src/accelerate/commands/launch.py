@@ -64,6 +64,12 @@ def launch_command_parser(subparsers=None):
         help="Whether or not this should launch a distributed GPU training.",
     )
     parser.add_argument(
+        "--use_mps_device",
+        default=False,
+        action="store_true",
+        help="Whether or not this should use MPS-enabled GPU device on MacOS machines.",
+    )
+    parser.add_argument(
         "--use_deepspeed",
         default=False,
         action="store_true",
@@ -320,6 +326,7 @@ def simple_launcher(args):
 
     current_env = os.environ.copy()
     current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
+    current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
@@ -738,11 +745,18 @@ def launch_command(args):
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
-        if not args.multi_gpu and not args.tpu and not args.use_deepspeed and not args.use_fsdp:
+        if (
+            not args.multi_gpu
+            and not args.tpu
+            and not args.use_deepspeed
+            and not args.use_fsdp
+            and not args.use_mps_device
+        ):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
+            args.use_mps_device = defaults.distributed_type == DistributedType.MPS
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
