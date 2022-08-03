@@ -594,7 +594,9 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
     def test_basic_run(self):
         mod_file = inspect.getfile(accelerate.test_utils)
-        test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_performance.py"])
+        test_file_path = os.path.sep.join(
+            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_performance.py"]
+        )
         with tempfile.TemporaryDirectory() as dirpath:
             cmd = [
                 "accelerate",
@@ -634,7 +636,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
 
         self.stages = [1, 2, 3]
         self.zero3_offload_config = False
-        self.performance_lower_bound = 0.83
+        self.performance_lower_bound = 0.82
         self.peak_memory_usage_upper_bound = {
             "multi_gpu_fp16": 3200,
             "deepspeed_stage_1_fp16": 1600,
@@ -646,7 +648,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         self.n_val = 160
 
         mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts"])
+        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps"])
 
     def test_performance(self):
         self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
