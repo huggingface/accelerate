@@ -89,7 +89,7 @@ like:
 ProcessExitedException: process 0 terminated with signal SIGSEGV
 ```
 
-This error is *extremely* cryptic but the basic explaination is you ran out of system RAM. You can avoid this entirely by reconfiguring the training function to 
+This error is *extremely* cryptic but the basic explanation is you ran out of system RAM. You can avoid this entirely by reconfiguring the training function to 
 accept a single `model` argument, and declare it in an outside cell:
 
 ```python
@@ -137,7 +137,7 @@ accelerator = Accelerator(mixed_precision="bf16")
 By default this will cast `torch.float` and `torch.double` to `bfloat16` on TPUs. 
 The specific configuration being set is an environmental variable of `XLA_USE_BF16` is set to `1`.
 
-There is a futher configuration you can perform which is setting the `XLA_DOWNCAST_BF16` environmental variable. If set to `1`, then 
+There is a further configuration you can perform which is setting the `XLA_DOWNCAST_BF16` environmental variable. If set to `1`, then 
 `torch.float` is `bfloat16` and `torch.double` is `float32`.
 
 This is performed in the `Accelerator` object when passing `downcast_bf16=True`:
