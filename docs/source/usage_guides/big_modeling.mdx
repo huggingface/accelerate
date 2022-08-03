@@ -213,7 +213,7 @@ You can let 🤗 Accelerate handle the device map computation by setting `device
 
 </Tip>
 
-All the options will produce the same result when you don't have enough GPU memory to accomodate the whole model (which is to fit everything that can on the GPU, then offload weights on the CPU or even on the disk if there is not enough RAM). 
+All the options will produce the same result when you don't have enough GPU memory to accommodate the whole model (which is to fit everything that can on the GPU, then offload weights on the CPU or even on the disk if there is not enough RAM). 
 
 When you have more GPU memory available than the model size, here the difference between each option:
 - `"auto"` and `"balanced"` evenly split the model on all available GPUs, making it possible for you to use a batch size greater than 1.

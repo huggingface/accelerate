@@ -68,7 +68,7 @@ Inference:
 
 ## How it works?
 
-**Pre-Requisites**: Install DeepSpeed version >=0.6.5. Please refer to the [DeepSpeed Insallation details](https://github.com/microsoft/DeepSpeed#installation)
+**Pre-Requisites**: Install DeepSpeed version >=0.6.5. Please refer to the [DeepSpeed Installation details](https://github.com/microsoft/DeepSpeed#installation)
 for more information.
 
 We will first look at easy to use integration via `accelerate config`. 
@@ -383,13 +383,13 @@ We will look at the changes needed in the code when using these.
    ```
    b. Custom Optim + Custom Scheduler: The case when both `optimizer` and `scheduler` keys are absent in the DeepSpeed config file.
    In this situation, no code changes are needed from the user and this is the case when using integration via DeepSpeed Plugin.
-   In the above example we can see that the code reamins unchanged if the `optimizer` and `scheduler` keys are absent in the DeepSpeed config file.
+   In the above example we can see that the code remains unchanged if the `optimizer` and `scheduler` keys are absent in the DeepSpeed config file.
 
    c. Custom Optim + DS Scheduler: The case when only `scheduler` key is present in the DeepSpeed config file. 
    In this situation, user has to use `accelerate.utils.DummyScheduler` to replace the PyTorch/Custom scheduler in their code. 
 
    d. DS Optim + Custom Scheduler: The case when only `optimizer` key is present in the DeepSpeed config file. 
-   This will result in an error because one can only use DS Scheduler when using DS Optim.
+   This will result in an error because you can only use DS Scheduler when using DS Optim.
 
 2. Notice the `auto` values in the above example DeepSpeed config files. These are automatically handled by `prepare` method 
 based on model, dataloaders, dummy optimizer and dummy schedulers provided to `prepare` method. 
@@ -435,7 +435,7 @@ ZeRO Stage-3 has 2 options:
        logging.warning(f"Failure {status_msg}")
    ``` 
    This will create ZeRO model and optimizer partitions along with `zero_to_fp32.py` script in checkpoint directory.
-   One can use this script to do offline consolidation.  
+   You can use this script to do offline consolidation.  
    It requires no configuration files or GPUs. Here is an example of its usage:  
    ```bash
    $ cd /path/to/checkpoint_dir
@@ -444,14 +444,14 @@ ZeRO Stage-3 has 2 options:
    Detected checkpoint of type zero stage 3, world_size: 2
    Saving fp32 state dict to pytorch_model.bin (total_numel=60506624)
    ```
-   To get 32bit model for saving/inference, one can do the following:
+   To get 32bit model for saving/inference, you can perform:
    ```python
    from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
 
    unwrapped_model = accelerator.unwrap_model(model)
    fp32_model = load_state_dict_from_zero_checkpoint(unwrapped_model, checkpoint_dir)
    ```
-   If only interested in state_dict, one can do the following:
+   If you are only interested in the `state_dict`, you can do the following:
    ```python
    from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
 
@@ -462,7 +462,7 @@ ZeRO Stage-3 has 2 options:
 ## ZeRO Inference
 DeepSpeed ZeRO Inference supports ZeRO stage 3 with ZeRO-Infinity. 
 It uses the same ZeRO protocol as training, but it doesn't use an optimizer and a lr scheduler and only stage 3 is relevant.
-With accelerate integration, one has to just prepare model and dataloader as shown below:
+With accelerate integration, you just need to prepare the model and dataloader as shown below:
 
 ```python
 model, eval_dataloader = accelerator.prepare(model, eval_dataloader)
