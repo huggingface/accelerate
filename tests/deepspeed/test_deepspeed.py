@@ -35,6 +35,7 @@ from accelerate.test_utils.testing import (
     require_cuda,
     require_deepspeed,
     require_multi_gpu,
+    skip,
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset
@@ -642,7 +643,9 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             "deepspeed_stage_1_fp16": 1600,
             "deepspeed_stage_2_fp16": 2500,
             "deepspeed_stage_3_zero_init_fp16": 2800,
-            "deepspeed_stage_3_cpu_offload_fp16": 1900,
+            # Disabling below test as it overwhelms the RAM memory usage
+            # on CI self-hosted runner leading to tests getting killed.
+            # "deepspeed_stage_3_cpu_offload_fp16": 1900,
         }
         self.n_train = 160
         self.n_val = 160
@@ -694,6 +697,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
+    @skip
     def test_checkpointing(self):
         self.test_file_path = os.path.join(self.test_scripts_folder, "test_checkpointing.py")
         cmd = [
