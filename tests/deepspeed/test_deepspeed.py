@@ -35,6 +35,7 @@ from accelerate.test_utils.testing import (
     require_cuda,
     require_deepspeed,
     require_multi_gpu,
+    skip,
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset
@@ -696,6 +697,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
+    @skip
     def test_checkpointing(self):
         self.test_file_path = os.path.join(self.test_scripts_folder, "test_checkpointing.py")
         cmd = [
