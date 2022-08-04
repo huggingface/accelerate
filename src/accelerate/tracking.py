@@ -209,7 +209,7 @@ class WandBTracker(GeneralTracker):
 
     @property
     def tracker(self):
-        return self.run.run
+        return self.run
 
     def store_init_configuration(self, values: dict):
         """
