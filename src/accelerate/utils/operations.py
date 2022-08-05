@@ -118,7 +118,7 @@ def send_to_device(tensor, device):
     """
 
     def _send_to_device(t, device):
-        return t.to(device)
+        return t.to(device, non_blocking=True)
 
     def _has_to_method(t):
         return hasattr(t, "to")
