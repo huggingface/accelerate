@@ -103,7 +103,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
     return data
 
 
-def send_to_device(tensor, device):
+def send_to_device(tensor, device, non_blocking=True):
     """
     Recursively sends the elements in a nested list/tuple/dictionary of tensors to a given device.
 
@@ -117,13 +117,13 @@ def send_to_device(tensor, device):
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
 
-    def _send_to_device(t, device):
-        return t.to(device, non_blocking=True)
+    def _send_to_device(t, device, non_blocking):
+        return t.to(device, non_blocking=non_blocking)
 
     def _has_to_method(t):
         return hasattr(t, "to")
 
-    return recursively_apply(_send_to_device, tensor, device, test_type=_has_to_method)
+    return recursively_apply(_send_to_device, tensor, device, non_blocking, test_type=_has_to_method)
 
 
 def get_data_structure(data):
