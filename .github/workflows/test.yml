@@ -9,7 +9,7 @@ env:
 jobs:
   check-for-source:
     if: always()
-    uses: ./.github/actions/check_file_changes.yml@delegate-tests
+    uses: ./.github/workflows/check_file_changes.yml@delegate-tests
     with:
       FILE_TO_SEARCH: ".py"
       COMP: ~=
