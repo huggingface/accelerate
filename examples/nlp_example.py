@@ -142,7 +142,6 @@ def training_function(config, args):
     for epoch in range(num_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
-            batch["labels"][0] = 2
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
