@@ -27,6 +27,7 @@ from .imports import (
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_rich_available,
     is_sagemaker_available,
     is_tensorboard_available,
     is_tpu_available,
@@ -102,5 +103,4 @@ from .other import (
     write_basic_config,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
-from .rich import clean_traceback
 from .tqdm import tqdm
