@@ -57,11 +57,15 @@ jobs:
           git fetch && git checkout ${{ github.sha }}
           pip install -e . --no-deps
 
-      - name: Run test on GPUs
+      - name: Run core and big modeling tests on GPUs
         run: |
           source activate accelerate
           make test_big_modeling
           make test_core
+
+      - name: Run Integration tests on GPUs
+        run: |
+          source activate accelerate
           make test_integrations
 
       - name: Run examples on GPUs
