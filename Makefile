@@ -45,7 +45,7 @@ test_examples:
 
 # Broken down example tests for the CI runners
 test_integrations:
-	python -m pytest -s -v ./tests/deepspeed ./tests/fdsp
+	python -m pytest -s -v ./tests/deepspeed ./tests/fsdp
 test_example_differences:
 	python -m pytest -s -v ./tests/test_examples.py::ExampleDifferenceTests
 
