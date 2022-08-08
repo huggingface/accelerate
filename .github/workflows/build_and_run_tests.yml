@@ -12,7 +12,7 @@ env:
 jobs:
   check-for-setup:
     if: always()
-    uses: ./.github/actions/check_file_changes.yml
+    uses: ./.github/actions/check_file_changes.yml@delegate-tests
     with:
       FILE_TO_SEARCH: "setup.py"
       COMP: ==
@@ -20,10 +20,10 @@ jobs:
   build-docker-containers:
     needs: check-for-setup
     if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
-    uses: ./.github/actions/build_docker_images.yml
+    uses: ./.github/actions/build_docker_images.yml@delegate-tests
     secrets: inherit
 
   run-merge-tests:
     needs: build-docker-containers
     if: always()
-    uses: ./.github/actions/run_merge_tess.yml
+    uses: ./.github/actions/run_merge_tests.yml@delegate-tests
