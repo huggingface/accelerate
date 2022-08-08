@@ -25,7 +25,7 @@ jobs:
         id: was_changed
         run: |
           for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            if [ `basename "${file}"` == *".py"* ]; then
+            if [[ $file == *.py ]]; then
               echo ::set-output name=changed::"1"
             fi
           done
