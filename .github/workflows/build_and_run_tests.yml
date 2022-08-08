@@ -10,12 +10,28 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  check-for-setup:
-    if: always()
-    uses: ./.github/workflows/check_file_changes.yml
-    with:
-      FILE_TO_SEARCH: "setup.py"
-      COMP: ==
+  check-for-source:
+    runs-on: ubuntu-latest
+    name: Checks if source code or tests were changed
+    outputs:
+      changed: ${{ steps.was_changed.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v3
+        with: 
+          fetch-depth: "2"
+      
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v22.2
+      
+      - name: Was setup changed 
+        id: was_changed
+        run: |
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            if [ `basename "${file}"` == "setup.py" ]; then
+              echo ::set-output name=changed::"1"
+            fi
+          done
           
   build-docker-containers:
     needs: check-for-setup
