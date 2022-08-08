@@ -1,0 +1,29 @@
+name: Check for file changes
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  check-for-source:
+    runs-on: ubuntu-latest
+    name: Checks if source code or tests were changed
+    outputs:
+      changed: ${{ steps.was_changed.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v3
+        with: 
+          fetch-depth: "2"
+      
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v22.2
+      
+      - name: Was setup changed 
+        id: was_changed
+        run: |
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            if [ `basename "${file}"` ${COMP} "${FILE_TO_SEARCH}" ]; then
+              echo ::set-output name=changed::"1"
+            fi
+          done

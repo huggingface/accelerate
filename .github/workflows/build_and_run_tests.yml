@@ -1,0 +1,29 @@
+name: Trigger docker images and run tests
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  check-for-setup:
+    if: always()
+    uses: ./.github/actions/check_file_changes.yml
+    with:
+      FILE_TO_SEARCH: "setup.py"
+      COMP: ==
+          
+  build-docker-containers:
+    needs: check-for-setup
+    if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
+    uses: ./.github/actions/build_docker_images.yml
+    secrets: inherit
+
+  run-merge-tests:
+    needs: build-docker-containers
+    if: always()
+    uses: ./.github/actions/run_merge_tess.yml
