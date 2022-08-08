@@ -96,6 +96,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
 
 def training_function(config, args):
+    raise ValueError("We failed!")
     # Initialize accelerator
     accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs

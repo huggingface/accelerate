@@ -26,20 +26,6 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
-def _is_local_main_process():
-    if is_tpu_available():
-        return xm.get_local_ordinal() == 0
-    elif torch.distributed.is_initialized():
-        return (
-            get_int_from_env(
-                ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"], 0
-            )
-            == 0
-        )
-    else:
-        return True
-
-
 @contextmanager
 def clean_traceback(show_locals: bool = False):
     """
