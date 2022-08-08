@@ -21,11 +21,11 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@v22.2
       
-      - name: Was setup changed 
+      - name: Was source changed 
         id: was_changed
         run: |
           for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            if [ `basename "${file}"` ~= ".py" ]; then
+            if [ `basename "${file}"` == *".py"* ]; then
               echo ::set-output name=changed::"1"
             fi
           done
