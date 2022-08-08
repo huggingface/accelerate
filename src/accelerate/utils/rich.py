@@ -14,31 +14,18 @@
 
 from contextlib import contextmanager
 
-import torch
-
-from rich.console import Console
-
-from ..state import get_int_from_env
-from .imports import is_tpu_available
-
-
-if is_tpu_available(check_device=False):
-    import torch_xla.core.xla_model as xm
+from rich import get_console
 
 
 @contextmanager
-def clean_traceback(show_locals: bool = False):
+def clean_traceback(verbose=False, is_main_process=True):
     """
-    A context manager that uses `rich` to provide a clean traceback when dealing with multiprocessed logs.
-
-    Args:
-        show_locals (`bool`, *optional*, defaults to False):
-            Whether to show local objects as part of the final traceback
+    A context manager that uses `rich` to provide a clean traceback when dealing with multiprocessed logs
     """
 
-    console = Console()
+    console = get_console()
     try:
         yield
     except:
-        if _is_local_main_process():
-            console.print_exception(suppress=[__file__], show_locals=show_locals)
+        if is_main_process:
+            console.print_exception(suppress=[__file__], show_locals=verbose)

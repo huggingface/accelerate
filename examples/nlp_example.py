@@ -20,7 +20,6 @@ from torch.utils.data import DataLoader
 
 import evaluate
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import clean_traceback
 from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
@@ -96,7 +95,6 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
 
 def training_function(config, args):
-    raise ValueError("We failed!")
     # Initialize accelerator
     accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
@@ -144,6 +142,7 @@ def training_function(config, args):
     for epoch in range(num_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
+            batch["labels"][0] = 2
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
@@ -191,5 +190,4 @@ def main():
 
 
 if __name__ == "__main__":
-    with clean_traceback():
-        main()
+    main()

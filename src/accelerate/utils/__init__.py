@@ -102,6 +102,5 @@ from .other import (
     write_basic_config,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
-from .tqdm import tqdm
-
 from .rich import clean_traceback
+from .tqdm import tqdm

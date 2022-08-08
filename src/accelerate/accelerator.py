@@ -426,6 +426,12 @@ class Accelerator:
 
         return decorator
 
+    @contextmanager
+    def clean_traceback(self, verbose=False):
+        "Context manager that raises a clean traceback with `rich` in your script"
+        with clean_traceback(verbose, self.is_main_process):
+            yield
+
     def _goes_first(self, is_main):
         if not is_main:
             self.wait_for_everyone()
