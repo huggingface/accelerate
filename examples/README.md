@@ -136,7 +136,7 @@ To run it in each of these various modes, use the following commands:
         ```
 - single GPU:
     ```bash
-    python ./nlp_example.py  # from a server with a GPU
+    python ./cv_example.py  # from a server with a GPU
     ```
 - with fp16 (mixed-precision)
     * from any server by passing `fp16=True` to the `Accelerator`.
