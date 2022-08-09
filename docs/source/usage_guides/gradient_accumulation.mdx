@@ -31,7 +31,6 @@ model.to(device)
 gradient_accumulation_steps = 2
 
 for index, batch in enumerate(training_dataloader):
-    optimizer.zero_grad()
     inputs, targets = batch
     inputs = inputs.to(device)
     targets = targets.to(device)
@@ -42,6 +41,7 @@ for index, batch in enumerate(training_dataloader):
     if (index + 1) % gradient_accumulation_steps == 0:
         optimizer.step()
         scheduler.step()
+        optimizer.zero_grad()
 ```
 
 ## Converting it to 🤗 Accelerate
@@ -57,7 +57,6 @@ First the code shown earlier will be converted to utilize 🤗 Accelerate withou
 + )
 
   for index, batch in enumerate(training_dataloader):
-      optimizer.zero_grad()
       inputs, targets = batch
 -     inputs = inputs.to(device)
 -     targets = targets.to(device)
@@ -68,6 +67,7 @@ First the code shown earlier will be converted to utilize 🤗 Accelerate withou
       if (index+1) % gradient_accumulation_steps == 0:
           optimizer.step()
           scheduler.step()
+          optimizer.zero_grad()
 ```
 
 <Tip warning={true}>
@@ -94,7 +94,6 @@ You just wrap it around the entire training part of our code:
 - for index, batch in enumerate(training_dataloader):
 + for batch in training_dataloader:
 +     with accelerator.accumulate(model):
-          optimizer.zero_grad()
           inputs, targets = batch
           outputs = model(inputs)
 ```
@@ -107,6 +106,7 @@ You can remove all the special checks for the step number and the loss adjustmen
 - if (index+1) % gradient_accumulation_steps == 0:
   optimizer.step()
   scheduler.step()
+  optimizer.zero_grad()
 ```
 
 As you can see the [`Accelerator`] is able to keep track of the batch number you are on and it will automatically know whether to step through the prepared optimizer and how to adjust the loss. 
@@ -118,11 +118,11 @@ Below is the finished implementation for performing gradient accumulation with �
 ```python
 for batch in training_dataloader:
     with accelerator.accumulate(model):
-        optimizer.zero_grad()
         inputs, targets = batch
         outputs = model(inputs)
         loss = loss_function(outputs, targets)
         accelerator.backward(loss)
         optimizer.step()
         scheduler.step()
+        optimizer.zero_grad()
 ```
