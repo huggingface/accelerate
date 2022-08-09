@@ -47,11 +47,14 @@ from accelerate.utils import (
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
 
+from rich.logging import RichHandler
 
 if is_torch_version(">=", "1.9.0"):
     import torch.distributed.run as distrib_run
 
-
+FORMAT = "%(message)s"
+logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
+  
 logger = logging.getLogger(__name__)
 
 
@@ -301,7 +304,12 @@ def launch_command_parser(subparsers=None):
         "--aws_secret_access_key",
         type=str,
         default=None,
-        help="The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job",
+        help="The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job.",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Whether to print out the torch.distributed stack trace when something fails."
     )
     parser.add_argument(
         "training_script",
@@ -372,6 +380,7 @@ def multi_gpu_launcher(args):
         setattr(args, "master_port", str(args.main_process_port))
     else:
         setattr(args, "nproc_per_node", str(num_processes))
+        setattr(args, "nproc_per_node", str(args.num_processes))
         if args.main_process_port is not None:
             setattr(args, "master_port", str(args.main_process_port))
 
@@ -441,9 +450,18 @@ def multi_gpu_launcher(args):
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_torch_version(">=", "1.9.0"):
+        debug = getattr(args, "debug", False)
         distrib_args = _filter_args(args)
         with patch_environment(**current_env):
-            distrib_run.run(distrib_args)
+            from rich import get_console
+            console = get_console()
+
+            try:
+                distrib_run.run(distrib_args)
+            except:
+                if debug:
+                    console.print(f'\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]')
+                    console.print_exception(suppress=[__file__], show_locals=False)
     else:
         # We still have to use subprocess, the user won't get a clean traceback as a result
         cmd = get_launch_prefix()
@@ -459,7 +477,7 @@ def multi_gpu_launcher(args):
         process.wait()
         if process.returncode != 0:
             raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
-
+    
 
 def deepspeed_launcher(args):
     if not is_deepspeed_available():

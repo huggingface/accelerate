@@ -23,6 +23,7 @@ from accelerate import Accelerator, DistributedType
 from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
+from accelerate.utils import rich
 
 ########################################################################
 # This is a fully working simple example to use Accelerate
@@ -97,6 +98,8 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 def training_function(config, args):
     # Initialize accelerator
     accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    if accelerator.process_index == 1:
+        raise ValueError()
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
@@ -169,7 +172,6 @@ def training_function(config, args):
         eval_metric = metric.compute()
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")

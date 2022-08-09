@@ -12,20 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from contextlib import contextmanager
+# from contextlib import contextmanager
 
-from rich import get_console
+# from rich import get_console
 
-
-@contextmanager
-def clean_traceback(verbose=False, is_main_process=True):
-    """
-    A context manager that uses `rich` to provide a clean traceback when dealing with multiprocessed logs
-    """
-
-    console = get_console()
-    try:
-        yield
-    except:
-        if is_main_process:
-            console.print_exception(suppress=[__file__], show_locals=verbose)
+from rich.traceback import install
+install(show_locals=False)
