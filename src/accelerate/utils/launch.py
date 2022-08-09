@@ -16,6 +16,7 @@ import os
 import sys
 
 import torch
+import torch.distributed.run as distrib_run
 
 from ..utils import is_torch_version
 from .dataclasses import DistributedType
@@ -33,6 +34,21 @@ def get_launch_prefix():
     else:
         cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
     return cmd
+
+
+def _filter_args(args):
+    """
+    Filters out all `accelerate` specific args
+    """
+    distrib_args = distrib_run.get_args_parser()
+    known_args, _ = distrib_args.parse_known_args()
+    for arg in list(vars(args).keys()):
+        if arg not in vars(known_args).keys():
+            delattr(args, arg)
+    distrib_args = distrib_run.parse_args(vars(args))
+    for key, value in vars(args).items():
+        setattr(distrib_args, key, value)
+    return distrib_args
 
 
 class PrepareForLaunch:
