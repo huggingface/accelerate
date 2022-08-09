@@ -186,7 +186,7 @@ To run it in each of these various modes, use the following commands:
 
 ### Simple vision example (GANs)
 
-- Please see: https://github.com/huggingface/community-events/tree/main/huggan
+- [huggan project](https://github.com/huggingface/community-events/tree/main/huggan)
     
 ## Finer Examples
 
