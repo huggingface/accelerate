@@ -460,11 +460,6 @@ def multi_gpu_launcher(args):
         process.wait()
         if process.returncode != 0:
             raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
-=======
-    distrib_args = _filter_args(args)
-    with patch_environment(**current_env):
-        distrib_run.run(distrib_args)
->>>>>>> 771bdbe (Remove one of the subprocesses!)
 
 
 def deepspeed_launcher(args):
