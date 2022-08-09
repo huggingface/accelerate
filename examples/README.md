@@ -184,6 +184,10 @@ To run it in each of these various modes, use the following commands:
     * In PyTorch:
         Add an `xmp.spawn` line in your script as you usually do.
 
+### Simple vision example (GANs)
+
+    * Please see: https://github.com/huggingface/community-events/tree/main/huggan
+    
 ## Finer Examples
 
 While the first two scripts are extremely barebones when it comes to what you can do with accelerate, more advanced features are documented in two other locations.
