@@ -48,6 +48,8 @@ def _filter_args(args):
     distrib_args = distrib_run.parse_args(vars(args))
     for key, value in vars(args).items():
         setattr(distrib_args, key, value)
+    if is_torch_version("<", "1.9.0"):
+        setattr(distrib_args, "use_env", True)
     return distrib_args
 
 

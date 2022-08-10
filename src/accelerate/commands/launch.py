@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Dict, List
 
 import torch
-import torch.distributed.run as distrib_run
 
 import psutil
 from accelerate.commands.config import default_config_file, load_config_from_file
@@ -41,10 +40,17 @@ from accelerate.utils import (
     get_launch_prefix,
     is_deepspeed_available,
     is_sagemaker_available,
+    is_torch_version,
     patch_environment,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
+
+
+if is_torch_version(">=", "1.9.0"):
+    import torch.distributed.run as distrib_run
+else:
+    import torch.distributed.launch as distrib_run
 
 
 logger = logging.getLogger(__name__)
@@ -362,13 +368,13 @@ def multi_gpu_launcher(args):
     if num_machines > 1:
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
-        setattr(args, "machine_rank", str(args.pop("machine_rank")))
-        setattr(args, "master_addr", str(args.pop("main_process_ip")))
-        setattr(args, "master_port", str(args.pop("main_process_port")))
+        setattr(args, "machine_rank", str(args.machine_rank))
+        setattr(args, "master_addr", str(args.main_process_ip))
+        setattr(args, "master_port", str(args.main_process_port))
     else:
         setattr(args, "nproc_per_node", str(num_processes))
         if args.main_process_port is not None:
-            setattr(args, "master_port", str(args.pop("main_process_port")))
+            setattr(args, "master_port", str(args.main_process_port))
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
