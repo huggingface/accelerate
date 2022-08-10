@@ -380,7 +380,6 @@ def multi_gpu_launcher(args):
         setattr(args, "master_port", str(args.main_process_port))
     else:
         setattr(args, "nproc_per_node", str(num_processes))
-        setattr(args, "nproc_per_node", str(args.num_processes))
         if args.main_process_port is not None:
             setattr(args, "master_port", str(args.main_process_port))
 
