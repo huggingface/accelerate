@@ -32,17 +32,24 @@ from accelerate.commands.config import default_config_file, load_config_from_fil
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.state import get_int_from_env
 from accelerate.utils import (
+    TORCH_LAUNCH_PARAMS,
     ComputeEnvironment,
     DistributedType,
     PrecisionType,
     PrepareForLaunch,
+    _filter_args,
     get_launch_prefix,
     is_deepspeed_available,
     is_sagemaker_available,
+    is_torch_version,
     patch_environment,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
+
+
+if is_torch_version(">=", "1.9.0"):
+    import torch.distributed.run as distrib_run
 
 
 logger = logging.getLogger(__name__)
@@ -355,43 +362,32 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
-    cmd = get_launch_prefix()
-    if args.num_machines > 1:
-        cmd.extend(
-            [
-                "--nproc_per_node",
-                str(args.num_processes // args.num_machines),
-                "--nnodes",
-                str(args.num_machines),
-                "--node_rank",
-                str(args.machine_rank),
-                "--master_addr",
-                args.main_process_ip,
-                "--master_port",
-                str(args.main_process_port),
-            ]
-        )
+    num_processes = getattr(args, "num_processes")
+    num_machines = getattr(args, "num_machines")
+    if num_machines > 1:
+        setattr(args, "nproc_per_node", str(num_processes // num_machines))
+        setattr(args, "nnodes", str(num_machines))
+        setattr(args, "machine_rank", str(args.machine_rank))
+        setattr(args, "master_addr", str(args.main_process_ip))
+        setattr(args, "master_port", str(args.main_process_port))
     else:
-        cmd.extend(["--nproc_per_node", str(args.num_processes)])
+        setattr(args, "nproc_per_node", str(num_processes))
         if args.main_process_port is not None:
-            cmd.extend(["--master_port", str(args.main_process_port)])
+            setattr(args, "master_port", str(args.main_process_port))
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
     elif args.module:
-        cmd.append("--module")
+        setattr(args, "module", True)
     elif args.no_python:
-        cmd.append("--no_python")
-    cmd.append(args.training_script)
-    cmd.extend(args.training_script_args)
+        setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    mixed_precision = args.mixed_precision.lower()
     try:
-        mixed_precision = PrecisionType(args.mixed_precision.lower())
+        mixed_precision = PrecisionType(mixed_precision)
     except ValueError:
-        raise ValueError(
-            f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
-        )
+        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}.")
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
@@ -444,10 +440,25 @@ def multi_gpu_launcher(args):
         if args.fsdp_state_dict_type is not None:
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
-    process = subprocess.Popen(cmd, env=current_env)
-    process.wait()
-    if process.returncode != 0:
-        raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+    if is_torch_version(">=", "1.9.0"):
+        distrib_args = _filter_args(args)
+        with patch_environment(**current_env):
+            distrib_run.run(distrib_args)
+    else:
+        # We still have to use subprocess, the user won't get a clean traceback as a result
+        cmd = get_launch_prefix()
+        for k, v in vars(args).items():
+            if k in TORCH_LAUNCH_PARAMS and v:
+                param = [f"--{k}"]
+                if not v:
+                    param.append(v)
+                cmd.extend(param)
+        cmd.append(args.training_script)
+        cmd.extend(args.training_script_args)
+        process = subprocess.Popen(cmd, env=current_env)
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
 
 
 def deepspeed_launcher(args):

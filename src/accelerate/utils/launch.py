@@ -21,6 +21,12 @@ from ..utils import is_torch_version
 from .dataclasses import DistributedType
 
 
+if is_torch_version(">=", "1.9.0"):
+    import torch.distributed.run as distrib_run
+else:
+    import torch.distributed.launch as distrib_run
+
+
 def get_launch_prefix():
     """
     Grabs the correct launcher for starting a distributed command, such as either `torchrun`, `python -m
@@ -33,6 +39,23 @@ def get_launch_prefix():
     else:
         cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
     return cmd
+
+
+def _filter_args(args):
+    """
+    Filters out all `accelerate` specific args
+    """
+    distrib_args = distrib_run.get_args_parser()
+    known_args, _ = distrib_args.parse_known_args()
+    for arg in list(vars(args).keys()):
+        if arg not in vars(known_args).keys():
+            delattr(args, arg)
+    distrib_args = distrib_run.parse_args(vars(args))
+    for key, value in vars(args).items():
+        setattr(distrib_args, key, value)
+    if is_torch_version("<", "1.9.0"):
+        setattr(distrib_args, "use_env", True)
+    return distrib_args
 
 
 class PrepareForLaunch:
