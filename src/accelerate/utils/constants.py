@@ -31,10 +31,7 @@ FSDP_STATE_DICT_TYPE = ["FULL_STATE_DICT", "LOCAL_STATE_DICT", "SHARDED_STATE_DI
 DEEPSPEED_MULTINODE_LAUNCHERS = ["pdsh", "standard", "openmpi", "mvapich"]
 
 STR_OPERATION_TO_FUNC = {">": op.gt, ">=": op.ge, "==": op.eq, "!=": op.ne, "<=": op.le, "<": op.lt}
-<<<<<<< HEAD
-<<<<<<< HEAD
 
-<<<<<<< HEAD
 # These are the args for `torch.distributed.launch` for pytorch < 1.9
 TORCH_LAUNCH_PARAMS = [
     "nnodes",
