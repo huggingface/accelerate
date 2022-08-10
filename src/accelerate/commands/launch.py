@@ -32,6 +32,7 @@ from accelerate.commands.config import default_config_file, load_config_from_fil
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.state import get_int_from_env
 from accelerate.utils import (
+    TORCH_LAUNCH_PARAMS,
     ComputeEnvironment,
     DistributedType,
     PrecisionType,
@@ -42,7 +43,6 @@ from accelerate.utils import (
     is_sagemaker_available,
     is_torch_version,
     patch_environment,
-    TORCH_LAUNCH_PARAMS,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
@@ -447,19 +447,20 @@ def multi_gpu_launcher(args):
         with patch_environment(**current_env):
             distrib_run.run(distrib_args)
     else:
+        # We still have to use subprocess, the user won't get a clean traceback as a result
         cmd = get_launch_prefix()
-        for k,v in vars(args).items():
-            if k in TORCH_LAUNCH_PARAMS and v != False:
-                param = [f'--{k}']
-                if v != True:
+        for k, v in vars(args).items():
+            if k in TORCH_LAUNCH_PARAMS and v:
+                param = [f"--{k}"]
+                if not v:
                     param.append(v)
                 cmd.extend(param)
-        for arg in args.training_script_args:
-            cmd.extend(["--"])
-        # process = subprocess.Popen(cmd, env=current_env)
-        # process.wait()
-        # if process.returncode != 0:
-        #     raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+        cmd.append(args.training_script)
+        cmd.extend(args.training_script_args)
+        process = subprocess.Popen(cmd, env=current_env)
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
 
 
 def deepspeed_launcher(args):
