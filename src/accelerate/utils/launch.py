@@ -16,7 +16,6 @@ import os
 import sys
 
 import torch
-import torch.distributed.run as distrib_run
 
 from ..utils import is_torch_version
 from .dataclasses import DistributedType
