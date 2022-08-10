@@ -50,7 +50,6 @@ from .utils import (
     get_pretty_name,
     is_bf16_available,
     is_deepspeed_available,
-    is_rich_available,
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
@@ -425,21 +424,6 @@ class Accelerator:
             return wrapper
 
         return decorator
-
-    @contextmanager
-    def with_clean_traceback(self, verbose=False):
-        """
-        A context manager that when the code ran under it errors out, a clean traceback is reported using the `rich`
-        utility.
-
-        Rich must be installed to use this.
-        """
-        if not is_rich_available():
-            raise ImportError("`rich` must be installed to use this. Run `pip install rich`")
-        from accelerate.utils.rich import clean_traceback
-
-        with clean_traceback(verbose, self.is_main_process):
-            yield
 
     def _goes_first(self, is_main):
         if not is_main:

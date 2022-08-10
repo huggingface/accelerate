@@ -109,10 +109,6 @@ def is_boto3_available():
     return importlib.util.find_spec("boto3") is not None
 
 
-def is_rich_available():
-    return importlib.util.find_spec("rich") is not None
-
-
 def is_sagemaker_available():
     return importlib.util.find_spec("sagemaker") is not None
 
