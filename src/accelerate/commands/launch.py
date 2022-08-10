@@ -46,6 +46,7 @@ from accelerate.utils import (
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
+from rich import get_console
 from rich.logging import RichHandler
 
 
@@ -452,8 +453,6 @@ def multi_gpu_launcher(args):
         debug = getattr(args, "debug", False)
         distrib_args = _filter_args(args)
         with patch_environment(**current_env):
-            from rich import get_console
-
             console = get_console()
 
             try:

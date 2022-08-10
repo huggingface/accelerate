@@ -17,5 +17,6 @@ from .utils import (
     find_executable_batch_size,
     infer_auto_device_map,
     load_checkpoint_in_model,
+    rich,
     synchronize_rng_states,
 )

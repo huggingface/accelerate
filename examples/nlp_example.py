@@ -20,7 +20,6 @@ from torch.utils.data import DataLoader
 
 import evaluate
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import rich  # noqa: F401
 from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
@@ -98,8 +97,6 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 def training_function(config, args):
     # Initialize accelerator
     accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
-    if accelerator.process_index == 1:
-        raise ValueError()
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
