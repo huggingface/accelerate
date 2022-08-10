@@ -20,10 +20,10 @@ from torch.utils.data import DataLoader
 
 import evaluate
 from accelerate import Accelerator, DistributedType
+from accelerate.utils import rich  # noqa: F401
 from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
-from accelerate.utils import rich
 
 ########################################################################
 # This is a fully working simple example to use Accelerate
@@ -172,6 +172,7 @@ def training_function(config, args):
         eval_metric = metric.compute()
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")

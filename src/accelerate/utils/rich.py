@@ -17,4 +17,6 @@
 # from rich import get_console
 
 from rich.traceback import install
+
+
 install(show_locals=False)
