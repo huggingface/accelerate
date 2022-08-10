@@ -450,10 +450,12 @@ def multi_gpu_launcher(args):
         cmd = get_launch_prefix()
         for k,v in vars(args).items():
             if k in TORCH_LAUNCH_PARAMS and v != False:
-                cmd.extend([
-                    f"--{k}", v
-                ])
-        print(cmd)
+                param = [f'--{k}']
+                if v != True:
+                    param.append(v)
+                cmd.extend(param)
+        for arg in args.training_script_args:
+            cmd.extend(["--"])
         # process = subprocess.Popen(cmd, env=current_env)
         # process.wait()
         # if process.returncode != 0:
