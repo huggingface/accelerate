@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# from contextlib import contextmanager
-
-# from rich import get_console
-
 from rich.traceback import install
 
 
