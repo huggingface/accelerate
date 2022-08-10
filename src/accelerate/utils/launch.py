@@ -24,8 +24,6 @@ from .dataclasses import DistributedType
 
 if is_torch_version(">=", "1.9.0"):
     import torch.distributed.run as distrib_run
-else:
-    import torch.distributed.launch as distrib_run
 
 
 def get_launch_prefix():
@@ -54,11 +52,8 @@ def _filter_args(args):
     distrib_args = distrib_run.parse_args(vars(args))
     for key, value in vars(args).items():
         setattr(distrib_args, key, value)
-<<<<<<< HEAD
     if is_torch_version("<", "1.9.0"):
         setattr(distrib_args, "use_env", True)
-=======
->>>>>>> 771bdbe (Remove one of the subprocesses!)
     return distrib_args
 
 

@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Dict, List
 
 import torch
-import torch.distributed.run as distrib_run
 
 import psutil
 from accelerate.commands.config import default_config_file, load_config_from_file
@@ -51,7 +50,6 @@ from accelerate.utils.dataclasses import SageMakerDistributedType
 
 if is_torch_version(">=", "1.9.0"):
     import torch.distributed.run as distrib_run
-
 
 logger = logging.getLogger(__name__)
 
