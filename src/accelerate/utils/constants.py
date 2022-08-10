@@ -31,3 +31,5 @@ FSDP_STATE_DICT_TYPE = ["FULL_STATE_DICT", "LOCAL_STATE_DICT", "SHARDED_STATE_DI
 DEEPSPEED_MULTINODE_LAUNCHERS = ["pdsh", "standard", "openmpi", "mvapich"]
 
 STR_OPERATION_TO_FUNC = {">": op.gt, ">=": op.ge, "==": op.eq, "!=": op.ne, "<=": op.le, "<": op.lt}
+
+TORCH_LAUNCH_PARAMS = """nnodes,nproc_per_node,rdzv_backend,rdzv_endpoint,rdzv_id,rdzv_conf,standalone,max_restarts,monitor_interval,start_method,role,module,m,no_python,run_path,log_dir,r,redirects,t,tee,node_rank,master_addr,master_port,training_script,training_script_args""".split(",") 

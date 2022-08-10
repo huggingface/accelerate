@@ -42,6 +42,7 @@ from accelerate.utils import (
     is_sagemaker_available,
     is_torch_version,
     patch_environment,
+    TORCH_LAUNCH_PARAMS,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
@@ -441,9 +442,22 @@ def multi_gpu_launcher(args):
         if args.fsdp_state_dict_type is not None:
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
-    distrib_args = _filter_args(args)
-    with patch_environment(**current_env):
-        distrib_run.run(distrib_args)
+    if is_torch_version(">=", "1.9.0"):
+        distrib_args = _filter_args(args)
+        with patch_environment(**current_env):
+            distrib_run.run(distrib_args)
+    else:
+        cmd = get_launch_prefix()
+        for k,v in vars(args).items():
+            if k in TORCH_LAUNCH_PARAMS and v != False:
+                cmd.extend([
+                    f"--{k}", v
+                ])
+        print(cmd)
+        # process = subprocess.Popen(cmd, env=current_env)
+        # process.wait()
+        # if process.returncode != 0:
+        #     raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
 
 
 def deepspeed_launcher(args):
