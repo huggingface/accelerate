@@ -367,7 +367,7 @@ def multi_gpu_launcher(args):
     if num_machines > 1:
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
-        setattr(args, "machine_rank", str(args.machine_rank))
+        setattr(args, "node_rank", str(args.machine_rank))
         setattr(args, "master_addr", str(args.main_process_ip))
         setattr(args, "master_port", str(args.main_process_port))
     else:
@@ -450,7 +450,7 @@ def multi_gpu_launcher(args):
         for k, v in vars(args).items():
             if k in TORCH_LAUNCH_PARAMS and v:
                 param = [f"--{k}"]
-                if not v:
+                if type(v) != bool:
                     param.append(v)
                 cmd.extend(param)
         cmd.append(args.training_script)
@@ -464,55 +464,53 @@ def multi_gpu_launcher(args):
 def deepspeed_launcher(args):
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
-    cmd = ["deepspeed", "--no_local_rank"]
-    if args.num_machines > 1:
-        if args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-            cmd = get_launch_prefix()
+    num_processes = getattr(args, "num_processes")
+    num_machines = getattr(args, "num_machines")
+    if num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+        cmd = ["deepspeed", "--no_local_rank"]
+        cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
+        if args.deepspeed_exclusion_filter is not None:
             cmd.extend(
                 [
-                    "--nproc_per_node",
-                    str(args.num_processes // args.num_machines),
-                    "--nnodes",
-                    str(args.num_machines),
-                    "--node_rank",
-                    str(args.machine_rank),
-                    "--master_addr",
-                    args.main_process_ip,
-                    "--master_port",
-                    str(args.main_process_port),
+                    "--exclude",
+                    str(args.deepspeed_exclusion_filter),
+                ]
+            )
+        elif args.deepspeed_inclusion_filter is not None:
+            cmd.extend(
+                [
+                    "--include",
+                    str(args.deepspeed_inclusion_filter),
                 ]
             )
         else:
-            cmd.extend(
-                ["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)]
-            )
-            if args.deepspeed_exclusion_filter is not None:
-                cmd.extend(
-                    [
-                        "--exclude",
-                        str(args.deepspeed_exclusion_filter),
-                    ]
-                )
-            elif args.deepspeed_inclusion_filter is not None:
-                cmd.extend(
-                    [
-                        "--include",
-                        str(args.deepspeed_inclusion_filter),
-                    ]
-                )
-            else:
-                cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+            cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+
+        if args.module and args.no_python:
+            raise ValueError("--module and --no_python cannot be used together")
+        elif args.module:
+            cmd.append("--module")
+        elif args.no_python:
+            cmd.append("--no_python")
+        cmd.append(args.training_script)
+        cmd.extend(args.training_script_args)
+    elif num_machines > 1 and args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+        setattr(args, "nproc_per_node", str(num_processes // num_machines))
+        setattr(args, "nnodes", str(num_machines))
+        setattr(args, "node_rank", str(args.machine_rank))
+        setattr(args, "master_addr", str(args.main_process_ip))
+        setattr(args, "master_port", str(args.main_process_port))
     else:
-        cmd.extend(["--num_gpus", str(args.num_processes)])
+        setattr(args, "nproc_per_node", str(num_processes))
+        if args.main_process_port is not None:
+            setattr(args, "master_port", str(args.main_process_port))
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
     elif args.module:
-        cmd.append("--module")
+        setattr(args, "module", True)
     elif args.no_python:
-        cmd.append("--no_python")
-    cmd.append(args.training_script)
-    cmd.extend(args.training_script_args)
+        setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
     try:
@@ -545,10 +543,30 @@ def deepspeed_launcher(args):
                     continue
                 f.write(f"{key}={value}\n")
 
-    process = subprocess.Popen(cmd, env=current_env)
-    process.wait()
-    if process.returncode != 0:
-        raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+        process = subprocess.Popen(cmd, env=current_env)
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+    else:
+        if is_torch_version(">=", "1.9.0"):
+            distrib_args = _filter_args(args)
+            with patch_environment(**current_env):
+                distrib_run.run(distrib_args)
+        else:
+            # We still have to use subprocess, the user won't get a clean traceback as a result
+            cmd = get_launch_prefix()
+            for k, v in vars(args).items():
+                if k in TORCH_LAUNCH_PARAMS and v:
+                    param = [f"--{k}"]
+                    if type(v) != bool:
+                        param.append(v)
+                    cmd.extend(param)
+            cmd.append(args.training_script)
+            cmd.extend(args.training_script_args)
+            process = subprocess.Popen(cmd, env=current_env)
+            process.wait()
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
 
 
 def tpu_launcher(args):
