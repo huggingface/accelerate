@@ -343,6 +343,8 @@ def simple_launcher(args):
     current_env = os.environ.copy()
     current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
     current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
+    if args.use_mps_device:
+        current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
@@ -376,7 +378,7 @@ def multi_gpu_launcher(args):
     if num_machines > 1:
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
-        setattr(args, "machine_rank", str(args.machine_rank))
+        setattr(args, "node_rank", str(args.machine_rank))
         setattr(args, "master_addr", str(args.main_process_ip))
         setattr(args, "master_port", str(args.main_process_port))
     else:
@@ -451,12 +453,12 @@ def multi_gpu_launcher(args):
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_torch_version(">=", "1.9.0"):
         debug = getattr(args, "debug", False)
-        distrib_args = _filter_args(args)
+        args = _filter_args(args)
         with patch_environment(**current_env):
             console = get_console()
 
             try:
-                distrib_run.run(distrib_args)
+                distrib_run.run(args)
             except:
                 if debug:
                     console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
@@ -467,7 +469,7 @@ def multi_gpu_launcher(args):
         for k, v in vars(args).items():
             if k in TORCH_LAUNCH_PARAMS and v:
                 param = [f"--{k}"]
-                if not v:
+                if type(v) != bool:
                     param.append(v)
                 cmd.extend(param)
         cmd.append(args.training_script)
