@@ -23,8 +23,6 @@ from .dataclasses import DistributedType
 
 if is_torch_version(">=", "1.9.0"):
     import torch.distributed.run as distrib_run
-else:
-    import torch.distributed.launch as distrib_run
 
 
 def get_launch_prefix():
