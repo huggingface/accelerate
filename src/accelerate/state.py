@@ -226,7 +226,7 @@ class AcceleratorState:
 
                         if not is_torch_version(">", "1.12.0"):
                             warnings.warn(
-                                "We strongly recommend to install the latest PyTorch nightly version (1.13.0.dev...) on your MacOS machine. "
+                                "We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. "
                                 "It has major fixes related to model correctness and performance improvements for transformer based models. "
                                 "Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details."
                             )
