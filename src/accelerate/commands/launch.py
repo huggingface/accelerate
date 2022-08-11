@@ -369,7 +369,7 @@ def multi_gpu_launcher(args):
     if num_machines > 1:
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
-        setattr(args, "machine_rank", str(args.machine_rank))
+        setattr(args, "node_rank", str(args.machine_rank))
         setattr(args, "master_addr", str(args.main_process_ip))
         setattr(args, "master_port", str(args.main_process_port))
     else:
@@ -443,16 +443,16 @@ def multi_gpu_launcher(args):
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_torch_version(">=", "1.9.0"):
-        distrib_args = _filter_args(args)
+        args = _filter_args(args)
         with patch_environment(**current_env):
-            distrib_run.run(distrib_args)
+            distrib_run.run(args)
     else:
         # We still have to use subprocess, the user won't get a clean traceback as a result
         cmd = get_launch_prefix()
         for k, v in vars(args).items():
             if k in TORCH_LAUNCH_PARAMS and v:
                 param = [f"--{k}"]
-                if not v:
+                if type(v) != bool:
                     param.append(v)
                 cmd.extend(param)
         cmd.append(args.training_script)
