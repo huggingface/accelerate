@@ -14,6 +14,8 @@
 
 import operator as op
 
+# Color scheme for rich choices
+RICH_COLORS = ["#648FFF", "#785EF0", "#DC267F", "#FE6100", "#FFB000"]
 
 SCALER_NAME = "scaler.pt"
 MODEL_NAME = "pytorch_model"

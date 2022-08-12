@@ -13,6 +13,18 @@
 # limitations under the License.
 
 from rich.traceback import install
+from rich.prompt import Confirm, FloatPrompt, IntPrompt, Prompt
 
 
 install(show_locals=False)
+
+_kind2prompt = {"bool": Confirm.ask, "float": FloatPrompt.ask, "int": IntPrompt.ask, "default": Prompt.ask}
+
+
+def _ask_prompt(prompt, kind="default", choices=None, default=None):
+    if default is None:
+        if kind == "bool":
+            default = False
+        elif kind == "int":
+            default = 0
+    return _kind2prompt[kind](prompt, default=default, choices=options, show_choices="[0]" in prompt)

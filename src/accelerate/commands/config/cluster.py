@@ -14,135 +14,135 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available, is_transformers_available
+from rich.console import Console
+from rich.prompt import Confirm, FloatPrompt, IntPrompt, Prompt
+
+from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available, is_transformers_available, 
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
     FSDP_STATE_DICT_TYPE,
+    RICHRICH_COLORS
 )
 from .config_args import ClusterConfig
-from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
+from .config_utils import _convert_distributed_mode
 
+
+console = Console()
 
 def get_cluster_input():
-    distributed_type = _ask_field(
-        "Which type of machine are you using? ([0] No distributed training, [1] multi-CPU, [2] multi-GPU, [3] TPU [4] MPS): ",
-        _convert_distributed_mode,
-        error_message="Please enter 0, 1, 2, 3 or 4.",
-    )
+    config = {
+        "machine_rank": 0,
+        "num_machines": 1,
+        "main_process_ip": None,
+        "main_process_port": None,
+        "main_training_function": "main",
+        "num_processes": 1,
+        "mixed_precision": "no",
+        "downcast_bf16": "no",
+        "use_cpu": False,
+        "deepspeed_config": {},
+        "fsdp_config": {},
+    }
 
-    machine_rank = 0
-    num_machines = 1
-    main_process_ip = None
-    main_process_port = None
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
-        num_machines = _ask_field(
-            "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
-            lambda x: int(x),
-            default=1,
+    distributed_type = _ask_prompt(
+        f"Which type of machine are you using? ([{RICH_COLORS[0]}][0] No distributed training[/{RICH_COLORS[0]}], [{RICH_COLORS[1]}][1] multi-CPU[/{RICH_COLORS[1]}], [{RICH_COLORS[2]}][2] multi-GPU[/{RICH_COLORS[2]}], [{RICH_COLORS[3]}][3] TPU[/#FE6100], [#FFB000][4] MPS[/#FFB000])",
+        "int",
+        choices=["0", "1", "2", "3", "4"],
+    )
+    config["distributed_type"] = _convert_distributed_mode(distributed_type)
+
+    if config["distributed_type"] in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
+        config["num_machines"] = _ask_prompt(
+            "How many different machines will you use? (use more than 1 for multi-node training)",
+            "int",
+            default=config["num_machines"],
         )
-        if num_machines > 1:
-            machine_rank = _ask_field(
-                "What is the rank of this machine (from 0 to the number of machines - 1 )? [0]: ",
-                lambda x: int(x),
-                default=0,
+        if config["num_machines"] > 1:
+            config["machine_rank"] = _ask_prompt(
+                f"What is the rank of this machine?",
+                "int",
+                default=config["machine_rank"],
+                choices=[*map(str, range(0, config["num_machines"] - 1))],
             )
-            main_process_ip = _ask_field(
-                "What is the IP address of the machine that will host the main process? ",
+            config["main_process_ip"] = _ask_prompt(
+                "What is the IP address of the machine that will host the main process",
             )
-            main_process_port = _ask_field(
-                "What is the port you will use to communicate with the main process? ",
-                lambda x: int(x),
+            config["main_process_port"] = _ask_prompt(
+                "What is the port you will use to communicate with the main process",
             )
 
     if distributed_type == DistributedType.NO:
-        use_cpu = _ask_field(
-            "Do you want to run your training on CPU only (even if a GPU is available)? [yes/NO]:",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
+        config["use_cpu"] = _ask_prompt(
+            "Do you want to run your training on CPU only (even if a GPU is available)",
+            "bool",
         )
     elif distributed_type == DistributedType.MULTI_CPU:
-        use_cpu = True
-    else:
-        use_cpu = False
+        config["use_cpu"] = True
 
-    deepspeed_config = {}
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
-        use_deepspeed = _ask_field(
-            "Do you want to use DeepSpeed? [yes/NO]: ",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
-        )
+        use_deepspeed = _ask_prompt("Do you want to use DeepSpeed?", "bool")
         if use_deepspeed:
+            deepspeed_config = {}
             distributed_type = DistributedType.DEEPSPEED
             assert (
                 is_deepspeed_available()
             ), "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
 
         if distributed_type == DistributedType.DEEPSPEED:
-            use_deepspeed_config = _ask_field(
-                "Do you want to specify a json file to a DeepSpeed config? [yes/NO]: ",
-                _convert_yes_no_to_bool,
-                default=False,
-                error_message="Please enter yes or no.",
+            use_deepspeed_config = _ask_prompt(
+                "Do you want to specify a json file to a DeepSpeed config?",
+                "bool",
             )
             if use_deepspeed_config:
-                deepspeed_config["deepspeed_config_file"] = _ask_field(
-                    "Please enter the path to the json DeepSpeed config file: ",
-                    lambda x: str(x),
+                deepspeed_config["deepspeed_config_file"] = _ask_prompt(
+                    "Please enter the path to the json DeepSpeed config file",
                     default="none",
                 )
             else:
-                deepspeed_config["zero_stage"] = _ask_field(
-                    "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2, 3)? [2]: ",
-                    lambda x: int(x),
+                deepspeed_config["zero_stage"] = _ask_prompt(
+                    "What should be your DeepSpeed's ZeRO optimization stage?",
+                    "int",
+                    choices=[*map(str, range(0, 4))],
                     default=2,
                 )
 
                 if deepspeed_config["zero_stage"] >= 2:
-                    deepspeed_config["offload_optimizer_device"] = _ask_field(
-                        "Where to offload optimizer states? [none/cpu/nvme]: ",
-                        lambda x: str(x),
+                    deepspeed_config["offload_optimizer_device"] = _ask_prompt(
+                        "Where to offload optimizer states?",
+                        choices=["none", "cpu", "nvme"],
                         default="none",
                     )
-                    deepspeed_config["offload_param_device"] = _ask_field(
-                        "Where to offload parameters? [none/cpu/nvme]: ",
-                        lambda x: str(x),
+                    deepspeed_config["offload_param_device"] = _ask_prompt(
+                        "Where to offload parameters?",
+                        choices=["none", "cpu", "nvme"],
                         default="none",
                     )
-                deepspeed_config["gradient_accumulation_steps"] = _ask_field(
-                    "How many gradient accumulation steps you're passing in your script? [1]: ",
-                    lambda x: int(x),
+                deepspeed_config["gradient_accumulation_steps"] = _ask_prompt(
+                    "How many gradient accumulation steps you're passing in your script?",
+                    "int",
                     default=1,
                 )
-                use_gradient_clipping = _ask_field(
-                    "Do you want to use gradient clipping? [yes/NO]: ",
-                    _convert_yes_no_to_bool,
-                    default=False,
-                    error_message="Please enter yes or no.",
+                use_gradient_clipping = _ask_prompt(
+                    "Do you want to use gradient clipping?",
+                    "bool",
                 )
                 if use_gradient_clipping:
-                    deepspeed_config["gradient_clipping"] = _ask_field(
-                        "What is the gradient clipping value? [1.0]: ",
-                        lambda x: float(x),
+                    deepspeed_config["gradient_clipping"] = _ask_prompt(
+                        "What is the gradient clipping value?",
+                        "float",
                         default=1.0,
                     )
                 if deepspeed_config["zero_stage"] == 3:
-                    deepspeed_config["zero3_save_16bit_model"] = _ask_field(
-                        "Do you want to save 16-bit model weights when using ZeRO Stage-3? [yes/NO]: ",
-                        _convert_yes_no_to_bool,
-                        default=False,
-                        error_message="Please enter yes or no.",
+                    deepspeed_config["zero3_save_16bit_model"] = _ask_prompt(
+                        "Do you want to save 16-bit model weights when using ZeRO Stage-3?",
+                        "bool",
                     )
-            deepspeed_config["zero3_init_flag"] = _ask_field(
-                "Do you want to enable `deepspeed.zero.Init` when using ZeRO Stage-3 for constructing massive models? [yes/NO]: ",
-                _convert_yes_no_to_bool,
-                default=False,
-                error_message="Please enter yes or no.",
+            deepspeed_config["zero3_init_flag"] = _ask_prompt(
+                "Do you want to enable `deepspeed.zero.Init` when using ZeRO Stage-3 for constructing massive models?",
+                "bool",
             )
             if deepspeed_config["zero3_init_flag"]:
                 if not is_transformers_available():
@@ -151,123 +151,110 @@ def get_cluster_input():
                         "Please run `pip3 install transformers`."
                     )
 
-            if num_machines > 1:
-                launcher_query = "Which Type of launcher do you want to use "
+            if config["num_machines"] > 1:
+                launcher_query = "Which Type of launcher do you want to use? ("
                 for i, launcher in enumerate(DEEPSPEED_MULTINODE_LAUNCHERS):
-                    launcher_query += f"[{i}] {launcher}, "
-                launcher_query = launcher_query[:-2] + ")? [0]: "
-                deepspeed_config["deepspeed_multinode_launcher"] = _ask_field(
-                    launcher_query,
-                    lambda x: DEEPSPEED_MULTINODE_LAUNCHERS[int(x)],
-                    default=DEEPSPEED_MULTINODE_LAUNCHERS[0],
-                )
+                    launcher_query += f"[{RICH_COLORS[i]}][{i}] {launcher}[/{RICH_COLORS[i]}], "
+                launcher_query = launcher_query[:-2] + ")"
+                deepspeed_config["deepspeed_multinode_launcher"] = DEEPSPEED_MULTINODE_LAUNCHERS[
+                    _ask_prompt(launcher_query, "int", default=0, choices=[*map(str, range(3))])
+                ]
 
                 if deepspeed_config["deepspeed_multinode_launcher"] != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-                    deepspeed_config["deepspeed_hostfile"] = _ask_field(
+                    deepspeed_config["deepspeed_hostfile"] = Prompt.ask(
                         "DeepSpeed configures multi-node compute resources with hostfile. "
                         "Each row is of the format `hostname slots=[num_gpus]`, e.g., `localhost slots=2`; "
                         "for more information please refer official [documentation]"
                         "(https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node). "
-                        "Please specify the location of hostfile: ",
-                        lambda x: str(x),
+                        "Please specify the location of hostfile"
                     )
 
-                    is_exclusion_filter = _ask_field(
-                        "Do you want to specify exclusion filter string? [yes/NO]: ",
-                        _convert_yes_no_to_bool,
-                        default=False,
-                        error_message="Please enter yes or no.",
+                    is_exclusion_filter = _ask_prompt(
+                        "Do you want to specify exclusion filter string?", "bool"
                     )
                     if is_exclusion_filter:
-                        deepspeed_config["deepspeed_exclusion_filter"] = _ask_field(
-                            "DeepSpeed exclusion filter string: ",
-                            lambda x: str(x),
+                        deepspeed_config["deepspeed_exclusion_filter"] = _ask_prompt(
+                            "DeepSpeed exclusion filter string"
                         )
 
-                    is_inclusion_filter = _ask_field(
-                        "Do you want to specify inclusion filter string? [yes/NO]: ",
-                        _convert_yes_no_to_bool,
-                        default=False,
-                        error_message="Please enter yes or no.",
+                    is_inclusion_filter = _ask_prompt(
+                        "Do you want to specify inclusion filter string?",
+                        "bool",
                     )
                     if is_inclusion_filter:
-                        deepspeed_config["deepspeed_inclusion_filter"] = _ask_field(
-                            "DeepSpeed inclusion filter string: ",
-                            lambda x: str(x),
+                        deepspeed_config["deepspeed_inclusion_filter"] = _ask_prompt(
+                            "DeepSpeed inclusion filter string: "
                         )
+            config["deepspeed_config"] = deepspeed_config
 
-    fsdp_config = {}
     if distributed_type in [DistributedType.MULTI_GPU]:
-        use_fsdp = _ask_field(
-            "Do you want to use FullyShardedDataParallel? [yes/NO]: ",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
+        use_fsdp = _ask_prompt(
+            "Do you want to use FullyShardedDataParallel?",
+            "bool",
         )
         if use_fsdp:
+            fsdp_config = {}
             distributed_type = DistributedType.FSDP
         if distributed_type == DistributedType.FSDP:
-            sharding_strategy_query = "What should be your sharding strategy ("
+            sharding_strategy_query = "What should be your sharding strategy? ("
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
-                sharding_strategy_query += f"[{i+1}] {strategy}, "
-            sharding_strategy_query = sharding_strategy_query[:-2] + ")? [1]: "
-            fsdp_config["fsdp_sharding_strategy"] = _ask_field(
+                sharding_strategy_query += f"[{RICH_COLORS[i]}][{i+1}] {strategy}[/{RICH_COLORS[i]}], "
+            sharding_strategy_query = sharding_strategy_query[:-2] + ")"
+            fsdp_config["fsdp_sharding_strategy"] = _ask_prompt(
                 sharding_strategy_query,
-                lambda x: int(x),
+                "int",
                 default=1,
             )
-            fsdp_config["fsdp_offload_params"] = _ask_field(
-                "Do you want to offload parameters and gradients to CPU? [yes/NO]: ",
-                _convert_yes_no_to_bool,
-                default=False,
-                error_message="Please enter yes or no.",
+            fsdp_config["fsdp_offload_params"] = _ask_prompt(
+                "Do you want to offload parameters and gradients to CPU?",
+                "bool",
             )
-            fsdp_wrap_query = "What should be your auto wrap policy ("
+            fsdp_wrap_query = "What should be your auto wrap policy? ("
             for i, wrap_policy in enumerate(FSDP_AUTO_WRAP_POLICY):
-                fsdp_wrap_query += f"[{i}] {wrap_policy}, "
-            fsdp_wrap_query = fsdp_wrap_query[:-2] + ")? [0]: "
-            fsdp_config["fsdp_auto_wrap_policy"] = _ask_field(
-                fsdp_wrap_query,
-                lambda x: FSDP_AUTO_WRAP_POLICY[int(x)],
-                default="TRANSFORMER_BASED_WRAP",
-            )
+                fsdp_wrap_query += f"[{RICH_COLORS[i]}][{i}]{wrap_policy}[/{RICH_COLORS[i]}], "
+            fsdp_wrap_query = fsdp_wrap_query[:-2] + ")"
+            fsdp_config["fsdp_auto_wrap_policy"] = FSDP_AUTO_WRAP_POLICY[
+                _ask_prompt(
+                    fsdp_wrap_query,
+                    "int",
+                    choices=[*map(str, range(3))],
+                )
+            ]
             if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
-                fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
-                    "What is the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ...? : ",
-                    lambda x: str(x),
+                fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_prompt(
+                    "What is the transformer layer class name (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`, `T5Block` ...?",
                 )
             elif fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[1]:
-                fsdp_config["fsdp_min_num_params"] = _ask_field(
-                    "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
-                    lambda x: int(x),
+                fsdp_config["fsdp_min_num_params"] = _ask_prompt(
+                    "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy?",
+                    "int", 
                     default=1e8,
                 )
-            fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy ("
+            fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy? ("
             for i, backward_prefetch_policy in enumerate(FSDP_BACKWARD_PREFETCH):
-                fsdp_backward_prefetch_query += f"[{i}] {backward_prefetch_policy}, "
-            fsdp_backward_prefetch_query = fsdp_backward_prefetch_query[:-2] + ")? [0]: "
-            fsdp_config["fsdp_backward_prefetch_policy"] = _ask_field(
-                fsdp_backward_prefetch_query,
-                lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
-                default="BACKWARD_PRE",
-            )
-            fsdp_state_dict_type_query = "What should be your FSDP's state dict type ("
+                fsdp_backward_prefetch_query += f"[{RICH_COLORS[i]}][{i}] {backward_prefetch_policy}[/{RICH_COLORS[i]}][{i}], "
+            fsdp_backward_prefetch_query = fsdp_backward_prefetch_query[:-2] + ")"
+            fsdp_config["fsdp_backward_prefetch_policy"] = FSDP_BACKWARD_PREFETCH[
+                _ask_prompt(
+                    fsdp_backward_prefetch_query,
+                    "int",
+                    choices=[*map(str, range(3))],
+                )
+            ]
+            fsdp_state_dict_type_query = "What should be your FSDP's state dict type? ("
             for i, state_dict_type in enumerate(FSDP_STATE_DICT_TYPE):
-                fsdp_state_dict_type_query += f"[{i}] {state_dict_type}, "
-            fsdp_state_dict_type_query = fsdp_state_dict_type_query[:-2] + ")? [0]: "
-            fsdp_config["fsdp_state_dict_type"] = _ask_field(
-                fsdp_state_dict_type_query,
-                lambda x: FSDP_STATE_DICT_TYPE[int(x)],
-                default="FULL_STATE_DICT",
-            )
+                fsdp_state_dict_type_query += f"[{RICH_COLORS[i]}][{i}] {state_dict_type}[/{RICH_COLORS[i]}], "
+            fsdp_state_dict_type_query = fsdp_state_dict_type_query[:-2] + ")"
+            fsdp_config["fsdp_state_dict_type"] = FSDP_STATE_DICT_TYPE[
+                _ask_prompt(fsdp_state_dict_type_query, "int", choices=[*map(str, range(3))])
+            ]
+        config["fsdp_config"] = fsdp_config
 
     if distributed_type == DistributedType.TPU:
-        main_training_function = _ask_field(
-            "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
+        config["main_training_function"] = _ask_prompt(
+            "What is the name of the function in your script that should be launched in all parallel scripts?",
             default="main",
         )
-    else:
-        main_training_function = "main"
 
     if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
         machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
@@ -275,52 +262,27 @@ def get_cluster_input():
             machine_type += " cores"
         else:
             machine_type += "(s)"
-        num_processes = _ask_field(
-            f"How many {machine_type} should be used for distributed training? [1]:",
-            lambda x: int(x),
+        config["num_processes"] = _ask_prompt(
+            f"How many {machine_type} should be used for distributed training?",
+            "int",
             default=1,
-            error_message="Please enter an integer.",
         )
     elif distributed_type in [DistributedType.FSDP, DistributedType.DEEPSPEED]:
-        num_processes = _ask_field(
-            "How many GPU(s) should be used for distributed training? [1]:",
-            lambda x: int(x),
+        config["num_processes"] = _ask_prompt(
+            "How many GPU(s) should be used for distributed training?",
+            "int",
             default=1,
-            error_message="Please enter an integer.",
         )
-    else:
-        num_processes = 1
-
-    if distributed_type != DistributedType.TPU:
-        if distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config:
-            mixed_precision = "no"
-        else:
-            mixed_precision = _ask_field(
-                "Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: ",
-                lambda x: str(x).lower(),
-                default="no",
-            )
-    else:
-        mixed_precision = "no"
-
-    downcast_bf16 = "no"
-    if distributed_type == DistributedType.TPU and mixed_precision == "bf16":
-        downcast_bf16 = _ask_field(
-            "Should `torch.float` be cast as `bfloat16` and `torch.double` remain `float32` on TPUs?", default="no"
+    if not (distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config):
+        config["mixed_precision"] = _ask_prompt(
+            "Do you wish to use FP16 or BF16 (mixed precision)?",
+            choices=["no", "fp16", "bf16"],
+            default="no",
         )
 
-    return ClusterConfig(
-        compute_environment=ComputeEnvironment.LOCAL_MACHINE,
-        distributed_type=distributed_type,
-        num_processes=num_processes,
-        mixed_precision=mixed_precision,
-        downcast_bf16=downcast_bf16,
-        machine_rank=machine_rank,
-        num_machines=num_machines,
-        main_process_ip=main_process_ip,
-        main_process_port=main_process_port,
-        main_training_function=main_training_function,
-        deepspeed_config=deepspeed_config,
-        fsdp_config=fsdp_config,
-        use_cpu=use_cpu,
-    )
+    if distributed_type == DistributedType.TPU and config["mixed_precision"] == "bf16":
+        config["downcast_bf16"] = _ask_prompt(
+            "Should `torch.float` be cast as `bfloat16` and `torch.double` remain `float32` on TPUs?", "bool",
+        )
+
+    return ClusterConfig(compute_environment=ComputeEnvironment.LOCAL_MACHINE, **config)
