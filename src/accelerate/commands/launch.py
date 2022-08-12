@@ -460,7 +460,6 @@ def multi_gpu_launcher(args):
             distrib_run.run(args)
         except:
             if debug:
-                console = get_console()
                 console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
                 console.print_exception(suppress=[__file__], show_locals=False)
 
