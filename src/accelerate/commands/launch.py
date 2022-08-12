@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import torch
+import torch.distributed.run as distrib_run
 
 import psutil
 from accelerate.commands.config import default_config_file, load_config_from_file
@@ -48,7 +49,6 @@ from accelerate.utils.dataclasses import SageMakerDistributedType
 from rich import get_console
 from rich.logging import RichHandler
 
-import torch.distributed.run as distrib_run
 
 FORMAT = "%(message)s"
 logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
@@ -448,14 +448,13 @@ def multi_gpu_launcher(args):
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_torch_version("<", "1.9.0"):
-        raise NotImplementedError(f'Multi-node training requires pytorch>=1.9.0')
+        raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
 
     debug = getattr(args, "debug", False)
     args = _filter_args(args)
     with patch_environment(**current_env):
         try:
-            print(args)
-            # distrib_run.run(args)
+            distrib_run.run(args)
         except:
             if debug:
                 console = get_console()
