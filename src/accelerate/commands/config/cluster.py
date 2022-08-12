@@ -56,6 +56,9 @@ def get_cluster_input():
                 "What is the port you will use to communicate with the main process? ",
                 lambda x: int(x),
             )
+            rdzv_backend = _ask_field(
+                "What rendezvous backend will you use? ('static', 'c10d', ...)", default="static"
+            )
 
     if distributed_type == DistributedType.NO:
         use_cpu = _ask_field(
@@ -323,4 +326,5 @@ def get_cluster_input():
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
         use_cpu=use_cpu,
+        rdzv_backend=rdzv_backend,
     )
