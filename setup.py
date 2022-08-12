@@ -50,7 +50,7 @@ setup(
         ]
     },
     python_requires=">=3.7.0",
-    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.4.0", "rich"],
+    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.9.0", "rich"],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
