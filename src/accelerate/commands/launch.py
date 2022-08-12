@@ -376,8 +376,7 @@ def multi_gpu_launcher(args):
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
         setattr(args, "node_rank", str(args.machine_rank))
-        setattr(args, "master_addr", str(args.main_process_ip))
-        setattr(args, "master_port", str(args.main_process_port))
+        setattr(args, "rdzv_endpoint", f"{args.main_process_ip}:{args.main_process_port}")
     else:
         setattr(args, "nproc_per_node", str(num_processes))
         if args.main_process_port is not None:
