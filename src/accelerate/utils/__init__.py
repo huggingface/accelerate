@@ -5,11 +5,11 @@
 from .constants import (
     MODEL_NAME,
     OPTIMIZER_NAME,
+    RICH_COLORS,
     RNG_STATE_NAME,
     SCALER_NAME,
     SCHEDULER_NAME,
     TORCH_LAUNCH_PARAMS,
-    RICH_COLORS,
 )
 from .dataclasses import (
     ComputeEnvironment,
@@ -110,5 +110,5 @@ from .other import (
     write_basic_config,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
-from .rich import _ask_prompt
+from .rich import console
 from .tqdm import tqdm

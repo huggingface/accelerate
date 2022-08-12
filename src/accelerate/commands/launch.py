@@ -38,6 +38,7 @@ from accelerate.utils import (
     PrecisionType,
     PrepareForLaunch,
     _filter_args,
+    console,
     get_launch_prefix,
     is_deepspeed_available,
     is_sagemaker_available,
@@ -46,7 +47,6 @@ from accelerate.utils import (
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
-from rich import get_console
 from rich.logging import RichHandler
 
 
@@ -455,8 +455,6 @@ def multi_gpu_launcher(args):
         debug = getattr(args, "debug", False)
         args = _filter_args(args)
         with patch_environment(**current_env):
-            console = get_console()
-
             try:
                 distrib_run.run(args)
             except:
@@ -664,7 +662,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     from sagemaker.huggingface import HuggingFace
 
     # configure environment
-    print("Configuring Amazon SageMaker environment")
+    console.print("Configuring Amazon SageMaker environment")
     os.environ["AWS_DEFAULT_REGION"] = sagemaker_config.region
 
     # configure credentials
@@ -686,7 +684,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     if not entry_point.endswith(".py"):
         raise ValueError(f'Your training script should be a python script and not "{entry_point}"')
 
-    print("Converting Arguments to Hyperparameters")
+    console.print("Converting Arguments to Hyperparameters")
     hyperparameters = _convert_nargs_to_dict(args.training_script_args)
 
     try:
@@ -714,7 +712,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     # configure sagemaker inputs
     sagemaker_inputs = None
     if sagemaker_config.sagemaker_inputs_file is not None:
-        print(f"Loading SageMaker Inputs from {sagemaker_config.sagemaker_inputs_file} file")
+        console.print(f"Loading SageMaker Inputs from {sagemaker_config.sagemaker_inputs_file} file")
         sagemaker_inputs = {}
         with open(sagemaker_config.sagemaker_inputs_file) as file:
             for i, line in enumerate(file):
@@ -722,12 +720,12 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
                     continue
                 l = line.split("\t")
                 sagemaker_inputs[l[0]] = l[1].strip()
-        print(f"Loaded SageMaker Inputs: {sagemaker_inputs}")
+        console.print(f"Loaded SageMaker Inputs: {sagemaker_inputs}")
 
     # configure sagemaker metrics
     sagemaker_metrics = None
     if sagemaker_config.sagemaker_metrics_file is not None:
-        print(f"Loading SageMaker Metrics from {sagemaker_config.sagemaker_metrics_file} file")
+        console.print(f"Loading SageMaker Metrics from {sagemaker_config.sagemaker_metrics_file} file")
         sagemaker_metrics = []
         with open(sagemaker_config.sagemaker_metrics_file) as file:
             for i, line in enumerate(file):
@@ -739,10 +737,10 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
                     "Regex": l[1].strip(),
                 }
                 sagemaker_metrics.append(metric_dict)
-        print(f"Loaded SageMaker Metrics: {sagemaker_metrics}")
+        console.print(f"Loaded SageMaker Metrics: {sagemaker_metrics}")
 
     # configure session
-    print("Creating Estimator")
+    console.print("Creating Estimator")
     huggingface_estimator = HuggingFace(
         image_uri=sagemaker_config.image_uri,
         entry_point=entry_point,
@@ -762,7 +760,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     )
 
     huggingface_estimator.fit(inputs=sagemaker_inputs)
-    print(f"You can find your model data at: {huggingface_estimator.model_data}")
+    console.print(f"You can find your model data at: {huggingface_estimator.model_data}")
 
 
 def launch_command(args):

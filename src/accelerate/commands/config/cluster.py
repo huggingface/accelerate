@@ -14,23 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from rich.console import Console
-from rich.prompt import Confirm, FloatPrompt, IntPrompt, Prompt
-
-from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available, is_transformers_available, 
+from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available, is_transformers_available
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
     FSDP_STATE_DICT_TYPE,
-    RICHRICH_COLORS
+    RICH_COLORS,
 )
+from ...utils.rich import _ask_prompt
 from .config_args import ClusterConfig
 from .config_utils import _convert_distributed_mode
 
-
-console = Console()
 
 def get_cluster_input():
     config = {
@@ -62,10 +58,10 @@ def get_cluster_input():
         )
         if config["num_machines"] > 1:
             config["machine_rank"] = _ask_prompt(
-                f"What is the rank of this machine?",
+                "What is the rank of this machine?",
                 "int",
                 default=config["machine_rank"],
-                choices=[*map(str, range(0, config["num_machines"] - 1))],
+                choices=[*map(str, range(0, config["num_machines"]))],
             )
             config["main_process_ip"] = _ask_prompt(
                 "What is the IP address of the machine that will host the main process",
@@ -74,24 +70,24 @@ def get_cluster_input():
                 "What is the port you will use to communicate with the main process",
             )
 
-    if distributed_type == DistributedType.NO:
+    if config["distributed_type"] == DistributedType.NO:
         config["use_cpu"] = _ask_prompt(
             "Do you want to run your training on CPU only (even if a GPU is available)",
             "bool",
         )
-    elif distributed_type == DistributedType.MULTI_CPU:
+    elif config["distributed_type"] == DistributedType.MULTI_CPU:
         config["use_cpu"] = True
 
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
+    if config["distributed_type"] in [DistributedType.MULTI_GPU, DistributedType.NO]:
         use_deepspeed = _ask_prompt("Do you want to use DeepSpeed?", "bool")
         if use_deepspeed:
             deepspeed_config = {}
-            distributed_type = DistributedType.DEEPSPEED
+            config["distributed_type"] = DistributedType.DEEPSPEED
             assert (
                 is_deepspeed_available()
             ), "DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source"
 
-        if distributed_type == DistributedType.DEEPSPEED:
+        if config["distributed_type"] == DistributedType.DEEPSPEED:
             use_deepspeed_config = _ask_prompt(
                 "Do you want to specify a json file to a DeepSpeed config?",
                 "bool",
@@ -111,17 +107,17 @@ def get_cluster_input():
 
                 if deepspeed_config["zero_stage"] >= 2:
                     deepspeed_config["offload_optimizer_device"] = _ask_prompt(
-                        "Where to offload optimizer states?",
+                        "Where should optimizer states be offloaded to?",
                         choices=["none", "cpu", "nvme"],
                         default="none",
                     )
                     deepspeed_config["offload_param_device"] = _ask_prompt(
-                        "Where to offload parameters?",
+                        "Where should parameters be offloaded to?",
                         choices=["none", "cpu", "nvme"],
                         default="none",
                     )
                 deepspeed_config["gradient_accumulation_steps"] = _ask_prompt(
-                    "How many gradient accumulation steps you're passing in your script?",
+                    "How many gradient accumulation steps are you passing in your script?",
                     "int",
                     default=1,
                 )
@@ -161,7 +157,7 @@ def get_cluster_input():
                 ]
 
                 if deepspeed_config["deepspeed_multinode_launcher"] != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-                    deepspeed_config["deepspeed_hostfile"] = Prompt.ask(
+                    deepspeed_config["deepspeed_hostfile"] = _ask_prompt(
                         "DeepSpeed configures multi-node compute resources with hostfile. "
                         "Each row is of the format `hostname slots=[num_gpus]`, e.g., `localhost slots=2`; "
                         "for more information please refer official [documentation]"
@@ -169,9 +165,7 @@ def get_cluster_input():
                         "Please specify the location of hostfile"
                     )
 
-                    is_exclusion_filter = _ask_prompt(
-                        "Do you want to specify exclusion filter string?", "bool"
-                    )
+                    is_exclusion_filter = _ask_prompt("Do you want to specify exclusion filter string?", "bool")
                     if is_exclusion_filter:
                         deepspeed_config["deepspeed_exclusion_filter"] = _ask_prompt(
                             "DeepSpeed exclusion filter string"
@@ -187,15 +181,15 @@ def get_cluster_input():
                         )
             config["deepspeed_config"] = deepspeed_config
 
-    if distributed_type in [DistributedType.MULTI_GPU]:
+    if config["distributed_type"] in [DistributedType.MULTI_GPU]:
         use_fsdp = _ask_prompt(
             "Do you want to use FullyShardedDataParallel?",
             "bool",
         )
         if use_fsdp:
             fsdp_config = {}
-            distributed_type = DistributedType.FSDP
-        if distributed_type == DistributedType.FSDP:
+            config["distributed_type"] = DistributedType.FSDP
+        if config["distributed_type"] == DistributedType.FSDP:
             sharding_strategy_query = "What should be your sharding strategy? ("
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
                 sharding_strategy_query += f"[{RICH_COLORS[i]}][{i+1}] {strategy}[/{RICH_COLORS[i]}], "
@@ -227,12 +221,14 @@ def get_cluster_input():
             elif fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[1]:
                 fsdp_config["fsdp_min_num_params"] = _ask_prompt(
                     "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy?",
-                    "int", 
+                    "int",
                     default=1e8,
                 )
             fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy? ("
             for i, backward_prefetch_policy in enumerate(FSDP_BACKWARD_PREFETCH):
-                fsdp_backward_prefetch_query += f"[{RICH_COLORS[i]}][{i}] {backward_prefetch_policy}[/{RICH_COLORS[i]}][{i}], "
+                fsdp_backward_prefetch_query += (
+                    f"[{RICH_COLORS[i]}][{i}] {backward_prefetch_policy}[/{RICH_COLORS[i]}][{i}], "
+                )
             fsdp_backward_prefetch_query = fsdp_backward_prefetch_query[:-2] + ")"
             fsdp_config["fsdp_backward_prefetch_policy"] = FSDP_BACKWARD_PREFETCH[
                 _ask_prompt(
@@ -248,41 +244,44 @@ def get_cluster_input():
             fsdp_config["fsdp_state_dict_type"] = FSDP_STATE_DICT_TYPE[
                 _ask_prompt(fsdp_state_dict_type_query, "int", choices=[*map(str, range(3))])
             ]
-        config["fsdp_config"] = fsdp_config
+            config["fsdp_config"] = fsdp_config
 
-    if distributed_type == DistributedType.TPU:
+    if config["distributed_type"] == DistributedType.TPU:
         config["main_training_function"] = _ask_prompt(
             "What is the name of the function in your script that should be launched in all parallel scripts?",
             default="main",
         )
 
-    if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
-        machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
+    if config["distributed_type"] in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
+        machine_type = str(config["distributed_type"]).split(".")[1].replace("MULTI_", "")
         if machine_type == "TPU":
             machine_type += " cores"
+            default = 8
         else:
             machine_type += "(s)"
+            default = 1
         config["num_processes"] = _ask_prompt(
             f"How many {machine_type} should be used for distributed training?",
             "int",
-            default=1,
+            default=default,
         )
-    elif distributed_type in [DistributedType.FSDP, DistributedType.DEEPSPEED]:
+    elif config["distributed_type"] in [DistributedType.FSDP, DistributedType.DEEPSPEED]:
         config["num_processes"] = _ask_prompt(
             "How many GPU(s) should be used for distributed training?",
             "int",
             default=1,
         )
-    if not (distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config):
+    if not (config["distributed_type"] == DistributedType.DEEPSPEED and use_deepspeed_config):
         config["mixed_precision"] = _ask_prompt(
             "Do you wish to use FP16 or BF16 (mixed precision)?",
             choices=["no", "fp16", "bf16"],
             default="no",
         )
 
-    if distributed_type == DistributedType.TPU and config["mixed_precision"] == "bf16":
+    if config["distributed_type"] == DistributedType.TPU and config["mixed_precision"] == "bf16":
         config["downcast_bf16"] = _ask_prompt(
-            "Should `torch.float` be cast as `bfloat16` and `torch.double` remain `float32` on TPUs?", "bool",
+            "Should `torch.float` be cast as `bfloat16` and `torch.double` remain `float32` on TPUs?",
+            "bool",
         )
 
     return ClusterConfig(compute_environment=ComputeEnvironment.LOCAL_MACHINE, **config)

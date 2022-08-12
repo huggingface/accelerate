@@ -7,6 +7,7 @@ import torch
 
 from accelerate import __version__ as version
 from accelerate.commands.config import default_config_file, load_config_from_file
+from accelerate.utils import console
 
 
 def env_command_parser(subparsers=None):
@@ -41,16 +42,16 @@ def env_command(args):
         "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
     }
 
-    print("\nCopy-and-paste the text below in your GitHub issue\n")
-    print("\n".join([f"- {prop}: {val}" for prop, val in info.items()]))
+    console.print("\nCopy-and-paste the text below in your GitHub issue\n")
+    console.print("\n".join([f"- {prop}: {val}" for prop, val in info.items()]))
 
-    print("- `Accelerate` default config:" if args.config_file is None else "- `Accelerate` config passed:")
+    console.print("- `Accelerate` default config:" if args.config_file is None else "- `Accelerate` config passed:")
     accelerate_config_str = (
         "\n".join([f"\t- {prop}: {val}" for prop, val in accelerate_config.items()])
         if isinstance(accelerate_config, dict)
         else f"\t{accelerate_config}"
     )
-    print(accelerate_config_str)
+    console.print(accelerate_config_str)
 
     info["`Accelerate` configs"] = accelerate_config
 
