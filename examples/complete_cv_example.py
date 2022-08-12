@@ -105,6 +105,8 @@ def training_function(config, args):
     # We need to initialize the trackers we use, and also store our configuration
     if args.with_tracking and accelerator.is_main_process:
         run = os.path.split(__file__)[-1].split(".")[0]
+        if args.logging_dir:
+            run = os.path.join(args.logging_dir, run)
         accelerator.init_trackers(run, config)
 
     # Grab all the image filenames
