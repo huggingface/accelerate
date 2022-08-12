@@ -19,7 +19,7 @@ import os
 from ...utils.constants import RICH_COLORS, SAGEMAKER_PARALLEL_EC2_INSTANCES
 from ...utils.dataclasses import ComputeEnvironment, SageMakerDistributedType
 from ...utils.imports import is_boto3_available
-from ...utils.rich import _ask_prompt
+from ...utils.rich import _ask_field
 from .config_args import SageMakerConfig
 from .config_utils import _convert_sagemaker_distributed_mode
 
@@ -88,71 +88,71 @@ def _get_iam_role_arn(role_name):
 
 
 def get_sagemaker_input():
-    credentials_configuration = _ask_prompt(
+    credentials_configuration = _ask_field(
         f"How do you want to authorize? ([{RICH_COLORS[0]}][0] AWS Profile[/{RICH_COLORS[0]}], [{RICH_COLORS[1]}][1] Credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)[/{RICH_COLORS[1]}])",
         "int",
         choices=[0, 1],
     )
     aws_profile = None
     if credentials_configuration == 0:
-        aws_profile = _ask_prompt("Enter your AWS Profile name", default="default")
+        aws_profile = _ask_field("Enter your AWS Profile name", default="default")
         os.environ["AWS_PROFILE"] = aws_profile
     else:
         print(
             "Note you will need to provide AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY when you launch you training script with,"
             "`accelerate launch --aws_access_key_id XXX --aws_secret_access_key YYY`"
         )
-        aws_access_key_id = _ask_prompt("AWS Access Key ID", password=True)
+        aws_access_key_id = _ask_field("AWS Access Key ID", password=True)
         os.environ["AWS_ACCESS_KEY_ID"] = aws_access_key_id
 
-        aws_secret_access_key = _ask_prompt("AWS Secret Access Key", password=True)
+        aws_secret_access_key = _ask_field("AWS Secret Access Key", password=True)
         os.environ["AWS_SECRET_ACCESS_KEY"] = aws_secret_access_key
 
-    aws_region = _ask_prompt("Enter your AWS Region", default="us-east-1")
+    aws_region = _ask_field("Enter your AWS Region", default="us-east-1")
     os.environ["AWS_DEFAULT_REGION"] = aws_region
 
-    role_management = _ask_prompt(
+    role_management = _ask_field(
         f"Do you already have an IAM Role for executing Amazon SageMaker Training Jobs? ([{RICH_COLORS[0]}][0] provide IAM Role name[/{RICH_COLORS[0]}], [{RICH_COLORS[1]}][1] create new IAM role using credentials[/{RICH_COLORS[1]}]",
         "int",
         choices=[0, 1],
     )
     if role_management == 0:
-        iam_role_name = _ask_prompt("Enter your IAM role name")
+        iam_role_name = _ask_field("Enter your IAM role name")
     else:
         iam_role_name = "accelerate_sagemaker_execution_role"
         print(f'Accelerate will create an iam role "{iam_role_name}" using the provided credentials')
         _create_iam_role_for_sagemaker(iam_role_name)
 
-    is_custom_docker_image = _ask_prompt(
+    is_custom_docker_image = _ask_field(
         "Do you want to use custom Docker image?",
         "bool",
     )
     docker_image = None
     if is_custom_docker_image:
-        docker_image = _ask_prompt("Enter your Docker image:").lower()
+        docker_image = _ask_field("Enter your Docker image:").lower()
 
-    is_sagemaker_inputs_enabled = _ask_prompt(
+    is_sagemaker_inputs_enabled = _ask_field(
         "Do you want to provide SageMaker input channels with data locations?",
         "bool",
     )
     sagemaker_inputs_file = None
     if is_sagemaker_inputs_enabled:
-        sagemaker_inputs_file = _ask_prompt(
+        sagemaker_inputs_file = _ask_field(
             "Enter the path to the SageMaker inputs TSV file with columns (channel_name, data_location)",
         ).lower()
 
-    is_sagemaker_metrics_enabled = _ask_prompt(
+    is_sagemaker_metrics_enabled = _ask_field(
         "Do you want to enable SageMaker metrics?",
         "bool",
     )
     sagemaker_metrics_file = None
     if is_sagemaker_metrics_enabled:
-        sagemaker_metrics_file = _ask_prompt(
+        sagemaker_metrics_file = _ask_field(
             "Enter the path to the SageMaker metrics TSV file with columns (metric_name, metric_regex)",
         ).lower()
 
     distributed_type = _convert_sagemaker_distributed_mode(
-        _ask_prompt(
+        _ask_field(
             f"Which type of machine are you using? ([{RICH_COLORS[0]}][0] No distributed training[/{RICH_COLORS[0]}], [{RICH_COLORS[1]}][1] data parallelism[/{RICH_COLORS[1]}])",
             "int",
             choices=[0, 1],
@@ -166,24 +166,24 @@ def get_sagemaker_input():
             ec2_instance_query += f"[{RICH_COLORS[i]}][{i}] {instance_type}[/{RICH_COLORS[i]}], "
         ec2_instance_query = ec2_instance_query[:-2] + ")"
         ec2_instance_type = SAGEMAKER_PARALLEL_EC2_INSTANCES[
-            _ask_prompt(ec2_instance_query, "int", choices=[*map(str, range(3))])
+            _ask_field(ec2_instance_query, "int", choices=[*map(str, range(3))])
         ]
     else:
         ec2_instance_query += "? [ml.p3.2xlarge]:"
-        ec2_instance_type = _ask_prompt(ec2_instance_query, default="ml.p3.2xlarge").lower()
+        ec2_instance_type = _ask_field(ec2_instance_query, default="ml.p3.2xlarge").lower()
 
     num_machines = 1
     if (
         distributed_type == SageMakerDistributedType.DATA_PARALLEL
         or distributed_type == SageMakerDistributedType.MODEL_PARALLEL
     ):
-        num_machines = _ask_prompt(
+        num_machines = _ask_field(
             "How many machines do you want use?",
             "int",
             default=1,
         )
 
-    mixed_precision = _ask_prompt(
+    mixed_precision = _ask_field(
         "Do you wish to use FP16 or BF16 (mixed precision)?",
         default="No",
     )

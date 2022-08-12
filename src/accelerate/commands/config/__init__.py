@@ -18,7 +18,7 @@ import argparse
 import os
 
 from accelerate.utils import RICH_COLORS, ComputeEnvironment
-from accelerate.utils.rich import _ask_prompt
+from accelerate.utils.rich import _ask_field
 
 from .cluster import get_cluster_input
 from .config_args import cache_dir, default_config_file, default_yaml_config_file, load_config_from_file  # noqa: F401
@@ -28,7 +28,7 @@ from .sagemaker import get_sagemaker_input
 
 def get_user_input():
     compute_environment = _convert_compute_environment(
-        _ask_prompt(
+        _ask_field(
             f"In which compute environment are you running? ([{RICH_COLORS[0]}][0] This machine[/{RICH_COLORS[0]}], [{RICH_COLORS[1]}][1] AWS (Amazon SageMaker)[/{RICH_COLORS[1]}])",
             "int",
             choices=["0", "1"],

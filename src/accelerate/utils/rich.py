@@ -25,7 +25,7 @@ install(show_locals=False)
 _kind2prompt = {"bool": Confirm.ask, "float": FloatPrompt.ask, "int": IntPrompt.ask, "default": Prompt.ask}
 
 
-def _ask_prompt(prompt, kind="default", choices=None, default=None, password=False):
+def _ask_field(prompt, kind="default", choices=None, default=None, password=False):
     if default is None:
         if kind == "bool":
             default = False
