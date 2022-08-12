@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import warnings
 from distutils.util import strtobool
 
 import torch
@@ -221,6 +222,14 @@ class AcceleratorState:
                                 "and/or you do not have an MPS-enabled device on this machine."
                             )
                     else:
+                        from .utils import is_torch_version
+
+                        if not is_torch_version(">", "1.12.0"):
+                            warnings.warn(
+                                "We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. "
+                                "It has major fixes related to model correctness and performance improvements for transformer based models. "
+                                "Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details."
+                            )
                         self.device = torch.device("mps")
                 elif cpu or not torch.cuda.is_available():
                     self.device = torch.device("cpu")
