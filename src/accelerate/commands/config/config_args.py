@@ -137,6 +137,7 @@ class ClusterConfig(BaseConfig):
     num_machines: int = 1
     main_process_ip: Optional[str] = None
     main_process_port: Optional[int] = None
+    rdzv_backend: Optional[str] = "static"
     main_training_function: str = "main"
 
     # args for deepspeed_plugin

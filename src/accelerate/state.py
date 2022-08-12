@@ -251,7 +251,7 @@ class AcceleratorState:
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
         else:
-            f"Mixed precision type: {mixed_precision}\n"
+            repr += f"Mixed precision type: {mixed_precision}\n"
         return repr
 
     # For backward compatibility
