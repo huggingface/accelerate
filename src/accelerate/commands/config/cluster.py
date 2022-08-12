@@ -37,6 +37,7 @@ def get_cluster_input():
     num_machines = 1
     main_process_ip = None
     main_process_port = None
+    rdzv_backend = "static"
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
@@ -55,6 +56,9 @@ def get_cluster_input():
             main_process_port = _ask_field(
                 "What is the port you will use to communicate with the main process? ",
                 lambda x: int(x),
+            )
+            rdzv_backend = _ask_field(
+                "What rendezvous backend will you use? ('static', 'c10d', ...)", default="static"
             )
 
     if distributed_type == DistributedType.NO:
@@ -323,4 +327,5 @@ def get_cluster_input():
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
         use_cpu=use_cpu,
+        rdzv_backend=rdzv_backend,
     )
