@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Dict, List
 
 import torch
-import torch.distributed.run as distrib_run
 
 import psutil
 from accelerate.commands.config import default_config_file, load_config_from_file
@@ -48,6 +47,10 @@ from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
 from rich import get_console
 from rich.logging import RichHandler
+
+
+if is_torch_version(">=", "1.9.0"):
+    import torch.distributed.run as distrib_run
 
 
 FORMAT = "%(message)s"
