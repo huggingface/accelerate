@@ -18,7 +18,7 @@ from functools import partial
 import torch
 
 from accelerate import Accelerator, debug_launcher
-from accelerate.test_utils import require_cpu
+from accelerate.test_utils import require_cpu, require_torch_version
 
 
 def scheduler_test(num_processes=2, step_scheduler_with_optimizer=True, split_batches=False):
@@ -48,6 +48,7 @@ def scheduler_test(num_processes=2, step_scheduler_with_optimizer=True, split_ba
 
 
 @require_cpu
+@require_torch_version(version="1.5.0")
 class SchedulerTester(unittest.TestCase):
     def test_scheduler_steps_with_optimizer_single_process(self):
         debug_launcher(partial(scheduler_test, num_processes=1), num_processes=1)

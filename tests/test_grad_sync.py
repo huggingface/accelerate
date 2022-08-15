@@ -25,6 +25,7 @@ from accelerate.test_utils import (
     require_cpu,
     require_multi_gpu,
     require_single_gpu,
+    require_torch_version,
     test_sync,
 )
 from accelerate.utils import get_launch_prefix, patch_environment
@@ -36,10 +37,12 @@ class SyncScheduler(unittest.TestCase):
         self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_sync.py"])
 
     @require_cpu
+    @require_torch_version(version="1.5.0")
     def test_gradient_sync_cpu_noop(self):
         debug_launcher(test_sync.main, num_processes=1)
 
     @require_cpu
+    @require_torch_version(version="1.5.0")
     def test_gradient_sync_cpu_multi(self):
         debug_launcher(test_sync.main)
 

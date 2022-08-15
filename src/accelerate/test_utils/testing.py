@@ -20,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from distutils.util import strtobool
+from functools import partial
 from pathlib import Path
 from typing import List, Union
 from unittest import mock
@@ -130,6 +131,16 @@ def require_fsdp(test_case):
     Decorator marking a test that requires FSDP installed. These tests are skipped when FSDP isn't installed
     """
     return unittest.skipUnless(is_torch_version(">=", "1.12.0"), "test requires torch version >= 1.12.0")(test_case)
+
+
+def require_torch_version(test_case=None, version=None):
+    """
+    Decorator marking that a test requires a particular torch version to be tested. These tests are skipped when a
+    torch version is not installed
+    """
+    if test_case is None:
+        return partial(require_torch_version, version=version)
+    return unittest.skipUnless(is_torch_version(">=", version), f"test requires torch version >= {version}")
 
 
 def require_tensorboard(test_case):

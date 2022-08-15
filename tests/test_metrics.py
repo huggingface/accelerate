@@ -26,6 +26,7 @@ from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_gpu,
     require_single_gpu,
+    require_torch_version,
 )
 from accelerate.utils import get_launch_prefix, patch_environment
 
@@ -43,10 +44,12 @@ class MetricTester(unittest.TestCase):
         self.test_metrics = test_metrics
 
     @require_cpu
+    @require_torch_version(version="1.5.0")
     def test_metric_cpu_noop(self):
         debug_launcher(self.test_metrics.main, num_processes=1)
 
     @require_cpu
+    @require_torch_version(version="1.5.0")
     def test_metric_cpu_multi(self):
         debug_launcher(self.test_metrics.main)
 
