@@ -33,7 +33,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }} 
           pip install -e . --no-deps
-          if [[ ${{ matrix.pytorch-version }} == minimum]]; then pip install torch==1.4.0
+          if [[ ${{ matrix.pytorch-version }} == minimum]]; then pip install torch==1.4.0; fi
 
       - name: Run test on GPUs
         run: |
@@ -69,7 +69,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e . --no-deps
-          if [[ ${{ matrix.pytorch-version }} == minimum]]; then pip install torch==1.4.0
+          if [[ ${{ matrix.pytorch-version }} == minimum]]; then pip install torch==1.4.0; fi
 
       - name: Run core and big modeling tests on GPUs
         run: |
