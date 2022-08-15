@@ -15,7 +15,6 @@
 import os
 import unittest
 from tempfile import TemporaryDirectory
-from ..src.accelerate.test_utils.testing import require_torch_version
 
 import torch
 import torch.nn as nn
@@ -31,6 +30,8 @@ from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import require_cuda, require_multi_gpu, slow
 from accelerate.utils import offload_state_dict
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from ..src.accelerate.test_utils.testing import require_torch_version
 
 
 class ModelForTest(nn.Module):
