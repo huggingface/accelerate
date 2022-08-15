@@ -68,6 +68,7 @@ class DistributedDataParallelKwargs(KwargsHandler):
     find_unused_parameters: bool = False
     check_reduction: bool = False
     gradient_as_bucket_view: bool = False
+    static_graph: bool = False
 
 
 @dataclass
