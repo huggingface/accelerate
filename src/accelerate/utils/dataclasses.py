@@ -60,6 +60,8 @@ class DistributedDataParallelKwargs(KwargsHandler):
 
     `gradient_as_bucket_view` is only available in PyTorch 1.7.0 and later versions.
 
+    `static_graph` is only available in PyTorch 1.11.0 and later versions.
+
     </Tip>"""
 
     dim: int = 0
