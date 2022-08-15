@@ -135,8 +135,8 @@ def require_fsdp(test_case):
 
 def require_torch_version(test_case=None, version=None):
     """
-    Decorator marking that a test requires a particular torch version to be tested. These tests are skipped when a
-    torch version is not installed
+    Decorator marking that a test requires a particular torch version to be tested. These tests are skipped when an
+    installed torch version is less than the required one.
     """
     if test_case is None:
         return partial(require_torch_version, version=version)
