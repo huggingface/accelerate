@@ -29,6 +29,7 @@ from .utils import (
     load_checkpoint_in_model,
     offload_state_dict,
 )
+from .utils.versions import is_torch_version
 
 
 @contextmanager
@@ -59,6 +60,8 @@ def init_empty_weights(include_buffers: bool = False):
 
     </Tip>
     """
+    if not is_torch_version(">=", "1.9.0"):
+        raise NotImplementedError("Initializing empty weights to a meta device requires torch >= 1.9.0")
     old_register_parameter = nn.Module.register_parameter
     if include_buffers:
         old_register_buffer = nn.Module.register_buffer
