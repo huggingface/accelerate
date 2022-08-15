@@ -19,7 +19,8 @@ from typing import List
 
 import numpy as np
 import torch
-from torch.cuda.amp import GradScaler
+
+from accelerate.utils.versions import is_torch_version
 
 from .utils import (
     MODEL_NAME,
@@ -48,7 +49,7 @@ def save_accelerator_state(
     optimizers: list,
     schedulers: list,
     process_index: int,
-    scaler: GradScaler = None,
+    scaler=None,
 ):
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
@@ -88,7 +89,7 @@ def save_accelerator_state(
         save(state, output_scheduler_file)
         logger.info(f"Scheduler state saved in {output_scheduler_file}")
     # GradScaler state
-    if scaler is not None:
+    if scaler is not None and is_torch_version(">=", "1.6"):
         state = scaler.state_dict()
         output_scaler_file = os.path.join(output_dir, SCALER_NAME)
         torch.save(state, output_scaler_file)

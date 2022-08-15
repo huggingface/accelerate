@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        pytorch-version: [
+          latest,
+          minimum
+        ]
         test-kind: [
           test_prod,
           test_core,
@@ -43,6 +47,7 @@ jobs:
         if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
         if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
+        if [[ ${{ matrix.pytorch-version }} == minimum]]; then pip install torch==1.4.0
     
     - name: Run Tests
       run: |
