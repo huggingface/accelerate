@@ -1032,6 +1032,7 @@ class Accelerator:
         """
         wait_for_everyone()
 
+    @on_main_process
     def init_trackers(self, project_name: str, config: Optional[dict] = None, init_kwargs: Optional[dict] = {}):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
