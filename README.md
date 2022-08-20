@@ -196,7 +196,7 @@ from accelerate import notebook_launcher
 notebook_launcher(training_function)
 ```
 
-An example can be found in [this notebook](https://github.com/huggingface/notebooks/blob/master/examples/accelerate/simple_nlp_example.ipynb). [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/accelerate/simple_nlp_example.ipynb)
+An example can be found in [this notebook](https://github.com/huggingface/notebooks/blob/main/examples/accelerate_examples/simple_nlp_example.ipynb). [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/accelerate_examples/simple_nlp_example.ipynb)
 
 ## Why should I use 🤗 Accelerate?
 
