@@ -20,7 +20,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import List, Optional, Union
 
 from .logging import get_logger
-from .utils import LoggerType, is_comet_ml_available, is_tensorboard_available, is_wandb_available
+from .utils import LoggerType, is_aim_available, is_comet_ml_available, is_tensorboard_available, is_wandb_available
 
 
 _available_trackers = []
@@ -39,6 +39,11 @@ if is_comet_ml_available():
     from comet_ml import Experiment
 
     _available_trackers.append(LoggerType.COMETML)
+
+if is_aim_available():
+    from aim import Run
+
+    _available_trackers.append(LoggerType.AIM)
 
 
 logger = get_logger(__name__)
@@ -320,7 +325,74 @@ class CometMLTracker(GeneralTracker):
         logger.info("CometML run closed")
 
 
-LOGGER_TYPE_TO_CLASS = {"tensorboard": TensorBoardTracker, "wandb": WandBTracker, "comet_ml": CometMLTracker}
+class AimTracker(GeneralTracker):
+    """
+    A `Tracker` class that supports `aim`. Should be initialized at the start of your script.
+
+    Args:
+        run_name (`str`):
+            The name of the experiment run.
+        kwargs:
+            Additional key word arguments passed along to the `Run.__init__` method.
+    """
+
+    name = "aim"
+    requires_logging_directory = True
+
+    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
+        self.run_name = run_name
+        self.writer = Run(repo=logging_dir, experiment=run_name, **kwargs)
+        logger.info(f"Initialized Aim project {self.run_name}")
+        logger.info(
+            "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
+        )
+
+    @property
+    def tracker(self):
+        return self.writer
+
+    def store_init_configuration(self, values: dict):
+        """
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+
+        Args:
+            values (`dict`):
+                Values to be stored as initial hyperparameters as key-value pairs.
+        """
+        self.writer["hparams"].update(values)
+
+    def log(self, values: dict, step: Optional[int], **kwargs):
+        """
+        Logs `values` to the current run.
+
+        Args:
+            values (`dict`):
+                Values to be logged as key-value pairs.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs (`dict`, *optional*):
+                Additional key word arguments passed along to the `Run.track` method. Valid keys include `context` and
+                `epoch`.
+        """
+        # Note: replace this with the dictionary support when merged
+        context = kwargs.pop("context", {})
+        epoch = kwargs.pop("epoch", None)
+        for key, value in values.items():
+            self.writer.track(value, key, step=step, epoch=epoch, context=context)
+
+    def finish(self):
+        """
+        Closes `aim` writer
+        """
+        self.writer.finalize()
+
+
+LOGGER_TYPE_TO_CLASS = {
+    "aim": AimTracker,
+    "comet_ml": CometMLTracker,
+    "tensorboard": TensorBoardTracker,
+    "wandb": WandBTracker,
+}
 
 
 def filter_trackers(
