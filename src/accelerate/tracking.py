@@ -378,13 +378,13 @@ class AimTracker(GeneralTracker):
         context = kwargs.pop("context", {})
         epoch = kwargs.pop("epoch", None)
         for key, value in values.items():
-            self.writer.track(value, key, step=step, epoch=epoch, context=context)
+            self.writer.track(value, name=key, step=step, epoch=epoch, context=context)
 
     def finish(self):
         """
         Closes `aim` writer
         """
-        self.writer.finalize()
+        self.writer.close()
 
 
 LOGGER_TYPE_TO_CLASS = {
