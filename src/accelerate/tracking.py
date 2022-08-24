@@ -341,7 +341,7 @@ class AimTracker(GeneralTracker):
 
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
         self.run_name = run_name
-        self.writer = Run(repo=logging_dir, experiment=run_name, **kwargs)
+        self.writer = Run(run_hash=run_name, repo=logging_dir, **kwargs)
         logger.info(f"Initialized Aim project {self.run_name}")
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
@@ -370,15 +370,12 @@ class AimTracker(GeneralTracker):
                 Values to be logged as key-value pairs.
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
-            kwargs (`dict`, *optional*):
-                Additional key word arguments passed along to the `Run.track` method. Valid keys include `context` and
-                `epoch`.
+            kwargs:
+                Additional key word arguments passed along to the `Run.track` method.
         """
         # Note: replace this with the dictionary support when merged
-        context = kwargs.pop("context", {})
-        epoch = kwargs.pop("epoch", None)
         for key, value in values.items():
-            self.writer.track(value, name=key, step=step, epoch=epoch, context=context)
+            self.writer.track(value, name=key, step=step, **kwargs)
 
     def finish(self):
         """
