@@ -19,6 +19,8 @@ import os
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import List, Optional, Union
 
+import yaml
+
 from .logging import get_logger
 from .utils import LoggerType, is_comet_ml_available, is_tensorboard_available, is_wandb_available
 
@@ -151,7 +153,9 @@ class TensorBoardTracker(GeneralTracker):
         """
         self.writer.add_hparams(values, metric_dict={})
         self.writer.flush()
-        logger.info("Stored initial configuration hyperparameters to TensorBoard")
+        with open("hparams.yaml", "w") as outfile:
+            yaml.dump(values, outfile)
+        logger.info("Stored initial configuration hyperparameters to TensorBoard and hparams yaml file")
 
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
