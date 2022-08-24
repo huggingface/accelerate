@@ -115,3 +115,5 @@ for batch in dataloader:
         loss = loss_function(outputs, targets)
         accelerator.backward(loss)
 ```
+
+As a result, you should either use *one or the other* when it comes to API choice. 
