@@ -153,7 +153,7 @@ class TensorBoardTracker(GeneralTracker):
         """
         self.writer.add_hparams(values, metric_dict={})
         self.writer.flush()
-        with open("hparams.yaml", "w") as outfile:
+        with open("self.logging_dir/hparams.yaml", "w") as outfile:
             yaml.dump(values, outfile)
         logger.info("Stored initial configuration hyperparameters to TensorBoard and hparams yaml file")
 
