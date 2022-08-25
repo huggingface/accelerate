@@ -341,7 +341,8 @@ class AimTracker(GeneralTracker):
 
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
         self.run_name = run_name
-        self.writer = Run(run_hash=run_name, repo=logging_dir, **kwargs)
+        self.writer = Run(repo=logging_dir, **kwargs)
+        self.writer.name = self.run_name
         logger.info(f"Initialized Aim project {self.run_name}")
         logger.info(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
