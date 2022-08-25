@@ -19,6 +19,7 @@ import os
 import time
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import List, Optional, Union
+
 import yaml
 
 from .logging import get_logger
@@ -144,8 +145,8 @@ class TensorBoardTracker(GeneralTracker):
 
     def store_init_configuration(self, values: dict):
         """
-        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
-        Stores the hyperparameters in a yaml file for future use.
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment. Stores the
+        hyperparameters in a yaml file for future use.
 
         Args:
             values (Dictionary `str` to `bool`, `str`, `float` or `int`):
@@ -155,11 +156,12 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.add_hparams(values, metric_dict={})
         self.writer.flush()
         project_run_name = time.time()
-        with open(os.path.join(self.logging_dir, project_run_name,  "hparams.yml"), "w") as outfile:
+        with open(os.path.join(self.logging_dir, project_run_name, "hparams.yml"), "w") as outfile:
             try:
                 yaml.dump(values, outfile)
             except yaml.representer.RepresenterError:
-                logger.info("Serialization to store hyperparmeters failed")
+                logger.error("Serialization to store hyperparameters failed")
+                raise
         logger.info("Stored initial configuration hyperparameters to TensorBoard and hparams yaml file")
 
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
