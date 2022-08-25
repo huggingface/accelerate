@@ -156,7 +156,9 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.add_hparams(values, metric_dict={})
         self.writer.flush()
         project_run_name = time.time()
-        with open(os.path.join(self.logging_dir, str(project_run_name), "hparams.yml"), "w") as outfile:
+        dir_name = os.path.join(self.logging_dir, str(project_run_name))
+        os.makedirs(dir_name, exist_ok=True)
+        with open(os.path.join(dir_name, "hparams.yml"), "w") as outfile:
             try:
                 yaml.dump(values, outfile)
             except yaml.representer.RepresenterError:
