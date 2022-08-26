@@ -243,3 +243,16 @@ pip install accelerate
 - FP16 with native AMP (apex on the roadmap)
 - DeepSpeed support (Experimental)
 - PyTorch Fully Sharded Data Parallel (FSDP) support (Experimental)
+
+## Citing 🤗 Accelerate
+
+If you use 🤗 Accelerate in your publication, please cite it by using the following BibTeX entry.
+
+```bibtex
+@Misc{accelerate,
+  title =        {Accelerate: Training and inference at scale made simple, efficient and adaptable.},
+  author =       {Sylvain Gugger, Lysandre Debut, Thomas Wolf, Philipp Schmid, Zachary Mueller, Sourab Mangrulkar},
+  howpublished = {\url{https://github.com/huggingface/accelerate}},
+  year =         {2022}
+}
+```
