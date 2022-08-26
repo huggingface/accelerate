@@ -116,4 +116,4 @@ for batch in dataloader:
         accelerator.backward(loss)
 ```
 
-As a result, you should either use *one or the other* when it comes to API choice. 
+As a result, you should either use *`accelerator.accumulate` or `accelerator.no_sync`* when it comes to API choice. 
