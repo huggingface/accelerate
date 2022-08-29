@@ -17,6 +17,7 @@
 import warnings
 
 from .state import AcceleratorState
+from .utils import DistributedType
 
 
 warnings.filterwarnings("ignore", category=UserWarning, module="torch.optim.lr_scheduler")
@@ -51,7 +52,7 @@ class AcceleratedScheduler:
         self.step_with_optimizer = step_with_optimizer
 
     def step(self, *args, **kwargs):
-        if not self.step_with_optimizer:
+        if not self.step_with_optimizer or AcceleratorState().distributed_type == DistributedType.TPU:
             # No link between scheduler and optimizer -> just step
             self.scheduler.step(*args, **kwargs)
             return
