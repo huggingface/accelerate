@@ -52,7 +52,7 @@ class AcceleratedScheduler:
         self.step_with_optimizer = step_with_optimizer
 
     def step(self, *args, **kwargs):
-        if not self.step_with_optimizer or AcceleratorState().distributed_type == DistributedType.TPU:
+        if not self.step_with_optimizer:
             # No link between scheduler and optimizer -> just step
             self.scheduler.step(*args, **kwargs)
             return
@@ -61,7 +61,7 @@ class AcceleratedScheduler:
         for opt in self.optimizers:
             if opt.step_was_skipped:
                 return
-        if self.split_batches:
+        if self.split_batches or AcceleratorState().distributed_type == DistributedType.TPU:
             # Split batches -> the training dataloader batch size is not changed so one step per training step
             self.scheduler.step(*args, **kwargs)
         else:
