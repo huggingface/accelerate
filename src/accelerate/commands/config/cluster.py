@@ -265,6 +265,67 @@ def get_cluster_input():
                 default="FULL_STATE_DICT",
             )
 
+    megatronlm_config = {}
+    if distributed_type in [DistributedType.MULTI_GPU]:
+        use_megatronlm = _ask_field(
+            "Do you want to use Megatron-LM ? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+        if use_megatronlm:
+            distributed_type = DistributedType.MEGATRONLM
+        if distributed_type == DistributedType.MEGATRONLM:
+            prefix = "megatronlm_"
+            megatronlm_config[prefix + "tp_degree"] = _ask_field(
+                "What is the Tensor Parallelism degree/size? [1]:",
+                lambda x: int(x),
+                default=1,
+                error_message="Please enter an integer.",
+            )
+            if megatronlm_config[prefix + "tp_degree"] > 1:
+                megatronlm_config[prefix + "sequence_parallelism"] = _ask_field(
+                    "Do you want to enable Sequence Parallelism? [YES/no]: ",
+                    _convert_yes_no_to_bool,
+                    default=True,
+                    error_message="Please enter yes or no.",
+                )
+
+            megatronlm_config[prefix + "pp_degree"] = _ask_field(
+                "What is the Pipeline Parallelism degree/size? [1]:",
+                lambda x: int(x),
+                default=1,
+                error_message="Please enter an integer.",
+            )
+            if megatronlm_config[prefix + "pp_degree"] > 1:
+                megatronlm_config[prefix + "num_micro_batches"] = _ask_field(
+                    "What is the number of micro-batches? [1]:",
+                    lambda x: int(x),
+                    default=1,
+                    error_message="Please enter an integer.",
+                )
+
+            megatronlm_config[prefix + "recompute_activations"] = _ask_field(
+                "Do you want to enable selective activation recomputation? [YES/no]: ",
+                _convert_yes_no_to_bool,
+                default=True,
+                error_message="Please enter yes or no.",
+            )
+
+            megatronlm_config[prefix + "use_distributed_optimizer"] = _ask_field(
+                "Do you want to use distributed optimizer "
+                "which shards optimizer state and gradients across data pralellel ranks? [YES/no]: ",
+                _convert_yes_no_to_bool,
+                default=True,
+                error_message="Please enter yes or no.",
+            )
+
+            megatronlm_config[prefix + "gradient_clipping"] = _ask_field(
+                "What is the gradient clipping value based on global L2 Norm (0 to disable)? [1.0]: ",
+                lambda x: float(x),
+                default=1.0,
+            )
+
     if distributed_type == DistributedType.TPU:
         main_training_function = _ask_field(
             "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
@@ -285,7 +346,7 @@ def get_cluster_input():
             default=1,
             error_message="Please enter an integer.",
         )
-    elif distributed_type in [DistributedType.FSDP, DistributedType.DEEPSPEED]:
+    elif distributed_type in [DistributedType.FSDP, DistributedType.DEEPSPEED, DistributedType.MEGATRONLM]:
         num_processes = _ask_field(
             "How many GPU(s) should be used for distributed training? [1]:",
             lambda x: int(x),
@@ -326,6 +387,7 @@ def get_cluster_input():
         main_training_function=main_training_function,
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
+        megatronlm_config=megatronlm_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
     )

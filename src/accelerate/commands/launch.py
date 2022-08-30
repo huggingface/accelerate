@@ -80,6 +80,8 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether or not this should use MPS-enabled GPU device on MacOS machines.",
     )
+
+    # deepspeed args
     parser.add_argument(
         "--use_deepspeed",
         default=False,
@@ -160,6 +162,8 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="DeepSpeed multi-node launcher to use.",
     )
+
+    # fsdp args
     parser.add_argument(
         "--use_fsdp",
         default=False,
@@ -233,6 +237,62 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="This argument is deprecated. Use `fsdp_transformer_layer_cls_to_wrap` instead.",
     )
+
+    # megatronlm args
+    parser.add_argument(
+        "--use_megatronlm",
+        default=False,
+        action="store_true",
+        help="Whether to use Megatron-LM.",
+    )
+    parser.add_argument(
+        "--megatronlm_tp_degree",
+        type=int,
+        default=1,
+        help="Megatron-LM's Tensor Parallelism (TP) degree. (useful only when `use_megatronlm` flag is passed).",
+    )
+    parser.add_argument(
+        "--megatronlm_pp_degree",
+        type=int,
+        default=1,
+        help="Megatron-LM's Pipeline Parallelism (PP) degree. (useful only when `use_megatronlm` flag is passed).",
+    )
+    parser.add_argument(
+        "--megatronlm_num_micro_batches",
+        type=int,
+        default=None,
+        help="Megatron-LM's number of micro batches when PP degree > 1. (useful only when `use_megatronlm` flag is passed).",
+    )
+    parser.add_argument(
+        "--megatronlm_sequence_parallelism",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to enable Sequence Parallelism when TP degree > 1. "
+        "(useful only when `use_megatronlm` flag is passed).",
+    )
+    parser.add_argument(
+        "--megatronlm_recompute_activations",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to enable Selective Activation Recomputation. "
+        "(useful only when `use_megatronlm` flag is passed).",
+    )
+    parser.add_argument(
+        "--megatronlm_use_distributed_optimizer",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to use distributed optimizer "
+        "which shards optimizer state and gradients across Data Pralellel (DP) ranks. "
+        "(useful only when `use_megatronlm` flag is passed).",
+    )
+    parser.add_argument(
+        "--megatronlm_gradient_clipping",
+        default=1.0,
+        type=float,
+        help="Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable). "
+        "(useful only when `use_megatronlm` flag is passed).",
+    )
+
     parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
@@ -449,6 +509,22 @@ def multi_gpu_launcher(args):
             current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch_policy)
         if args.fsdp_state_dict_type is not None:
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
+
+    if args.use_megatronlm:
+        prefix = "MEGATRON_"
+        current_env["USE_MEGATRONLM"] = "true"
+        current_env[prefix + "TP_DEGREE"] = str(args.megatronlm_tp_degree)
+        current_env[prefix + "PP_DEGREE"] = str(args.megatronlm_pp_degree)
+        current_env[prefix + "GRADIENT_CLIPPING"] = str(args.megatronlm_gradient_clipping)
+        if args.megatronlm_num_micro_batches is not None:
+            current_env[prefix + "NUM_MICRO_BATCHES"] = str(args.megatronlm_num_micro_batches)
+        if args.megatronlm_sequence_parallelism is not None:
+            current_env[prefix + "SEQUENCE_PARALLELISM"] = str(args.megatronlm_sequence_parallelism)
+        if args.megatronlm_recompute_activations is not None:
+            current_env[prefix + "RECOMPUTE_ACTIVATIONS"] = str(args.megatronlm_recompute_activations)
+        if args.megatronlm_use_distributed_optimizer is not None:
+            current_env[prefix + "USE_DISTRIBUTED_OPTIMIZER"] = str(args.megatronlm_use_distributed_optimizer)
+
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     if is_torch_version("<", "1.9.0"):
         raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
@@ -766,12 +842,14 @@ def launch_command(args):
             and not args.use_deepspeed
             and not args.use_fsdp
             and not args.use_mps_device
+            and not args.use_megatronlm
         ):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_mps_device = defaults.distributed_type == DistributedType.MPS
+            args.use_megatronlm = defaults.distributed_type == DistributedType.MEGATRONLM
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
@@ -784,6 +862,8 @@ def launch_command(args):
                         if "fsdp" not in arg_to_set:
                             arg_to_set = "fsdp_" + arg_to_set
                         setattr(args, arg_to_set, defaults.fsdp_config[k])
+                    for k in defaults.megatronlm_config:
+                        setattr(args, k, defaults.megatronlm_config[k])
                     continue
 
                 # Those args are handled separately
@@ -841,6 +921,8 @@ def launch_command(args):
     if args.use_deepspeed and not args.cpu:
         deepspeed_launcher(args)
     elif args.use_fsdp and not args.cpu:
+        multi_gpu_launcher(args)
+    elif args.use_megatronlm and not args.cpu:
         multi_gpu_launcher(args)
     elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)

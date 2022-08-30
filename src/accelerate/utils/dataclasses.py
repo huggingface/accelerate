@@ -24,6 +24,7 @@ import typing
 import warnings
 from dataclasses import dataclass, field
 from datetime import timedelta
+from distutils.util import strtobool
 from typing import Any, Callable, Iterable, Optional
 
 import torch
@@ -127,6 +128,7 @@ class DistributedType(str, enum.Enum):
     FSDP = "FSDP"
     TPU = "TPU"
     MPS = "MPS"
+    MEGATRONLM = "MEGATRONLM"
 
 
 class SageMakerDistributedType(str, enum.Enum):
@@ -643,3 +645,142 @@ class FullyShardedDataParallelPlugin:
         # called from all ranks, though only rank0 has a valid param for full_osd
         sharded_osd = FSDP.scatter_full_optim_state_dict(full_osd, model)
         optimizer.load_state_dict(sharded_osd)
+
+
+@dataclass
+class MegatronLMPlugin:
+    """
+    Plugin for Megatron-LM to enable tensor, pipeline, sequence and data parallelism. Also to enable selective
+    activation recomputation and optimized fused kernels.
+    """
+
+    tp_degree: int = field(default=None, metadata={"help": "tensor parallelism degree."})
+    pp_degree: int = field(default=None, metadata={"help": "pipeline parallelism degree."})
+    num_micro_batches: int = field(default=None, metadata={"help": "number of micro-batches."})
+    gradient_clipping: float = field(
+        default=None, metadata={"help": "gradient clipping value based on global L2 Norm (0 to disable)"}
+    )
+    sequence_parallelism: bool = field(
+        default=None,
+        metadata={"help": "enable sequence parallelism"},
+    )
+    recompute_activation: bool = field(
+        default=None,
+        metadata={"help": "enable selective activation recomputation"},
+    )
+    use_distributed_optimizer: bool = field(
+        default=None,
+        metadata={"help": "enable distributed optimizer"},
+    )
+    pipeline_model_parallel_split_rank: int = field(
+        default=None, metadata={"help": "Rank where encoder and decoder should be split."}
+    )
+    num_layers_per_virtual_pipeline_stage: int = field(
+        default=None, metadata={"help": "Number of layers per virtual pipeline stage."}
+    )
+    is_train_batch_min: str = field(
+        default=True,
+        metadata={"help": "If both train & eval dataloaders are specified, this will decide the micro_batch_size"},
+    )
+
+    def __post_init__(self):
+        prefix = "MEGATRON_"
+        if self.tp_degree is None:
+            self.tp_degree = int(os.environ.get(prefix + "TP_DEGREE", 1))
+        if self.pp_degree is None:
+            self.pp_degree = int(os.environ.get(prefix + "PP_DEGREE", 1))
+        if self.num_micro_batches is None:
+            self.num_micro_batches = int(os.environ.get(prefix + "NUM_MICRO_BATCHES", 1))
+        if self.gradient_clipping is None:
+            self.gradient_clipping = float(os.environ.get(prefix + "GRADIENT_CLIPPING", 1.0))
+        if self.recompute_activation is None:
+            self.recompute_activation = strtobool(os.environ.get(prefix + "RECOMPUTE_ACTIVATION", "False")) == 1
+        if self.use_distributed_optimizer is None:
+            self.use_distributed_optimizer = (
+                strtobool(os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")) == 1
+            )
+        if self.sequence_parallelism is None:
+            self.sequence_parallelism = strtobool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False")) == 1
+
+        if self.pp_degree > 1:
+            self.DDP_impl = "local"
+        else:
+            self.DDP_impl = "torch"
+
+        self.megtron_lm_default_args = {
+            "tensor_model_parallel_size": self.tp_degree,
+            "pipeline_model_parallel_size": self.pp_degree,
+            "pipeline_model_parallel_split_rank": self.pipeline_model_parallel_split_rank,
+            "num_layers_per_virtual_pipeline_stage": self.num_layers_per_virtual_pipeline_stage,
+            "DDP_impl": self.DDP_impl,
+            "use_distributed_optimizer": self.use_distributed_optimizer,
+            "recompute_activations": self.recompute_activation,
+            "sequence_parallel": self.sequence_parallelism,
+            "clip_grad": self.gradient_clipping,
+            "num_micro_batches": self.num_micro_batches,
+        }
+
+    def set_network_size_args(self, model):
+        # Check if the model is either BERT, GPT or T5 else raise error
+        # set 'num_layers', 'hidden_size', 'num_attention_heads', 'max_position_embeddings'
+        if "bert" in model.__class__.__name__.lower():
+            model_type = "bert"
+            num_layers = model.config.num_hidden_layers
+            hidden_size = model.config.hidden_size
+            num_attention_heads = model.config.num_attention_heads
+            max_position_embeddings = model.config.max_position_embeddings
+            num_labels = model.config.num_labels
+        elif "gpt" in model.__class__.__name__.lower():
+            model_type = "gpt"
+            num_layers = model.config.n_layer
+            hidden_size = model.config.n_embd
+            num_attention_heads = model.config.n_head
+            max_position_embeddings = model.config.n_positions
+        elif "t5" in model.__class__.__name__.lower():
+            model_type = "t5"
+            num_layers = model.config.num_layers
+            hidden_size = model.config.d_model
+            num_attention_heads = model.config.num_heads
+            max_position_embeddings = model.config.n_positions
+        else:
+            raise ValueError("Model is not BERT, GPT or T5. Please check the model you are using.")
+
+        self.megtron_lm_default_args["model_type"] = model_type
+        self.megtron_lm_default_args["num_layers"] = num_layers
+        self.megtron_lm_default_args["hidden_size"] = hidden_size
+        self.megtron_lm_default_args["num_attention_heads"] = num_attention_heads
+        self.megtron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+        if model_type == "bert":
+            self.megtron_lm_default_args["num_labels"] = num_labels
+
+    def set_mixed_precision(self, mixed_precision):
+        if mixed_precision == "fp16":
+            self.megtron_lm_default_args["fp16"] = True
+        elif mixed_precision == "bf16":
+            self.megtron_lm_default_args["bf16"] = True
+
+    def set_training_args(self, micro_batch_size, dp_degree):
+        self.megtron_lm_default_args["data_parallel_size"] = dp_degree
+        self.megtron_lm_default_args["micro_batch_size"] = micro_batch_size
+        self.megtron_lm_default_args["global_batch_size"] = dp_degree * micro_batch_size * self.num_micro_batches
+
+    def set_optimizer_type(self, optimizer):
+        optimizer_name = optimizer.__class__.__name__.lower()
+        if "adam" in optimizer_name:
+            self.megtron_lm_default_args["optimizer"] = "adam"
+        elif "sgd" in optimizer_name:
+            self.megtron_lm_default_args["optimizer"] = "sgd"
+        else:
+            raise ValueError(f"Optimizer {optimizer_name} is not supported by Megatron-LM")
+
+    def save_model(self, model, output_dir):
+        pass
+
+    def load_model(self, model, input_dir):
+        pass
+
+    def save_optimizer(self, optimizer, output_dir):
+        pass
+
+    def load_optimizer(self, optimizer, input_dir):
+        pass

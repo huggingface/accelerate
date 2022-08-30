@@ -13,6 +13,7 @@ from .dataclasses import (
     InitProcessGroupKwargs,
     KwargsHandler,
     LoggerType,
+    MegatronLMPlugin,
     PrecisionType,
     RNGType,
     SageMakerDistributedType,
