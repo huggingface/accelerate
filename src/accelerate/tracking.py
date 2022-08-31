@@ -134,8 +134,8 @@ class TensorBoardTracker(GeneralTracker):
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
         self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
-        logger.info(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
-        logger.info(
+        logger.debug(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
+        logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
 
@@ -164,7 +164,7 @@ class TensorBoardTracker(GeneralTracker):
             except yaml.representer.RepresenterError:
                 logger.error("Serialization to store hyperparameters failed")
                 raise
-        logger.info("Stored initial configuration hyperparameters to TensorBoard and hparams yaml file")
+        logger.debug("Stored initial configuration hyperparameters to TensorBoard and hparams yaml file")
 
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
@@ -188,14 +188,14 @@ class TensorBoardTracker(GeneralTracker):
             elif isinstance(v, dict):
                 self.writer.add_scalars(k, v, global_step=step, **kwargs)
         self.writer.flush()
-        logger.info("Successfully logged to TensorBoard")
+        logger.debug("Successfully logged to TensorBoard")
 
     def finish(self):
         """
         Closes `TensorBoard` writer
         """
         self.writer.close()
-        logger.info("TensorBoard writer closed")
+        logger.debug("TensorBoard writer closed")
 
 
 class WandBTracker(GeneralTracker):
@@ -215,8 +215,8 @@ class WandBTracker(GeneralTracker):
     def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
         self.run = wandb.init(project=self.run_name, **kwargs)
-        logger.info(f"Initialized WandB project {self.run_name}")
-        logger.info(
+        logger.debug(f"Initialized WandB project {self.run_name}")
+        logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
 
@@ -234,7 +234,7 @@ class WandBTracker(GeneralTracker):
                 `str`, `float`, `int`, or `None`.
         """
         wandb.config.update(values)
-        logger.info("Stored initial configuration hyperparameters to WandB")
+        logger.debug("Stored initial configuration hyperparameters to WandB")
 
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
@@ -250,14 +250,14 @@ class WandBTracker(GeneralTracker):
                 Additional key word arguments passed along to the `wandb.log` method.
         """
         self.run.log(values, step=step, **kwargs)
-        logger.info("Successfully logged to WandB")
+        logger.debug("Successfully logged to WandB")
 
     def finish(self):
         """
         Closes `wandb` writer
         """
         self.run.finish()
-        logger.info("WandB run closed")
+        logger.debug("WandB run closed")
 
 
 class CometMLTracker(GeneralTracker):
@@ -279,8 +279,8 @@ class CometMLTracker(GeneralTracker):
     def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
         self.writer = Experiment(project_name=run_name, **kwargs)
-        logger.info(f"Initialized CometML project {self.run_name}")
-        logger.info(
+        logger.debug(f"Initialized CometML project {self.run_name}")
+        logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
 
@@ -298,7 +298,7 @@ class CometMLTracker(GeneralTracker):
                 `str`, `float`, `int`, or `None`.
         """
         self.writer.log_parameters(values)
-        logger.info("Stored initial configuration hyperparameters to CometML")
+        logger.debug("Stored initial configuration hyperparameters to CometML")
 
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
@@ -323,14 +323,14 @@ class CometMLTracker(GeneralTracker):
                 self.writer.log_other(k, v, **kwargs)
             elif isinstance(v, dict):
                 self.writer.log_metrics(v, step=step, **kwargs)
-        logger.info("Successfully logged to CometML")
+        logger.debug("Successfully logged to CometML")
 
     def finish(self):
         """
         Closes `comet-ml` writer
         """
         self.writer.end()
-        logger.info("CometML run closed")
+        logger.debug("CometML run closed")
 
 
 LOGGER_TYPE_TO_CLASS = {"tensorboard": TensorBoardTracker, "wandb": WandBTracker, "comet_ml": CometMLTracker}
@@ -384,6 +384,6 @@ def filter_trackers(
                                     )
                             loggers.append(log_type)
                         else:
-                            logger.info(f"Tried adding logger {log_type}, but package is unavailable in the system.")
+                            logger.debug(f"Tried adding logger {log_type}, but package is unavailable in the system.")
 
     return loggers
