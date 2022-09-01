@@ -14,6 +14,7 @@
 
 import importlib
 import sys
+from functools import lru_cache
 
 import torch
 
@@ -50,6 +51,7 @@ def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
+@lru_cache()
 def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if _tpu_available and check_device:
