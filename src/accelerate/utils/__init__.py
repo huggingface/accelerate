@@ -28,6 +28,7 @@ from .imports import (
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_megatron_lm_available,
     is_sagemaker_available,
     is_tensorboard_available,
     is_tpu_available,
@@ -90,6 +91,16 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
         HfDeepSpeedConfig,
+    )
+
+if is_megatron_lm_available():
+    from .megatron_lm import (
+        MegatronLMDummyScheduler,
+        initialize,
+        prepare_model,
+        prepare_optimizer,
+        prepare_scheduler,
+        prepare_data_loader,
     )
 
 from .launch import PrepareForLaunch, _filter_args, get_launch_prefix

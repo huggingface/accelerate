@@ -51,6 +51,7 @@ from .utils import (
     get_pretty_name,
     is_bf16_available,
     is_deepspeed_available,
+    is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
@@ -71,6 +72,15 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
     )
+
+if is_megatron_lm_available():
+    from .utils import MegatronLMDummyScheduler
+    from .utils import initialize as megatron_lm_initialize
+    from .utils import prepare_data_loader as megatron_lm_prepare_data_loader
+    from .utils import prepare_model as megatron_lm_prepare_model
+    from .utils import prepare_optimizer as megatron_lm_prepare_optimizer
+    from .utils import prepare_scheduler as megatron_lm_prepare_scheduler
+
 
 if is_tpu_available(check_device=False):
     import torch_xla.distributed.xla_multiprocessing as xmp
@@ -108,7 +118,7 @@ class Accelerator:
         fsdp_plugin (`FullyShardedDataParallelPlugin`, *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
-        megatronlm_plugin (`MegatronLMPlugin`, *optional*):
+        megatron_lm_plugin (`MegatronLMPlugin`, *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
@@ -170,7 +180,7 @@ class Accelerator:
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
-        megatronlm_plugin: MegatronLMPlugin = None,
+        megatron_lm_plugin: MegatronLMPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
@@ -223,12 +233,12 @@ class Accelerator:
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["USE_FSDP"] = "true"  # use FSDP if plugin is provided
 
-        if megatronlm_plugin is None:  # init from env variables
-            megatronlm_plugin = MegatronLMPlugin() if os.environ.get("USE_MEGATRONLM", "false") == "true" else None
+        if megatron_lm_plugin is None:  # init from env variables
+            megatron_lm_plugin = MegatronLMPlugin() if os.environ.get("USE_MEGATRON_LM", "false") == "true" else None
         else:
-            if not isinstance(megatronlm_plugin, MegatronLMPlugin):
-                raise TypeError("`megatronlm_plugin` must be a MegatronLMPlugin object.")
-            os.environ["USE_MEGATRONLM"] = "true"  # use MegatronLM if plugin is provided
+            if not isinstance(megatron_lm_plugin, MegatronLMPlugin):
+                raise TypeError("`megatron_lm_plugin` must be a MegatronLMPlugin object.")
+            os.environ["USE_MEGATRON_LM"] = "true"  # use MegatronLM if plugin is provided
 
         # Kwargs handlers
         self.ddp_handler = None
@@ -259,7 +269,7 @@ class Accelerator:
             cpu=cpu,
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
-            megatronlm_plugin=megatronlm_plugin,
+            megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -630,8 +640,8 @@ class Accelerator:
 
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
-        elif self.distributed_type == DistributedType.MEGATRONLM:
-            result = self._prepare_megatronlm(*args)
+        elif self.distributed_type == DistributedType.MEGATRON_LM:
+            result = self._prepare_megatron_lm(*args)
         else:
             result = tuple(self._prepare_one(obj, first_pass=True) for obj in args)
             result = tuple(self._prepare_one(obj) for obj in result)
@@ -853,23 +863,23 @@ class Accelerator:
                 )
         return tuple(result)
 
-    def _prepare_megatronlm(self, *args):
-        megatronlm_plugin = self.state.megatronlm_plugin
+    def _prepare_megatron_lm(self, *args):
+        megatron_lm_plugin = self.state.megatron_lm_plugin
         batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
         if len(batch_sizes) == 0:
             raise ValueError(
                 "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
             )
 
-        micro_batch_size = min(batch_sizes) if megatronlm_plugin.is_train_batch_min else max(batch_sizes)
+        micro_batch_size = min(batch_sizes) if megatron_lm_plugin.is_train_batch_min else max(batch_sizes)
         if len(batch_sizes) > 1:
             logger.info(
                 "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
-                f"{megatronlm_plugin.is_train_batch_min} will decide the `train_batch_size` ({micro_batch_size})."
+                f"{megatron_lm_plugin.is_train_batch_min} will decide the `train_batch_size` ({micro_batch_size})."
             )
 
-        dp_degree = self.num_processes // (megatronlm_plugin.tp_degree * megatronlm_plugin.pp_degree)
-        megatronlm_plugin.set_training_args(micro_batch_size, dp_degree)
+        dp_degree = self.num_processes // (megatron_lm_plugin.tp_degree * megatron_lm_plugin.pp_degree)
+        megatron_lm_plugin.set_training_args(micro_batch_size, dp_degree)
 
         model = None
         optimizer = None
@@ -879,15 +889,33 @@ class Accelerator:
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer, DummyOptim)):
                 optimizer = obj
-            elif (isinstance(obj, (torch.optim.lr_scheduler._LRScheduler, DummyScheduler))) or (
-                type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
-            ):
+            elif isinstance(obj, (torch.optim.lr_scheduler._LRScheduler, MegatronLMDummyScheduler)):
                 scheduler = obj  # noqa F841
 
         if model is not None:
-            megatronlm_plugin.set_network_size_args(model)
+            megatron_lm_plugin.set_network_size_args(model)
         if optimizer is not None:
-            megatronlm_plugin.set_optimizer_type(optimizer)
+            megatron_lm_plugin.set_optimizer_type(optimizer)
+        if scheduler is not None:
+            is_dummy_scheduler = isinstance(scheduler, MegatronLMDummyScheduler)
+            megatron_lm_plugin.set_scheduler_args(scheduler, is_dummy_scheduler)
+
+        # initialize megatron-lm
+        megatron_lm_initialize(self, args_defaults=megatron_lm_plugin.megatron_lm_default_args)
+        result = [  # noqa F841
+            megatron_lm_prepare_data_loader(self, obj.dataset, consumed_samples=0)
+            if isinstance(obj, torch.utils.data.DataLoader)
+            else obj
+            for obj in args
+        ]
+
+        if model is not None:
+            model = megatron_lm_prepare_model(self)
+        if optimizer is not None:
+            optimizer = megatron_lm_prepare_optimizer(self, model)
+        if scheduler is not None:
+            is_dummy_scheduler = isinstance(scheduler, MegatronLMDummyScheduler)
+            scheduler = megatron_lm_prepare_scheduler(self, optimizer, scheduler, is_dummy_scheduler)
 
         # To Do, main logic for preparing dataloaders, model, optimizer and scheduler
 

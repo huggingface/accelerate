@@ -128,7 +128,7 @@ class DistributedType(str, enum.Enum):
     FSDP = "FSDP"
     TPU = "TPU"
     MPS = "MPS"
-    MEGATRONLM = "MEGATRONLM"
+    MEGATRON_LM = "MEGATRON_LM"
 
 
 class SageMakerDistributedType(str, enum.Enum):
@@ -682,6 +682,90 @@ class MegatronLMPlugin:
         default=True,
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the micro_batch_size"},
     )
+    train_iters: int = field(
+        default=None,
+        metadata={
+            "help": "Total number of iterations to train over all training runs. "
+            "Note that either train-iters or train-samples should be provided when using `MegatronLMDummyScheduler`"
+        },
+    )
+    train_samples: int = field(
+        default=None,
+        metadata={
+            "help": "Total number of samples to train over all training runs. "
+            "Note that either train-iters or train-samples should be provided when using `MegatronLMDummyScheduler`"
+        },
+    )
+    weight_decay_incr_style: str = field(
+        default="constant",
+        metadata={
+            "help": 'Weight decay increment function. choices=["constant", "linear", "cosine"]. '
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
+    start_weight_decay: float = field(
+        default=None,
+        metadata={
+            "help": "Initial weight decay coefficient for L2 regularization. "
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
+    end_weight_decay: float = field(
+        default=None,
+        metadata={
+            "help": "End of run weight decay coefficient for L2 regularization. "
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
+    lr_decay_style: str = field(
+        default="linear",
+        metadata={
+            "help": "Learning rate decay function. choices=['constant', 'linear', 'cosine']. "
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
+    lr_decay_iters: int = field(
+        default=None,
+        metadata={
+            "help": "Number of iterations for learning rate decay. If None defaults to `train_iters`. "
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
+    lr_decay_samples: int = field(
+        default=None,
+        metadata={
+            "help": "Number of samples for learning rate decay. If None defaults to `train_samples`. "
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
+    lr_warmup_iters: int = field(
+        default=None,
+        metadata={
+            "help": "number of iterations to linearly warmup learning rate over. "
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
+    lr_warmup_samples: int = field(
+        default=None,
+        metadata={
+            "help": "number of samples to linearly warmup learning rate over. "
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
+    lr_warmup_fraction: float = field(
+        default=None,
+        metadata={
+            "help": "fraction of lr-warmup-(iters/samples) to linearly warmup learning rate over. "
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
+    min_lr: float = field(
+        default=None,
+        metadata={
+            "help": "Minumum value for learning rate. The scheduler clip values below this threshold. "
+            "Only applicable when using `MegatronLMDummyScheduler`."
+        },
+    )
 
     def __post_init__(self):
         prefix = "MEGATRON_"
@@ -707,7 +791,7 @@ class MegatronLMPlugin:
         else:
             self.DDP_impl = "torch"
 
-        self.megtron_lm_default_args = {
+        self.megatron_lm_default_args = {
             "tensor_model_parallel_size": self.tp_degree,
             "pipeline_model_parallel_size": self.pp_degree,
             "pipeline_model_parallel_split_rank": self.pipeline_model_parallel_split_rank,
@@ -724,54 +808,89 @@ class MegatronLMPlugin:
         # Check if the model is either BERT, GPT or T5 else raise error
         # set 'num_layers', 'hidden_size', 'num_attention_heads', 'max_position_embeddings'
         if "bert" in model.__class__.__name__.lower():
-            model_type = "bert"
+            model_type_name = "bert"
             num_layers = model.config.num_hidden_layers
             hidden_size = model.config.hidden_size
             num_attention_heads = model.config.num_attention_heads
             max_position_embeddings = model.config.max_position_embeddings
             num_labels = model.config.num_labels
+            if "maskedlm" in model.__class__.__name__.lower():
+                pretraining_flag = True
         elif "gpt" in model.__class__.__name__.lower():
-            model_type = "gpt"
+            model_type_name = "gpt"
             num_layers = model.config.n_layer
             hidden_size = model.config.n_embd
             num_attention_heads = model.config.n_head
             max_position_embeddings = model.config.n_positions
+            pretraining_flag = True
         elif "t5" in model.__class__.__name__.lower():
-            model_type = "t5"
+            model_type_name = "t5"
             num_layers = model.config.num_layers
             hidden_size = model.config.d_model
             num_attention_heads = model.config.num_heads
             max_position_embeddings = model.config.n_positions
+            pretraining_flag = True
         else:
             raise ValueError("Model is not BERT, GPT or T5. Please check the model you are using.")
 
-        self.megtron_lm_default_args["model_type"] = model_type
-        self.megtron_lm_default_args["num_layers"] = num_layers
-        self.megtron_lm_default_args["hidden_size"] = hidden_size
-        self.megtron_lm_default_args["num_attention_heads"] = num_attention_heads
-        self.megtron_lm_default_args["max_position_embeddings"] = max_position_embeddings
-        if model_type == "bert":
-            self.megtron_lm_default_args["num_labels"] = num_labels
+        self.megatron_lm_default_args["model_type_name"] = model_type_name
+        self.megatron_lm_default_args["num_layers"] = num_layers
+        self.megatron_lm_default_args["hidden_size"] = hidden_size
+        self.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
+        self.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
+        self.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+        if model_type_name == "bert":
+            self.megatron_lm_default_args["num_labels"] = num_labels
 
     def set_mixed_precision(self, mixed_precision):
         if mixed_precision == "fp16":
-            self.megtron_lm_default_args["fp16"] = True
+            self.megatron_lm_default_args["fp16"] = True
         elif mixed_precision == "bf16":
-            self.megtron_lm_default_args["bf16"] = True
+            self.megatron_lm_default_args["bf16"] = True
 
     def set_training_args(self, micro_batch_size, dp_degree):
-        self.megtron_lm_default_args["data_parallel_size"] = dp_degree
-        self.megtron_lm_default_args["micro_batch_size"] = micro_batch_size
-        self.megtron_lm_default_args["global_batch_size"] = dp_degree * micro_batch_size * self.num_micro_batches
+        self.megatron_lm_default_args["data_parallel_size"] = dp_degree
+        self.megatron_lm_default_args["micro_batch_size"] = micro_batch_size
+        self.megatron_lm_default_args["global_batch_size"] = dp_degree * micro_batch_size * self.num_micro_batches
 
     def set_optimizer_type(self, optimizer):
         optimizer_name = optimizer.__class__.__name__.lower()
         if "adam" in optimizer_name:
-            self.megtron_lm_default_args["optimizer"] = "adam"
+            self.megatron_lm_default_args["optimizer"] = "adam"
+            self.megatron_lm_default_args["adam_beta1"] = optimizer.defaults["betas"][0]
+            self.megatron_lm_default_args["adam_beta2"] = optimizer.defaults["betas"][1]
+            self.megatron_lm_default_args["adam_eps"] = optimizer.defaults["eps"]
         elif "sgd" in optimizer_name:
-            self.megtron_lm_default_args["optimizer"] = "sgd"
+            self.megatron_lm_default_args["optimizer"] = "sgd"
+            self.megatron_lm_default_args["sgd_momentum"] = optimizer.defaults["momentum"]
         else:
             raise ValueError(f"Optimizer {optimizer_name} is not supported by Megatron-LM")
+
+        self.megatron_lm_default_args["lr"] = optimizer.defaults["lr"]
+        self.megatron_lm_default_args["weight_decay"] = optimizer.defaults["weight_decay"]
+
+    def set_scheduler_args(self, scheduler, is_dummy_scheduler):
+        if is_dummy_scheduler:
+            if self.train_iters is None:
+                self.train_iters = scheduler.total_num_steps
+            if self.lr_warmup_iters is None:
+                self.lr_warmup_iters = scheduler.warmup_steps
+            if self.train_samples is None:
+                self.train_samples = self.train_iters * self.megatron_lm_default_args["global_batch_size"]
+            if self.lr_warmup_samples is None:
+                self.lr_warmup_samples = self.lr_warmup_iters * self.megatron_lm_default_args["global_batch_size"]
+            self.megatron_lm_default_args["train_iters"] = self.train_iters
+            self.megatron_lm_default_args["lr_warmup_iters"] = self.lr_warmup_iters
+            self.megatron_lm_default_args["train_samples"] = self.train_samples
+            self.megatron_lm_default_args["lr_warmup_samples"] = self.lr_warmup_samples
+            self.megatron_lm_default_args["lr_decay_iters"] = self.lr_decay_iters
+            self.megatron_lm_default_args["lr_decay_samples"] = self.lr_decay_samples
+            self.megatron_lm_default_args["lr_warmup_fraction"] = self.lr_warmup_fraction
+            self.megatron_lm_default_args["lr_decay_style"] = self.lr_decay_style
+            self.megatron_lm_default_args["weight_decay_incr_style"] = self.weight_decay_incr_style
+            self.megatron_lm_default_args["start_weight_decay"] = self.start_weight_decay
+            self.megatron_lm_default_args["end_weight_decay"] = self.end_weight_decay
+            self.megatron_lm_default_args["min_lr"] = self.min_lr
 
     def save_model(self, model, output_dir):
         pass
