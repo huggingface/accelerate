@@ -75,11 +75,11 @@ _PYTORCH_DATALOADER_KWARGS = {
     "timeout": 0,
     "worker_init_fn": None,
     "multiprocessing_context": None,
+    "generator": None,
 }
 
 # kwargs added after by version
 _PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {
-    "1.6.0": {"generator": None},
     "1.7.0": {"prefetch_factor": 2, "persistent_workers": False},
 }
 

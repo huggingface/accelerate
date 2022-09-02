@@ -279,9 +279,7 @@ class Accelerator:
         self.native_amp = False
         err = "{mode} mixed precision requires {requirement}"
         if self.state.mixed_precision == "fp16":
-            self.native_amp = is_torch_version(">=", "1.6")
-            if not self.native_amp:
-                raise ValueError(err.format(mode="fp16", requirement="PyTorch >= 1.6"))
+            self.native_amp = True
             if not torch.cuda.is_available() and not parse_flag_from_env("USE_MPS_DEVICE"):
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
@@ -314,7 +312,7 @@ class Accelerator:
         # RNG Types
         self.rng_types = rng_types
         if self.rng_types is None:
-            self.rng_types = ["torch"] if is_torch_version("<=", "1.5.1") else ["generator"]
+            self.rng_types = ["generator"]
 
     @property
     def use_distributed(self):
