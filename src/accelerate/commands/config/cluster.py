@@ -59,7 +59,7 @@ def get_cluster_input():
                 lambda x: int(x),
             )
             same_network = _ask_field(
-                "Are all the machines on the same network? [YES/no]: ",
+                "Are all the machines on the same local network? [YES/no]: ",
                 _convert_yes_no_to_bool,
                 default=True,
                 error_message="Please enter yes or no.",
