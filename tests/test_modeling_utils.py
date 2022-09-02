@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 
 from accelerate.test_utils import require_cuda, require_multi_gpu
-from accelerate.test_utils.testing import require_torch_version
+from accelerate.test_utils.testing import require_torch_min_version
 from accelerate.utils.modeling import (
     check_device_map,
     clean_device_map,
@@ -106,7 +106,7 @@ class ModelingUtilsTester(unittest.TestCase):
                 set_module_tensor_to_device(model, "batchnorm.running_mean", device1)
             self.assertEqual(model.batchnorm.running_mean.device, torch.device(device1))
 
-    @require_torch_version(version="1.9.0")
+    @require_torch_min_version(version="1.9.0")
     def test_set_module_tensor_to_meta_and_cpu(self):
         model = ModelForTest()
         self.check_set_module_tensor_for_device(model, "cpu", "meta")
@@ -117,7 +117,7 @@ class ModelingUtilsTester(unittest.TestCase):
         self.check_set_module_tensor_for_device(model, "cpu", 0)
 
     @require_cuda
-    @require_torch_version(version="1.9.0")
+    @require_torch_min_version(version="1.9.0")
     def test_set_module_tensor_to_meta_and_gpu(self):
         model = ModelForTest().to(0)
         self.check_set_module_tensor_for_device(model, 0, "meta")

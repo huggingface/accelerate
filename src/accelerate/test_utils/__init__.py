@@ -10,7 +10,7 @@ from .testing import (
     require_huggingface_suite,
     require_multi_gpu,
     require_single_gpu,
-    require_torch_version,
+    require_torch_min_version,
     require_tpu,
     skip,
     slow,
