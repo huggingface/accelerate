@@ -75,11 +75,11 @@ _PYTORCH_DATALOADER_KWARGS = {
     "timeout": 0,
     "worker_init_fn": None,
     "multiprocessing_context": None,
+    "generator": None,
 }
 
 # kwargs added after by version
 _PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {
-    "1.6.0": {"generator": None},
     "1.7.0": {"prefetch_factor": 2, "persistent_workers": False},
 }
 
@@ -412,7 +412,7 @@ class DataLoaderDispatcher(DataLoader):
         self.split_batches = split_batches
         if is_torch_version("<", "1.8.0"):
             raise ImportError(
-                "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
+                f"Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
         if shuffle:
             torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
