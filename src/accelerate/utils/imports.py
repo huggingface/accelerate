@@ -125,3 +125,7 @@ def is_sagemaker_available():
 
 def is_tqdm_available():
     return importlib.util.find_spec("tqdm") is not None
+
+
+def is_mlflow_available():
+    return importlib.util.find_spec("mlflow") is not None
