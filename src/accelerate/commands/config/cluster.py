@@ -37,7 +37,7 @@ def get_cluster_input():
     num_machines = 1
     main_process_ip = None
     main_process_port = None
-    rdzv_backend = None
+    rdzv_backend = "static"
     same_network = True
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
         num_machines = _ask_field(
