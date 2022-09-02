@@ -79,8 +79,8 @@ class ModelWithUnusedSubModulesForTest(nn.Module):
         return self.linear4(self.linear3(self.batchnorm(self.linear2(self.linear1(x)))))
 
 
+@require_torch_min_version(version="1.9.0")
 class BigModelingTester(unittest.TestCase):
-    @require_torch_min_version(version="1.9.0")
     def test_init_empty_weights(self):
         # base use
         with init_empty_weights():
@@ -104,7 +104,6 @@ class BigModelingTester(unittest.TestCase):
         self.assertEqual(module.weight.device, torch.device("cpu"))
         self.assertEqual(module.running_mean.device, torch.device("cpu"))
 
-    @require_torch_min_version(version="1.9.0")
     def test_init_empty_weights_very_large_model(self):
         # This is a 100 billion parameters model.
         with init_empty_weights():

@@ -46,6 +46,7 @@ class ModelForTest(nn.Module):
         return self.linear2(self.batchnorm(self.linear1(x)))
 
 
+@require_torch_min_version(version="1.9.0")
 class ModelingUtilsTester(unittest.TestCase):
     def check_set_module_tensor_for_device(self, model, device1, device2):
         self.assertEqual(model.linear1.weight.device, torch.device(device1))
@@ -106,7 +107,6 @@ class ModelingUtilsTester(unittest.TestCase):
                 set_module_tensor_to_device(model, "batchnorm.running_mean", device1)
             self.assertEqual(model.batchnorm.running_mean.device, torch.device(device1))
 
-    @require_torch_min_version(version="1.9.0")
     def test_set_module_tensor_to_meta_and_cpu(self):
         model = ModelForTest()
         self.check_set_module_tensor_for_device(model, "cpu", "meta")
@@ -117,7 +117,6 @@ class ModelingUtilsTester(unittest.TestCase):
         self.check_set_module_tensor_for_device(model, "cpu", 0)
 
     @require_cuda
-    @require_torch_min_version(version="1.9.0")
     def test_set_module_tensor_to_meta_and_gpu(self):
         model = ModelForTest().to(0)
         self.check_set_module_tensor_for_device(model, 0, "meta")
