@@ -21,9 +21,10 @@ extras["docs"] = []
 extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
 extras["test_dev"] = ["datasets", "evaluate", "transformers", "scipy", "sklearn", "deepspeed<0.7.0", "tqdm"]
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
+extras["rich"] = ["rich"]
 
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]
-extras["dev"] = extras["quality"] + extras["testing"]
+extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
 
 extras["sagemaker"] = [
     "sagemaker",  # boto3 is a required package in sagemaker
@@ -51,6 +52,7 @@ setup(
     },
     python_requires=">=3.7.0",
     install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.6.0", "rich"],
+    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.4.0"],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",

@@ -17,7 +17,11 @@ from .utils import (
     find_executable_batch_size,
     infer_auto_device_map,
     is_torch_version,
+    is_rich_available,
     load_checkpoint_in_model,
-    rich,
     synchronize_rng_states,
 )
+
+
+if is_rich_available():
+    from .utils import rich

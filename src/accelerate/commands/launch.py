@@ -39,22 +39,25 @@ from accelerate.utils import (
     _filter_args,
     get_launch_prefix,
     is_deepspeed_available,
+    is_rich_available,
     is_sagemaker_available,
     is_torch_version,
     patch_environment,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
-from rich import get_console
-from rich.logging import RichHandler
+
+
+if is_rich_available():
+    from rich import get_console
+    from rich.logging import RichHandler
+
+    FORMAT = "%(message)s"
+    logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
 
 if is_torch_version(">=", "1.9.0"):
     import torch.distributed.run as distrib_run
-
-
-FORMAT = "%(message)s"
-logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
 logger = logging.getLogger(__name__)
 
@@ -375,15 +378,21 @@ def simple_launcher(args):
 def multi_gpu_launcher(args):
     num_processes = getattr(args, "num_processes")
     num_machines = getattr(args, "num_machines")
+    main_process_ip = getattr(args, "main_process_ip")
+    main_process_port = getattr(args, "main_process_port")
     if num_machines > 1:
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
-        setattr(args, "node_rank", str(args.machine_rank))
-        setattr(args, "rdzv_endpoint", f"{args.main_process_ip}:{args.main_process_port}")
+        setattr(args, "node_rank", int(args.machine_rank))
+        if getattr(args, "same_network"):
+            setattr(args, "master_addr", str(main_process_ip))
+            setattr(args, "master_port", str(main_process_port))
+        else:
+            setattr(args, "rdzv_endpoint", f"{main_process_ip}:{main_process_port}")
     else:
         setattr(args, "nproc_per_node", str(num_processes))
-        if args.main_process_port is not None:
-            setattr(args, "master_port", str(args.main_process_port))
+        if main_process_port is not None:
+            setattr(args, "master_port", str(main_process_port))
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")

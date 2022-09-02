@@ -140,7 +140,7 @@ class Accelerator:
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
 
-    **Attributes:**
+    **Available attributes:**
 
         - **device** (`torch.device`) -- The device to use.
         - **distributed_type** ([`~utils.DistributedType`]) -- The distributed training configuration.
@@ -461,6 +461,28 @@ class Accelerator:
         Args:
             model (`torch.nn.Module`):
                 PyTorch Module that was prepared with `Accelerator.prepare`
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> dataloader, model, optimizer = accelerator.prepare(dataloader, model, optimizer)
+        >>> input_a = next(iter(dataloader))
+        >>> input_b = next(iter(dataloader))
+
+        >>> with accelerator.no_sync():
+        ...     outputs = model(input_a)
+        ...     loss = loss_func(outputs)
+        ...     accelerator.backward(loss)
+        ...     # No synchronization across processes, only accumulate gradients
+        >>> outputs = model(input_b)
+        >>> accelerator.backward(loss)
+        >>> # Synchronization across all processes
+        >>> optimizer.step()
+        >>> optimizer.zero_grad()
+        ```
         """
         context = contextlib.nullcontext
         if self.use_distributed:
@@ -490,6 +512,24 @@ class Accelerator:
         Args:
             model (`torch.nn.Module`):
                 PyTorch Module that was prepared with `Accelerator.prepare`
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
+        >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
+
+        >>> with accelerator.accumulate():
+        ...     for input, output in dataloader:
+        ...         outputs = model(input)
+        ...         loss = loss_func(outputs)
+        ...         loss.backward()
+        ...         optimizer.step()
+        ...         scheduler.step()
+        ...         optimizer.zero_grad()
+        ```
         """
         self._do_sync()
         if self.sync_gradients:
@@ -871,7 +911,10 @@ class Accelerator:
 
     def backward(self, loss, **kwargs):
         """
-        Use `accelerator.backward(loss)` in lieu of `loss.backward()`.
+        Scales the gradients in accordance to `Accelerator.gradient_accumulation_steps` and calls the correct
+        `backward()` based on the configuration.
+
+        Should be used in lieu of `loss.backward()`.
         """
         loss /= self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:
@@ -904,6 +947,24 @@ class Accelerator:
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
         """
         Should be used in place of `torch.nn.utils.clip_grad_norm_`.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
+        >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
+
+        >>> for (input, target) in dataloader:
+        ...     optimizer.zero_grad()
+        ...     output = model(input)
+        ...     loss = loss_func(output, target)
+        ...     accelerator.backward(loss)
+        ...     if accelerator.sync_gradients:
+        ...         accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
+        ...     optimizer.step()
+        ```
         """
         if self.distributed_type == DistributedType.FSDP:
             self.unscale_gradients()
@@ -921,6 +982,24 @@ class Accelerator:
     def clip_grad_value_(self, parameters, clip_value):
         """
         Should be used in place of `torch.nn.utils.clip_grad_value_`.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
+        >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
+
+        >>> for (input, target) in dataloader:
+        ...     optimizer.zero_grad()
+        ...     output = model(input)
+        ...     loss = loss_func(output, target)
+        ...     accelerator.backward(loss)
+        ...     if accelerator.sync_gradients:
+        ...         accelerator.clip_grad_value_(model.parameters(), clip_value)
+        ...     optimizer.step()
+        ```
         """
         if self.distributed_type in [DistributedType.DEEPSPEED, DistributedType.FSDP]:
             raise Exception("DeepSpeed and FSDP  do not support `clip_grad_value_`. Use `clip_grad_norm_` instead.")
@@ -1030,6 +1109,7 @@ class Accelerator:
         """
         wait_for_everyone()
 
+    @on_main_process
     def init_trackers(self, project_name: str, config: Optional[dict] = None, init_kwargs: Optional[dict] = {}):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
@@ -1121,6 +1201,13 @@ class Accelerator:
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
+        <Tip>
+
+        Should only be used when wanting to save a checkpoint during training and restoring the state in the same
+        environment.
+
+        </Tip>
+
         Args:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
@@ -1175,6 +1262,12 @@ class Accelerator:
     def load_state(self, input_dir: str):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
+
+        <Tip>
+
+        Should only be used in conjunction with [`Accelerator.save_state`].
+
+        </Tip>
 
         Args:
             input_dir (`str` or `os.PathLike`):
