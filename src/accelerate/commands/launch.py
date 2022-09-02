@@ -39,22 +39,25 @@ from accelerate.utils import (
     _filter_args,
     get_launch_prefix,
     is_deepspeed_available,
+    is_rich_available,
     is_sagemaker_available,
     is_torch_version,
     patch_environment,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
-from rich import get_console
-from rich.logging import RichHandler
+
+
+if is_rich_available():
+    from rich import get_console
+    from rich.logging import RichHandler
+
+    FORMAT = "%(message)s"
+    logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
 
 if is_torch_version(">=", "1.9.0"):
     import torch.distributed.run as distrib_run
-
-
-FORMAT = "%(message)s"
-logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
 logger = logging.getLogger(__name__)
 
