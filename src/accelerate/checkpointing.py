@@ -37,6 +37,9 @@ from .utils import (
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
+if is_torch_version(">=", "1.6"):
+    from torch.cuda.amp import GradScaler
+
 from .logging import get_logger
 
 
@@ -49,7 +52,7 @@ def save_accelerator_state(
     optimizers: list,
     schedulers: list,
     process_index: int,
-    scaler=None,
+    scaler: "GradScaler" = None,
 ):
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
