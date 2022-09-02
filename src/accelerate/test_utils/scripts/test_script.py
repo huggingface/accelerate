@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 from accelerate import Accelerator
 from accelerate.data_loader import prepare_data_loader
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
+from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors, is_torch_version
 from accelerate.utils import DistributedType, gather, is_bf16_available, set_seed, synchronize_rng_states
 
 
@@ -331,7 +331,7 @@ def main():
     if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
-    if state.distributed_type != DistributedType.TPU:
+    if state.distributed_type != DistributedType.TPU and is_torch_version(">=", "1.8.0"):
         central_dl_preparation_check()
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
