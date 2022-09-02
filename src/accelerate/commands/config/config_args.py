@@ -137,7 +137,7 @@ class ClusterConfig(BaseConfig):
     num_machines: int = 1
     main_process_ip: Optional[str] = None
     main_process_port: Optional[int] = None
-    rdzv_backend: Optional[str] = None
+    rdzv_backend: Optional[str] = "static"
     same_network: Optional[bool] = False
     main_training_function: str = "main"
 
