@@ -21,7 +21,14 @@ from accelerate import Accelerator
 from accelerate.data_loader import prepare_data_loader
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
-from accelerate.utils import DistributedType, gather, is_bf16_available, set_seed, synchronize_rng_states, is_torch_version
+from accelerate.utils import (
+    DistributedType,
+    gather,
+    is_bf16_available,
+    is_torch_version,
+    set_seed,
+    synchronize_rng_states,
+)
 
 
 def init_state_check():
