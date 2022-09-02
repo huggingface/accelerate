@@ -35,13 +35,13 @@ While this works very well for regularly sized models, this workflow has some cl
 
 </Tip>
 
-# How the Process Works: A Quick Overview
+## How the Process Works: A Quick Overview
 
 <Youtube id="MWCSGj9jEAo" />
 
-# How the Process Works: Working with Code
+## How the Process Works: Working with Code
 
-## Instantiating an empty model
+### Instantiating an empty model
 
 The first tool 🤗 Accelerate introduces to help with big models is a context manager [`init_empty_weights`] that helps you initialize a model without using any RAM, so that step 1 can be done on models of any size. Here is how it works:
 
@@ -67,7 +67,7 @@ initializes an empty model with a bit more than 100B parameters. Behind the scen
 
 </Tip>
 
-## Sharded checkpoints
+### Sharded checkpoints
 
 It's possible your model is so big that even a single copy won't fit in RAM. That doesn't mean it can't be loaded: if you have one or several GPUs, this is more memory available to store your model. In this case, it's better if your checkpoint is split in several smaller files that we call checkpoint shards.
 
@@ -92,7 +92,7 @@ with index.json being the following file:
 
 and `first_state_dict.bin` containing the weights for `"linear1.weight"` and `"linear1.bias"`, `second_state_dict.bin` the ones for `"linear2.weight"` and `"linear2.bias"`
 
-## Loading weights
+### Loading weights
 
 The second tool 🤗 Accelerate introduces is a function [`load_checkpoint_and_dispatch`], that will allow you to load a checkpoint inside your empty model. This supports full checkpoints (a single file containing the whole state dict) as well as sharded checkpoints. It will also automatically dispatch those weights across the devices you have available (GPUs, CPU RAM), so if you are loading a sharded checkpoint, the maximum RAM usage will be the size of the biggest shard.
 
@@ -182,7 +182,7 @@ You can also design your `device_map` yourself, if you prefer to explicitly deci
 model = load_checkpoint_and_dispatch(model, "sharded-gpt-j-6B", device_map=my_device_map)
 ```
 
-## Run the model
+### Run the model
 
 Now that we have done this, our model lies across several devices, and maybe the hard drive. But it can still be used as a regular PyTorch model:
 
@@ -209,7 +209,7 @@ This way, you model can run for inference even if it doesn't fit on one of the G
 
 </Tip>
 
-## Designing a device map
+### Designing a device map
 
 You can let 🤗 Accelerate handle the device map computation by setting `device_map` to one of the supported options (`"auto"`, `"balanced"`, `"balanced_low_0"`, `"sequential"`) or create one yourself, if you want more control over where each layer should go.
 
