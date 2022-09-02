@@ -139,7 +139,7 @@ def require_torch_min_version(test_case=None, version=None):
     installed torch version is less than the required one.
     """
     if test_case is None:
-        return partial(require_torch_version, version=version)
+        return partial(require_torch_min_version, version=version)
     return unittest.skipUnless(is_torch_version(">=", version), f"test requires torch version >= {version}")
 
 
