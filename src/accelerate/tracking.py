@@ -343,8 +343,8 @@ class AimTracker(GeneralTracker):
         self.run_name = run_name
         self.writer = Run(repo=logging_dir, **kwargs)
         self.writer.name = self.run_name
-        logger.info(f"Initialized Aim project {self.run_name}")
-        logger.info(
+        logger.debug(f"Initialized Aim project {self.run_name}")
+        logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
 
@@ -360,7 +360,7 @@ class AimTracker(GeneralTracker):
             values (`dict`):
                 Values to be stored as initial hyperparameters as key-value pairs.
         """
-        self.writer["hparams"].update(values)
+        self.writer["hparams"] = values
 
     def log(self, values: dict, step: Optional[int], **kwargs):
         """
