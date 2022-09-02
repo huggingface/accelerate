@@ -27,11 +27,9 @@ from accelerate.big_modeling import (
     load_checkpoint_and_dispatch,
 )
 from accelerate.hooks import remove_hook_from_submodules
-from accelerate.test_utils import require_cuda, require_multi_gpu, slow
+from accelerate.test_utils import require_cuda, require_multi_gpu, require_torch_min_version, slow
 from accelerate.utils import offload_state_dict
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-from ..src.accelerate.test_utils.testing import require_torch_min_version
 
 
 class ModelForTest(nn.Module):
