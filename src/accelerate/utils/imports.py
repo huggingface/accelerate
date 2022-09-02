@@ -95,6 +95,10 @@ def is_datasets_available():
     return importlib.util.find_spec("datasets") is not None
 
 
+def is_aim_available():
+    return importlib.util.find_spec("aim") is not None
+
+
 def is_tensorboard_available():
     return importlib.util.find_spec("tensorboard") is not None or importlib.util.find_spec("tensorboardX") is not None
 
