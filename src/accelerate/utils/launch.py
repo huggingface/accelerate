@@ -47,7 +47,7 @@ def _filter_args(args):
     new_args, _ = distrib_args.parse_known_args()
 
     for key, value in vars(args).items():
-        if key in vars(new_args).keys():
+        if key in vars(new_args).keys() and value is not None:
             setattr(new_args, key, value)
     return new_args
 
