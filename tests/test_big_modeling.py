@@ -351,7 +351,6 @@ class BigModelingTester(unittest.TestCase):
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_cuda
-    @require_torch_min_version(version="1.9.0")
     def test_load_checkpoint_and_dispatch(self):
         model = ModelForTest()
         device_map = {"linear1": "cpu", "batchnorm": "cpu", "linear2": 0}
@@ -374,7 +373,6 @@ class BigModelingTester(unittest.TestCase):
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_multi_gpu
-    @require_torch_min_version(version="1.9.0")
     def test_load_checkpoint_and_dispatch_multi_gpu(self):
         model = BiggerModelForTest()
         device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
@@ -399,7 +397,6 @@ class BigModelingTester(unittest.TestCase):
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_cuda
-    @require_torch_min_version(version="1.9.0")
     def test_load_checkpoint_and_dispatch_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
         device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 0}
@@ -426,7 +423,6 @@ class BigModelingTester(unittest.TestCase):
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_multi_gpu
-    @require_torch_min_version(version="1.9.0")
     def test_load_checkpoint_and_dispatch_multi_gpu_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
         device_map = {"linear1": "cpu", "linear2": "cpu", "batchnorm": 0, "linear3": 0, "linear4": 1}
