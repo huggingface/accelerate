@@ -32,6 +32,7 @@ from accelerate.utils import get_launch_prefix, patch_environment
 
 
 @require_huggingface_suite
+@require_torch_min_version(version="1.8.0")
 class MetricTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
@@ -44,12 +45,10 @@ class MetricTester(unittest.TestCase):
         self.test_metrics = test_metrics
 
     @require_cpu
-    @require_torch_min_version(version="1.5.0")
     def test_metric_cpu_noop(self):
         debug_launcher(self.test_metrics.main, num_processes=1)
 
     @require_cpu
-    @require_torch_min_version(version="1.5.0")
     def test_metric_cpu_multi(self):
         debug_launcher(self.test_metrics.main)
 
