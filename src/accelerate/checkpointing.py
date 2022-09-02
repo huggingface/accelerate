@@ -19,6 +19,7 @@ from typing import List
 
 import numpy as np
 import torch
+from torch.cuda.amp import GradScaler
 
 from .utils import (
     MODEL_NAME,
@@ -34,8 +35,6 @@ from .utils import (
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
-
-from torch.cuda.amp import GradScaler
 
 from .logging import get_logger
 

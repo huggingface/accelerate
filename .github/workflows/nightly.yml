@@ -10,12 +10,6 @@ env:
 
 jobs:
   run_all_tests_single_gpu:
-    strategy:
-      matrix:
-        pytorch-version: [
-          latest,
-          minimum
-        ]
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     env:
       CUDA_VISIBLE_DEVICES: "0"
@@ -33,7 +27,6 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }} 
           pip install -e . --no-deps
-          if [[ ${{ matrix.pytorch-version }} = minimum ]]; then pip install torch==1.4.0; fi
 
       - name: Run test on GPUs
         run: |
@@ -69,7 +62,6 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e . --no-deps
-          if [[ ${{ matrix.pytorch-version }} = minimum ]]; then pip install torch==1.4.0; fi
 
       - name: Run core and big modeling tests on GPUs
         run: |
