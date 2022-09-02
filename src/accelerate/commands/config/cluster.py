@@ -336,4 +336,5 @@ def get_cluster_input():
         fsdp_config=fsdp_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
+        same_network=same_network,
     )
