@@ -49,12 +49,6 @@ jobs:
       run:
         working-directory: accelerate/
         shell: bash
-    strategy:
-      matrix:
-        pytorch-version: [
-          latest,
-          minimum
-        ]
     steps:
       - name: Update clone
         run: |

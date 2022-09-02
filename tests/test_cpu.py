@@ -15,11 +15,10 @@
 import unittest
 
 from accelerate import debug_launcher
-from accelerate.test_utils import require_cpu, require_torch_min_version, test_script
+from accelerate.test_utils import require_cpu, test_script
 
 
 @require_cpu
-@require_torch_min_version(version="1.5.0")
 class MultiCPUTester(unittest.TestCase):
     def test_cpu(self):
         debug_launcher(test_script.main)
