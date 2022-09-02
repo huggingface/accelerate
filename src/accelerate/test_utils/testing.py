@@ -140,7 +140,7 @@ def require_torch_min_version(test_case=None, version=None):
     """
     if test_case is None:
         return partial(require_torch_min_version, version=version)
-    return unittest.skipUnless(is_torch_version(">=", version), f"test requires torch version >= {version}")
+    return unittest.skipUnless(is_torch_version(">=", version), f"test requires torch version >= {version}")(test_case)
 
 
 def require_tensorboard(test_case):
