@@ -375,15 +375,21 @@ def simple_launcher(args):
 def multi_gpu_launcher(args):
     num_processes = getattr(args, "num_processes")
     num_machines = getattr(args, "num_machines")
+    main_process_ip = getattr(args, "main_process_ip")
+    main_process_port = getattr(args, "main_process_port")
     if num_machines > 1:
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
-        setattr(args, "node_rank", str(args.machine_rank))
-        setattr(args, "rdzv_endpoint", f"{args.main_process_ip}:{args.main_process_port}")
+        setattr(args, "node_rank", int(args.machine_rank))
+        if getattr(args, "same_network"):
+            setattr(args, "master_addr", str(main_process_ip))
+            setattr(args, "master_port", str(main_process_port))
+        else:
+            setattr(args, "rdzv_endpoint", f"{main_process_ip}:{main_process_port}")
     else:
         setattr(args, "nproc_per_node", str(num_processes))
-        if args.main_process_port is not None:
-            setattr(args, "master_port", str(args.main_process_port))
+        if main_process_port is not None:
+            setattr(args, "master_port", str(main_process_port))
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
