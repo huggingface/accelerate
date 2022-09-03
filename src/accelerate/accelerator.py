@@ -919,13 +919,14 @@ class Accelerator:
 
         Should be used in lieu of `loss.backward()`.
         """
+        if self.distributed_type != DistributedType.DEEPSPEED:
+            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
+            loss = loss / self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:
             self.deepspeed_engine_wrapped.backward(loss, **kwargs)
         elif self.scaler is not None:
-            loss /= self.gradient_accumulation_steps
             self.scaler.scale(loss).backward(**kwargs)
         else:
-            loss /= self.gradient_accumulation_steps
             loss.backward(**kwargs)
 
     def unscale_gradients(self, optimizer=None):
