@@ -49,15 +49,20 @@ def get_logger(name: str):
 
     If a log should be called on all processes, pass `main_process_only=False`
 
-    E.g.
-    ```python
-    logger.info("My log", main_process_only=False)
-    logger.debug("My log", main_process_only=False)
-    ```
-
     Args:
         name (`str`):
             The name for the logger, such as `__file__`
+
+    Example:
+
+    ```python
+    >>> from accelerate.logging import get_logger
+
+    >>> logger = get_logger(__name__)
+
+    >>> logger.info("My log", main_process_only=False)
+    >>> logger.debug("My log", main_process_only=True)
+    ```
     """
     logger = logging.getLogger(name)
     return MultiProcessAdapter(logger, {})

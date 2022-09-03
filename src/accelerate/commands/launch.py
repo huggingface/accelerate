@@ -32,7 +32,6 @@ from accelerate.commands.config import default_config_file, load_config_from_fil
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.state import get_int_from_env
 from accelerate.utils import (
-    TORCH_LAUNCH_PARAMS,
     ComputeEnvironment,
     DistributedType,
     PrecisionType,
@@ -40,21 +39,25 @@ from accelerate.utils import (
     _filter_args,
     get_launch_prefix,
     is_deepspeed_available,
+    is_rich_available,
     is_sagemaker_available,
     is_torch_version,
     patch_environment,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
-from rich import get_console
-from rich.logging import RichHandler
+
+
+if is_rich_available():
+    from rich import get_console
+    from rich.logging import RichHandler
+
+    FORMAT = "%(message)s"
+    logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
 
 if is_torch_version(">=", "1.9.0"):
     import torch.distributed.run as distrib_run
-
-FORMAT = "%(message)s"
-logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
 logger = logging.getLogger(__name__)
 
@@ -375,16 +378,21 @@ def simple_launcher(args):
 def multi_gpu_launcher(args):
     num_processes = getattr(args, "num_processes")
     num_machines = getattr(args, "num_machines")
+    main_process_ip = getattr(args, "main_process_ip")
+    main_process_port = getattr(args, "main_process_port")
     if num_machines > 1:
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
-        setattr(args, "node_rank", str(args.machine_rank))
-        setattr(args, "master_addr", str(args.main_process_ip))
-        setattr(args, "master_port", str(args.main_process_port))
+        setattr(args, "node_rank", int(args.machine_rank))
+        if getattr(args, "same_network"):
+            setattr(args, "master_addr", str(main_process_ip))
+            setattr(args, "master_port", str(main_process_port))
+        else:
+            setattr(args, "rdzv_endpoint", f"{main_process_ip}:{main_process_port}")
     else:
         setattr(args, "nproc_per_node", str(num_processes))
-        if args.main_process_port is not None:
-            setattr(args, "master_port", str(args.main_process_port))
+        if main_process_port is not None:
+            setattr(args, "master_port", str(main_process_port))
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
@@ -451,33 +459,19 @@ def multi_gpu_launcher(args):
         if args.fsdp_state_dict_type is not None:
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
-    if is_torch_version(">=", "1.9.0"):
-        debug = getattr(args, "debug", False)
-        args = _filter_args(args)
-        with patch_environment(**current_env):
-            console = get_console()
+    if is_torch_version("<", "1.9.0"):
+        raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
 
-            try:
-                distrib_run.run(args)
-            except:
-                if debug:
-                    console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
-                    console.print_exception(suppress=[__file__], show_locals=False)
-    else:
-        # We still have to use subprocess, the user won't get a clean traceback as a result
-        cmd = get_launch_prefix()
-        for k, v in vars(args).items():
-            if k in TORCH_LAUNCH_PARAMS and v:
-                param = [f"--{k}"]
-                if type(v) != bool:
-                    param.append(v)
-                cmd.extend(param)
-        cmd.append(args.training_script)
-        cmd.extend(args.training_script_args)
-        process = subprocess.Popen(cmd, env=current_env)
-        process.wait()
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+    debug = getattr(args, "debug", False)
+    args = _filter_args(args)
+    with patch_environment(**current_env):
+        try:
+            distrib_run.run(args)
+        except:
+            if debug:
+                console = get_console()
+                console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
+                console.print_exception(suppress=[__file__], show_locals=False)
 
 
 def deepspeed_launcher(args):
