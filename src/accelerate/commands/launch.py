@@ -549,7 +549,8 @@ def deepspeed_launcher(args):
     current_env["DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
     current_env["DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
     current_env["DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
-    current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file)
+    if args.deepspeed_config is not None:
+        current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         with open(".deepspeed_env", "a") as f:
