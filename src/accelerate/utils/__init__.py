@@ -96,6 +96,7 @@ if is_deepspeed_available():
 if is_megatron_lm_available():
     from .megatron_lm import (
         MegatronLMDummyScheduler,
+        MegatronLMDummyDataLoader,
         initialize,
         prepare_model,
         prepare_optimizer,

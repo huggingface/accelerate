@@ -25,7 +25,7 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import timedelta
 from distutils.util import strtobool
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, List, Optional
 
 import torch
 
@@ -766,6 +766,19 @@ class MegatronLMPlugin:
             "Only applicable when using `MegatronLMDummyScheduler`."
         },
     )
+    consumed_samples: List[int] = field(
+        default=None,
+        metadata={
+            "help": "Number of samples consumed in the same order as the dataloaders to `accelerator.prepare` call."
+        },
+    )
+    no_wd_decay_cond: Optional[Callable] = field(default=None, metadata={"help": "Condition to disable weight decay."})
+    scale_lr_cond: Optional[Callable] = field(default=None, metadata={"help": "Condition to scale learning rate."})
+    lr_mult: float = field(default=1.0, metadata={"help": "Learning rate multiplier."})
+    megatron_dataset_flag: bool = field(
+        default=False,
+        metadata={"help": "Whether the format of dataset follows Megatron-LM Indexed/Cached/MemoryMapped format."},
+    )
 
     def __post_init__(self):
         prefix = "MEGATRON_"
@@ -791,6 +804,12 @@ class MegatronLMPlugin:
         else:
             self.DDP_impl = "torch"
 
+        if self.consumed_samples is not None:
+            if len(self.consumed_samples) == 1:
+                self.consumed_samples.extend([0, 0])
+            elif len(self.consumed_samples) == 2:
+                self.consumed_samples.append(0)
+
         self.megatron_lm_default_args = {
             "tensor_model_parallel_size": self.tp_degree,
             "pipeline_model_parallel_size": self.pp_degree,
@@ -802,6 +821,11 @@ class MegatronLMPlugin:
             "sequence_parallel": self.sequence_parallelism,
             "clip_grad": self.gradient_clipping,
             "num_micro_batches": self.num_micro_batches,
+            "consumed_samples": self.consumed_samples,
+            "no_wd_decay_cond": self.no_wd_decay_cond,
+            "scale_lr_cond": self.scale_lr_cond,
+            "lr_mult": self.lr_mult,
+            "megatron_dataset_flag": self.megatron_dataset_flag,
         }
 
     def set_network_size_args(self, model):
@@ -814,14 +838,17 @@ class MegatronLMPlugin:
             num_attention_heads = model.config.num_attention_heads
             max_position_embeddings = model.config.max_position_embeddings
             num_labels = model.config.num_labels
+            orig_vocab_size = model.config.vocab_size
             if "maskedlm" in model.__class__.__name__.lower():
                 pretraining_flag = True
+
         elif "gpt" in model.__class__.__name__.lower():
             model_type_name = "gpt"
             num_layers = model.config.n_layer
             hidden_size = model.config.n_embd
             num_attention_heads = model.config.n_head
             max_position_embeddings = model.config.n_positions
+            orig_vocab_size = model.config.vocab_size
             pretraining_flag = True
         elif "t5" in model.__class__.__name__.lower():
             model_type_name = "t5"
@@ -829,6 +856,7 @@ class MegatronLMPlugin:
             hidden_size = model.config.d_model
             num_attention_heads = model.config.num_heads
             max_position_embeddings = model.config.n_positions
+            orig_vocab_size = model.config.vocab_size
             pretraining_flag = True
         else:
             raise ValueError("Model is not BERT, GPT or T5. Please check the model you are using.")
@@ -839,6 +867,7 @@ class MegatronLMPlugin:
         self.megatron_lm_default_args["num_attention_heads"] = num_attention_heads
         self.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
         self.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
+        self.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
         if model_type_name == "bert":
             self.megatron_lm_default_args["num_labels"] = num_labels
 

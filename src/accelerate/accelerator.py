@@ -74,7 +74,7 @@ if is_deepspeed_available():
     )
 
 if is_megatron_lm_available():
-    from .utils import MegatronLMDummyScheduler
+    from .utils import MegatronLMDummyDataLoader, MegatronLMDummyScheduler
     from .utils import initialize as megatron_lm_initialize
     from .utils import prepare_data_loader as megatron_lm_prepare_data_loader
     from .utils import prepare_model as megatron_lm_prepare_model
@@ -301,7 +301,7 @@ class Accelerator:
         self.scaler = None
         self.native_amp = False
         err = "{mode} mixed precision requires {requirement}"
-        if self.state.mixed_precision == "fp16":
+        if self.state.mixed_precision == "fp16" and self.distributed_type != DistributedType.MEGATRON_LM:
             self.native_amp = is_torch_version(">=", "1.6")
             if not self.native_amp:
                 raise ValueError(err.format(mode="fp16", requirement="PyTorch >= 1.6"))
@@ -314,7 +314,11 @@ class Accelerator:
                 self.scaler = ShardedGradScaler(**kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
-        elif self.state.mixed_precision == "bf16" and self.distributed_type != DistributedType.FSDP:
+        elif (
+            self.state.mixed_precision == "bf16"
+            and self.distributed_type != DistributedType.FSDP
+            and self.distributed_type != DistributedType.MEGATRON_LM
+        ):
             self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
@@ -902,12 +906,20 @@ class Accelerator:
 
         # initialize megatron-lm
         megatron_lm_initialize(self, args_defaults=megatron_lm_plugin.megatron_lm_default_args)
-        result = [  # noqa F841
-            megatron_lm_prepare_data_loader(self, obj.dataset, consumed_samples=0)
-            if isinstance(obj, torch.utils.data.DataLoader)
-            else obj
-            for obj in args
-        ]
+        counter = 0
+        result = []
+        for obj in enumerate(args):
+            if isinstance(obj, torch.utils.data.DataLoader):
+                result.append(megatron_lm_prepare_data_loader(self, obj, consumed_samples_index=counter))
+                counter += 1
+            elif isinstance(obj, MegatronLMDummyDataLoader):
+                if counter == 0:
+                    obj.set_megatron_data_args()
+                    dataloaders = megatron_lm_prepare_data_loader(self, obj)
+                result.append(dataloaders[counter])
+                counter += 1
+            else:
+                result.append(obj)
 
         if model is not None:
             model = megatron_lm_prepare_model(self)
