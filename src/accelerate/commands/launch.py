@@ -270,6 +270,25 @@ def launch_command_parser(subparsers=None):
         default=None,
         help="The port to use to communicate with the machine of rank 0.",
     )
+    # Rendezvous related arguments
+    parser.add_argument(
+        "--rdzv_conf",
+        type=str,
+        default="",
+        help="Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).",
+    )
+    parser.add_argument(
+        "--max_restarts",
+        type=int,
+        default=0,
+        help="Maximum number of worker group restarts before failing.",
+    )
+    parser.add_argument(
+        "--monitor_interval",
+        type=float,
+        default=5,
+        help="Interval, in seconds, to monitor the state of workers.",
+    )
     parser.add_argument(
         "--main_training_function",
         type=str,
