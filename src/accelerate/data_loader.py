@@ -466,7 +466,7 @@ class DataLoaderDispatcher(DataLoader):
                     return batch, batch_info
             else:
                 return batch, batch_info
-        return batch, batch_info, False
+        return batch, batch_info
 
     def __iter__(self):
         self.gradient_state._set_end_of_dataloader(False)
