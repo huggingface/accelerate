@@ -37,7 +37,6 @@ from accelerate.utils import (
     PrecisionType,
     PrepareForLaunch,
     _filter_args,
-    get_launch_prefix,
     is_deepspeed_available,
     is_rich_available,
     is_sagemaker_available,
@@ -477,55 +476,58 @@ def multi_gpu_launcher(args):
 def deepspeed_launcher(args):
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
-    cmd = ["deepspeed", "--no_local_rank"]
-    if args.num_machines > 1:
-        if args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-            cmd = get_launch_prefix()
+    num_processes = getattr(args, "num_processes")
+    num_machines = getattr(args, "num_machines")
+    main_process_ip = getattr(args, "main_process_ip")
+    main_process_port = getattr(args, "main_process_port")
+    if num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+        cmd = ["deepspeed", "--no_local_rank"]
+        cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
+        if args.deepspeed_exclusion_filter is not None:
             cmd.extend(
                 [
-                    "--nproc_per_node",
-                    str(args.num_processes // args.num_machines),
-                    "--nnodes",
-                    str(args.num_machines),
-                    "--node_rank",
-                    str(args.machine_rank),
-                    "--master_addr",
-                    args.main_process_ip,
-                    "--master_port",
-                    str(args.main_process_port),
+                    "--exclude",
+                    str(args.deepspeed_exclusion_filter),
+                ]
+            )
+        elif args.deepspeed_inclusion_filter is not None:
+            cmd.extend(
+                [
+                    "--include",
+                    str(args.deepspeed_inclusion_filter),
                 ]
             )
         else:
-            cmd.extend(
-                ["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)]
-            )
-            if args.deepspeed_exclusion_filter is not None:
-                cmd.extend(
-                    [
-                        "--exclude",
-                        str(args.deepspeed_exclusion_filter),
-                    ]
-                )
-            elif args.deepspeed_inclusion_filter is not None:
-                cmd.extend(
-                    [
-                        "--include",
-                        str(args.deepspeed_inclusion_filter),
-                    ]
-                )
-            else:
-                cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+            cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+
+        if args.module and args.no_python:
+            raise ValueError("--module and --no_python cannot be used together")
+        elif args.module:
+            cmd.append("--module")
+        elif args.no_python:
+            cmd.append("--no_python")
+        cmd.append(args.training_script)
+        cmd.extend(args.training_script_args)
+    elif num_machines > 1 and args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+        setattr(args, "nproc_per_node", str(num_processes // num_machines))
+        setattr(args, "nnodes", str(num_machines))
+        setattr(args, "node_rank", int(args.machine_rank))
+        if getattr(args, "same_network"):
+            setattr(args, "master_addr", str(main_process_ip))
+            setattr(args, "master_port", str(main_process_port))
+        else:
+            setattr(args, "rdzv_endpoint", f"{main_process_ip}:{main_process_port}")
     else:
-        cmd.extend(["--num_gpus", str(args.num_processes)])
+        setattr(args, "nproc_per_node", str(num_processes))
+        if main_process_port is not None:
+            setattr(args, "master_port", str(main_process_port))
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
     elif args.module:
-        cmd.append("--module")
+        setattr(args, "module", True)
     elif args.no_python:
-        cmd.append("--no_python")
-    cmd.append(args.training_script)
-    cmd.extend(args.training_script_args)
+        setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
     try:
@@ -559,10 +561,24 @@ def deepspeed_launcher(args):
                     continue
                 f.write(f"{key}={value}\n")
 
-    process = subprocess.Popen(cmd, env=current_env)
-    process.wait()
-    if process.returncode != 0:
-        raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+        process = subprocess.Popen(cmd, env=current_env)
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+    else:
+        if is_torch_version("<", "1.9.0"):
+            raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
+
+        debug = getattr(args, "debug", False)
+        args = _filter_args(args)
+        with patch_environment(**current_env):
+            try:
+                distrib_run.run(args)
+            except:
+                if debug:
+                    console = get_console()
+                    console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
+                    console.print_exception(suppress=[__file__], show_locals=False)
 
 
 def tpu_launcher(args):
