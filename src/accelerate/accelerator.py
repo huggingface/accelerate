@@ -745,6 +745,7 @@ class Accelerator:
                 )
         else:
             batch_size_per_device = deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"]
+            result = [obj for obj in args]
 
         config_kwargs = {
             "train_micro_batch_size_per_gpu": batch_size_per_device,
