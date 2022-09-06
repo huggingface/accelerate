@@ -481,7 +481,16 @@ class DataLoaderDispatcher(DataLoader):
         while not stop_iteration:
             batch, batch_info, skip = next_batch, next_batch_info, next_skip
             if skip:
+                stop_iteration = self._stop_iteration
+                if not stop_iteration:
+                    # We may still be at the end of the dataloader without knowing it yet: if there is nothing left in
+                    # the dataloader since the number of batches is a round multiple of the number of processes.
+                    next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+                    # next_batch_info[0] is None when there are no more batches, otherwise we still need to process them.
+                    if self._stop_iteration and next_batch_info[0] is None:
+                        stop_iteration = True
                 continue
+
             if self.state.process_index != 0:
                 # Initialize tensors on other processes than process 0.
                 batch = initialize_tensors(batch_info[0])
