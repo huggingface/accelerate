@@ -723,25 +723,28 @@ class Accelerator:
 
         deepspeed_plugin = self.state.deepspeed_plugin
 
-        result = [
-            self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
-            for obj in args
-        ]
+        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto":
+            result = [
+                self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
+                for obj in args
+            ]
 
-        batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
-        if self.split_batches:
-            batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
-        if len(batch_sizes) == 0:
-            raise ValueError(
-                "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
-            )
+            batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
+            if self.split_batches:
+                batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
+            if len(batch_sizes) == 0:
+                raise ValueError(
+                    "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
+                )
 
-        batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
-        if len(batch_sizes) > 1:
-            logger.info(
-                "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
-                f"{deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
-            )
+            batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
+            if len(batch_sizes) > 1:
+                logger.info(
+                    "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
+                    f"{deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
+                )
+        else:
+            batch_size_per_device = deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"]
 
         config_kwargs = {
             "train_micro_batch_size_per_gpu": batch_size_per_device,
@@ -916,7 +919,9 @@ class Accelerator:
 
         Should be used in lieu of `loss.backward()`.
         """
-        loss /= self.gradient_accumulation_steps
+        if self.distributed_type != DistributedType.DEEPSPEED:
+            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
+            loss = loss / self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:
             self.deepspeed_engine_wrapped.backward(loss, **kwargs)
         elif self.scaler is not None:
