@@ -97,6 +97,9 @@ if is_megatron_lm_available():
     from .megatron_lm import (
         MegatronLMDummyScheduler,
         MegatronLMDummyDataLoader,
+        MegatronEngine,
+        MegatronLMOptimizerWrapper,
+        MegatronLMSchedulerWrapper,
         initialize,
         prepare_model,
         prepare_optimizer,

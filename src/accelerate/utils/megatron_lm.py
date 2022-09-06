@@ -22,12 +22,21 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
-from .imports import is_megatron_lm_available
+from .imports import is_megatron_lm_available, is_transformers_available
 from .operations import recursively_apply
 
 
+if is_transformers_available():
+    from transformers.modeling_outputs import (
+        CausalLMOutputWithCrossAttentions,
+        Seq2SeqLMOutput,
+        SequenceClassifierOutput,
+    )
+    from transformers.models.bert.modeling_bert import BertForPreTrainingOutput
+
+
 if is_megatron_lm_available():
-    from megatron import get_args, mpu
+    from megatron import get_args, get_num_microbatches, get_timers, mpu
     from megatron.arguments import _add_data_args
     from megatron.data.data_samplers import build_pretraining_data_loader
     from megatron.data.dataset_utils import build_train_valid_test_datasets
@@ -41,6 +50,7 @@ if is_megatron_lm_available():
     from megatron.model.classification import Classification
     from megatron.model.module import MegatronModule
     from megatron.optimizer import get_megatron_optimizer
+    from megatron.schedules import get_forward_backward_func
     from megatron.tokenizer.tokenizer import _vocab_size_with_padding
     from megatron.training import build_train_valid_test_data_iterators, get_model, get_optimizer_param_scheduler
     from megatron.utils import average_losses_across_data_parallel_group, get_ltor_masks_and_position_ids
@@ -241,7 +251,7 @@ class MegatronLMDummyDataLoader:
         return train_valid_test_datasets_provider
 
 
-class MegatronLMModelWrapper(MegatronModule):
+class MegatronEngine(MegatronModule):
     """
     Megatron-LM model wrapper
     """
@@ -250,11 +260,16 @@ class MegatronLMModelWrapper(MegatronModule):
         self.module = model
         self.optimizer = optimizer
         self.scheduler = scheduler
-
-    # args = get_args()
-
-    def train_step():
-        pass
+        args = get_args()
+        if args.model_type_name == "bert":
+            self.train_step_handler = BertTrainStep(args)
+        elif args.model_type_name == "gpt":
+            self.train_step_handler = GPTTrainStep(args)
+        elif args.model_type_name == "t5":
+            self.train_step_handler = T5TrainStep(args)
+        else:
+            raise ValueError(f"Unknown model type: {args.model_type_name}")
+        self.optimizer.skipped_iter = False
 
     def train(self):
         for model_module in self.module:
@@ -264,8 +279,139 @@ class MegatronLMModelWrapper(MegatronModule):
         for model_module in self.module:
             model_module.eval()
 
-    def forward(self, *inputs, **kwargs):
-        pass
+    def train_step(self, **batch_data):
+        args = get_args()
+        timers = get_timers()
+        if len(self.module) > 1:
+            batch_data_iterator = [iter([batch_data]) for _ in range(len(self.module))]
+        else:
+            batch_data_iterator = iter([batch_data])
+
+        # Set grad to zero.
+        if args.DDP_impl == "local" and args.use_contiguous_buffers_in_local_ddp:
+            for partition in self.module:
+                partition.zero_grad_buffer()
+        self.optimizer.zero_grad()
+
+        # Forward pass.
+        forward_backward_func = get_forward_backward_func()
+        losses_reduced = forward_backward_func(
+            self.train_step_handler.forward_step,
+            batch_data_iterator,
+            self.module,
+            self.optimizer,
+            None,
+            forward_only=False,
+        )
+
+        # Empty unused memory.
+        if args.empty_unused_memory_level >= 1:
+            torch.cuda.empty_cache()
+
+        # Reduce gradients.
+        timers("backward-reduce-model-grads").start()
+        self.optimizer.reduce_model_grads(args, timers)
+        timers("backward-reduce-model-grads").stop()
+
+        # Update parameters.
+        timers("optimizer").start()
+        update_successful, grad_norm, num_zeros_in_grad = self.optimizer.step(args, timers)
+        timers("optimizer").stop()
+
+        # Gather params.
+        if update_successful:
+            timers("backward-gather-model-params").start()
+            self.optimizer.gather_model_params(args, timers)
+            timers("backward-gather-model-params").stop()
+
+        # Update learning rate.
+        if update_successful:
+            if self.scheduler is not None:
+                increment = get_num_microbatches() * args.micro_batch_size * args.data_parallel_size
+                self.scheduler.step(increment=increment)
+            skipped_iter = 0
+        else:
+            skipped_iter = 1
+
+        self.optimizer.skipped_iter = not update_successful
+
+        # Empty unused memory.
+        if args.empty_unused_memory_level >= 2:
+            torch.cuda.empty_cache()
+
+        args.consumed_train_samples += (
+            mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
+        )
+
+        if mpu.is_pipeline_last_stage(ignore_virtual=True):
+            # Average loss across microbatches.
+            loss_reduced = {}
+            for key in losses_reduced[0]:
+                losses_reduced_for_key = [x[key] for x in losses_reduced]
+                loss_reduced[key] = sum(losses_reduced_for_key) / len(losses_reduced_for_key)
+            return loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad
+        return {}, skipped_iter, grad_norm, num_zeros_in_grad
+
+    def eval_step(self, **batch_data):
+        args = get_args()
+        if len(self.module) > 1:
+            batch_data_iterator = [iter([batch_data]) for _ in range(len(self.module))]
+        else:
+            batch_data_iterator = iter([batch_data])
+        forward_backward_func = get_forward_backward_func()
+        loss_dicts = forward_backward_func(
+            self.train_step_handler.forward_step,
+            batch_data_iterator,
+            self.module,
+            optimizer=None,
+            timers=None,
+            forward_only=True,
+        )
+        # Empty unused memory
+        if args.empty_unused_memory_level >= 1:
+            torch.cuda.empty_cache()
+
+        args.consumed_valid_samples += (
+            mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
+        )
+
+        if mpu.is_pipeline_last_stage(ignore_virtual=True):
+            # Average loss across microbatches.
+            loss_reduced = {}
+            for key in loss_dicts[0]:
+                losses_reduced_for_key = [x[key] for x in loss_dicts]
+                loss_reduced[key] = sum(losses_reduced_for_key) / len(losses_reduced_for_key)
+            return loss_reduced
+        else:
+            return {}
+
+    def forward(self, **batch_data):
+        # During training, we use train_step()
+        # model(**batch_data) performs following operations by delegating it to `self.train_step`:
+        # 1. Prepare **batch_data for Tendor, Pipeline and Model Parallelism
+        # 2. Set grad to zero.
+        # 3. forward pass and backward pass using Pipeline Parallelism
+        # 4. Empty unused memory.
+        # 5. Reduce gradients.
+        # 6. Update parameters.
+        # 7. Gather params when using Distributed Optimizer (Data Parallelism).
+        # 8. Update learning rate if scheduler is specified.
+        # 9. Empty unused memory.
+        # 10. Average loss across microbatches and across DP ranks.
+        #
+        # During evaluation, we use eval_step()
+        args = get_args()
+        if self.module[0].training:
+            loss_dict, _, _, _ = self.train_step(**batch_data)
+        else:
+            loss_dict = self.eval_step(**batch_data)
+        loss = torch.tensor(0.0, device=args.local_rank)
+        for key in loss_dict:
+            loss += loss_dict[key]
+        # loss = reduce(loss)
+        if self.train_step_handler.model_output_class is not None:
+            return self.train_step_handler.model_output_class(loss=loss)
+        return loss
 
 
 class MegatronLMOptimizerWrapper(AcceleratedOptimizer):
@@ -281,15 +427,24 @@ class MegatronLMOptimizerWrapper(AcceleratedOptimizer):
     @property
     def step_was_skipped(self):
         """Whether or not the optimizer step was done, or skipped because of gradient overflow."""
-        return self.optimizer.overflow
+        return self.optimizer.skipped_iter
 
 
 class MegatronLMSchedulerWrapper(AcceleratedScheduler):
-    def __init__(self, scheduler, optimizers):
+    def __init__(self, scheduler, optimizers, skip_step=False):
         super().__init__(scheduler, optimizers)
+        args = get_args()
+        self.skip_step = skip_step
+        self.increment = args.data_parallel_size
 
-    def step(self):
-        pass  # `model(**batch)` is doing that automatically. Therefore, it's implementation is not needed
+    def step(self, *args, **kwargs):
+        if self.skip_step:
+            return  # `model(**batch)` is doing that automatically. Therefore, it's implementation is not needed
+        else:
+            for _ in range(self.increment):
+                # Special case when using OneCycle and `drop_last` was not used
+                if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch:
+                    self.scheduler.step(*args, **kwargs)
 
 
 class AbstractTrainStep(ABC):
@@ -312,12 +467,18 @@ class AbstractTrainStep(ABC):
 class BertTrainStep(AbstractTrainStep):
     """Bert train step class."""
 
-    def __init__(self):
+    def __init__(self, args):
         super().__init__("BertTrainStep")
-        args = get_args()
         self.get_batch = self.get_batch_func(args.megatron_dataset_flag)
         self.loss_func = self.get_loss_func(args.pretraining_flag, args.num_labels)
         self.forward_step = self.get_forward_step_func(args.pretraining_flag, args.bert_binary_head)
+        if not args.model_return_dict:
+            self.model_output_class = None
+        else:
+            if args.pretraining_flag:
+                self.model_output_class = BertForPreTrainingOutput
+            else:
+                self.model_output_class = SequenceClassifierOutput
 
     def get_batch_func(self, megatron_dataset_flag):
         def get_batch_megatron(data_iterator):
@@ -350,7 +511,6 @@ class BertTrainStep(AbstractTrainStep):
             # Broadcast data.
             if data_iterator is not None:
                 data = next(data_iterator)
-                data["loss_mask"] = (data["labels"] != -100).to(torch.float)
             else:
                 data = None
             data_b = broadcast_data(data)
@@ -364,13 +524,14 @@ class BertTrainStep(AbstractTrainStep):
                 types = None
             if "labels" in data_b:
                 lm_labels = data_b["labels"].long()
+                loss_mask = (data_b["labels"] != -100).to(torch.float)
             else:
                 lm_labels = None
+                loss_mask = None
             if "next_sentence_label" in data_b:
                 sentence_order = data_b["next_sentence_label"].long()
             else:
                 sentence_order = None
-            loss_mask = data_b["loss_mask"].float()
 
             return tokens, types, sentence_order, loss_mask, lm_labels, padding_mask
 
@@ -436,12 +597,15 @@ class BertTrainStep(AbstractTrainStep):
 
 
 class GPTTrainStep(AbstractTrainStep):
-    def __init__(self):
+    def __init__(self, args):
         super().__init__("GPTTrainStep")
-        args = get_args()
         self.get_batch = self.get_batch_func(args.megatron_dataset_flag)
         self.loss_func = self.get_loss_func()
         self.forward_step = self.get_forward_step_func()
+        if not args.model_return_dict:
+            self.model_output_class = None
+        else:
+            self.model_output_class = CausalLMOutputWithCrossAttentions
 
     def get_batch_func(self, megatron_dataset_flag):
         def get_batch_megatron(data_iterator):
@@ -478,26 +642,15 @@ class GPTTrainStep(AbstractTrainStep):
             # Broadcast data.
             if data_iterator is not None:
                 data = next(data_iterator)
-                tokens_ = data["input_ids"].long()
-                labels = tokens_[:, 1:].contiguous()
-                tokens = tokens_[:, :-1].contiguous()
-                # Get the masks and postition ids.
-                attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                    tokens, 0, False, False, False
-                )
-                data["input_ids"] = tokens
-                data["labels"] = labels
-                data["loss_mask"] = loss_mask
-                data["attention_mask"] = attention_mask
-                data["position_ids"] = position_ids
+                data = {"input_ids": data["input_ids"]}
             else:
                 data = None
             data_b = broadcast_data(data)
-            tokens = data_b["input_ids"]
-            labels = data_b["labels"]
-            loss_mask = data_b["loss_mask"]
-            attention_mask = data_b["attention_mask"]
-            position_ids = data_b["position_ids"]
+            tokens_ = data_b["input_ids"].long()
+            labels = tokens_[:, 1:].contiguous()
+            tokens = tokens_[:, :-1].contiguous()
+            # Get the masks and postition ids.
+            attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(tokens, 0, False, False, False)
             return tokens, labels, loss_mask, attention_mask, position_ids
 
         if megatron_dataset_flag:
@@ -531,7 +684,127 @@ class GPTTrainStep(AbstractTrainStep):
 
 
 class T5TrainStep(AbstractTrainStep):
-    pass
+    def __init__(self, args):
+        super().__init__("T5TrainStep")
+        self.get_batch = self.get_batch_func(args.megatron_dataset_flag)
+        self.loss_func = self.get_loss_func()
+        self.forward_step = self.get_forward_step_func()
+        if not args.model_return_dict:
+            self.model_output_class = None
+        else:
+            self.model_output_class = Seq2SeqLMOutput
+
+    @staticmethod
+    def attn_mask_postprocess(attention_mask):
+        # We create a 3D attention mask from a 2D tensor mask.
+        # [b, 1, s]
+        attention_mask_b1s = attention_mask.unsqueeze(1)
+        # [b, s, 1]
+        attention_mask_bs1 = attention_mask.unsqueeze(2)
+        # [b, s, s]
+        attention_mask_bss = attention_mask_b1s * attention_mask_bs1
+        # Convert attention mask to binary:
+        extended_attention_mask = attention_mask_bss < 0.5
+        return extended_attention_mask
+
+    @staticmethod
+    def get_decoder_mask(seq_length, device):
+        attention_mask = torch.tril(torch.ones((1, seq_length, seq_length), device=device))
+        attention_mask = attention_mask < 0.5
+        return attention_mask
+
+    @staticmethod
+    def get_enc_dec_mask(attention_mask):
+        # We create a 3D attention mask from a 2D tensor mask.
+        # [b, 1, s]
+        attention_mask_b1s = attention_mask.unsqueeze(1)
+        extended_attention_mask = attention_mask_b1s < 0.5
+        return extended_attention_mask
+
+    def get_batch_func(self, megatron_dataset_flag):
+        def get_batch_megatron(data_iterator):
+            """Build the batch."""
+
+            keys = ["text_enc", "text_dec", "labels", "loss_mask", "enc_mask", "dec_mask", "enc_dec_mask"]
+            datatype = torch.int64
+
+            # Broadcast data.
+            if data_iterator is not None:
+                data = next(data_iterator)
+            else:
+                data = None
+            data_b = mpu.broadcast_data(keys, data, datatype)
+
+            # Unpack.
+            tokens_enc = data_b["text_enc"].long()
+            tokens_dec = data_b["text_dec"].long()
+            labels = data_b["labels"].long()
+            loss_mask = data_b["loss_mask"].float()
+
+            enc_mask = data_b["enc_mask"] < 0.5
+            dec_mask = data_b["dec_mask"] < 0.5
+            enc_dec_mask = data_b["enc_dec_mask"] < 0.5
+
+            return tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, enc_dec_mask
+
+        def get_batch_transformer(data_iterator):
+            """Build the batch."""
+
+            # Broadcast data.
+            if data_iterator is not None:
+                data = next(data_iterator)
+
+            else:
+                data = None
+            data_b = broadcast_data(data)
+            tokens_enc = data_b["input_ids"].long()
+            labels = data_b["labels"].long()
+            loss_mask = (labels != -100).to(torch.float)
+            if "decoder_input_ids" in data_b:
+                tokens_dec = data_b["decoder_input_ids"].long()
+            else:
+                tokens_dec = labels.new_zeros(labels.shape, device=labels.device, dtype=torch.long)
+                tokens_dec[..., 1:] = labels[..., :-1].clone()
+                tokens_dec[..., 0] = 0
+                tokens_dec.masked_fill_(tokens_dec == -100, 0)
+            enc_mask = T5TrainStep.attn_mask_postprocess(data_b["attention_mask"].long())
+            dec_mask = T5TrainStep.get_decoder_mask(tokens_dec.shape[1], tokens_dec.device)
+            enc_dec_mask = T5TrainStep.get_enc_dec_mask(data_b["attention_mask"].long())
+
+            return tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, enc_dec_mask
+
+        if megatron_dataset_flag:
+            return get_batch_megatron
+        else:
+            return get_batch_transformer
+
+    def get_loss_func(self):
+        def loss_func(loss_mask, output_tensor):
+            lm_loss_ = output_tensor.float()
+            lm_loss = torch.sum(lm_loss_.view(-1) * loss_mask.reshape(-1)) / loss_mask.sum()
+
+            loss = lm_loss
+            averaged_losses = average_losses_across_data_parallel_group([lm_loss])
+
+            return loss, {"lm loss": averaged_losses[0]}
+
+        return loss_func
+
+    def get_forward_step_func(self):
+        def forward_step(data_iterator, model):
+            """Forward step."""
+            # Get the batch.
+            tokens_enc, tokens_dec, loss_mask, lm_labels, enc_mask, dec_mask, enc_dec_mask = self.get_batch(
+                data_iterator
+            )
+            # Forward model lm_labels
+            output_tensor = model(
+                tokens_enc, tokens_dec, enc_mask, dec_mask, enc_dec_mask, tokentype_ids=None, lm_labels=lm_labels
+            )
+
+            return output_tensor, partial(self.loss_func, loss_mask)
+
+        return forward_step
 
 
 def broadcast_data(data):

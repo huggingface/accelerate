@@ -74,7 +74,13 @@ if is_deepspeed_available():
     )
 
 if is_megatron_lm_available():
-    from .utils import MegatronLMDummyDataLoader, MegatronLMDummyScheduler
+    from .utils import (
+        MegatronEngine,
+        MegatronLMDummyDataLoader,
+        MegatronLMDummyScheduler,
+        MegatronLMOptimizerWrapper,
+        MegatronLMSchedulerWrapper,
+    )
     from .utils import initialize as megatron_lm_initialize
     from .utils import prepare_data_loader as megatron_lm_prepare_data_loader
     from .utils import prepare_model as megatron_lm_prepare_model
@@ -385,6 +391,10 @@ class Accelerator:
         return self.mixed_precision != "no"
 
     @property
+    def is_last_rank(self):
+        return self.process_index == self.num_processes - 1
+
+    @property
     def mixed_precision(self):
         if self.distributed_type == DistributedType.DEEPSPEED:
             config = self.state.deepspeed_plugin.deepspeed_config
@@ -418,6 +428,18 @@ class Accelerator:
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             if self.is_local_main_process or not self.use_distributed:
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    def on_last_process(func):
+        """
+        A decorator that will run the decorated function on the last process only.
+        """
+
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if self.is_last_rank or not self.use_distributed:
                 return func(self, *args, **kwargs)
 
         return wrapper
@@ -887,14 +909,15 @@ class Accelerator:
 
         model = None
         optimizer = None
-        scheduler = None  # noqa F841
+        scheduler = None
+        is_dummy_scheduler = False
         for obj in args:
             if isinstance(obj, torch.nn.Module):
                 model = obj
-            elif isinstance(obj, (torch.optim.Optimizer, DummyOptim)):
+            elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
             elif isinstance(obj, (torch.optim.lr_scheduler._LRScheduler, MegatronLMDummyScheduler)):
-                scheduler = obj  # noqa F841
+                scheduler = obj
 
         if model is not None:
             megatron_lm_plugin.set_network_size_args(model)
@@ -926,10 +949,36 @@ class Accelerator:
         if optimizer is not None:
             optimizer = megatron_lm_prepare_optimizer(self, model)
         if scheduler is not None:
-            is_dummy_scheduler = isinstance(scheduler, MegatronLMDummyScheduler)
             scheduler = megatron_lm_prepare_scheduler(self, optimizer, scheduler, is_dummy_scheduler)
 
-        # To Do, main logic for preparing dataloaders, model, optimizer and scheduler
+        if model is not None and is_dummy_scheduler:
+            model = MegatronEngine(model, optimizer, scheduler)
+        else:
+            model = MegatronEngine(model, optimizer, None)
+        optimizer = MegatronLMOptimizerWrapper(optimizer)
+        if is_dummy_scheduler:
+            scheduler = MegatronLMSchedulerWrapper(scheduler, optimizer, skip_step=True)
+        else:
+            scheduler = MegatronLMSchedulerWrapper(scheduler, optimizer, skip_step=False)
+
+        for i in range(len(result)):
+            if isinstance(result[i], torch.nn.Module):
+                result[i] = model
+            elif isinstance(result[i], (torch.optim.Optimizer)):
+                result[i] = optimizer
+            elif isinstance(result[i], (torch.optim.lr_scheduler._LRScheduler, MegatronLMDummyScheduler)):
+                result[i] = scheduler
+        if model is not None:
+            self._models.append(model)
+        if optimizer is not None:
+            self._optimizers.append(optimizer)
+        if scheduler is not None:
+            self._schedulers.append(scheduler)
+        if len(self._models) > 1:
+            raise AssertionError(
+                "You can't use same `Accelerator()` instance with multiple models when using Megatron-LM"
+            )
+        return tuple(result)
 
     def prepare_data_loader(self, data_loader):
         return prepare_data_loader(
@@ -1125,7 +1174,7 @@ class Accelerator:
         """
         wait_for_everyone()
 
-    @on_main_process
+    @on_last_process
     def init_trackers(self, project_name: str, config: Optional[dict] = None, init_kwargs: Optional[dict] = {}):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
@@ -1160,7 +1209,7 @@ class Accelerator:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
-    @on_main_process
+    @on_last_process
     def get_tracker(self, name: str):
         """
         Returns a `tracker` from `self.trackers` based on `name` on the main process only.
@@ -1174,7 +1223,7 @@ class Accelerator:
                 return tracker.tracker
         raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
 
-    @on_main_process
+    @on_last_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
         """
         Logs `values` to all stored trackers in `self.trackers` on the main process only.
@@ -1194,7 +1243,7 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
 
-    @on_main_process
+    @on_last_process
     def end_training(self):
         """
         Runs any special end training behaviors, such as stopping trackers on the main process only.

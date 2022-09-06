@@ -868,6 +868,7 @@ class MegatronLMPlugin:
         self.megatron_lm_default_args["max_position_embeddings"] = max_position_embeddings
         self.megatron_lm_default_args["pretraining_flag"] = pretraining_flag
         self.megatron_lm_default_args["orig_vocab_size"] = orig_vocab_size
+        self.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
         if model_type_name == "bert":
             self.megatron_lm_default_args["num_labels"] = num_labels
 
