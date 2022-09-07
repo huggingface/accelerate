@@ -15,16 +15,23 @@
 # Expectation:
 # Provide a project dir name, then each type of logger gets stored in project/{`logging_dir`}
 
+import json
 import os
 import time
-import json
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Optional, Union, Dict, Any
+from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
 from .logging import get_logger
-from .utils import LoggerType, is_aim_available, is_comet_ml_available, is_tensorboard_available, is_wandb_available, is_mlflow_available
+from .utils import (
+    LoggerType,
+    is_aim_available,
+    is_comet_ml_available,
+    is_mlflow_available,
+    is_tensorboard_available,
+    is_wandb_available,
+)
 
 
 _available_trackers = []
@@ -409,29 +416,26 @@ class MLflowTracker(GeneralTracker):
 
     Args:
         experiment_name (`str`):
-            Name of the experiment. 
-            Environment variable MLFLOW_EXPERIMENT_NAME has priority over this argument.
+            Name of the experiment. Environment variable MLFLOW_EXPERIMENT_NAME has priority over this argument.
         logging_dir (`str`, `os.PathLike`):
             Location for mlflow logs to be stored.
         run_id (`str`):
-            If specified, get the run with the specified UUID and log parameters and metrics under that run. 
-            The run’s end time is unset and its status is set to running, but the run’s other attributes 
-            (source_version, source_type, etc.) are not changed.
-            Environment variable MLFLOW_RUN_ID has priority over this argument.
+            If specified, get the run with the specified UUID and log parameters and metrics under that run. The run’s
+            end time is unset and its status is set to running, but the run’s other attributes (source_version,
+            source_type, etc.) are not changed. Environment variable MLFLOW_RUN_ID has priority over this argument.
         tags (`dict`, `str`):
-            An optional `dict` of `str` keys and values, or a `str` dump from a `dict`, 
-            to set as tags on the run. If a run is being resumed, these tags are set on the resumed run. 
-            If a new run is being created, these tags are set on the new run.
-            Environment variable MLFLOW_TAGS has priority over this argument.
+            An optional `dict` of `str` keys and values, or a `str` dump from a `dict`, to set as tags on the run. If a
+            run is being resumed, these tags are set on the resumed run. If a new run is being created, these tags are
+            set on the new run. Environment variable MLFLOW_TAGS has priority over this argument.
         nested_run (`bool`):
-            Controls whether run is nested in parent run. True creates a nested run.
-            Environment variable MLFLOW_NESTED_RUN has priority over this argument.
+            Controls whether run is nested in parent run. True creates a nested run. Environment variable
+            MLFLOW_NESTED_RUN has priority over this argument.
         run_name (`str`):
             Name of new run (stored as a mlflow.runName tag). Used only when run_id is unspecified.
         description (`str`):
-            An optional string that populates the description box of the run. 
-            If a run is being resumed, the description is set on the resumed run. 
-            If a new run is being created, the description is set on the new run.
+            An optional string that populates the description box of the run. If a run is being resumed, the
+            description is set on the resumed run. If a new run is being created, the description is set on the new
+            run.
     """
 
     name = "mlflow"
@@ -482,7 +486,6 @@ class MLflowTracker(GeneralTracker):
     @property
     def tracker(self):
         return mlflow.active_run()
-
 
     def store_init_configuration(self, values: dict):
         """
