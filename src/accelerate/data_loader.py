@@ -463,10 +463,10 @@ class DataLoaderDispatcher(DataLoader):
                     batch_info = [None, True]
                 broadcast_object_list(batch_info)
                 if batch_info[1]:
-                    return batch, batch_info, True
+                    return batch, batch_info
             else:
-                return batch, batch_info, True
-        return batch, batch_info, False
+                return batch, batch_info
+        return batch, batch_info
 
     def __iter__(self):
         self.gradient_state._set_end_of_dataloader(False)
@@ -477,11 +477,10 @@ class DataLoaderDispatcher(DataLoader):
         stop_iteration = False
         self._stop_iteration = False
         first_batch = None
-        next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+        next_batch, next_batch_info = self._fetch_batches(main_iterator)
         while not stop_iteration:
-            batch, batch_info, skip = next_batch, next_batch_info, next_skip
-            if skip:
-                continue
+            batch, batch_info = next_batch, next_batch_info
+
             if self.state.process_index != 0:
                 # Initialize tensors on other processes than process 0.
                 batch = initialize_tensors(batch_info[0])
@@ -500,7 +499,7 @@ class DataLoaderDispatcher(DataLoader):
             if not stop_iteration:
                 # We may still be at the end of the dataloader without knowing it yet: if there is nothing left in
                 # the dataloader since the number of batches is a round multiple of the number of processes.
-                next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+                next_batch, next_batch_info = self._fetch_batches(main_iterator)
                 # next_batch_info[0] is None when there are no more batches, otherwise we still need to process them.
                 if self._stop_iteration and next_batch_info[0] is None:
                     stop_iteration = True
