@@ -23,10 +23,8 @@ from typing import List, Optional, Union, Dict, Any
 
 import yaml
 
-from accelerate.utils.imports import is_mlflow_available
-
 from .logging import get_logger
-from .utils import LoggerType, is_aim_available, is_comet_ml_available, is_tensorboard_available, is_wandb_available
+from .utils import LoggerType, is_aim_available, is_comet_ml_available, is_tensorboard_available, is_wandb_available, is_mlflow_available
 
 
 _available_trackers = []
@@ -441,7 +439,7 @@ class MLflowTracker(GeneralTracker):
 
     def __init__(
         self,
-        experiment_name: Optional[str] = None,
+        experiment_name: str = None,
         logging_dir: Optional[Union[str, os.PathLike]] = ".",
         run_id: Optional[str] = None,
         tags: Optional[Union[Dict[str, Any], str]] = None,
@@ -508,7 +506,7 @@ class MLflowTracker(GeneralTracker):
 
         # MLflow cannot log more than 100 values in one go, so we have to split it
         for i in range(0, len(values_list), self._MAX_PARAMS_TAGS_PER_BATCH):
-            mlflow.log_metrics(dict(values_list[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
+            mlflow.log_params(dict(values_list[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
 
         logger.debug("Stored initial configuration hyperparameters to MLflow")
 
