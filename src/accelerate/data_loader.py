@@ -462,10 +462,6 @@ class DataLoaderDispatcher(DataLoader):
                 else:
                     batch_info = [None, True]
                 broadcast_object_list(batch_info)
-                if batch_info[1]:
-                    return batch, batch_info
-            else:
-                return batch, batch_info
         return batch, batch_info
 
     def __iter__(self):
