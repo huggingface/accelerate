@@ -23,7 +23,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
 from .imports import is_megatron_lm_available, is_transformers_available
-from .operations import recursively_apply
+from .operations import recursively_apply, send_to_device
 
 
 if is_transformers_available():
@@ -37,18 +37,15 @@ if is_transformers_available():
 
 if is_megatron_lm_available():
     from megatron import get_args, get_num_microbatches, get_timers, mpu
-    from megatron.arguments import _add_data_args
+    from megatron.arguments import _add_data_args, parse_args, validate_args
+    from megatron.checkpointing import load_args_from_checkpoint
     from megatron.data.data_samplers import build_pretraining_data_loader
     from megatron.data.dataset_utils import build_train_valid_test_datasets
-    from megatron.initialize import (
-        get_tensor_model_parallel_group,
-        get_tensor_model_parallel_src_rank,
-        initialize_megatron,
-        set_jit_fusion_options,
-    )
+    from megatron.global_vars import set_global_variables
+    from megatron.initialize import _compile_dependencies, _init_autoresume, _set_random_seed, set_jit_fusion_options
     from megatron.model import BertModel, GPTModel, ModelType, T5Model
     from megatron.model.classification import Classification
-    from megatron.model.module import MegatronModule
+    from megatron.mpu.initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_src_rank
     from megatron.optimizer import get_megatron_optimizer
     from megatron.schedules import get_forward_backward_func
     from megatron.tokenizer.tokenizer import _vocab_size_with_padding
@@ -56,11 +53,12 @@ if is_megatron_lm_available():
     from megatron.utils import average_losses_across_data_parallel_group, get_ltor_masks_and_position_ids
 
 
-def model_provider_func(accelerator, pre_process=True, post_process=True, add_encoder=True, add_decoder=True):
+def model_provider_func(pre_process=True, post_process=True, add_encoder=True, add_decoder=True):
     """Build the model."""
     args = get_args()
     mode = "pre-training" if args.pretraining_flag else "fine-tuning"
-    accelerator.print(f"Building {args.model_type_name} model in the {mode} mode.")
+    if args.rank == 0:
+        print(f"Building {args.model_type_name} model in the {mode} mode.")
     if args.model_type_name == "bert":
         if args.pretraining_flag:
             num_tokentypes = 2 if args.bert_binary_head else 0
@@ -76,7 +74,7 @@ def model_provider_func(accelerator, pre_process=True, post_process=True, add_en
             model = Classification(
                 num_classes=args.num_labels, num_tokentypes=2, pre_process=pre_process, post_process=post_process
             )
-    elif args.model_type_name == "gpt2":
+    elif args.model_type_name == "gpt":
         model = GPTModel(num_tokentypes=0, parallel_output=True, pre_process=pre_process, post_process=post_process)
     elif args.model_type_name == "t5":
         model = T5Model(
@@ -96,9 +94,12 @@ def prepare_data_loader(accelerator, dataloader, consumed_samples_index=-1, cons
     accelerator.print("Preparing dataloader")
     args = get_args()
     if not args.megatron_dataset_flag:
+        collate_fn = dataloader.collate_fn
         if args.consumed_samples is not None:
             consumed_samples = args.consumed_samples[consumed_samples_index]
-        return build_pretraining_data_loader(dataloader.dataset, consumed_samples)
+        dataloader = build_pretraining_data_loader(dataloader.dataset, consumed_samples)
+        dataloader.collate_fn = collate_fn
+        return dataloader
     else:
         if args.consumed_samples is not None:
             (
@@ -132,21 +133,84 @@ def prepare_optimizer(accelerator, model):
     return optimizer
 
 
-def prepare_scheduler(accelerator, optimizer, scheduler, is_dummy_scheduler):
+def prepare_scheduler(accelerator, optimizer, scheduler):
     accelerator.print("Preparing scheduler")
-    if is_dummy_scheduler:
-        scheduler = get_optimizer_param_scheduler(optimizer)
-    else:
-        scheduler.optimizer = optimizer
-        if isinstance(scheduler, torch.optim.lr_scheduler.LambdaLR):
-            scheduler = scheduler.__class__(optimizer, scheduler.lr_lambdas[0])
+    scheduler = get_optimizer_param_scheduler(optimizer)
     return scheduler
 
 
 def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     accelerator.print("Initializing Megatron-LM")
-    # Initalize and get arguments
-    initialize_megatron(extra_args_provider=extra_args_provider, args_defaults=args_defaults, ignore_unknown_args=True)
+    assert torch.cuda.is_available(), "Megatron requires CUDA."
+
+    # Parse arguments
+    args = parse_args(extra_args_provider, ignore_unknown_args=True)
+
+    # Set defaults
+    for key, value in args_defaults.items():
+        if getattr(args, key, None) is not None:
+            if args.rank == 0:
+                print(
+                    "WARNING: overriding default arguments for {key}:{v} \
+                        with {key}:{v2}".format(
+                        key=key, v=getattr(args, key), v2=value
+                    ),
+                    flush=True,
+                )
+        setattr(args, key, value)
+
+    if args.use_checkpoint_args or args_defaults.get("use_checkpoint_args", False):
+        assert args.load is not None, "--use-checkpoints-args requires --load argument"
+        load_args_from_checkpoint(args)
+
+    validate_args(args)
+
+    # set global args, build tokenizer, and set adlr-autoresume,
+    # tensorboard-writer, and timers.
+    set_global_variables(args)
+
+    # torch.distributed initialization
+    def finish_mpu_init():
+        args = get_args()
+        # Pytorch distributed.
+        device_count = torch.cuda.device_count()
+        args.rank = torch.distributed.get_rank()
+        args.world_size = torch.distributed.get_world_size()
+        if device_count > 0:
+            device = args.rank % device_count
+            if args.local_rank is not None:
+                assert args.local_rank == device, "expected local-rank to be the same as rank % device-count."
+            else:
+                args.local_rank = device
+
+            # Set the tensor model-parallel, pipeline model-parallel, and
+            # data-parallel communicators.
+            if mpu.model_parallel_is_initialized():
+                print("model parallel is already initialized")
+            else:
+                mpu.initialize_model_parallel(
+                    args.tensor_model_parallel_size,
+                    args.pipeline_model_parallel_size,
+                    args.virtual_pipeline_model_parallel_size,
+                    args.pipeline_model_parallel_split_rank,
+                )
+
+        # Random seeds for reproducibility.
+        if args.rank == 0:
+            print("> setting random seeds to {} ...".format(args.seed))
+        _set_random_seed(args.seed, args.data_parallel_random_init)
+
+    args = get_args()
+
+    # Megatron's MPU is the master. Complete initialization right away.
+    finish_mpu_init()
+
+    # Autoresume.
+    _init_autoresume()
+
+    # Compile dependencies.
+    _compile_dependencies()
+
     # Set pytorch JIT layer fusion options and warmup JIT functions.
     set_jit_fusion_options()
     args = get_args()
@@ -251,13 +315,15 @@ class MegatronLMDummyDataLoader:
         return train_valid_test_datasets_provider
 
 
-class MegatronEngine(MegatronModule):
+class MegatronEngine(torch.nn.Module):
     """
     Megatron-LM model wrapper
     """
 
     def __init__(self, model, optimizer, scheduler):
+        super(MegatronEngine, self).__init__()
         self.module = model
+        self.base_model = model[0]
         self.optimizer = optimizer
         self.scheduler = scheduler
         args = get_args()
@@ -431,20 +497,11 @@ class MegatronLMOptimizerWrapper(AcceleratedOptimizer):
 
 
 class MegatronLMSchedulerWrapper(AcceleratedScheduler):
-    def __init__(self, scheduler, optimizers, skip_step=False):
+    def __init__(self, scheduler, optimizers):
         super().__init__(scheduler, optimizers)
-        args = get_args()
-        self.skip_step = skip_step
-        self.increment = args.data_parallel_size
 
     def step(self, *args, **kwargs):
-        if self.skip_step:
-            return  # `model(**batch)` is doing that automatically. Therefore, it's implementation is not needed
-        else:
-            for _ in range(self.increment):
-                # Special case when using OneCycle and `drop_last` was not used
-                if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch:
-                    self.scheduler.step(*args, **kwargs)
+        return  # `model(**batch)` is doing that automatically. Therefore, it's implementation is not needed
 
 
 class AbstractTrainStep(ABC):
@@ -511,6 +568,7 @@ class BertTrainStep(AbstractTrainStep):
             # Broadcast data.
             if data_iterator is not None:
                 data = next(data_iterator)
+                data = send_to_device(data, torch.cuda.current_device())
             else:
                 data = None
             data_b = broadcast_data(data)
@@ -643,6 +701,7 @@ class GPTTrainStep(AbstractTrainStep):
             if data_iterator is not None:
                 data = next(data_iterator)
                 data = {"input_ids": data["input_ids"]}
+                data = send_to_device(data, torch.cuda.current_device())
             else:
                 data = None
             data_b = broadcast_data(data)
@@ -753,7 +812,7 @@ class T5TrainStep(AbstractTrainStep):
             # Broadcast data.
             if data_iterator is not None:
                 data = next(data_iterator)
-
+                data = send_to_device(data, torch.cuda.current_device())
             else:
                 data = None
             data_b = broadcast_data(data)

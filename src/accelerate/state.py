@@ -163,7 +163,7 @@ class AcceleratorState:
                     if self.mixed_precision != "no":
                         fsdp_plugin.set_mixed_precision(self.mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
-                if os.environ.get("USE_MEGATRONLM", "false") == "true":
+                if os.environ.get("USE_MEGATRON_LM", "false") == "true":
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self.mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin

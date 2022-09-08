@@ -925,13 +925,17 @@ class Accelerator:
             megatron_lm_plugin.set_optimizer_type(optimizer)
         if scheduler is not None:
             is_dummy_scheduler = isinstance(scheduler, MegatronLMDummyScheduler)
-            megatron_lm_plugin.set_scheduler_args(scheduler, is_dummy_scheduler)
+            if not is_dummy_scheduler:
+                raise ValueError(
+                    "You can't use a custom scheduler with Megatron-LM. Please use the `accelerate.utils.MegatronLMDummyScheduler` instead."
+                )
+            megatron_lm_plugin.set_scheduler_args(scheduler)
 
         # initialize megatron-lm
         megatron_lm_initialize(self, args_defaults=megatron_lm_plugin.megatron_lm_default_args)
         counter = 0
         result = []
-        for obj in enumerate(args):
+        for obj in args:
             if isinstance(obj, torch.utils.data.DataLoader):
                 result.append(megatron_lm_prepare_data_loader(self, obj, consumed_samples_index=counter))
                 counter += 1
@@ -949,24 +953,21 @@ class Accelerator:
         if optimizer is not None:
             optimizer = megatron_lm_prepare_optimizer(self, model)
         if scheduler is not None:
-            scheduler = megatron_lm_prepare_scheduler(self, optimizer, scheduler, is_dummy_scheduler)
+            scheduler = megatron_lm_prepare_scheduler(self, optimizer, scheduler)
 
-        if model is not None and is_dummy_scheduler:
+        if model is not None:
             model = MegatronEngine(model, optimizer, scheduler)
-        else:
-            model = MegatronEngine(model, optimizer, None)
-        optimizer = MegatronLMOptimizerWrapper(optimizer)
-        if is_dummy_scheduler:
-            scheduler = MegatronLMSchedulerWrapper(scheduler, optimizer, skip_step=True)
-        else:
-            scheduler = MegatronLMSchedulerWrapper(scheduler, optimizer, skip_step=False)
+        if optimizer is not None:
+            optimizer = MegatronLMOptimizerWrapper(optimizer)
+        if scheduler is not None:
+            scheduler = MegatronLMSchedulerWrapper(scheduler, optimizer)
 
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
-            elif isinstance(result[i], (torch.optim.Optimizer)):
+            elif isinstance(result[i], torch.optim.Optimizer):
                 result[i] = optimizer
-            elif isinstance(result[i], (torch.optim.lr_scheduler._LRScheduler, MegatronLMDummyScheduler)):
+            elif isinstance(result[i], MegatronLMDummyScheduler):
                 result[i] = scheduler
         if model is not None:
             self._models.append(model)
@@ -1020,6 +1021,8 @@ class Accelerator:
         loss /= self.gradient_accumulation_steps
         if self.distributed_type == DistributedType.DEEPSPEED:
             self.deepspeed_engine_wrapped.backward(loss, **kwargs)
+        elif self.distributed_type == DistributedType.MEGATRON_LM:
+            return
         elif self.scaler is not None:
             self.scaler.scale(loss).backward(**kwargs)
         else:
