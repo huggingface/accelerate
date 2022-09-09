@@ -64,7 +64,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     state = AcceleratorState()
     if state.distributed_type == DistributedType.TPU:
         rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
-    elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU]:
+    elif state.distributed_type in [DistributedType.DEEPSPEED, DistributedType.MULTI_GPU, DistributedType.FSDP]:
         rng_state = rng_state.to(state.device)
         torch.distributed.broadcast(rng_state, 0)
         rng_state = rng_state.cpu()
