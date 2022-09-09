@@ -1177,7 +1177,7 @@ class Accelerator:
         """
         wait_for_everyone()
 
-    @on_last_process
+    @on_main_process
     def init_trackers(self, project_name: str, config: Optional[dict] = None, init_kwargs: Optional[dict] = {}):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
@@ -1212,7 +1212,7 @@ class Accelerator:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
-    @on_last_process
+    @on_main_process
     def get_tracker(self, name: str):
         """
         Returns a `tracker` from `self.trackers` based on `name` on the main process only.
@@ -1226,7 +1226,7 @@ class Accelerator:
                 return tracker.tracker
         raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
 
-    @on_last_process
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
         """
         Logs `values` to all stored trackers in `self.trackers` on the main process only.
@@ -1246,7 +1246,7 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
 
-    @on_last_process
+    @on_main_process
     def end_training(self):
         """
         Runs any special end training behaviors, such as stopping trackers on the main process only.
@@ -1290,6 +1290,10 @@ class Accelerator:
                 ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
                 model.save_checkpoint(output_dir, ckpt_id)
                 logger.info(f"DeepSpeed Model and Optimizer saved to output dir {os.path.join(output_dir, ckpt_id)}")
+            elif self.distributed_type == DistributedType.MEGATRON_LM:
+                logger.info("Saving Megatron-LM Model, Optimizer and Scheduler")
+                model.save_checkpoint(output_dir)
+                logger.info(f"Megatron-LM Model , Optimizer and Scheduler saved to output dir {output_dir}")
             else:
                 weights.append(self.get_state_dict(model, unwrap=False))
 
@@ -1300,7 +1304,7 @@ class Accelerator:
                 logger.info("Saving FSDP Optimizer")
                 self.state.fsdp_plugin.save_optimizer(self, opt, self._models[i], output_dir, i)
                 logger.info(f"FSDP Optimizer saved to output dir {output_dir}")
-        elif self.distributed_type != DistributedType.DEEPSPEED:
+        elif self.distributed_type not in [DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
             optimizers = self._optimizers
 
         # Save the lr schedulers taking care of DeepSpeed nuances
@@ -1310,7 +1314,7 @@ class Accelerator:
                 if isinstance(scheduler, DeepSpeedSchedulerWrapper):
                     continue
                 schedulers.append(scheduler)
-        else:
+        elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
 
         save_location = save_accelerator_state(
@@ -1346,6 +1350,10 @@ class Accelerator:
                 ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
                 model.load_checkpoint(input_dir, ckpt_id)
                 logger.info(f"DeepSpeed Model and Optimizer loaded from input dir {os.path.join(input_dir, ckpt_id)}")
+            elif self.distributed_type == DistributedType.MEGATRON_LM:
+                logger.info("Loading Megatron-LM Model, Optimizer and Scheduler")
+                model.load_checkpoint(input_dir)
+                logger.info(f"Megatron-LM Model , Optimizer and Scheduler loaded from input dir {input_dir}")
             else:
                 models.append(model)
 
@@ -1356,7 +1364,7 @@ class Accelerator:
                 logger.info("Loading FSDP Optimizer")
                 self.state.fsdp_plugin.load_optimizer(self, opt, self._models[i], input_dir, i)
                 logger.info(f"FSDP Optimizer loaded from input dir {input_dir}")
-        elif self.distributed_type != DistributedType.DEEPSPEED:
+        elif self.distributed_type not in [DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
             optimizers = self._optimizers
 
         # Load the lr schedulers taking care of DeepSpeed nuances
@@ -1366,7 +1374,7 @@ class Accelerator:
                 if isinstance(scheduler, DeepSpeedSchedulerWrapper):
                     continue
                 schedulers.append(scheduler)
-        else:
+        elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
 
         load_accelerator_state(input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler)

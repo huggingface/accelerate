@@ -352,12 +352,12 @@ class MegatronEngine(torch.nn.Module):
             raise ValueError(f"Unknown model type: {args.model_type_name}")
         self.optimizer.skipped_iter = False
 
+        # Tracking loss.
+        self.total_loss_dict = {}
+        self.eval_total_loss_dict = {}
+        self.iteration = 0
+        self.report_memory_flag = True
         if args.tensorboard_dir is not None:
-            # Tracking loss.
-            self.total_loss_dict = {}
-            self.eval_total_loss_dict = {}
-            self.iteration = 0
-            self.report_memory_flag = True
             write_args_to_tensorboard()
 
     def train(self):
@@ -493,13 +493,13 @@ class MegatronEngine(torch.nn.Module):
         args = get_args()
         if self.module[0].training:
             loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = self.train_step(**batch_data)
+            self.iteration += 1
             if args.tensorboard_dir is not None:
                 # Logging.
                 loss_scale = self.optimizer.get_loss_scale().item()
                 params_norm = None
                 if args.log_params_norm:
                     params_norm = calc_params_l2_norm(self.model)
-                self.iteration += 1
                 self.report_memory_flag = training_log(
                     loss_dict,
                     self.total_loss_dict,
@@ -558,14 +558,15 @@ class MegatronEngine(torch.nn.Module):
         self.eval_total_loss_dict = {}
 
     def save_checkpoint(self, output_dir):
+        self.log_eval_results()
         args = get_args()
         args.save = output_dir
-        save_checkpoint(self.iteration, self.module, self.optimizer, self.opt_param_scheduler)
+        save_checkpoint(self.iteration, self.module, self.optimizer, self.scheduler)
 
     def load_checkpoint(self, input_dir):
         args = get_args()
         args.load = input_dir
-        iteration = load_checkpoint(self.module, self.optimizer, self.opt_param_scheduler)
+        iteration = load_checkpoint(self.module, self.optimizer, self.scheduler)
         self.iteration = iteration
 
 
