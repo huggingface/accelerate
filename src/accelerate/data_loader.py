@@ -622,6 +622,7 @@ def prepare_data_loader(
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
+    sampler_is_batch_sampler = False
     generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
     if num_processes != 1 and not dispatch_batches:
@@ -645,8 +646,10 @@ def prepare_data_loader(
                     generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
             elif getattr(dataloader.batch_sampler, "generator", None) is not None:
                 generator = dataloader.batch_sampler.generator
+            sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+            batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(
-                dataloader.batch_sampler,
+                batch_sampler,
                 num_processes=num_processes,
                 process_index=process_index,
                 split_batches=split_batches,
@@ -682,6 +685,15 @@ def prepare_data_loader(
             split_batches=split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader.drop_last,
+            **kwargs,
+        )
+    elif sampler_is_batch_sampler:
+        dataloader = DataLoaderShard(
+            new_dataset,
+            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
+            sampler=new_batch_sampler,
+            rng_types=rng_types,
+            generator=generator,
             **kwargs,
         )
     else:
