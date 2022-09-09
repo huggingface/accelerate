@@ -16,6 +16,7 @@
 General namespace and dataclass related classes
 """
 
+import argparse
 import copy
 import enum
 import functools
@@ -761,6 +762,14 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Maximum sequence length to process for the decoder."},
     )
+    tensorboard_dir: str = field(
+        default=None,
+        metadata={"help": "Path to save tensorboard logs."},
+    )
+    set_all_logging_options: bool = field(
+        default=False,
+        metadata={"help": "Whether to set all logging options."},
+    )
 
     def __post_init__(self):
         prefix = "MEGATRON_LM_"
@@ -810,6 +819,10 @@ class MegatronLMPlugin:
         }
         if self.recompute_activation:
             self.megatron_lm_default_args["recompute_granularity"] = "selective"
+        if self.tensorboard_dir is not None:
+            self.megatron_lm_default_args["tensorboard_dir"] = self.tensorboard_dir
+            if self.set_all_logging_options:
+                self.set_tensorboard_logging_options()
 
     def set_network_size_args(self, model):
         # Check if the model is either BERT, GPT or T5 else raise error
@@ -933,6 +946,19 @@ class MegatronLMPlugin:
         self.megatron_lm_default_args["start_weight_decay"] = self.start_weight_decay
         self.megatron_lm_default_args["end_weight_decay"] = self.end_weight_decay
         self.megatron_lm_default_args["min_lr"] = self.min_lr
+
+    def set_tensorboard_logging_options(self):
+        from megatron.arguments import _add_logging_args
+
+        parser = argparse.ArgumentParser()
+        parser = _add_logging_args(parser)
+        logging_args = parser.parse_known_args()
+        self.dataset_args = vars(logging_args[0])
+        for key, value in self.dataset_args.items():
+            if key.startswith("log_"):
+                self.megatron_lm_default_args[key] = True
+            elif key.startswith("no_log_"):
+                self.megatron_lm_default_args[key.replace("no_", "")] = True
 
     def save_model(self, model, output_dir):
         pass

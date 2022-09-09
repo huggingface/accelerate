@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import math
 from abc import ABC
 from functools import partial
 
@@ -32,25 +33,39 @@ if is_transformers_available():
         Seq2SeqLMOutput,
         SequenceClassifierOutput,
     )
-    from transformers.models.bert.modeling_bert import BertForPreTrainingOutput
 
 
 if is_megatron_lm_available():
-    from megatron import get_args, get_num_microbatches, get_timers, mpu
+    from megatron import get_args, get_num_microbatches, get_tensorboard_writer, get_timers, mpu, print_rank_last
     from megatron.arguments import _add_data_args, parse_args, validate_args
-    from megatron.checkpointing import load_args_from_checkpoint
+    from megatron.checkpointing import load_args_from_checkpoint, load_checkpoint, save_checkpoint
     from megatron.data.data_samplers import build_pretraining_data_loader
     from megatron.data.dataset_utils import build_train_valid_test_datasets
     from megatron.global_vars import set_global_variables
-    from megatron.initialize import _compile_dependencies, _init_autoresume, _set_random_seed, set_jit_fusion_options
+    from megatron.initialize import (
+        _compile_dependencies,
+        _init_autoresume,
+        _set_random_seed,
+        set_jit_fusion_options,
+        write_args_to_tensorboard,
+    )
     from megatron.model import BertModel, GPTModel, ModelType, T5Model
     from megatron.model.classification import Classification
     from megatron.mpu.initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_src_rank
     from megatron.optimizer import get_megatron_optimizer
     from megatron.schedules import get_forward_backward_func
     from megatron.tokenizer.tokenizer import _vocab_size_with_padding
-    from megatron.training import build_train_valid_test_data_iterators, get_model, get_optimizer_param_scheduler
-    from megatron.utils import average_losses_across_data_parallel_group, get_ltor_masks_and_position_ids
+    from megatron.training import (
+        build_train_valid_test_data_iterators,
+        get_model,
+        get_optimizer_param_scheduler,
+        training_log,
+    )
+    from megatron.utils import (
+        average_losses_across_data_parallel_group,
+        calc_params_l2_norm,
+        get_ltor_masks_and_position_ids,
+    )
 
 
 def model_provider_func(pre_process=True, post_process=True, add_encoder=True, add_decoder=True):
@@ -337,9 +352,18 @@ class MegatronEngine(torch.nn.Module):
             raise ValueError(f"Unknown model type: {args.model_type_name}")
         self.optimizer.skipped_iter = False
 
+        if args.tensorboard_dir is not None:
+            # Tracking loss.
+            self.total_loss_dict = {}
+            self.eval_total_loss_dict = {}
+            self.iteration = 0
+            self.report_memory_flag = True
+            write_args_to_tensorboard()
+
     def train(self):
         for model_module in self.module:
             model_module.train()
+        self.log_eval_results()
 
     def eval(self):
         for model_module in self.module:
@@ -468,9 +492,37 @@ class MegatronEngine(torch.nn.Module):
         # During evaluation, we use eval_step()
         args = get_args()
         if self.module[0].training:
-            loss_dict, _, _, _ = self.train_step(**batch_data)
+            loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = self.train_step(**batch_data)
+            if args.tensorboard_dir is not None:
+                # Logging.
+                loss_scale = self.optimizer.get_loss_scale().item()
+                params_norm = None
+                if args.log_params_norm:
+                    params_norm = calc_params_l2_norm(self.model)
+                self.iteration += 1
+                self.report_memory_flag = training_log(
+                    loss_dict,
+                    self.total_loss_dict,
+                    self.optimizer.param_groups[0]["lr"],
+                    self.iteration,
+                    loss_scale,
+                    self.report_memory_flag,
+                    skipped_iter,
+                    grad_norm,
+                    params_norm,
+                    num_zeros_in_grad,
+                )
         else:
             loss_dict = self.eval_step(**batch_data)
+            if args.tensorboard_dir is not None:
+                for key in loss_dict:
+                    self.eval_total_loss_dict[key] = (
+                        self.eval_total_loss_dict.get(key, torch.cuda.FloatTensor([0.0])) + loss_dict[key]
+                    )
+                    self.eval_total_loss_dict[key + "_num_iters"] = self.eval_total_loss_dict.get(
+                        key + "_num_iters", torch.cuda.FloatTensor([0.0])
+                    ) + torch.cuda.FloatTensor([1.0])
+
         loss = torch.tensor(0.0, device=args.local_rank)
         for key in loss_dict:
             loss += loss_dict[key]
@@ -478,6 +530,43 @@ class MegatronEngine(torch.nn.Module):
         if self.train_step_handler.model_output_class is not None:
             return self.train_step_handler.model_output_class(loss=loss)
         return loss
+
+    def log_eval_results(self):
+        args = get_args()
+        if args.tensorboard_dir is None or self.iteration == 0:
+            return
+        args = get_args()
+        writer = get_tensorboard_writer()
+        string = f"validation loss at iteration {self.iteration} | "
+        for key in self.eval_total_loss_dict:
+            if key.endswith("_num_iters"):
+                continue
+            value = self.eval_total_loss_dict[key] / self.eval_total_loss_dict[key + "_num_iters"]
+            string += f"{key} value: {value} | "
+            ppl = math.exp(min(20, value.item()))
+            if args.pretraining_flag:
+                string += f"{key} PPL: {ppl} | "
+            if writer:
+                writer.add_scalar(f"{key} validation", value.item(), self.iteration)
+                if args.pretraining_flag:
+                    writer.add_scalar(f"{key} validation ppl", ppl, self.iteration)
+
+        length = len(string) + 1
+        print_rank_last("-" * length)
+        print_rank_last(string)
+        print_rank_last("-" * length)
+        self.eval_total_loss_dict = {}
+
+    def save_checkpoint(self, output_dir):
+        args = get_args()
+        args.save = output_dir
+        save_checkpoint(self.iteration, self.module, self.optimizer, self.opt_param_scheduler)
+
+    def load_checkpoint(self, input_dir):
+        args = get_args()
+        args.load = input_dir
+        iteration = load_checkpoint(self.module, self.optimizer, self.opt_param_scheduler)
+        self.iteration = iteration
 
 
 class MegatronLMOptimizerWrapper(AcceleratedOptimizer):
@@ -532,10 +621,7 @@ class BertTrainStep(AbstractTrainStep):
         if not args.model_return_dict:
             self.model_output_class = None
         else:
-            if args.pretraining_flag:
-                self.model_output_class = BertForPreTrainingOutput
-            else:
-                self.model_output_class = SequenceClassifierOutput
+            self.model_output_class = SequenceClassifierOutput
 
     def get_batch_func(self, megatron_dataset_flag):
         def get_batch_megatron(data_iterator):
