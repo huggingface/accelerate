@@ -364,10 +364,7 @@ class DataLoaderShard(DataLoader):
 
     @property
     def total_batch_size(self):
-        if self.batch_sampler is None:
-            batch_sampler = self.sampler
-        else:
-            batch_sampler = self.batch_sampler
+        batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
         return (
             batch_sampler.batch_size
             if batch_sampler.split_batches
@@ -699,7 +696,7 @@ def prepare_data_loader(
             new_dataset,
             device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
             sampler=new_batch_sampler,
-            batch_size=None,
+            batch_size=getattr(dataloader, "batch_size", _PYTORCH_DATALOADER_KWARGS["batch_size"]),
             rng_types=rng_types,
             generator=generator,
             **kwargs,
