@@ -121,12 +121,17 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                 start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
 
         else:
-            # No need for a distributed launch otherwise as it's either CPU or one GPU.
-            if torch.cuda.is_available():
+            # No need for a distributed launch otherwise as it's either CPU, GPU or MPS.
+            use_mps_device = "false"
+            if torch.backends.mps.is_available():
+                print("Launching training on MPS.")
+                use_mps_device = "true"
+            elif torch.cuda.is_available():
                 print("Launching training on one GPU.")
             else:
                 print("Launching training on CPU.")
-            function(*args)
+            with patch_environment(use_mps_device=use_mps_device):
+                function(*args)
 
 
 def debug_launcher(function, args=(), num_processes=2):
