@@ -232,8 +232,6 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     args.padded_vocab_size = _vocab_size_with_padding(args.orig_vocab_size, args)
     if args.model_type_name == "bert" and args.pretraining_flag and args.num_labels == 2:
         args.bert_binary_head = True
-    # if args.virtual_pipeline_model_parallel_size is not None:
-    #     raise Exception("Virtual pipeline model parallelism is not supported in Accelerate")
 
 
 class MegatronLMDummyScheduler:
