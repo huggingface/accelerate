@@ -101,7 +101,7 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
             add_decoder=add_decoder,
         )
     else:
-        raise ValueError(f"Unknown model type: {args.model_type_name}")
+        raise ValueError(f"Unsupported model type: {args.model_type_name}")
     return model
 
 
@@ -321,7 +321,7 @@ class MegatronLMDummyDataLoader:
                     "seed": args.seed,
                 }
             else:
-                raise ValueError(f"Unknown model type: {args.model_type_name}")
+                raise ValueError(f"Unsupported model type: {args.model_type_name}")
             train_ds, valid_ds, test_ds = build_train_valid_test_datasets(**dataset_args)
             return train_ds, valid_ds, test_ds
 
@@ -347,7 +347,7 @@ class MegatronEngine(torch.nn.Module):
         elif args.model_type_name == "t5":
             self.train_step_handler = T5TrainStep(args)
         else:
-            raise ValueError(f"Unknown model type: {args.model_type_name}")
+            raise ValueError(f"Unsupported model type: {args.model_type_name}")
         self.optimizer.skipped_iter = False
 
         # Tracking loss.
