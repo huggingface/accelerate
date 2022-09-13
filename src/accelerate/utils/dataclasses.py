@@ -825,7 +825,7 @@ class MegatronLMPlugin:
             if self.set_all_logging_options:
                 self.set_tensorboard_logging_options()
 
-    def set_network_size_args(self, model):
+    def set_network_size_args(self, model, batch_data=None):
         # Check if the model is either BERT, GPT or T5 else raise error
         # set 'num_layers', 'hidden_size', 'num_attention_heads', 'max_position_embeddings'
         if "bert" in model.config.model_type.lower():
@@ -844,6 +844,8 @@ class MegatronLMPlugin:
                 self.seq_length = self.encoder_seq_length
             elif self.encoder_seq_length is not None:
                 self.seq_length = self.encoder_seq_length
+            elif batch_data is not None:
+                self.seq_length = batch_data["input_ids"].shape[1]
             else:
                 self.seq_length = max_position_embeddings
             self.megatron_lm_default_args["seq_length"] = self.seq_length
@@ -861,6 +863,8 @@ class MegatronLMPlugin:
                 self.seq_length = self.decoder_seq_length
             elif self.decoder_seq_length is not None:
                 self.seq_length = self.decoder_seq_length
+            elif batch_data is not None:
+                self.seq_length = batch_data["input_ids"].shape[1]
             else:
                 self.seq_length = max_position_embeddings
             self.megatron_lm_default_args["seq_length"] = self.seq_length
@@ -872,10 +876,17 @@ class MegatronLMPlugin:
             max_position_embeddings = model.config.n_positions
             orig_vocab_size = model.config.vocab_size
             pretraining_flag = True
-            if self.encoder_seq_length is not None:
-                self.encoder_seq_length = max_position_embeddings
-            if self.decoder_seq_length is not None:
-                self.decoder_seq_length = max_position_embeddings
+            if self.encoder_seq_length is None:
+                if batch_data is not None:
+                    self.encoder_seq_length = batch_data["input_ids"].shape[1]
+                else:
+                    self.encoder_seq_length = max_position_embeddings
+            if self.decoder_seq_length is None:
+                if batch_data is not None:
+                    self.decoder_seq_length = batch_data["labels"].shape[1]
+                else:
+                    self.decoder_seq_length = max_position_embeddings
+
             self.megatron_lm_default_args["encoder_seq_length"] = self.encoder_seq_length
             self.megatron_lm_default_args["decoder_seq_length"] = self.decoder_seq_length
         else:
@@ -960,15 +971,3 @@ class MegatronLMPlugin:
                 self.megatron_lm_default_args[key] = True
             elif key.startswith("no_log_"):
                 self.megatron_lm_default_args[key.replace("no_", "")] = True
-
-    def save_model(self, model, output_dir):
-        pass
-
-    def load_model(self, model, input_dir):
-        pass
-
-    def save_optimizer(self, optimizer, output_dir):
-        pass
-
-    def load_optimizer(self, optimizer, input_dir):
-        pass

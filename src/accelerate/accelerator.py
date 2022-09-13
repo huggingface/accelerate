@@ -377,19 +377,25 @@ class Accelerator:
     @property
     def is_main_process(self):
         """True for one process only."""
-        return self.process_index == 0
+        return (
+            self.process_index == 0 if self.distributed_type != DistributedType.MEGATRON_LM else self.is_last_process
+        )
 
     @property
     def is_local_main_process(self):
         """True for one process per server."""
-        return self.local_process_index == 0
+        return (
+            self.local_process_index == 0
+            if self.distributed_type != DistributedType.MEGATRON_LM
+            else self.is_last_process
+        )
 
     @property
     def use_fp16(self):
         return self.mixed_precision != "no"
 
     @property
-    def is_last_rank(self):
+    def is_last_process(self):
         return self.process_index == self.num_processes - 1
 
     @property
@@ -437,7 +443,7 @@ class Accelerator:
 
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            if self.is_last_rank or not self.use_distributed:
+            if self.is_last_process or not self.use_distributed:
                 return func(self, *args, **kwargs)
 
         return wrapper
@@ -953,7 +959,10 @@ class Accelerator:
         optimizer = None
         scheduler = None
         is_dummy_scheduler = False
+        batch_data = None
         for obj in args:
+            if isinstance(obj, torch.utils.data.DataLoader) and batch_data is None:
+                batch_data = next(iter(obj))
             if isinstance(obj, torch.nn.Module):
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
@@ -962,7 +971,7 @@ class Accelerator:
                 scheduler = obj
 
         if model is not None:
-            megatron_lm_plugin.set_network_size_args(model)
+            megatron_lm_plugin.set_network_size_args(model, batch_data)
         if optimizer is not None:
             megatron_lm_plugin.set_optimizer_type(optimizer)
         if scheduler is not None:

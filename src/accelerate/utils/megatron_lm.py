@@ -39,7 +39,7 @@ if is_megatron_lm_available():
     from megatron import get_args, get_num_microbatches, get_tensorboard_writer, get_timers, mpu, print_rank_last
     from megatron.arguments import _add_data_args, parse_args, validate_args
     from megatron.checkpointing import load_args_from_checkpoint, load_checkpoint, save_checkpoint
-    from megatron.data.data_samplers import build_pretraining_data_loader
+    from megatron.data.data_samplers import MegatronPretrainingSampler
     from megatron.data.dataset_utils import build_train_valid_test_datasets
     from megatron.global_vars import set_global_variables
     from megatron.initialize import (
@@ -125,7 +125,7 @@ def prepare_data_loader(accelerator, dataloader, consumed_samples_index=-1, cons
         else:
             args.consumed_train_samples, args.consumed_valid_samples, args.consumed_test_samples = 0, 0, 0
         train_data_iterator, valid_data_iterator, test_data_iterator = build_train_valid_test_data_iterators(
-            MegatronLMDummyDataLoader.get_train_valid_test_datasets_provider
+            MegatronLMDummyDataLoader.get_train_valid_test_datasets_provider()
         )
         return train_data_iterator, valid_data_iterator, test_data_iterator
 
@@ -372,10 +372,19 @@ class MegatronEngine(torch.nn.Module):
     def train_step(self, **batch_data):
         args = get_args()
         timers = get_timers()
-        if len(self.module) > 1:
-            batch_data_iterator = [iter([batch_data]) for _ in range(len(self.module))]
+        data_chunks = []
+        if args.num_micro_batches > 1:
+            for i in range(0, args.num_micro_batches):
+                data_chunks.append(
+                    {k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size] for k, v in batch_data.items()}
+                )
         else:
-            batch_data_iterator = iter([batch_data])
+            data_chunks = [batch_data]
+
+        if len(self.module) > 1:
+            batch_data_iterator = [iter(data_chunks) for _ in range(len(self.module))]
+        else:
+            batch_data_iterator = iter(data_chunks)
 
         # Set grad to zero.
         if args.DDP_impl == "local" and args.use_contiguous_buffers_in_local_ddp:
@@ -444,10 +453,19 @@ class MegatronEngine(torch.nn.Module):
 
     def eval_step(self, **batch_data):
         args = get_args()
-        if len(self.module) > 1:
-            batch_data_iterator = [iter([batch_data]) for _ in range(len(self.module))]
+        data_chunks = []
+        if args.num_micro_batches > 1:
+            for i in range(0, args.num_micro_batches):
+                data_chunks.append(
+                    {k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size] for k, v in batch_data.items()}
+                )
         else:
-            batch_data_iterator = iter([batch_data])
+            data_chunks = [batch_data]
+
+        if len(self.module) > 1:
+            batch_data_iterator = [iter(data_chunks) for _ in range(len(self.module))]
+        else:
+            batch_data_iterator = iter(data_chunks)
         forward_backward_func = get_forward_backward_func()
         loss_dicts = forward_backward_func(
             self.train_step_handler.forward_step,
@@ -747,6 +765,7 @@ class GPTTrainStep(AbstractTrainStep):
         self.get_batch = self.get_batch_func(args.megatron_dataset_flag)
         self.loss_func = self.get_loss_func()
         self.forward_step = self.get_forward_step_func()
+        self.eod_token = args.padded_vocab_size - 1
         if not args.model_return_dict:
             self.model_output_class = None
         else:
@@ -793,10 +812,14 @@ class GPTTrainStep(AbstractTrainStep):
                 data = None
             data_b = broadcast_data(data)
             tokens_ = data_b["input_ids"].long()
+            padding = torch.zeros((tokens_.shape[0], 1), dtype=tokens_.dtype, device=tokens_.device) + self.eod_token
+            tokens_ = torch.concat([tokens_, padding], dim=1)
             labels = tokens_[:, 1:].contiguous()
             tokens = tokens_[:, :-1].contiguous()
             # Get the masks and postition ids.
-            attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(tokens, 0, False, False, False)
+            attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+                tokens, self.eod_token, False, False, True
+            )
             return tokens, labels, loss_mask, attention_mask, position_ids
 
         if megatron_dataset_flag:
@@ -964,4 +987,32 @@ def broadcast_data(data):
         error_on_other_type=True,
         src=get_tensor_model_parallel_src_rank(),
         group=get_tensor_model_parallel_group(),
+    )
+
+
+class MegatronPretrainingSamplerWrapper(MegatronPretrainingSampler):
+    def __len__(self):
+        length = self.total_samples // self.micro_batch_times_data_parallel_size
+        return length if self.drop_last else length + 1
+
+
+def build_pretraining_data_loader(dataset, consumed_samples):
+    """Buld dataloader given an input dataset."""
+
+    if dataset is None:
+        return None
+    args = get_args()
+    micro_batch_size = args.micro_batch_size * args.num_micro_batches
+
+    # Megatron sampler
+    batch_sampler = MegatronPretrainingSamplerWrapper(
+        total_samples=len(dataset),
+        consumed_samples=consumed_samples,
+        micro_batch_size=micro_batch_size,
+        data_parallel_rank=mpu.get_data_parallel_rank(),
+        data_parallel_size=mpu.get_data_parallel_world_size(),
+    )
+    # Torch dataloader.
+    return torch.utils.data.DataLoader(
+        dataset, batch_sampler=batch_sampler, num_workers=args.num_workers, pin_memory=True
     )

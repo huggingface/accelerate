@@ -15,6 +15,7 @@
 import logging
 
 from .state import AcceleratorState
+from .utils import DistributedType
 
 
 class MultiProcessAdapter(logging.LoggerAdapter):
@@ -28,7 +29,12 @@ class MultiProcessAdapter(logging.LoggerAdapter):
     @staticmethod
     def _should_log(main_process_only):
         "Check if log should be performed"
-        return not main_process_only or (main_process_only and AcceleratorState().local_process_index == 0)
+        state = AcceleratorState()
+        if state.distributed_type != DistributedType.MEGATRON_LM:
+            process_index_flag = state.local_process_index == 0
+        else:
+            process_index_flag = state.process_index == state.num_processes - 1
+        return not main_process_only or (main_process_only and process_index_flag)
 
     def log(self, level, msg, *args, **kwargs):
         """
