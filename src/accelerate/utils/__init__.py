@@ -21,6 +21,7 @@ from .dataclasses import (
 )
 from .imports import (
     get_ccl_version,
+    is_aim_available,
     is_apex_available,
     is_bf16_available,
     is_boto3_available,
@@ -29,6 +30,7 @@ from .imports import (
     is_datasets_available,
     is_deepspeed_available,
     is_megatron_lm_available,
+    is_rich_available,
     is_sagemaker_available,
     is_tensorboard_available,
     is_tpu_available,

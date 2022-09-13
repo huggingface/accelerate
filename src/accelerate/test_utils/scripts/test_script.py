@@ -46,10 +46,9 @@ def rng_sync_check():
     if state.distributed_type == DistributedType.MULTI_GPU:
         synchronize_rng_states(["cuda"])
         assert are_the_same_tensors(torch.cuda.get_rng_state()), "RNG states improperly synchronized on GPU."
-    if is_torch_version(">=", "1.6.0"):
-        generator = torch.Generator()
-        synchronize_rng_states(["generator"], generator=generator)
-        assert are_the_same_tensors(generator.get_state()), "RNG states improperly synchronized in generator."
+    generator = torch.Generator()
+    synchronize_rng_states(["generator"], generator=generator)
+    assert are_the_same_tensors(generator.get_state()), "RNG states improperly synchronized in generator."
 
     if state.local_process_index == 0:
         print("All rng are properly synched.")
@@ -339,7 +338,7 @@ def main():
     if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
-    if state.distributed_type != DistributedType.TPU:
+    if state.distributed_type != DistributedType.TPU and is_torch_version(">=", "1.8.0"):
         central_dl_preparation_check()
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode

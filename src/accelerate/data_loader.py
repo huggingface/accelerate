@@ -75,11 +75,11 @@ _PYTORCH_DATALOADER_KWARGS = {
     "timeout": 0,
     "worker_init_fn": None,
     "multiprocessing_context": None,
+    "generator": None,
 }
 
 # kwargs added after by version
 _PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {
-    "1.6.0": {"generator": None},
     "1.7.0": {"prefetch_factor": 2, "persistent_workers": False},
 }
 
@@ -364,10 +364,11 @@ class DataLoaderShard(DataLoader):
 
     @property
     def total_batch_size(self):
+        batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
         return (
-            self.batch_sampler.batch_size
-            if self.batch_sampler.split_batches
-            else (self.batch_sampler.batch_size * self.batch_sampler.num_processes)
+            batch_sampler.batch_size
+            if batch_sampler.split_batches
+            else (batch_sampler.batch_size * batch_sampler.num_processes)
         )
 
     @property
@@ -412,7 +413,7 @@ class DataLoaderDispatcher(DataLoader):
         self.split_batches = split_batches
         if is_torch_version("<", "1.8.0"):
             raise ImportError(
-                "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
+                f"Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
         if shuffle:
             torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
@@ -462,11 +463,7 @@ class DataLoaderDispatcher(DataLoader):
                 else:
                     batch_info = [None, True]
                 broadcast_object_list(batch_info)
-                if batch_info[1]:
-                    return batch, batch_info, True
-            else:
-                return batch, batch_info, True
-        return batch, batch_info, False
+        return batch, batch_info
 
     def __iter__(self):
         self.gradient_state._set_end_of_dataloader(False)
@@ -477,11 +474,10 @@ class DataLoaderDispatcher(DataLoader):
         stop_iteration = False
         self._stop_iteration = False
         first_batch = None
-        next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+        next_batch, next_batch_info = self._fetch_batches(main_iterator)
         while not stop_iteration:
-            batch, batch_info, skip = next_batch, next_batch_info, next_skip
-            if skip:
-                continue
+            batch, batch_info = next_batch, next_batch_info
+
             if self.state.process_index != 0:
                 # Initialize tensors on other processes than process 0.
                 batch = initialize_tensors(batch_info[0])
@@ -500,7 +496,7 @@ class DataLoaderDispatcher(DataLoader):
             if not stop_iteration:
                 # We may still be at the end of the dataloader without knowing it yet: if there is nothing left in
                 # the dataloader since the number of batches is a round multiple of the number of processes.
-                next_batch, next_batch_info, next_skip = self._fetch_batches(main_iterator)
+                next_batch, next_batch_info = self._fetch_batches(main_iterator)
                 # next_batch_info[0] is None when there are no more batches, otherwise we still need to process them.
                 if self._stop_iteration and next_batch_info[0] is None:
                     stop_iteration = True
@@ -627,6 +623,7 @@ def prepare_data_loader(
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
+    sampler_is_batch_sampler = False
     generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
     if num_processes != 1 and not dispatch_batches:
@@ -643,15 +640,20 @@ def prepare_data_loader(
             )
         else:
             # New batch sampler for the current process.
-            if hasattr(dataloader.sampler, "generator"):
-                if dataloader.sampler.generator is None:
-                    dataloader.sampler.generator = torch.Generator()
-                    generator = dataloader.sampler.generator
-                    generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
-            elif getattr(dataloader.batch_sampler, "generator", None) is not None:
-                generator = dataloader.batch_sampler.generator
+            sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+            if sampler_is_batch_sampler:
+                sampler = dataloader.sampler.sampler
+            else:
+                sampler = dataloader.batch_sampler.sampler
+            if hasattr(sampler, "generator"):
+                if sampler.generator is None:
+                    sampler.generator = torch.Generator()
+                generator = sampler.generator
+                generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
+
+            batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(
-                dataloader.batch_sampler,
+                batch_sampler,
                 num_processes=num_processes,
                 process_index=process_index,
                 split_batches=split_batches,
@@ -687,6 +689,16 @@ def prepare_data_loader(
             split_batches=split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader.drop_last,
+            **kwargs,
+        )
+    elif sampler_is_batch_sampler:
+        dataloader = DataLoaderShard(
+            new_dataset,
+            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
+            sampler=new_batch_sampler,
+            batch_size=getattr(dataloader, "batch_size", _PYTORCH_DATALOADER_KWARGS["batch_size"]),
+            rng_types=rng_types,
+            generator=generator,
             **kwargs,
         )
     else:

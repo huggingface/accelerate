@@ -199,6 +199,7 @@ class LoggerType(BaseEnum):
     """
 
     ALL = "all"
+    AIM = "aim"
     TENSORBOARD = "tensorboard"
     WANDB = "wandb"
     COMETML = "comet_ml"
