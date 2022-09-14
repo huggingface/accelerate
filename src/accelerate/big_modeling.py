@@ -80,10 +80,12 @@ def init_empty_weights(include_buffers: bool = False):
         torch_function_name: getattr(torch, torch_function_name)
         for torch_function_name in ["empty", "zeros", "ones", "full"]
     }
+
     def patch_tensor_constructor(fn):
         def wrapper(*args, **kwargs):
             kwargs["device"] = torch.device("meta")
             return fn(*args, **kwargs)
+
         return wrapper
 
     # Patch `state_dict` loading
