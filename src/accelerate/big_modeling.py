@@ -88,22 +88,12 @@ def init_empty_weights(include_buffers: bool = False):
 
         return wrapper
 
-    # Patch `state_dict` loading
-    # old_torch_load = torch.load
-    # import pickle
-    # def torch_load_empty(f, map_location=None, pickle_module=pickle, **pickle_kwargs):
-    #     # Temporary workaround
-    #     return {}
-    #     # Waiting https://github.com/pytorch/pytorch/pull/82603 in order to get `meta` support in `map_location`
-    #     # return old_torch_load(f, map_location="meta", pickle_module=pickle, **pickle_kwargs)
-
     try:
         nn.Module.register_parameter = register_empty_parameter
         if include_buffers:
             nn.Module.register_buffer = register_empty_buffer
         for torch_function_name in tensor_constructors_to_patch.keys():
             setattr(torch, torch_function_name, patch_tensor_constructor(getattr(torch, torch_function_name)))
-        # torch.load = torch_load_empty
         yield
     finally:
         nn.Module.register_parameter = old_register_parameter
@@ -111,7 +101,6 @@ def init_empty_weights(include_buffers: bool = False):
             nn.Module.register_buffer = old_register_buffer
         for torch_function_name, old_torch_function in tensor_constructors_to_patch.items():
             setattr(torch, torch_function_name, old_torch_function)
-        # torch.load = old_torch_load
 
 
 def cpu_offload(
