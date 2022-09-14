@@ -748,8 +748,8 @@ class Accelerator:
             result = [obj for obj in args]
 
         if self.gradient_accumulation_steps != deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]:
-            warnings.warn(
-                f"WARNING: Updating DeepSpeed's gradient accumulation steps to {self.gradient_accumulation_steps} from "
+            logger.info(
+                f"Updating DeepSpeed's gradient accumulation steps to {self.gradient_accumulation_steps} from "
                 f"{deepspeed_plugin.deepspeed_config['gradient_accumulation_steps']}."
             )
             deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"] = self.gradient_accumulation_steps
