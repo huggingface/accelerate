@@ -78,15 +78,35 @@ def init_empty_weights(include_buffers: bool = False):
         if buffer is not None:
             module._buffers[name] = module._buffers[name].to(torch.device("meta"))
 
+    # Patch tensor creation
+    if include_buffers:
+        tensor_constructors_to_patch = {
+            torch_function_name: getattr(torch, torch_function_name)
+            for torch_function_name in ["empty", "zeros", "ones", "full"]
+        }
+    else:
+        tensor_constructors_to_patch = {}
+
+    def patch_tensor_constructor(fn):
+        def wrapper(*args, **kwargs):
+            kwargs["device"] = torch.device("meta")
+            return fn(*args, **kwargs)
+
+        return wrapper
+
     try:
         nn.Module.register_parameter = register_empty_parameter
         if include_buffers:
             nn.Module.register_buffer = register_empty_buffer
+        for torch_function_name in tensor_constructors_to_patch.keys():
+            setattr(torch, torch_function_name, patch_tensor_constructor(getattr(torch, torch_function_name)))
         yield
     finally:
         nn.Module.register_parameter = old_register_parameter
         if include_buffers:
             nn.Module.register_buffer = old_register_buffer
+        for torch_function_name, old_torch_function in tensor_constructors_to_patch.items():
+            setattr(torch, torch_function_name, old_torch_function)
 
 
 def cpu_offload(
