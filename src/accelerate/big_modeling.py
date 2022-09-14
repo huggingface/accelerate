@@ -76,10 +76,13 @@ def init_empty_weights(include_buffers: bool = False):
             module._buffers[name] = module._buffers[name].to(torch.device("meta"))
 
     # Patch tensor creation
-    tensor_constructors_to_patch = {
-        torch_function_name: getattr(torch, torch_function_name)
-        for torch_function_name in ["empty", "zeros", "ones", "full"]
-    }
+    if include_buffers:
+        tensor_constructors_to_patch = {
+            torch_function_name: getattr(torch, torch_function_name)
+            for torch_function_name in ["empty", "zeros", "ones", "full"]
+        }
+    else:
+        tensor_constructors_to_patch = {}
 
     def patch_tensor_constructor(fn):
         def wrapper(*args, **kwargs):
