@@ -145,6 +145,8 @@ class ClusterConfig(BaseConfig):
     deepspeed_config: dict = None
     # args for fsdp
     fsdp_config: dict = None
+    # args for ipex
+    ipex_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
 
@@ -153,6 +155,8 @@ class ClusterConfig(BaseConfig):
             self.deepspeed_config = {}
         if self.fsdp_config is None:
             self.fsdp_config = {}
+        if self.ipex_config is None:
+            self.ipex_config = {}
         return super().__post_init__()
 
 

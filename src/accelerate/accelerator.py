@@ -39,6 +39,7 @@ from .utils import (
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
+    IntelPyTorchExtensionPlugin,
     KwargsHandler,
     LoggerType,
     PrecisionType,
@@ -50,6 +51,7 @@ from .utils import (
     get_pretty_name,
     is_bf16_available,
     is_deepspeed_available,
+    is_ipex_available,
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
@@ -107,6 +109,9 @@ class Accelerator:
         fsdp_plugin (`FullyShardedDataParallelPlugin`, *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
+        ipex_plugin (`IntelExtensionPlugin`, *optional*):
+            Tweak your Intel Extension for PyTorch related args using this argument. This argument is optional and can
+            be configured directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -166,6 +171,7 @@ class Accelerator:
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
+        ipex_plugin: IntelPyTorchExtensionPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
@@ -218,6 +224,12 @@ class Accelerator:
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
             os.environ["USE_FSDP"] = "true"  # use FSDP if plugin is provided
 
+        if ipex_plugin is None:  # init from env variables
+            ipex_plugin = IntelPyTorchExtensionPlugin()
+        else:
+            if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
+                raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
+
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -247,6 +259,7 @@ class Accelerator:
             cpu=cpu,
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
+            ipex_plugin=ipex_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -653,6 +666,9 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
+        if self.distributed_type == DistributedType.MULTI_CPU and self.state.ipex_plugin is not None:
+            args = self._prepare_ipex(*args)
+
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         else:
@@ -884,6 +900,45 @@ class Accelerator:
                 raise AssertionError(
                     "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
                 )
+        return tuple(result)
+
+    def _prepare_ipex(self, *args):
+        ipex_plugin = self.state.ipex_plugin
+        if not is_ipex_available():
+            raise ImportError(
+                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
+            )
+        import intel_extension_for_pytorch as ipex
+
+        model = None
+        optimizer = None
+        dataloader = None
+        result = [obj for obj in args]
+        for obj in result:
+            if isinstance(obj, torch.utils.data.DataLoader) and dataloader is None:
+                dataloader = obj
+            elif isinstance(obj, torch.nn.Module):
+                model = obj
+            elif isinstance(obj, (torch.optim.Optimizer)):
+                optimizer = obj
+
+        if ipex_plugin.do_fusion:
+            model.eval()
+            model = ipex.optimize(model, dtype=ipex_plugin.dtype, level="O1")
+            model = ipex_plugin.torch_jit_model_eval(model, dataloader, training=False)
+        else:
+            if not model.training:
+                model.train()
+            model, optimizer = ipex.optimize(
+                model, dtype=ipex_plugin.dtype, optimizer=optimizer, inplace=True, level="O1"
+            )
+        model.forward = torch.cpu.amp.autocast(dtype=ipex_plugin.dtype)(model.forward)
+        for i in range(len(result)):
+            if isinstance(result[i], torch.nn.Module):
+                result[i] = model
+            elif isinstance(result[i], (torch.optim.Optimizer)):
+                result[i] = optimizer
         return tuple(result)
 
     def prepare_data_loader(self, data_loader):

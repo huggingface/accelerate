@@ -70,6 +70,7 @@ class AcceleratorState:
         cpu: bool = False,
         deepspeed_plugin=None,
         fsdp_plugin=None,
+        ipex_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -203,6 +204,9 @@ class AcceleratorState:
                 self.local_process_index = local_rank
                 self.device = torch.device("cpu")
                 self.mixed_precision = mixed_precision
+                self.ipex_plugin = ipex_plugin if ipex_plugin.use_ipex else None
+                if self.ipex_plugin is not None:
+                    self.ipex_plugin.set_mixed_precision(self.mixed_precision)
             else:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1

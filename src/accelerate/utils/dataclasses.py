@@ -24,6 +24,7 @@ import typing
 import warnings
 from dataclasses import dataclass, field
 from datetime import timedelta
+from distutils.util import strtobool
 from typing import Any, Callable, Iterable, Optional
 
 import torch
@@ -231,6 +232,57 @@ class RNGType(BaseEnum):
 class TensorInformation:
     shape: torch.Size
     dtype: torch.dtype
+
+
+@dataclass
+class IntelPyTorchExtensionPlugin:
+    """
+    This plugin is used to enable Intel PyTorch Extension (IPEX).
+    """
+
+    use_ipex: bool = field(default=False, metadata={"help": "Enable Intel PyTorch Extension (IPEX)"})
+    do_fusion: bool = field(default=False, metadata={"help": "Enable fusion in IPEX"})
+    dtype: torch.dtype = field(default=torch.float32, metadata={"help": "Enable mixed precision in IPEX"})
+
+    def __post_init__(self):
+        prefix = "IPEX_"
+        if self.use_ipex is None:
+            self.use_ipex = strtobool(os.environ.get(prefix + "ENABLED", "False")) == 1
+
+        if self.use_ipex:
+            if self.do_fusion is None:
+                self.do_fusion = strtobool(os.environ.get(prefix + "FUSION_ENABLED", "False")) == 1
+        else:
+            self.do_fusion = False
+
+    def set_mixed_precision(self, mixed_precision):
+        if mixed_precision == "fp16":
+            raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+        elif mixed_precision == "bf16":
+            self.dtype = torch.bfloat16
+
+    def torch_jit_model_eval(self, model, dataloader, training=False):
+        if not training:
+            if dataloader is None:
+                warnings.warn("failed to use PyTorch jit mode due to current dataloader is none.")
+                return model
+            jit_inputs = []
+            example_batch = next(iter(dataloader))
+            for key in example_batch:
+                example_tensor = torch.ones_like(example_batch[key])
+                jit_inputs.append(example_tensor)
+            jit_inputs = tuple(jit_inputs)
+            try:
+                jit_model = model.eval()
+                with torch.no_grad():
+                    with torch.cpu.amp.autocast(dtype=self.dtype):
+                        jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                        jit_model = torch.jit.freeze(jit_model)
+                jit_model(**example_batch)
+                model = jit_model
+            except (RuntimeError, TypeError) as e:
+                warnings.warn(f"failed to use PyTorch jit mode due to: {e}.")
+        return model
 
 
 @dataclass

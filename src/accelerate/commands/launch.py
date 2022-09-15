@@ -76,12 +76,14 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether or not this should launch a distributed GPU training.",
     )
+    # mps related args
     parser.add_argument(
         "--use_mps_device",
         default=False,
         action="store_true",
         help="Whether or not this should use MPS-enabled GPU device on MacOS machines.",
     )
+    # deepspeed related args
     parser.add_argument(
         "--use_deepspeed",
         default=False,
@@ -162,6 +164,7 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="DeepSpeed multi-node launcher to use.",
     )
+    # fsdp related args
     parser.add_argument(
         "--use_fsdp",
         default=False,
@@ -235,9 +238,11 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="This argument is deprecated. Use `fsdp_transformer_layer_cls_to_wrap` instead.",
     )
+    # tpu related args
     parser.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
+    # mixed precision related args
     parser.add_argument(
         "--mixed_precision",
         type=str,
@@ -246,10 +251,10 @@ def launch_command_parser(subparsers=None):
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
     )
-
     parser.add_argument(
         "--fp16", default=False, action="store_true", help="Whether or not to use mixed precision training."
     )
+    # distributed training related args
     parser.add_argument(
         "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
     )
@@ -316,6 +321,20 @@ def launch_command_parser(subparsers=None):
         default=None,
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
     )
+    # ipex related arguments
+    parser.add_argument(
+        "--ipex_enabled",
+        type=bool,
+        default=False,
+        help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU?",
+    )
+    parser.add_argument(
+        "--ipex_fusion_enabled",
+        type=bool,
+        default=False,
+        help="Do you want to enable graph level optimization through operator fusion (Only applicable for Inference)?",
+    )
+    # aws related arguments
     parser.add_argument(
         "--aws_access_key_id",
         type=str,
@@ -363,6 +382,12 @@ def simple_launcher(args):
 
     current_env = os.environ.copy()
     current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
+    if args.cpu or args.use_cpu:
+        if args.ipex_enabled:
+            current_env["IPEX_ENABLED"] = str(args.ipex_enabled).lower()
+            if args.ipex_fusion_enabled:
+                current_env["IPEX_FUSION_ENABLED"] = str(args.ipex_fusion_enabled).lower()
+
     current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
     if args.use_mps_device:
         current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"

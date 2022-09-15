@@ -69,6 +69,7 @@ def get_cluster_input():
                     "What rendezvous backend will you use? ('static', 'c10d', ...): ", default="static"
                 )
 
+    ipex_config = {}
     if distributed_type == DistributedType.NO:
         use_cpu = _ask_field(
             "Do you want to run your training on CPU only (even if a GPU is available)? [yes/NO]:",
@@ -78,6 +79,18 @@ def get_cluster_input():
         )
     elif distributed_type == DistributedType.MULTI_CPU:
         use_cpu = True
+        ipex_config["ipex_enabled"] = _ask_field(
+            "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU? [yes/NO]:",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+        ipex_config["ipex_fusion_enabled"] = _ask_field(
+            "Do you want to enable graph level optimization through operator fusion (Only applicable for Inference)? [yes/NO]:",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
     else:
         use_cpu = False
 
@@ -334,6 +347,7 @@ def get_cluster_input():
         main_training_function=main_training_function,
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
+        ipex_config=ipex_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
         same_network=same_network,
