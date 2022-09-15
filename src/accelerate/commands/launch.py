@@ -324,14 +324,14 @@ def launch_command_parser(subparsers=None):
     # ipex related arguments
     parser.add_argument(
         "--ipex_enabled",
-        type=bool,
         default=False,
+        action="store_true",
         help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU?",
     )
     parser.add_argument(
         "--ipex_fusion_enabled",
-        type=bool,
         default=False,
+        action="store_true",
         help="Do you want to enable graph level optimization through operator fusion (Only applicable for Inference)?",
     )
     # aws related arguments
