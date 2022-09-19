@@ -57,4 +57,5 @@ jobs:
     - name: Generate Report
       if: always()
       run: |
-        python utils/log_reports.py
+        echo "### Hello world! :rocket:" >> $GITHUB_STEP_SUMMARY
+        python utils/log_reports.py >> $GITHUB_STEP_SUMMARY

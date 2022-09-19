@@ -40,4 +40,4 @@ for test in failed:
 failed_table += " |"
 result += failed_table
 
-subprocess.run(["echo", result, ">>", "$GITHUB_STEP_SUMMARY"])
+print(result)

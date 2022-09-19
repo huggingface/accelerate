@@ -32,7 +32,6 @@ from accelerate.utils import (
 
 
 def init_state_check():
-    raise ValueError()
     # Test we can instantiate this twice in a row.
     state = AcceleratorState()
     if state.local_process_index == 0:
