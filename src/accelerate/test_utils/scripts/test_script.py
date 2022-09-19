@@ -55,7 +55,6 @@ def rng_sync_check():
 
 
 def dl_preparation_check():
-    raise ValueError()
     state = AcceleratorState()
     length = 32 * state.num_processes
 
