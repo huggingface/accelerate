@@ -5,6 +5,7 @@ on: [pull_request]
 env:
   HF_HOME: ~/hf_cache
   TESTING_MOCKED_DATALOADERS: "1"
+  CI: 1
 
 jobs:
   run-tests:
