@@ -55,5 +55,6 @@ jobs:
         make ${{ matrix.test-kind }}
 
     - name: Generate Report
+      if: always()
       run: |
         python utils/log_reports.py
