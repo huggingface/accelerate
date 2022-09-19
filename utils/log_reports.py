@@ -23,17 +23,11 @@ for log in Path().glob("*.log"):
                         failed.append([test, duration])
                     else:
                         passed.append([test, duration])
-    if section_num_failed > 0:
-        success = ":no_entry:"
-    else:
-        success = ":heavy_checkmark:"
-    result_table += f'| {str(log).replace(".log","").title()} | {success} | {section_num_failed} |\n'
-    total_num_failed += section_num_failed
+
     group_info.append([str(log), section_num_failed])
 
 if len(failed) > 0:
     result = "## Failed Tests:\n"
-
     failed_table = '| Test Location | Test Class | Test Name |\n|---|---|---|\n| '
     for test in failed:
         failed_table += ' | '.join(test[0].split("::"))
