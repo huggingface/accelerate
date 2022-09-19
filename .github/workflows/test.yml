@@ -52,3 +52,7 @@ jobs:
     - name: Run Tests
       run: |
         make ${{ matrix.test-kind }}
+
+    - name: Generate Report
+      run: |
+        python utils/log_reports.py
