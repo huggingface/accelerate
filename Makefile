@@ -25,40 +25,40 @@ style:
 	
 # Run tests for the library
 test:
-	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --reportlog=all.log
+	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --report-log=all.log
 
 test_big_modeling:
-	python -m pytest -s -v ./tests/test_big_modeling.py --reportlog=big_modeling.log
+	python -m pytest -s -v ./tests/test_big_modeling.py --report-log=big_modeling.log
 
 test_core:
 	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/deepspeed --ignore=./tests/test_big_modeling.py \
-	--ignore=./tests/fsdp --reportlog=core.log
+	--ignore=./tests/fsdp --report-log=core.log
 
 test_deepspeed:
-	python -m pytest -s -v ./tests/deepspeed --reportlog=deepspeed.log
+	python -m pytest -s -v ./tests/deepspeed --report-log=deepspeed.log
 
 test_fsdp:
-	python -m pytest -s -v ./tests/fsdp --reportlog=fsdp.log
+	python -m pytest -s -v ./tests/fsdp --report-log=fsdp.log
 
 test_examples:
-	python -m pytest -s -v ./tests/test_examples.py --reportlog=examples.log
+	python -m pytest -s -v ./tests/test_examples.py --report-log=examples.log
 
 # Broken down example tests for the CI runners
 test_integrations:
-	python -m pytest -s -v ./tests/deepspeed ./tests/fsdp --reportlog=integrations.log
+	python -m pytest -s -v ./tests/deepspeed ./tests/fsdp --report-log=integrations.log
 
 test_example_differences:
-	python -m pytest -s -v ./tests/test_examples.py::ExampleDifferenceTests --reportlog=example_diff.log
+	python -m pytest -s -v ./tests/test_examples.py::ExampleDifferenceTests --report-log=example_diff.log
 
 test_checkpoint_epoch:
-	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_epoch" --reportlog=checkpoint_epoch.log
+	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_epoch" --report-log=checkpoint_epoch.log
 
 test_checkpoint_step:
-	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_step" --reportlog=checkpoint_step.log
+	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_step" --report-log=checkpoint_step.log
 
 # Same as test but used to install only the base dependencies
 test_prod:
 	$(MAKE) test_core
 
 test_rest:
-	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch" --reportlog=rest.log
+	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch" --report-log=rest.log
