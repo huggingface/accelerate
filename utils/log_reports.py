@@ -31,9 +31,8 @@ for log in Path().glob("*.log"):
     total_num_failed += section_num_failed
     group_info.append([str(log), section_num_failed])
 
-result = "## Overall Results:\n" + result_table 
 if len(failed) > 0:
-    result += "\n## Failed Tests:\n"
+    result = "## Failed Tests:\n"
 
     failed_table = '| Test Location | Test Class | Test Name |\n|---|---|---|\n| '
     for test in failed:
