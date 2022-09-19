@@ -32,12 +32,13 @@ for log in Path().glob("*.log"):
     group_info.append([str(log), section_num_failed])
 
 result = "## Overall Results:\n" + result_table 
-result += "\n## Failed Tests:\n"
+if len(failed) > 0:
+    result += "\n## Failed Tests:\n"
 
-failed_table = '| Test Location | Test Class | Test Name |\n|---|---|---|\n| '
-for test in failed:
-    failed_table += ' | '.join(test[0].split("::"))
-failed_table += " |"
-result += failed_table
+    failed_table = '| Test Location | Test Class | Test Name |\n|---|---|---|\n| '
+    for test in failed:
+        failed_table += ' | '.join(test[0].split("::"))
+    failed_table += " |"
+    result += failed_table
 
 print(result)
