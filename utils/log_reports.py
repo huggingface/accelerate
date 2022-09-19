@@ -39,5 +39,4 @@ if len(failed) > 0:
         failed_table += ' | '.join(test[0].split("::"))
     failed_table += " |"
     result += failed_table
-
-print(result)
+    print(result)
