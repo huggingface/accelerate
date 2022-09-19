@@ -25,39 +25,40 @@ style:
 	
 # Run tests for the library
 test:
-	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py
+	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py $(if $(CI),--report-log 'all.log',)
 
 test_big_modeling:
-	python -m pytest -s -v ./tests/test_big_modeling.py
+	python -m pytest -s -v ./tests/test_big_modeling.py $(if $(CI),--report-log 'big_modeling.log',)
 
 test_core:
 	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/deepspeed --ignore=./tests/test_big_modeling.py \
-	--ignore=./tests/fsdp
+	--ignore=./tests/fsdp $(if $(CI),--report-log 'core.log',)
 
 test_deepspeed:
-	python -m pytest -s -v ./tests/deepspeed
+	python -m pytest -s -v ./tests/deepspeed $(if $(CI),--report-log 'deepspeed.log',)
 
 test_fsdp:
-	python -m pytest -s -v ./tests/fsdp
+	python -m pytest -s -v ./tests/fsdp $(if $(CI),--report-log 'fsdp.log',)
 
 test_examples:
-	python -m pytest -s -v ./tests/test_examples.py
+	python -m pytest -s -v ./tests/test_examples.py $(if $(CI),--report-log 'examples.log',)
 
 # Broken down example tests for the CI runners
 test_integrations:
-	python -m pytest -s -v ./tests/deepspeed ./tests/fsdp
+	python -m pytest -s -v ./tests/deepspeed ./tests/fsdp $(if $(CI),--report-log 'integrations.log',)
+
 test_example_differences:
-	python -m pytest -s -v ./tests/test_examples.py::ExampleDifferenceTests
+	python -m pytest -s -v ./tests/test_examples.py::ExampleDifferenceTests $(if $(CI),--report-log 'example_diff.log',)
 
 test_checkpoint_epoch:
-	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_epoch"
+	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_epoch" $(if $(CI),--report-log 'checkpoint_epoch.log',)
 
 test_checkpoint_step:
-	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_step"
+	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "by_step" $(if $(CI),--report-log 'checkpoint_step.log',)
 
 # Same as test but used to install only the base dependencies
 test_prod:
 	$(MAKE) test_core
 
 test_rest:
-	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch"
+	python -m pytest -s -v ./tests/test_examples.py::FeatureExamplesTests -k "not by_step and not by_epoch" $(if $(CI),--report-log 'rest.log',)
