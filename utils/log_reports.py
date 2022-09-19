@@ -6,7 +6,6 @@ failed = []
 passed = []
 
 group_info = []
-result_table = '| Test Section | All Passed? | Number of Failures |\n|---|---|---|\n'
 
 total_num_failed = 0
 for log in Path().glob("*.log"):
@@ -23,7 +22,6 @@ for log in Path().glob("*.log"):
                         failed.append([test, duration])
                     else:
                         passed.append([test, duration])
-
     group_info.append([str(log), section_num_failed])
 
 if len(failed) > 0:
