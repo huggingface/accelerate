@@ -7,6 +7,7 @@ on:
 
 env:
   RUN_SLOW: "yes"
+  IS_GITHUB_CI: "1"
 
 jobs:
   run_all_tests_single_gpu:
@@ -39,10 +40,10 @@ jobs:
           pip uninstall comet_ml -y
           make test_examples
           
-      # - name: Generate Report
-      #   if: always()
-      #   run: |
-      #     python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
+      - name: Generate Report
+        if: always()
+        run: |
+          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
@@ -81,7 +82,7 @@ jobs:
           pip uninstall comet_ml -y
           make test_examples
 
-      # - name: Generate Report
-      #   if: always()
-      #   run: |
-      #     python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
+      - name: Generate Report
+        if: always()
+        run: |
+          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY

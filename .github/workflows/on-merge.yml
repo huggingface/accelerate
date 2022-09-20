@@ -6,6 +6,7 @@ on:
 
 env:
   TESTING_MOCKED_DATALOADERS: "1"
+  IS_GITHUB_CI: "1"
 
 jobs:
   run_all_tests_single_gpu:
