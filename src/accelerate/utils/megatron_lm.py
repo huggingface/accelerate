@@ -74,6 +74,10 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
     mode = "pre-training" if args.pretraining_flag else "fine-tuning"
     if args.rank == 0:
         print(f"Building {args.model_type_name} model in the {mode} mode.")
+        print(
+            "The Megatron LM model weights are initialized at random in `accelerator.prepare`. "
+            "Please use `accelerator.load_checkpoint` to load a pre-trained checkpoint matching the distributed setup."
+        )
     if args.model_type_name == "bert":
         if args.pretraining_flag:
             num_tokentypes = 2 if args.bert_binary_head else 0

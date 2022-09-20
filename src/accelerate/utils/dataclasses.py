@@ -828,7 +828,7 @@ class MegatronLMPlugin:
     def set_network_size_args(self, model, batch_data=None):
         # Check if the model is either BERT, GPT or T5 else raise error
         # set 'num_layers', 'hidden_size', 'num_attention_heads', 'max_position_embeddings'
-        if "bert" in model.config.model_type.lower():
+        if "megatron-bert" in model.config.model_type.lower():
             model_type_name = "bert"
             num_layers = model.config.num_hidden_layers
             hidden_size = model.config.hidden_size
