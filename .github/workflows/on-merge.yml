@@ -6,6 +6,7 @@ on:
 
 env:
   TESTING_MOCKED_DATALOADERS: "1"
+  IS_GITHUB_CI: "1"
 
 jobs:
   run_all_tests_single_gpu:
@@ -26,6 +27,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e .[testing,test_trackers]
+          pip install pytest-reportlog
 
       - name: Run test on GPUs
         run: |
@@ -36,6 +38,11 @@ jobs:
           source activate accelerate
           pip uninstall comet_ml -y
           make test_examples
+
+      - name: Generate Report
+        if: always()
+        run: |
+          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
@@ -53,6 +60,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e .[testing,test_trackers]
+          pip install pytest-reportlog
 
       - name: Run test on GPUs
         run: |
@@ -64,3 +72,8 @@ jobs:
           source activate accelerate
           pip uninstall comet_ml -y
           make test_examples
+
+      - name: Generate Report
+        if: always()
+        run: |
+          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
