@@ -28,7 +28,7 @@ BLACK_AVOID_PATTERNS = {}
 # Regexes
 # Re pattern that catches list introduction (with potential indent)
 _re_list = re.compile(r"^(\s*-\s+|\s*\*\s+|\s*\d+\.\s+)")
-# Re pattern that catches code block introduction (with potentinal indent)
+# Re pattern that catches code block introduction (with potential indent)
 _re_code = re.compile(r"^(\s*)```(.*)$")
 # Re pattern that catches rst args blocks of the form `Parameters:`.
 _re_args = re.compile("^\s*(Args?|Arguments?|Params?|Parameters?):\s*$")
@@ -62,7 +62,7 @@ def parse_code_example(code_lines):
 
     Args:
         code_lines (`List[str]`): The code lines to parse.
-        max_len (`int`): The maximum lengh per line.
+        max_len (`int`): The maximum length per line.
 
     Returns:
         (List[`str`], List[`str`]): The list of code samples and the list of outputs.
@@ -109,7 +109,7 @@ def format_code_example(code: str, max_len: int, in_docstring: bool = False):
 
     Args:
         code (`str`): The code example to format.
-        max_len (`int`): The maximum lengh per line.
+        max_len (`int`): The maximum length per line.
         in_docstring (`bool`, *optional*, defaults to `False`): Whether or not the code example is inside a docstring.
 
     Returns:
