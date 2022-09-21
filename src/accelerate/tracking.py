@@ -469,7 +469,7 @@ class MLflowTracker(GeneralTracker):
             tags=tags,
         )
 
-        mlflow.start_run(
+        self.active_run = mlflow.start_run(
             run_id=run_id,
             experiment_id=experiment_id,
             run_name=run_name,
@@ -485,7 +485,7 @@ class MLflowTracker(GeneralTracker):
 
     @property
     def tracker(self):
-        return mlflow.active_run()
+        return self.active_run
 
     def store_init_configuration(self, values: dict):
         """
@@ -506,6 +506,11 @@ class MLflowTracker(GeneralTracker):
                 del values[name]
 
         values_list = list(values.items())
+
+        if os.getenv("AML_CloudName") == "AzureCloud":
+            logger.info(
+                "It looks like you are using AzureML. Please note that there is a log limit of 100 total parameters when using AzureML."
+            )
 
         # MLflow cannot log more than 100 values in one go, so we have to split it
         for i in range(0, len(values_list), self._MAX_PARAMS_TAGS_PER_BATCH):
