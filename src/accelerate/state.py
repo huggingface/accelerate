@@ -165,7 +165,15 @@ class AcceleratorState:
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
-                    if get_ccl_version() >= "1.12":
+                    ccl_version = get_ccl_version()
+                    if ccl_version >= "1.12":
+                        from .utils import is_torch_version
+
+                        if "1.12.0" in ccl_version and is_torch_version("==", "1.12.1"):
+                            raise ValueError(
+                                "oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1. "
+                                "Please use torch 1.12.0 to work with oneccl_bindings_for_pytorch 1.12.0."
+                            )
                         import oneccl_bindings_for_pytorch  # noqa: F401
                     else:
                         import torch_ccl  # noqa: F401
