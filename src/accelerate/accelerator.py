@@ -125,7 +125,7 @@ class Accelerator:
             - `"tensorboard"`
             - `"wandb"`
             - `"comet_ml"`
-            If `"all`" is selected, will pick up all available trackers in the environment and intialize them. Can also
+            If `"all`" is selected, will pick up all available trackers in the environment and initialize them. Can also
             accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
@@ -643,7 +643,7 @@ class Accelerator:
                     "The model and the optimizer parameters are not on the same device, which probably means you "
                     "created an optimizer around your model **before** putting on the device. Make sure the line "
                     "model.to(device) is before the optimizer creation in your script or remove it entirely and use "
-                    "the flag default value for `devicement_placement` in your `Accelerator` to let it handle that "
+                    "the flag default value for `device_placement` in your `Accelerator` to let it handle that "
                     "part for you."
                 )
 

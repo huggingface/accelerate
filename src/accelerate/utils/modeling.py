@@ -617,7 +617,7 @@ def load_checkpoint_in_model(
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
         offload_state_dict (`bool`, *optional*, defaults to `False`):
-            If `True`, will temporarily offload the CPU state dict on the hard drive to avoig getting out of CPU RAM if
+            If `True`, will temporarily offload the CPU state dict on the hard drive to avoid getting out of CPU RAM if
             the weight of the CPU state dict + the biggest shard does not fit.
     """
     if offload_folder is None and device_map is not None and "disk" in device_map.values():
