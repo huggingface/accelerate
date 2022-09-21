@@ -71,7 +71,7 @@ class ModelHook:
 
     def detach_hook(self, module):
         """
-        To be executed when the hook is deached from a module.
+        To be executed when the hook is detached from a module.
 
         Args:
             module (`torch.nn.Module`): The module detached from this hook.
@@ -182,7 +182,7 @@ class AlignDevicesHook(ModelHook):
     Args:
         execution_device (`torch.device`, *optional*):
             The device on which inputs and model weights should be placed before the forward pass.
-        offload (`bool`, *optional*, defauts to `False`):
+        offload (`bool`, *optional*, defaults to `False`):
             Whether or not the weights should be offloaded after the forward pass.
         io_same_device (`bool`, *optional*, defaults to `False`):
             Whether or not the output should be placed on the same device as the input was.
@@ -319,7 +319,7 @@ def attach_align_device_hook(
             The module where we want to attach the hooks.
         execution_device (`torch.device`, *optional*):
             The device on which inputs and model weights should be placed before the forward pass.
-        offload (`bool`, *optional*, defauts to `False`):
+        offload (`bool`, *optional*, defaults to `False`):
             Whether or not the weights should be offloaded after the forward pass.
         weights_map (`Mapping[str, torch.Tensor]`, *optional*):
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
@@ -402,7 +402,7 @@ def attach_align_device_hook_on_blocks(
         execution_device (`torch.device` or `Dict[str, torch.device]`, *optional*):
             The device on which inputs and model weights should be placed before the forward pass. It can be one device
             for the whole module, or a dictionary mapping module name to device.
-        offload (`bool`, *optional*, defauts to `False`):
+        offload (`bool`, *optional*, defaults to `False`):
             Whether or not the weights should be offloaded after the forward pass. It can be one boolean for the whole
             module, or a dictionary mapping module name to boolean.
         weights_map (`Mapping[str, torch.Tensor]`, *optional*):
