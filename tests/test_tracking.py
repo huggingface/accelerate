@@ -85,12 +85,12 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         self.add_mocks(mock.patch.dict(os.environ, {"WANDB_DIR": self.tmpdir}))
 
     @staticmethod
-    def get_value_from_log(key: str, log: str, key_occurance: int = 0):
+    def get_value_from_log(key: str, log: str, key_occurrence: int = 0):
         """
         Parses wandb log for `key` and returns the value.
-        If parsing through multiple calls to .log, pass in a `key_occurance`
+        If parsing through multiple calls to .log, pass in a `key_occurrence`
         """
-        res = re.findall(rf"(?<={key} )[^\s]+", log)[key_occurance]
+        res = re.findall(rf"(?<={key} )[^\s]+", log)[key_occurrence]
         if '"' in res:
             return re.findall(r'"([^"]*)"', res)[0]
         else:
