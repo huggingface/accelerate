@@ -187,6 +187,9 @@ To run it in each of these various modes, use the following commands:
 ### Simple vision example (GANs)
 
 - [huggan project](https://github.com/huggingface/community-events/tree/main/huggan)
+
+### Using AWS SageMaker integration
+- [Examples showcasing AWS SageMaker integration of 🤗 Accelerate.](https://github.com/pacman100/accelerate-aws-sagemaker)
     
 ## Finer Examples
 
