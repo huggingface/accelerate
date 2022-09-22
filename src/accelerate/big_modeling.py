@@ -44,7 +44,7 @@ def init_empty_weights(include_buffers: bool = False):
 
     Example:
 
-    ```pyton
+    ```python
     import torch.nn as nn
     from accelerate import init_empty_weights
 
@@ -324,7 +324,7 @@ def load_checkpoint_and_dispatch(
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
         offload_state_dict (`bool`, *optional*):
-            If `True`, will temporarily offload the CPU state dict on the hard drive to avoig getting out of CPU RAM if
+            If `True`, will temporarily offload the CPU state dict on the hard drive to avoid getting out of CPU RAM if
             the weight of the CPU state dict + the biggest shard does not fit. Will default to `True` if the device map
             picked contains `"disk"` values.
         preload_module_classes (`List[str]`, *optional*):
