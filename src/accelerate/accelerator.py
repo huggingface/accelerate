@@ -608,13 +608,14 @@ class Accelerator:
         order.
 
         Args:
-            *args:
+            *args (list of objects):
                 Any of the following type of objects:
 
                 - `torch.utils.data.DataLoader`: PyTorch Dataloader
                 - `torch.nn.Module`: PyTorch Module
                 - `torch.optim.Optimizer`: PyTorch Optimizer
                 - `torch.optim.lr_scheduler._LRScheduler`: PyTorch LR Scheduler
+
             device_placement (`List[bool]`, *optional*):
                 Used to customize whether automatic device placement should be performed for each object passed. Needs
                 to be a list of the same length as `args`.
