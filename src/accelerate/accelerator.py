@@ -616,8 +616,8 @@ class Accelerator:
                 - `torch.optim.Optimizer`: PyTorch Optimizer
                 - `torch.optim.lr_scheduler._LRScheduler`: PyTorch LR Scheduler
             device_placement (`List[bool]`, *optional*):
-                Used to customize whether automatic device placement should be performed for each object passed. Needs to be a list of the same length as
-                `args`.
+                Used to customize whether automatic device placement should be performed for each object passed. Needs
+                to be a list of the same length as `args`.
         """
         if device_placement is None:
             device_placement = [None for _ in args]
