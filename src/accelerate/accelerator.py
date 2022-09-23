@@ -1420,7 +1420,7 @@ class Accelerator:
         Returns the state dictionary of a model sent through [`Accelerator.prepare`] in full precision
 
         Args:
-            model (`Module`, `DistributedDataParallel`, `FullyShardedDataParallel`, `MpModelWrapper`):
+            model (`torch.nn.Module`):
                 A PyTorch model sent through [`Accelerator.prepare`]
             unwrap (`bool`, *optional*, defaults to True):
                 Whether to return the original underlying state_dict of `model` or to return the wrapped state_dict
