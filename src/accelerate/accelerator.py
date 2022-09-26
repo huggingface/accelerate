@@ -619,6 +619,12 @@ class Accelerator:
             device_placement (`List[bool]`, *optional*):
                 Used to customize whether automatic device placement should be performed for each object passed. Needs
                 to be a list of the same length as `args`.
+
+        <Tip>
+
+          You don't need to prepare a model if you only use it for inference without any kind of mixed precision
+
+        </Tip>
         """
         if device_placement is None:
             device_placement = [None for _ in args]
@@ -699,7 +705,8 @@ class Accelerator:
 
         Args:
             model (`torch.nn.Module`):
-                A PyTorch model to prepare
+                A PyTorch model to prepare. You don't need to prepare a model if it is used only for inference without
+                any kind of mixed precision
             device_placement (`bool`, *optional*):
                 Whether or not to place the model on the proper device. Will default to `self.device_placement`.
         """
