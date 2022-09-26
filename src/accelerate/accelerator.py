@@ -612,7 +612,7 @@ class Accelerator:
                 Any of the following type of objects:
 
                 - `torch.utils.data.DataLoader`: PyTorch Dataloader
-                - `torch.nn.Module`: PyTorch Module
+                - `torch.nn.Module`: PyTorch Module that has its gradients utilized during training
                 - `torch.optim.Optimizer`: PyTorch Optimizer
                 - `torch.optim.lr_scheduler._LRScheduler`: PyTorch LR Scheduler
 
@@ -699,7 +699,7 @@ class Accelerator:
 
         Args:
             model (`torch.nn.Module`):
-                A PyTorch model to prepare
+                A PyTorch model to prepare that has its gradients utilized during training
             device_placement (`bool`, *optional*):
                 Whether or not to place the model on the proper device. Will default to `self.device_placement`.
         """
