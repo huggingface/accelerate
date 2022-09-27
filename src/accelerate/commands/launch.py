@@ -844,8 +844,8 @@ def launch_command(args):
                 args.mixed_precision = defaults.mixed_precision
     else:
         if args.num_processes is None:
-            warned.append("\t`--num_processes` was set to a value of `1`")
-            args.num_processes = 1
+            args.num_processes = torch.cuda.device_count() if args.multi_gpu else 1
+            warned.append("\t`--num_processes` was set to a value of `{args.num_processes}`")
         if args.num_machines is None:
             warned.append("\t`--num_machines` was set to a value of `1`")
             args.num_machines = 1
@@ -854,14 +854,6 @@ def launch_command(args):
             args.mixed_precision = "no"
         if not hasattr(args, "use_cpu"):
             args.use_cpu = args.cpu
-    if args.multi_gpu and args.num_processes == 1:
-        args.num_processes = torch.cuda.device_count()
-        if not any("--num_processes" in warn for warn in warned):
-            warned.append(f"\t`--num_processes` was set to `{args.num_processes}`")
-        else:
-            for i, warn in enumerate(warned):
-                if "--num_processes" in warn:
-                    warned[i] = warn.replace("`1`", f"`{args.num_processes}`")
 
     if args.num_cpu_threads_per_process is None:
         local_size = get_int_from_env(
