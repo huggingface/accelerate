@@ -1,19 +1,26 @@
-name: Build Docker images (scheduled)
+name: Build Docker images (releases)
 
 on:
   workflow_dispatch:
-  workflow_call:
-  schedule:
-    - cron: "0 1 * * *"
+  release:
 
 concurrency:
   group: docker-image-builds
   cancel-in-progress: false
 
 jobs:
-  latest-cpu:
-    name: "Latest Accelerate CPU [dev]"
+  get-version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.step1.outputs.version }}
+    steps:
+      - id: step1
+        run: echo "::set-output name=version::$(python setup.py --version)"
+
+  version-cpu:
+    name: "Latest Accelerate CPU [version]"
+    runs-on: ubuntu-latest
+    needs: get-version
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
@@ -30,11 +37,12 @@ jobs:
         with:
           context: ./docker/accelerate-cpu
           push: true
-          tags: huggingface/accelerate-cpu
+          tags: huggingface/accelerate-cpu:${{needs.get-version.outputs.version}}
 
-  latest-cuda:
-    name: "Latest Accelerate GPU [dev]"
+  version-cuda:
+    name: "Latest Accelerate GPU [version]"
     runs-on: ubuntu-latest
+    needs: get-version
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
@@ -51,4 +59,4 @@ jobs:
         with:
           context: ./docker/accelerate-gpu
           push: true
-          tags: huggingface/accelerate-gpu
+          tags: huggingface/accelerate-gpu:${{needs.get-version.outputs.version}}
