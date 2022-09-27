@@ -1,39 +1,21 @@
 name: Run Tests
 
-on: [pull_request]
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "setup.py"
+    types: [opened, synchronize, reopened]
 
 env:
   HF_HOME: ~/hf_cache
   TESTING_MOCKED_DATALOADERS: "1"
 
 jobs:
-  check-for-source:
-    runs-on: ubuntu-latest
-    name: Checks if source code or tests were changed
-    outputs:
-      changed: ${{ steps.was_changed.outputs.changed }}
-    steps:
-      - uses: actions/checkout@v3
-        with: 
-          fetch-depth: "2"
-      
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v22.2
-      
-      - name: Was source changed 
-        id: was_changed
-        run: |
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            if [[ $file == *.py ]]; then
-              echo ::set-output name=changed::"1"
-            fi
-          done
-
   run-tests:
     runs-on: ubuntu-latest
-    needs: check-for-source
-    if: needs.check-for-source.outputs.changed == '1'
     strategy:
       matrix:
         test-kind: [
