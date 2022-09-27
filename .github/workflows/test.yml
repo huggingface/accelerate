@@ -5,7 +5,6 @@ on:
     paths:
       - "src/**"
       - "tests/**"
-      - ".github/**"
       - "setup.py"
     types: [opened, synchronize, reopened]
 
