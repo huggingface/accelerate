@@ -3,6 +3,7 @@ name: Build Docker images (releases)
 on:
   workflow_dispatch:
   release:
+    types: [published]
 
 concurrency:
   group: docker-image-builds
