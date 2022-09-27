@@ -29,6 +29,7 @@ from .utils import (
     load_checkpoint_in_model,
     offload_state_dict,
 )
+from .utils.versions import is_torch_version
 
 
 @contextmanager
@@ -43,7 +44,7 @@ def init_empty_weights(include_buffers: bool = False):
 
     Example:
 
-    ```pyton
+    ```python
     import torch.nn as nn
     from accelerate import init_empty_weights
 
@@ -59,6 +60,8 @@ def init_empty_weights(include_buffers: bool = False):
 
     </Tip>
     """
+    if not is_torch_version(">=", "1.9.0"):
+        raise NotImplementedError("Initializing empty weights to a meta device requires torch >= 1.9.0")
     old_register_parameter = nn.Module.register_parameter
     if include_buffers:
         old_register_buffer = nn.Module.register_buffer
@@ -75,15 +78,35 @@ def init_empty_weights(include_buffers: bool = False):
         if buffer is not None:
             module._buffers[name] = module._buffers[name].to(torch.device("meta"))
 
+    # Patch tensor creation
+    if include_buffers:
+        tensor_constructors_to_patch = {
+            torch_function_name: getattr(torch, torch_function_name)
+            for torch_function_name in ["empty", "zeros", "ones", "full"]
+        }
+    else:
+        tensor_constructors_to_patch = {}
+
+    def patch_tensor_constructor(fn):
+        def wrapper(*args, **kwargs):
+            kwargs["device"] = torch.device("meta")
+            return fn(*args, **kwargs)
+
+        return wrapper
+
     try:
         nn.Module.register_parameter = register_empty_parameter
         if include_buffers:
             nn.Module.register_buffer = register_empty_buffer
+        for torch_function_name in tensor_constructors_to_patch.keys():
+            setattr(torch, torch_function_name, patch_tensor_constructor(getattr(torch, torch_function_name)))
         yield
     finally:
         nn.Module.register_parameter = old_register_parameter
         if include_buffers:
             nn.Module.register_buffer = old_register_buffer
+        for torch_function_name, old_torch_function in tensor_constructors_to_patch.items():
+            setattr(torch, torch_function_name, old_torch_function)
 
 
 def cpu_offload(
@@ -114,6 +137,8 @@ def cpu_offload(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
+    if not is_torch_version(">=", "1.9.0"):
+        raise NotImplementedError("CPU offloading requires torch >= 1.9.0")
     if execution_device is None:
         execution_device = next(iter(model.parameters())).device
     if state_dict is None:
@@ -157,6 +182,8 @@ def disk_offload(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
+    if not is_torch_version(">=", "1.9.0"):
+        raise NotImplementedError("Disk offloading requires torch >= 1.9.0")
     if not os.path.isdir(offload_dir) or not os.path.isfile(os.path.join(offload_dir, "index.json")):
         offload_state_dict(offload_dir, model.state_dict())
     if execution_device is None:
@@ -208,6 +235,8 @@ def dispatch_model(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
+    if not is_torch_version(">=", "1.9.0"):
+        raise NotImplementedError("Model dispatching requires torch >= 1.9.0")
     # Error early if the device map is incomplete.
     check_device_map(model, device_map)
 
@@ -295,7 +324,7 @@ def load_checkpoint_and_dispatch(
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
         offload_state_dict (`bool`, *optional*):
-            If `True`, will temporarily offload the CPU state dict on the hard drive to avoig getting out of CPU RAM if
+            If `True`, will temporarily offload the CPU state dict on the hard drive to avoid getting out of CPU RAM if
             the weight of the CPU state dict + the biggest shard does not fit. Will default to `True` if the device map
             picked contains `"disk"` values.
         preload_module_classes (`List[str]`, *optional*):
@@ -304,6 +333,8 @@ def load_checkpoint_and_dispatch(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
+    if not is_torch_version(">=", "1.9.0"):
+        raise NotImplementedError("Loading and dispatching requires torch >= 1.9.0")
     if isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
         raise ValueError(
             "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "

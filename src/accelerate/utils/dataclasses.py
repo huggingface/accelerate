@@ -60,6 +60,8 @@ class DistributedDataParallelKwargs(KwargsHandler):
 
     `gradient_as_bucket_view` is only available in PyTorch 1.7.0 and later versions.
 
+    `static_graph` is only available in PyTorch 1.11.0 and later versions.
+
     </Tip>"""
 
     dim: int = 0
@@ -68,6 +70,7 @@ class DistributedDataParallelKwargs(KwargsHandler):
     find_unused_parameters: bool = False
     check_reduction: bool = False
     gradient_as_bucket_view: bool = False
+    static_graph: bool = False
 
 
 @dataclass
@@ -193,6 +196,7 @@ class LoggerType(BaseEnum):
     """
 
     ALL = "all"
+    AIM = "aim"
     TENSORBOARD = "tensorboard"
     WANDB = "wandb"
     COMETML = "comet_ml"

@@ -36,14 +36,27 @@ from accelerate.utils import (
     DistributedType,
     PrecisionType,
     PrepareForLaunch,
-    get_launch_prefix,
+    _filter_args,
     is_deepspeed_available,
+    is_rich_available,
     is_sagemaker_available,
+    is_torch_version,
     patch_environment,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
 
+
+if is_rich_available():
+    from rich import get_console
+    from rich.logging import RichHandler
+
+    FORMAT = "%(message)s"
+    logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
+
+
+if is_torch_version(">=", "1.9.0"):
+    import torch.distributed.run as distrib_run
 
 logger = logging.getLogger(__name__)
 
@@ -256,6 +269,25 @@ def launch_command_parser(subparsers=None):
         default=None,
         help="The port to use to communicate with the machine of rank 0.",
     )
+    # Rendezvous related arguments
+    parser.add_argument(
+        "--rdzv_conf",
+        type=str,
+        default="",
+        help="Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).",
+    )
+    parser.add_argument(
+        "--max_restarts",
+        type=int,
+        default=0,
+        help="Maximum number of worker group restarts before failing.",
+    )
+    parser.add_argument(
+        "--monitor_interval",
+        type=float,
+        default=5,
+        help="Interval, in seconds, to monitor the state of workers.",
+    )
     parser.add_argument(
         "--main_training_function",
         type=str,
@@ -294,7 +326,12 @@ def launch_command_parser(subparsers=None):
         "--aws_secret_access_key",
         type=str,
         default=None,
-        help="The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job",
+        help="The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job.",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Whether to print out the torch.distributed stack trace when something fails.",
     )
     parser.add_argument(
         "training_script",
@@ -327,6 +364,8 @@ def simple_launcher(args):
     current_env = os.environ.copy()
     current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
     current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
+    if args.use_mps_device:
+        current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
@@ -355,43 +394,37 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
-    cmd = get_launch_prefix()
-    if args.num_machines > 1:
-        cmd.extend(
-            [
-                "--nproc_per_node",
-                str(args.num_processes // args.num_machines),
-                "--nnodes",
-                str(args.num_machines),
-                "--node_rank",
-                str(args.machine_rank),
-                "--master_addr",
-                args.main_process_ip,
-                "--master_port",
-                str(args.main_process_port),
-            ]
-        )
+    num_processes = getattr(args, "num_processes")
+    num_machines = getattr(args, "num_machines")
+    main_process_ip = getattr(args, "main_process_ip")
+    main_process_port = getattr(args, "main_process_port")
+    if num_machines > 1:
+        setattr(args, "nproc_per_node", str(num_processes // num_machines))
+        setattr(args, "nnodes", str(num_machines))
+        setattr(args, "node_rank", int(args.machine_rank))
+        if getattr(args, "same_network"):
+            setattr(args, "master_addr", str(main_process_ip))
+            setattr(args, "master_port", str(main_process_port))
+        else:
+            setattr(args, "rdzv_endpoint", f"{main_process_ip}:{main_process_port}")
     else:
-        cmd.extend(["--nproc_per_node", str(args.num_processes)])
-        if args.main_process_port is not None:
-            cmd.extend(["--master_port", str(args.main_process_port)])
+        setattr(args, "nproc_per_node", str(num_processes))
+        if main_process_port is not None:
+            setattr(args, "master_port", str(main_process_port))
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
     elif args.module:
-        cmd.append("--module")
+        setattr(args, "module", True)
     elif args.no_python:
-        cmd.append("--no_python")
-    cmd.append(args.training_script)
-    cmd.extend(args.training_script_args)
+        setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    mixed_precision = args.mixed_precision.lower()
     try:
-        mixed_precision = PrecisionType(args.mixed_precision.lower())
+        mixed_precision = PrecisionType(mixed_precision)
     except ValueError:
-        raise ValueError(
-            f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
-        )
+        raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}.")
 
     if args.fp16:
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
@@ -444,64 +477,76 @@ def multi_gpu_launcher(args):
         if args.fsdp_state_dict_type is not None:
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
-    process = subprocess.Popen(cmd, env=current_env)
-    process.wait()
-    if process.returncode != 0:
-        raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+    if is_torch_version("<", "1.9.0"):
+        raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
+
+    debug = getattr(args, "debug", False)
+    args = _filter_args(args)
+    with patch_environment(**current_env):
+        try:
+            distrib_run.run(args)
+        except:
+            if debug:
+                console = get_console()
+                console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
+                console.print_exception(suppress=[__file__], show_locals=False)
 
 
 def deepspeed_launcher(args):
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
-    cmd = ["deepspeed", "--no_local_rank"]
-    if args.num_machines > 1:
-        if args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-            cmd = get_launch_prefix()
+    num_processes = getattr(args, "num_processes")
+    num_machines = getattr(args, "num_machines")
+    main_process_ip = getattr(args, "main_process_ip")
+    main_process_port = getattr(args, "main_process_port")
+    if num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+        cmd = ["deepspeed", "--no_local_rank"]
+        cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
+        if args.deepspeed_exclusion_filter is not None:
             cmd.extend(
                 [
-                    "--nproc_per_node",
-                    str(args.num_processes // args.num_machines),
-                    "--nnodes",
-                    str(args.num_machines),
-                    "--node_rank",
-                    str(args.machine_rank),
-                    "--master_addr",
-                    args.main_process_ip,
-                    "--master_port",
-                    str(args.main_process_port),
+                    "--exclude",
+                    str(args.deepspeed_exclusion_filter),
+                ]
+            )
+        elif args.deepspeed_inclusion_filter is not None:
+            cmd.extend(
+                [
+                    "--include",
+                    str(args.deepspeed_inclusion_filter),
                 ]
             )
         else:
-            cmd.extend(
-                ["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)]
-            )
-            if args.deepspeed_exclusion_filter is not None:
-                cmd.extend(
-                    [
-                        "--exclude",
-                        str(args.deepspeed_exclusion_filter),
-                    ]
-                )
-            elif args.deepspeed_inclusion_filter is not None:
-                cmd.extend(
-                    [
-                        "--include",
-                        str(args.deepspeed_inclusion_filter),
-                    ]
-                )
-            else:
-                cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+            cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+
+        if args.module and args.no_python:
+            raise ValueError("--module and --no_python cannot be used together")
+        elif args.module:
+            cmd.append("--module")
+        elif args.no_python:
+            cmd.append("--no_python")
+        cmd.append(args.training_script)
+        cmd.extend(args.training_script_args)
+    elif num_machines > 1 and args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
+        setattr(args, "nproc_per_node", str(num_processes // num_machines))
+        setattr(args, "nnodes", str(num_machines))
+        setattr(args, "node_rank", int(args.machine_rank))
+        if getattr(args, "same_network"):
+            setattr(args, "master_addr", str(main_process_ip))
+            setattr(args, "master_port", str(main_process_port))
+        else:
+            setattr(args, "rdzv_endpoint", f"{main_process_ip}:{main_process_port}")
     else:
-        cmd.extend(["--num_gpus", str(args.num_processes)])
+        setattr(args, "nproc_per_node", str(num_processes))
+        if main_process_port is not None:
+            setattr(args, "master_port", str(main_process_port))
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
     elif args.module:
-        cmd.append("--module")
+        setattr(args, "module", True)
     elif args.no_python:
-        cmd.append("--no_python")
-    cmd.append(args.training_script)
-    cmd.extend(args.training_script_args)
+        setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
     try:
@@ -525,7 +570,8 @@ def deepspeed_launcher(args):
     current_env["DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
     current_env["DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
     current_env["DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
-    current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file).lower()
+    if args.deepspeed_config_file is not None:
+        current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         with open(".deepspeed_env", "a") as f:
@@ -534,10 +580,24 @@ def deepspeed_launcher(args):
                     continue
                 f.write(f"{key}={value}\n")
 
-    process = subprocess.Popen(cmd, env=current_env)
-    process.wait()
-    if process.returncode != 0:
-        raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+        process = subprocess.Popen(cmd, env=current_env)
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+    else:
+        if is_torch_version("<", "1.9.0"):
+            raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
+
+        debug = getattr(args, "debug", False)
+        args = _filter_args(args)
+        with patch_environment(**current_env):
+            try:
+                distrib_run.run(args)
+            except:
+                if debug:
+                    console = get_console()
+                    console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
+                    console.print_exception(suppress=[__file__], show_locals=False)
 
 
 def tpu_launcher(args):

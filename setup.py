@@ -21,9 +21,10 @@ extras["docs"] = []
 extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
 extras["test_dev"] = ["datasets", "evaluate", "transformers", "scipy", "sklearn", "deepspeed<0.7.0", "tqdm"]
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
+extras["rich"] = ["rich"]
 
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]
-extras["dev"] = extras["quality"] + extras["testing"]
+extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
 
 extras["sagemaker"] = [
     "sagemaker",  # boto3 is a required package in sagemaker

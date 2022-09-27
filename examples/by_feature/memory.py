@@ -29,7 +29,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_
 ########################################################################
 # This is a fully working simple example to use Accelerate,
 # specifically showcasing how to ensure out-of-memory errors never
-# iterrupt training, and builds off the `nlp_example.py` script.
+# interrupt training, and builds off the `nlp_example.py` script.
 #
 # This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):

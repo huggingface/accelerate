@@ -58,7 +58,7 @@ MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
 # New Code #
-# We need a different `get_dataloaders` function that will build dataloaders by indexs
+# We need a different `get_dataloaders` function that will build dataloaders by index
 
 
 def get_fold_dataloaders(
@@ -71,9 +71,9 @@ def get_fold_dataloaders(
         accelerator (`Accelerator`):
             The main `Accelerator` object
         train_idxs (list of `int`):
-            The split indicies for the training dataset
+            The split indices for the training dataset
         valid_idxs (list of `int`):
-            The split indicies for the validation dataset
+            The split indices for the validation dataset
         batch_size (`int`):
             The size of the minibatch. Default is 16
     """

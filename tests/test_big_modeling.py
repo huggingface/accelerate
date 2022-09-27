@@ -27,7 +27,7 @@ from accelerate.big_modeling import (
     load_checkpoint_and_dispatch,
 )
 from accelerate.hooks import remove_hook_from_submodules
-from accelerate.test_utils import require_cuda, require_multi_gpu, slow
+from accelerate.test_utils import require_cuda, require_multi_gpu, require_torch_min_version, slow
 from accelerate.utils import offload_state_dict
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -79,6 +79,7 @@ class ModelWithUnusedSubModulesForTest(nn.Module):
         return self.linear4(self.linear3(self.batchnorm(self.linear2(self.linear1(x)))))
 
 
+@require_torch_min_version(version="1.9.0")
 class BigModelingTester(unittest.TestCase):
     def test_init_empty_weights(self):
         # base use

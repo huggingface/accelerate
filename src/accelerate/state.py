@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import warnings
 from distutils.util import strtobool
 
 import torch
@@ -49,14 +50,14 @@ class AcceleratorState:
     """
     Singleton class that has information about the current training environment.
 
-    **Attributes:**
+    **Available attributes:**
 
         - **device** (`torch.device`) -- The device to use.
         - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
           in use.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
-        - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision. If you are using
-          mixed precision, define if you want to use FP16 or BF16 (bfloat16) as the floating point.
+        - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision, and if so the type
+          of mixed precision being performed.
         - **num_processes** (`int`) -- The number of processes currently launched in parallel.
         - **process_index** (`int`) -- The index of the current process.
     """
@@ -221,6 +222,14 @@ class AcceleratorState:
                                 "and/or you do not have an MPS-enabled device on this machine."
                             )
                     else:
+                        from .utils import is_torch_version
+
+                        if not is_torch_version(">", "1.12.0"):
+                            warnings.warn(
+                                "We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. "
+                                "It has major fixes related to model correctness and performance improvements for transformer based models. "
+                                "Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details."
+                            )
                         self.device = torch.device("mps")
                 elif cpu or not torch.cuda.is_available():
                     self.device = torch.device("cpu")
@@ -242,7 +251,7 @@ class AcceleratorState:
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
         else:
-            f"Mixed precision type: {mixed_precision}\n"
+            repr += f"Mixed precision type: {mixed_precision}\n"
         return repr
 
     # For backward compatibility
@@ -269,10 +278,11 @@ class GradientState:
     """
     Singleton class that has information related to gradient synchronization for gradient accumulation
 
-    **Attributes:**
+    **Available attributes:**
 
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
         - **remainder** (`int`) -- The number of extra samples that were added from padding the dataloader
+        - **sync_gradients** (`bool`) -- Whether the gradients should be synced across all devices
     """
 
     _shared_state = {}
@@ -301,5 +311,5 @@ class GradientState:
         self.end_of_dataloader = end_of_dataloader
 
     def _set_remainder(self, remainder):
-        "Private function that sets the number of remaining samples at the end of the dataloader"
+        "Private function that sets the number of remaining samples at the end of the dataloader. Users should not have to call this."
         self.remainder = remainder

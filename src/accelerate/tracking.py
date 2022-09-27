@@ -16,11 +16,14 @@
 # Provide a project dir name, then each type of logger gets stored in project/{`logging_dir`}
 
 import os
+import time
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import List, Optional, Union
 
+import yaml
+
 from .logging import get_logger
-from .utils import LoggerType, is_comet_ml_available, is_tensorboard_available, is_wandb_available
+from .utils import LoggerType, is_aim_available, is_comet_ml_available, is_tensorboard_available, is_wandb_available
 
 
 _available_trackers = []
@@ -39,6 +42,11 @@ if is_comet_ml_available():
     from comet_ml import Experiment
 
     _available_trackers.append(LoggerType.COMETML)
+
+if is_aim_available():
+    from aim import Run
+
+    _available_trackers.append(LoggerType.AIM)
 
 
 logger = get_logger(__name__)
@@ -131,8 +139,8 @@ class TensorBoardTracker(GeneralTracker):
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
         self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
-        logger.info(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
-        logger.info(
+        logger.debug(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
+        logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
 
@@ -142,7 +150,8 @@ class TensorBoardTracker(GeneralTracker):
 
     def store_init_configuration(self, values: dict):
         """
-        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment. Stores the
+        hyperparameters in a yaml file for future use.
 
         Args:
             values (Dictionary `str` to `bool`, `str`, `float` or `int`):
@@ -151,7 +160,16 @@ class TensorBoardTracker(GeneralTracker):
         """
         self.writer.add_hparams(values, metric_dict={})
         self.writer.flush()
-        logger.info("Stored initial configuration hyperparameters to TensorBoard")
+        project_run_name = time.time()
+        dir_name = os.path.join(self.logging_dir, str(project_run_name))
+        os.makedirs(dir_name, exist_ok=True)
+        with open(os.path.join(dir_name, "hparams.yml"), "w") as outfile:
+            try:
+                yaml.dump(values, outfile)
+            except yaml.representer.RepresenterError:
+                logger.error("Serialization to store hyperparameters failed")
+                raise
+        logger.debug("Stored initial configuration hyperparameters to TensorBoard and hparams yaml file")
 
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
@@ -175,14 +193,14 @@ class TensorBoardTracker(GeneralTracker):
             elif isinstance(v, dict):
                 self.writer.add_scalars(k, v, global_step=step, **kwargs)
         self.writer.flush()
-        logger.info("Successfully logged to TensorBoard")
+        logger.debug("Successfully logged to TensorBoard")
 
     def finish(self):
         """
         Closes `TensorBoard` writer
         """
         self.writer.close()
-        logger.info("TensorBoard writer closed")
+        logger.debug("TensorBoard writer closed")
 
 
 class WandBTracker(GeneralTracker):
@@ -202,8 +220,8 @@ class WandBTracker(GeneralTracker):
     def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
         self.run = wandb.init(project=self.run_name, **kwargs)
-        logger.info(f"Initialized WandB project {self.run_name}")
-        logger.info(
+        logger.debug(f"Initialized WandB project {self.run_name}")
+        logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
 
@@ -221,7 +239,7 @@ class WandBTracker(GeneralTracker):
                 `str`, `float`, `int`, or `None`.
         """
         wandb.config.update(values)
-        logger.info("Stored initial configuration hyperparameters to WandB")
+        logger.debug("Stored initial configuration hyperparameters to WandB")
 
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
@@ -237,14 +255,14 @@ class WandBTracker(GeneralTracker):
                 Additional key word arguments passed along to the `wandb.log` method.
         """
         self.run.log(values, step=step, **kwargs)
-        logger.info("Successfully logged to WandB")
+        logger.debug("Successfully logged to WandB")
 
     def finish(self):
         """
         Closes `wandb` writer
         """
         self.run.finish()
-        logger.info("WandB run closed")
+        logger.debug("WandB run closed")
 
 
 class CometMLTracker(GeneralTracker):
@@ -266,8 +284,8 @@ class CometMLTracker(GeneralTracker):
     def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
         self.writer = Experiment(project_name=run_name, **kwargs)
-        logger.info(f"Initialized CometML project {self.run_name}")
-        logger.info(
+        logger.debug(f"Initialized CometML project {self.run_name}")
+        logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
 
@@ -285,7 +303,7 @@ class CometMLTracker(GeneralTracker):
                 `str`, `float`, `int`, or `None`.
         """
         self.writer.log_parameters(values)
-        logger.info("Stored initial configuration hyperparameters to CometML")
+        logger.debug("Stored initial configuration hyperparameters to CometML")
 
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
@@ -310,17 +328,82 @@ class CometMLTracker(GeneralTracker):
                 self.writer.log_other(k, v, **kwargs)
             elif isinstance(v, dict):
                 self.writer.log_metrics(v, step=step, **kwargs)
-        logger.info("Successfully logged to CometML")
+        logger.debug("Successfully logged to CometML")
 
     def finish(self):
         """
         Closes `comet-ml` writer
         """
         self.writer.end()
-        logger.info("CometML run closed")
+        logger.debug("CometML run closed")
 
 
-LOGGER_TYPE_TO_CLASS = {"tensorboard": TensorBoardTracker, "wandb": WandBTracker, "comet_ml": CometMLTracker}
+class AimTracker(GeneralTracker):
+    """
+    A `Tracker` class that supports `aim`. Should be initialized at the start of your script.
+
+    Args:
+        run_name (`str`):
+            The name of the experiment run.
+        kwargs:
+            Additional key word arguments passed along to the `Run.__init__` method.
+    """
+
+    name = "aim"
+    requires_logging_directory = True
+
+    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
+        self.run_name = run_name
+        self.writer = Run(repo=logging_dir, **kwargs)
+        self.writer.name = self.run_name
+        logger.debug(f"Initialized Aim project {self.run_name}")
+        logger.debug(
+            "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
+        )
+
+    @property
+    def tracker(self):
+        return self.writer
+
+    def store_init_configuration(self, values: dict):
+        """
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+
+        Args:
+            values (`dict`):
+                Values to be stored as initial hyperparameters as key-value pairs.
+        """
+        self.writer["hparams"] = values
+
+    def log(self, values: dict, step: Optional[int], **kwargs):
+        """
+        Logs `values` to the current run.
+
+        Args:
+            values (`dict`):
+                Values to be logged as key-value pairs.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `Run.track` method.
+        """
+        # Note: replace this with the dictionary support when merged
+        for key, value in values.items():
+            self.writer.track(value, name=key, step=step, **kwargs)
+
+    def finish(self):
+        """
+        Closes `aim` writer
+        """
+        self.writer.close()
+
+
+LOGGER_TYPE_TO_CLASS = {
+    "aim": AimTracker,
+    "comet_ml": CometMLTracker,
+    "tensorboard": TensorBoardTracker,
+    "wandb": WandBTracker,
+}
 
 
 def filter_trackers(
@@ -341,8 +424,8 @@ def filter_trackers(
             - `"tensorboard"`
             - `"wandb"`
             - `"comet_ml"`
-            If `"all`" is selected, will pick up all available trackers in the environment and intialize them. Can also
-            accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
+            If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
+            also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
     """
@@ -371,6 +454,6 @@ def filter_trackers(
                                     )
                             loggers.append(log_type)
                         else:
-                            logger.info(f"Tried adding logger {log_type}, but package is unavailable in the system.")
+                            logger.debug(f"Tried adding logger {log_type}, but package is unavailable in the system.")
 
     return loggers
