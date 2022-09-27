@@ -1,4 +1,4 @@
-name: Build Docker images (releases)
+name: Build Docker images (scheduled)
 
 on:
   workflow_dispatch:
