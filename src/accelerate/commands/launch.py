@@ -844,8 +844,8 @@ def launch_command(args):
                 args.mixed_precision = defaults.mixed_precision
     else:
         if args.num_processes is None:
-            warned.append("\t`--num_processes` was set to a value of `1`")
             args.num_processes = torch.cuda.device_count() if args.multi_gpu else 1
+            warned.append("\t`--num_processes` was set to a value of `{args.num_processes}`")
         if args.num_machines is None:
             warned.append("\t`--num_machines` was set to a value of `1`")
             args.num_machines = 1
