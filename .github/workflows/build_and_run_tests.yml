@@ -12,7 +12,7 @@ env:
 jobs:
   check-for-source:
     runs-on: ubuntu-latest
-    name: Checks if source code or tests were changed
+    name: Check if setup was changed
     outputs:
       changed: ${{ steps.was_changed.outputs.changed }}
     steps:
