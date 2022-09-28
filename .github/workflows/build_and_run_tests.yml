@@ -34,8 +34,8 @@ jobs:
           done
           
   build-docker-containers:
-    needs: check-for-setup
-    if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
+    needs: check-for-source
+    if: (github.event_name == 'push') && (needs.check-for-source.outputs.changed == '1')
     uses: ./.github/workflows/build_docker_images.yml
     secrets: inherit
 
