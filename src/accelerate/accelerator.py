@@ -683,8 +683,8 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = [None for _ in args]
-        elif self.distributed_type == DistributedType.DEEPSPEED:
-            raise ValueError("You can't customize device placements with DeepSpeed.")
+        elif self.distributed_type in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM):
+            raise ValueError("You can't customize device placements with DeepSpeed or Megatron-LM.")
         elif len(device_placement) != len(args):
             raise ValueError(
                 f"`device_placement` should be a list with {len(args)} elements (the number of objects passed)."
