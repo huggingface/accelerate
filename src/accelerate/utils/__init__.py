@@ -97,11 +97,17 @@ if is_deepspeed_available():
 
 if is_megatron_lm_available():
     from .megatron_lm import (
+        AbstractTrainStep,
+        BertTrainStep,
+        GPTTrainStep,
+        T5TrainStep,
         MegatronLMDummyScheduler,
         MegatronLMDummyDataLoader,
         MegatronEngine,
         MegatronLMOptimizerWrapper,
         MegatronLMSchedulerWrapper,
+        avg_losses_across_data_parallel_group,
+        broadcast_data,
         initialize,
         prepare_model,
         prepare_optimizer,

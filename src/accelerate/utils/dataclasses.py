@@ -26,7 +26,7 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import timedelta
 from distutils.util import strtobool
-from typing import Any, Callable, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import torch
 
@@ -771,6 +771,14 @@ class MegatronLMPlugin:
         default=False,
         metadata={"help": "Whether to set all logging options."},
     )
+    custom_train_step_class: Optional[Any] = field(
+        default=None,
+        metadata={"help": "Custom train step class."},
+    )
+    custom_train_step_kwargs: Optional[Dict[str, Any]] = field(
+        default=None,
+        metadata={"help": "Custom train step kwargs."},
+    )
 
     def __post_init__(self):
         prefix = "MEGATRON_LM_"
@@ -913,9 +921,12 @@ class MegatronLMPlugin:
             self.megatron_lm_default_args["bf16"] = True
 
     def set_training_args(self, micro_batch_size, dp_degree):
-        self.megatron_lm_default_args["data_parallel_size"] = dp_degree
-        self.megatron_lm_default_args["micro_batch_size"] = micro_batch_size
-        self.megatron_lm_default_args["global_batch_size"] = dp_degree * micro_batch_size * self.num_micro_batches
+        self.data_parallel_size = dp_degree
+        self.micro_batch_size = micro_batch_size
+        self.global_batch_size = dp_degree * micro_batch_size * self.num_micro_batches
+        self.megatron_lm_default_args["data_parallel_size"] = self.data_parallel_size
+        self.megatron_lm_default_args["micro_batch_size"] = self.micro_batch_size
+        self.megatron_lm_default_args["global_batch_size"] = self.global_batch_size
 
     def set_optimizer_type(self, optimizer):
         optimizer_name = optimizer.__class__.__name__.lower()

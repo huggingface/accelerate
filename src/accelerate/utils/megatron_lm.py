@@ -68,6 +68,7 @@ if is_megatron_lm_available():
     )
 
 
+# model utilities
 def model_provider_func(pre_process=True, post_process=True, add_encoder=True, add_decoder=True):
     """Build the model."""
     args = get_args()
@@ -109,31 +110,6 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
     return model
 
 
-def prepare_data_loader(accelerator, dataloader, consumed_samples_index=-1, consumed_samples=0):
-    accelerator.print("Preparing dataloader")
-    args = get_args()
-    if not args.megatron_dataset_flag:
-        collate_fn = dataloader.collate_fn
-        if args.consumed_samples is not None:
-            consumed_samples = args.consumed_samples[consumed_samples_index]
-        dataloader = build_pretraining_data_loader(dataloader.dataset, consumed_samples)
-        dataloader.collate_fn = collate_fn
-        return dataloader
-    else:
-        if args.consumed_samples is not None:
-            (
-                args.consumed_train_samples,
-                args.consumed_valid_samples,
-                args.consumed_test_samples,
-            ) = args.consumed_samples
-        else:
-            args.consumed_train_samples, args.consumed_valid_samples, args.consumed_test_samples = 0, 0, 0
-        train_data_iterator, valid_data_iterator, test_data_iterator = build_train_valid_test_data_iterators(
-            MegatronLMDummyDataLoader.get_train_valid_test_datasets_provider()
-        )
-        return train_data_iterator, valid_data_iterator, test_data_iterator
-
-
 def prepare_model(accelerator):
     accelerator.print("Preparing model")
     args = get_args()
@@ -145,122 +121,7 @@ def prepare_model(accelerator):
     return model
 
 
-def prepare_optimizer(accelerator, model):
-    accelerator.print("Preparing optimizer")
-    args = get_args()
-    optimizer = get_megatron_optimizer(model, args.no_wd_decay_cond, args.scale_lr_cond, args.lr_mult)
-    return optimizer
-
-
-def prepare_scheduler(accelerator, optimizer, scheduler):
-    accelerator.print("Preparing scheduler")
-    scheduler = get_optimizer_param_scheduler(optimizer)
-    return scheduler
-
-
-def initialize(accelerator, extra_args_provider=None, args_defaults={}):
-    accelerator.print("Initializing Megatron-LM")
-    assert torch.cuda.is_available(), "Megatron requires CUDA."
-
-    # Parse arguments
-    args = parse_args(extra_args_provider, ignore_unknown_args=True)
-
-    # Set defaults
-    for key, value in args_defaults.items():
-        if getattr(args, key, None) is not None:
-            if args.rank == 0:
-                print(
-                    "WARNING: overriding default arguments for {key}:{v} \
-                        with {key}:{v2}".format(
-                        key=key, v=getattr(args, key), v2=value
-                    ),
-                    flush=True,
-                )
-        setattr(args, key, value)
-
-    if args.use_checkpoint_args or args_defaults.get("use_checkpoint_args", False):
-        assert args.load is not None, "--use-checkpoints-args requires --load argument"
-        load_args_from_checkpoint(args)
-
-    validate_args(args)
-
-    # set global args, build tokenizer, and set adlr-autoresume,
-    # tensorboard-writer, and timers.
-    set_global_variables(args)
-
-    # torch.distributed initialization
-    def finish_mpu_init():
-        args = get_args()
-        # Pytorch distributed.
-        device_count = torch.cuda.device_count()
-        args.rank = torch.distributed.get_rank()
-        args.world_size = torch.distributed.get_world_size()
-        if device_count > 0:
-            device = args.rank % device_count
-            if args.local_rank is not None:
-                assert args.local_rank == device, "expected local-rank to be the same as rank % device-count."
-            else:
-                args.local_rank = device
-
-            # Set the tensor model-parallel, pipeline model-parallel, and
-            # data-parallel communicators.
-            if mpu.model_parallel_is_initialized():
-                print("model parallel is already initialized")
-            else:
-                mpu.initialize_model_parallel(
-                    args.tensor_model_parallel_size,
-                    args.pipeline_model_parallel_size,
-                    args.virtual_pipeline_model_parallel_size,
-                    args.pipeline_model_parallel_split_rank,
-                )
-
-        # Random seeds for reproducibility.
-        if args.rank == 0:
-            print("> setting random seeds to {} ...".format(args.seed))
-        _set_random_seed(args.seed, args.data_parallel_random_init)
-
-    args = get_args()
-
-    # Megatron's MPU is the master. Complete initialization right away.
-    finish_mpu_init()
-
-    # Autoresume.
-    _init_autoresume()
-
-    # Compile dependencies.
-    _compile_dependencies()
-
-    # Set pytorch JIT layer fusion options and warmup JIT functions.
-    set_jit_fusion_options()
-    args = get_args()
-    args.padded_vocab_size = _vocab_size_with_padding(args.orig_vocab_size, args)
-    if args.model_type_name == "bert" and args.pretraining_flag and args.num_labels == 2:
-        args.bert_binary_head = True
-
-
-class MegatronLMDummyScheduler:
-    """
-    Dummy scheduler presents model parameters or param groups, this is primarily used to follow conventional training
-    loop when scheduler config is specified in the deepspeed config file.
-
-    Args:
-        optimizer (`torch.optim.optimizer.Optimizer`):
-            The optimizer to wrap.
-        total_num_steps (int):
-            Total number of steps.
-        warmup_num_steps (int):
-            Number of steps for warmup.
-        **kwargs:
-            Other arguments.
-    """
-
-    def __init__(self, optimizer, total_num_steps=None, warmup_num_steps=0, **kwargs):
-        self.optimizer = optimizer
-        self.total_num_steps = total_num_steps
-        self.warmup_num_steps = warmup_num_steps
-        self.kwargs = kwargs
-
-
+# dataloader utilities
 class MegatronLMDummyDataLoader:
     """
     Dummy dataloader presents model parameters or param groups, this is primarily used to follow conventional training
@@ -287,43 +148,39 @@ class MegatronLMDummyDataLoader:
         def train_valid_test_datasets_provider(train_val_test_num_samples):
             """Build train, valid, and test datasets."""
             args = get_args()
+            dataset_args = {
+                "data_path": args.data_path,
+                "data_impl": args.data_impl,
+                "splits_string": args.split,
+                "train_valid_test_num_samples": train_val_test_num_samples,
+                "skip_warmup": (not args.mmap_warmup),
+                "seed": args.seed,
+            }
             if args.model_type_name == "bert":
-                dataset_args = {
-                    "data_path": args.data_path,
-                    "data_impl": args.data_impl,
-                    "splits_string": args.split,
-                    "train_valid_test_num_samples": train_val_test_num_samples,
-                    "max_seq_length": args.seq_length,
-                    "masked_lm_prob": args.mask_prob,
-                    "short_seq_prob": args.short_seq_prob,
-                    "skip_warmup": (not args.mmap_warmup),
-                    "binary_head": args.bert_binary_head,
-                    "seed": args.seed,
-                }
+                dataset_args.update(
+                    {
+                        "max_seq_length": args.seq_length,
+                        "masked_lm_prob": args.mask_prob,
+                        "short_seq_prob": args.short_seq_prob,
+                        "binary_head": args.bert_binary_head,
+                    }
+                )
             elif args.model_type_name == "gpt":
-                dataset_args = {
-                    "data_path": args.data_path,
-                    "data_impl": args.data_impl,
-                    "splits_string": args.split,
-                    "train_valid_test_num_samples": train_val_test_num_samples,
-                    "seq_length": args.seq_length,
-                    "skip_warmup": (not args.mmap_warmup),
-                    "seed": args.seed,
-                }
+                dataset_args.update(
+                    {
+                        "seq_length": args.seq_length,
+                    }
+                )
             elif args.model_type_name == "t5":
-                dataset_args = {
-                    "data_path": args.data_path,
-                    "data_impl": args.data_impl,
-                    "splits_string": args.split,
-                    "train_valid_test_num_samples": train_val_test_num_samples,
-                    "max_seq_length": args.encoder_seq_length,
-                    "max_seq_length_dec": args.decoder_seq_length,
-                    "masked_lm_prob": args.mask_prob,
-                    "short_seq_prob": args.short_seq_prob,
-                    "skip_warmup": (not args.mmap_warmup),
-                    "dataset_type": "t5",
-                    "seed": args.seed,
-                }
+                dataset_args.update(
+                    {
+                        "max_seq_length": args.encoder_seq_length,
+                        "max_seq_length_dec": args.decoder_seq_length,
+                        "masked_lm_prob": args.mask_prob,
+                        "short_seq_prob": args.short_seq_prob,
+                        "dataset_type": "t5",
+                    }
+                )
             else:
                 raise ValueError(f"Unsupported model type: {args.model_type_name}")
             train_ds, valid_ds, test_ds = build_train_valid_test_datasets(**dataset_args)
@@ -332,264 +189,66 @@ class MegatronLMDummyDataLoader:
         return train_valid_test_datasets_provider
 
 
-class MegatronEngine(torch.nn.Module):
-    """
-    Megatron-LM model wrapper
-    """
+class MegatronPretrainingSamplerWrapper(MegatronPretrainingSampler):
+    def __len__(self):
+        length = self.total_samples // self.micro_batch_times_data_parallel_size
+        return length if self.drop_last else length + 1
 
-    def __init__(self, model, optimizer, scheduler):
-        super(MegatronEngine, self).__init__()
-        self.module = model
-        self.base_model = model[0]
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        args = get_args()
-        if args.model_type_name == "bert":
-            self.train_step_handler = BertTrainStep(args)
-        elif args.model_type_name == "gpt":
-            self.train_step_handler = GPTTrainStep(args)
-        elif args.model_type_name == "t5":
-            self.train_step_handler = T5TrainStep(args)
+
+def build_pretraining_data_loader(dataset, consumed_samples):
+    """Buld dataloader given an input dataset."""
+
+    if dataset is None:
+        return None
+    args = get_args()
+    micro_batch_size = args.micro_batch_size * args.num_micro_batches
+
+    # Megatron sampler
+    batch_sampler = MegatronPretrainingSamplerWrapper(
+        total_samples=len(dataset),
+        consumed_samples=consumed_samples,
+        micro_batch_size=micro_batch_size,
+        data_parallel_rank=mpu.get_data_parallel_rank(),
+        data_parallel_size=mpu.get_data_parallel_world_size(),
+    )
+    # Torch dataloader.
+    return torch.utils.data.DataLoader(
+        dataset, batch_sampler=batch_sampler, num_workers=args.num_workers, pin_memory=True
+    )
+
+
+def prepare_data_loader(accelerator, dataloader, consumed_samples_index=-1, consumed_samples=0):
+    accelerator.print("Preparing dataloader")
+    args = get_args()
+    if not args.megatron_dataset_flag:
+        collate_fn = dataloader.collate_fn
+        if args.consumed_samples is not None:
+            consumed_samples = args.consumed_samples[consumed_samples_index]
+        dataloader = build_pretraining_data_loader(dataloader.dataset, consumed_samples)
+        dataloader.collate_fn = collate_fn
+        return dataloader
+    else:
+        if args.consumed_samples is not None:
+            (
+                args.consumed_train_samples,
+                args.consumed_valid_samples,
+                args.consumed_test_samples,
+            ) = args.consumed_samples
         else:
-            raise ValueError(f"Unsupported model type: {args.model_type_name}")
-        self.optimizer.skipped_iter = False
-
-        # Tracking loss.
-        self.total_loss_dict = {}
-        self.eval_total_loss_dict = {}
-        self.iteration = 0
-        self.report_memory_flag = True
-        if args.tensorboard_dir is not None:
-            write_args_to_tensorboard()
-
-    def train(self):
-        for model_module in self.module:
-            model_module.train()
-        self.log_eval_results()
-
-    def eval(self):
-        for model_module in self.module:
-            model_module.eval()
-
-    def train_step(self, **batch_data):
-        args = get_args()
-        timers = get_timers()
-        data_chunks = []
-        if args.num_micro_batches > 1:
-            for i in range(0, args.num_micro_batches):
-                data_chunks.append(
-                    {k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size] for k, v in batch_data.items()}
+            args.consumed_train_samples, args.consumed_valid_samples, args.consumed_test_samples = 0, 0, 0
+        train_data_iterator, valid_data_iterator, test_data_iterator = build_train_valid_test_data_iterators(
+            MegatronLMDummyDataLoader.get_train_valid_test_datasets_provider()
+        )
+        for dataloader in [train_data_iterator, valid_data_iterator, test_data_iterator]:
+            if dataloader is not None:
+                dataloader.batch_sampler.micro_batch_size = args.micro_batch_size * args.num_micro_batches
+                dataloader.batch_sampler.micro_batch_times_data_parallel_size = (
+                    args.micro_batch_times_data_parallel_size * args.num_micro_batches
                 )
-        else:
-            data_chunks = [batch_data]
-
-        if len(self.module) > 1:
-            batch_data_iterator = [iter(data_chunks) for _ in range(len(self.module))]
-        else:
-            batch_data_iterator = iter(data_chunks)
-
-        # Set grad to zero.
-        if args.DDP_impl == "local" and args.use_contiguous_buffers_in_local_ddp:
-            for partition in self.module:
-                partition.zero_grad_buffer()
-        self.optimizer.zero_grad()
-
-        # Forward pass.
-        forward_backward_func = get_forward_backward_func()
-        losses_reduced = forward_backward_func(
-            self.train_step_handler.forward_step,
-            batch_data_iterator,
-            self.module,
-            self.optimizer,
-            None,
-            forward_only=False,
-        )
-
-        # Empty unused memory.
-        if args.empty_unused_memory_level >= 1:
-            torch.cuda.empty_cache()
-
-        # Reduce gradients.
-        timers("backward-reduce-model-grads").start()
-        self.optimizer.reduce_model_grads(args, timers)
-        timers("backward-reduce-model-grads").stop()
-
-        # Update parameters.
-        timers("optimizer").start()
-        update_successful, grad_norm, num_zeros_in_grad = self.optimizer.step(args, timers)
-        timers("optimizer").stop()
-
-        # Gather params.
-        if update_successful:
-            timers("backward-gather-model-params").start()
-            self.optimizer.gather_model_params(args, timers)
-            timers("backward-gather-model-params").stop()
-
-        # Update learning rate.
-        if update_successful:
-            if self.scheduler is not None:
-                increment = get_num_microbatches() * args.micro_batch_size * args.data_parallel_size
-                self.scheduler.step(increment=increment)
-            skipped_iter = 0
-        else:
-            skipped_iter = 1
-
-        self.optimizer.skipped_iter = not update_successful
-
-        # Empty unused memory.
-        if args.empty_unused_memory_level >= 2:
-            torch.cuda.empty_cache()
-
-        args.consumed_train_samples += (
-            mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
-        )
-
-        if mpu.is_pipeline_last_stage(ignore_virtual=True):
-            # Average loss across microbatches.
-            loss_reduced = {}
-            for key in losses_reduced[0]:
-                losses_reduced_for_key = [x[key] for x in losses_reduced]
-                loss_reduced[key] = sum(losses_reduced_for_key) / len(losses_reduced_for_key)
-            return loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad
-        return {}, skipped_iter, grad_norm, num_zeros_in_grad
-
-    def eval_step(self, **batch_data):
-        args = get_args()
-        data_chunks = []
-        if args.num_micro_batches > 1:
-            for i in range(0, args.num_micro_batches):
-                data_chunks.append(
-                    {k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size] for k, v in batch_data.items()}
-                )
-        else:
-            data_chunks = [batch_data]
-
-        if len(self.module) > 1:
-            batch_data_iterator = [iter(data_chunks) for _ in range(len(self.module))]
-        else:
-            batch_data_iterator = iter(data_chunks)
-        forward_backward_func = get_forward_backward_func()
-        loss_dicts = forward_backward_func(
-            self.train_step_handler.forward_step,
-            batch_data_iterator,
-            self.module,
-            optimizer=None,
-            timers=None,
-            forward_only=True,
-        )
-        # Empty unused memory
-        if args.empty_unused_memory_level >= 1:
-            torch.cuda.empty_cache()
-
-        args.consumed_valid_samples += (
-            mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
-        )
-
-        if mpu.is_pipeline_last_stage(ignore_virtual=True):
-            # Average loss across microbatches.
-            loss_reduced = {}
-            for key in loss_dicts[0]:
-                losses_reduced_for_key = [x[key] for x in loss_dicts]
-                loss_reduced[key] = sum(losses_reduced_for_key) / len(losses_reduced_for_key)
-            return loss_reduced
-        else:
-            return {}
-
-    def forward(self, **batch_data):
-        # During training, we use train_step()
-        # model(**batch_data) performs following operations by delegating it to `self.train_step`:
-        # 1. Prepare **batch_data for Tendor, Pipeline and Model Parallelism
-        # 2. Set grad to zero.
-        # 3. forward pass and backward pass using Pipeline Parallelism
-        # 4. Empty unused memory.
-        # 5. Reduce gradients.
-        # 6. Update parameters.
-        # 7. Gather params when using Distributed Optimizer (Data Parallelism).
-        # 8. Update learning rate if scheduler is specified.
-        # 9. Empty unused memory.
-        # 10. Average loss across microbatches and across DP ranks.
-        #
-        # During evaluation, we use eval_step()
-        args = get_args()
-        if self.module[0].training:
-            loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = self.train_step(**batch_data)
-            self.iteration += 1
-            if args.tensorboard_dir is not None:
-                # Logging.
-                loss_scale = self.optimizer.get_loss_scale().item()
-                params_norm = None
-                if args.log_params_norm:
-                    params_norm = calc_params_l2_norm(self.model)
-                self.report_memory_flag = training_log(
-                    loss_dict,
-                    self.total_loss_dict,
-                    self.optimizer.param_groups[0]["lr"],
-                    self.iteration,
-                    loss_scale,
-                    self.report_memory_flag,
-                    skipped_iter,
-                    grad_norm,
-                    params_norm,
-                    num_zeros_in_grad,
-                )
-        else:
-            loss_dict = self.eval_step(**batch_data)
-            if args.tensorboard_dir is not None:
-                for key in loss_dict:
-                    self.eval_total_loss_dict[key] = (
-                        self.eval_total_loss_dict.get(key, torch.cuda.FloatTensor([0.0])) + loss_dict[key]
-                    )
-                    self.eval_total_loss_dict[key + "_num_iters"] = self.eval_total_loss_dict.get(
-                        key + "_num_iters", torch.cuda.FloatTensor([0.0])
-                    ) + torch.cuda.FloatTensor([1.0])
-
-        loss = torch.tensor(0.0, device=args.local_rank)
-        for key in loss_dict:
-            loss += loss_dict[key]
-        # loss = reduce(loss)
-        if self.train_step_handler.model_output_class is not None:
-            return self.train_step_handler.model_output_class(loss=loss)
-        return loss
-
-    def log_eval_results(self):
-        args = get_args()
-        if args.tensorboard_dir is None or self.iteration == 0:
-            return
-        args = get_args()
-        writer = get_tensorboard_writer()
-        string = f"validation loss at iteration {self.iteration} | "
-        for key in self.eval_total_loss_dict:
-            if key.endswith("_num_iters"):
-                continue
-            value = self.eval_total_loss_dict[key] / self.eval_total_loss_dict[key + "_num_iters"]
-            string += f"{key} value: {value} | "
-            ppl = math.exp(min(20, value.item()))
-            if args.pretraining_flag:
-                string += f"{key} PPL: {ppl} | "
-            if writer:
-                writer.add_scalar(f"{key} validation", value.item(), self.iteration)
-                if args.pretraining_flag:
-                    writer.add_scalar(f"{key} validation ppl", ppl, self.iteration)
-
-        length = len(string) + 1
-        print_rank_last("-" * length)
-        print_rank_last(string)
-        print_rank_last("-" * length)
-        self.eval_total_loss_dict = {}
-
-    def save_checkpoint(self, output_dir):
-        self.log_eval_results()
-        args = get_args()
-        args.save = output_dir
-        save_checkpoint(self.iteration, self.module, self.optimizer, self.scheduler)
-
-    def load_checkpoint(self, input_dir):
-        args = get_args()
-        args.load = input_dir
-        iteration = load_checkpoint(self.module, self.optimizer, self.scheduler)
-        self.iteration = iteration
+        return train_data_iterator, valid_data_iterator, test_data_iterator
 
 
+# optimizer utilities
 class MegatronLMOptimizerWrapper(AcceleratedOptimizer):
     def __init__(self, optimizer):
         super().__init__(optimizer, device_placement=False, scaler=None)
@@ -606,12 +265,49 @@ class MegatronLMOptimizerWrapper(AcceleratedOptimizer):
         return self.optimizer.skipped_iter
 
 
+def prepare_optimizer(accelerator, model):
+    accelerator.print("Preparing optimizer")
+    args = get_args()
+    optimizer = get_megatron_optimizer(model, args.no_wd_decay_cond, args.scale_lr_cond, args.lr_mult)
+    return optimizer
+
+
+# scheduler utilities
+class MegatronLMDummyScheduler:
+    """
+    Dummy scheduler presents model parameters or param groups, this is primarily used to follow conventional training
+    loop when scheduler config is specified in the deepspeed config file.
+
+    Args:
+        optimizer (`torch.optim.optimizer.Optimizer`):
+            The optimizer to wrap.
+        total_num_steps (int):
+            Total number of steps.
+        warmup_num_steps (int):
+            Number of steps for warmup.
+        **kwargs:
+            Other arguments.
+    """
+
+    def __init__(self, optimizer, total_num_steps=None, warmup_num_steps=0, **kwargs):
+        self.optimizer = optimizer
+        self.total_num_steps = total_num_steps
+        self.warmup_num_steps = warmup_num_steps
+        self.kwargs = kwargs
+
+
 class MegatronLMSchedulerWrapper(AcceleratedScheduler):
     def __init__(self, scheduler, optimizers):
         super().__init__(scheduler, optimizers)
 
     def step(self, *args, **kwargs):
         return  # `model(**batch)` is doing that automatically. Therefore, it's implementation is not needed
+
+
+def prepare_scheduler(accelerator, optimizer, scheduler):
+    accelerator.print("Preparing scheduler")
+    scheduler = get_optimizer_param_scheduler(optimizer)
+    return scheduler
 
 
 class AbstractTrainStep(ABC):
@@ -978,6 +674,350 @@ class T5TrainStep(AbstractTrainStep):
         return forward_step
 
 
+# intialize megatron setup
+def initialize(accelerator, extra_args_provider=None, args_defaults={}):
+    accelerator.print("Initializing Megatron-LM")
+    assert torch.cuda.is_available(), "Megatron requires CUDA."
+
+    # Parse arguments
+    args = parse_args(extra_args_provider, ignore_unknown_args=True)
+
+    # Set defaults
+    for key, value in args_defaults.items():
+        if getattr(args, key, None) is not None:
+            if args.rank == 0:
+                print(
+                    "WARNING: overriding default arguments for {key}:{v} \
+                        with {key}:{v2}".format(
+                        key=key, v=getattr(args, key), v2=value
+                    ),
+                    flush=True,
+                )
+        setattr(args, key, value)
+
+    if args.use_checkpoint_args or args_defaults.get("use_checkpoint_args", False):
+        assert args.load is not None, "--use-checkpoints-args requires --load argument"
+        load_args_from_checkpoint(args)
+
+    validate_args(args)
+
+    # set global args, build tokenizer, and set adlr-autoresume,
+    # tensorboard-writer, and timers.
+    set_global_variables(args)
+
+    # torch.distributed initialization
+    def finish_mpu_init():
+        args = get_args()
+        # Pytorch distributed.
+        device_count = torch.cuda.device_count()
+        args.rank = torch.distributed.get_rank()
+        args.world_size = torch.distributed.get_world_size()
+        if device_count > 0:
+            device = args.rank % device_count
+            if args.local_rank is not None:
+                assert args.local_rank == device, "expected local-rank to be the same as rank % device-count."
+            else:
+                args.local_rank = device
+
+            # Set the tensor model-parallel, pipeline model-parallel, and
+            # data-parallel communicators.
+            if mpu.model_parallel_is_initialized():
+                print("model parallel is already initialized")
+            else:
+                mpu.initialize_model_parallel(
+                    args.tensor_model_parallel_size,
+                    args.pipeline_model_parallel_size,
+                    args.virtual_pipeline_model_parallel_size,
+                    args.pipeline_model_parallel_split_rank,
+                )
+
+        # Random seeds for reproducibility.
+        if args.rank == 0:
+            print("> setting random seeds to {} ...".format(args.seed))
+        _set_random_seed(args.seed, args.data_parallel_random_init)
+
+    args = get_args()
+
+    # Megatron's MPU is the master. Complete initialization right away.
+    finish_mpu_init()
+
+    # Autoresume.
+    _init_autoresume()
+
+    # Compile dependencies.
+    _compile_dependencies()
+
+    # Set pytorch JIT layer fusion options and warmup JIT functions.
+    set_jit_fusion_options()
+    args = get_args()
+    args.padded_vocab_size = _vocab_size_with_padding(args.orig_vocab_size, args)
+    if args.model_type_name == "bert" and args.pretraining_flag and args.num_labels == 2:
+        args.bert_binary_head = True
+
+
+class MegatronEngine(torch.nn.Module):
+    """
+    Megatron-LM model wrapper
+    """
+
+    def __init__(self, accelerator, model, optimizer, scheduler):
+        super(MegatronEngine, self).__init__()
+        self.module = model
+        self.base_model = model[0]
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        args = get_args()
+        if accelerator.megatron_lm_plugin.custom_train_step_class is not None:
+            self.train_step_handler = accelerator.megatron_lm_plugin.custom_train_step_class(
+                args, **accelerator.megatron_lm_plugin.custom_train_step_kwargs
+            )
+        elif args.model_type_name == "bert":
+            self.train_step_handler = BertTrainStep(args)
+        elif args.model_type_name == "gpt":
+            self.train_step_handler = GPTTrainStep(args)
+        elif args.model_type_name == "t5":
+            self.train_step_handler = T5TrainStep(args)
+        else:
+            raise ValueError(f"Unsupported model type: {args.model_type_name}")
+        self.optimizer.skipped_iter = False
+
+        # Tracking loss.
+        self.total_loss_dict = {}
+        self.eval_total_loss_dict = {}
+        self.iteration = 0
+        self.report_memory_flag = True
+        if args.tensorboard_dir is not None:
+            write_args_to_tensorboard()
+
+    def train(self):
+        for model_module in self.module:
+            model_module.train()
+        self.log_eval_results()
+
+    def eval(self):
+        for model_module in self.module:
+            model_module.eval()
+
+    def train_step(self, **batch_data):
+        args = get_args()
+        timers = get_timers()
+        data_chunks = []
+        if args.num_micro_batches > 1:
+            for i in range(0, args.num_micro_batches):
+                data_chunks.append(
+                    {k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size] for k, v in batch_data.items()}
+                )
+        else:
+            data_chunks = [batch_data]
+
+        if len(self.module) > 1:
+            batch_data_iterator = [iter(data_chunks) for _ in range(len(self.module))]
+        else:
+            batch_data_iterator = iter(data_chunks)
+
+        # Set grad to zero.
+        if args.DDP_impl == "local" and args.use_contiguous_buffers_in_local_ddp:
+            for partition in self.module:
+                partition.zero_grad_buffer()
+        self.optimizer.zero_grad()
+
+        # Forward pass.
+        forward_backward_func = get_forward_backward_func()
+        losses_reduced = forward_backward_func(
+            self.train_step_handler.forward_step,
+            batch_data_iterator,
+            self.module,
+            self.optimizer,
+            None,
+            forward_only=False,
+        )
+
+        # Empty unused memory.
+        if args.empty_unused_memory_level >= 1:
+            torch.cuda.empty_cache()
+
+        # Reduce gradients.
+        timers("backward-reduce-model-grads").start()
+        self.optimizer.reduce_model_grads(args, timers)
+        timers("backward-reduce-model-grads").stop()
+
+        # Update parameters.
+        timers("optimizer").start()
+        update_successful, grad_norm, num_zeros_in_grad = self.optimizer.step(args, timers)
+        timers("optimizer").stop()
+
+        # Gather params.
+        if update_successful:
+            timers("backward-gather-model-params").start()
+            self.optimizer.gather_model_params(args, timers)
+            timers("backward-gather-model-params").stop()
+
+        # Update learning rate.
+        if update_successful:
+            if self.scheduler is not None:
+                increment = get_num_microbatches() * args.micro_batch_size * args.data_parallel_size
+                self.scheduler.step(increment=increment)
+            skipped_iter = 0
+        else:
+            skipped_iter = 1
+
+        self.optimizer.skipped_iter = not update_successful
+
+        # Empty unused memory.
+        if args.empty_unused_memory_level >= 2:
+            torch.cuda.empty_cache()
+
+        args.consumed_train_samples += (
+            mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
+        )
+
+        if mpu.is_pipeline_last_stage(ignore_virtual=True):
+            # Average loss across microbatches.
+            loss_reduced = {}
+            for key in losses_reduced[0]:
+                losses_reduced_for_key = [x[key] for x in losses_reduced]
+                loss_reduced[key] = sum(losses_reduced_for_key) / len(losses_reduced_for_key)
+            return loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad
+        return {}, skipped_iter, grad_norm, num_zeros_in_grad
+
+    def eval_step(self, **batch_data):
+        args = get_args()
+        data_chunks = []
+        if args.num_micro_batches > 1:
+            for i in range(0, args.num_micro_batches):
+                data_chunks.append(
+                    {k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size] for k, v in batch_data.items()}
+                )
+        else:
+            data_chunks = [batch_data]
+
+        if len(self.module) > 1:
+            batch_data_iterator = [iter(data_chunks) for _ in range(len(self.module))]
+        else:
+            batch_data_iterator = iter(data_chunks)
+        forward_backward_func = get_forward_backward_func()
+        loss_dicts = forward_backward_func(
+            self.train_step_handler.forward_step,
+            batch_data_iterator,
+            self.module,
+            optimizer=None,
+            timers=None,
+            forward_only=True,
+        )
+        # Empty unused memory
+        if args.empty_unused_memory_level >= 1:
+            torch.cuda.empty_cache()
+
+        args.consumed_valid_samples += (
+            mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
+        )
+
+        if mpu.is_pipeline_last_stage(ignore_virtual=True):
+            # Average loss across microbatches.
+            loss_reduced = {}
+            for key in loss_dicts[0]:
+                losses_reduced_for_key = [x[key] for x in loss_dicts]
+                loss_reduced[key] = sum(losses_reduced_for_key) / len(losses_reduced_for_key)
+            return loss_reduced
+        else:
+            return {}
+
+    def forward(self, **batch_data):
+        # During training, we use train_step()
+        # model(**batch_data) performs following operations by delegating it to `self.train_step`:
+        # 1. Prepare **batch_data for Tendor, Pipeline and Model Parallelism
+        # 2. Set grad to zero.
+        # 3. forward pass and backward pass using Pipeline Parallelism
+        # 4. Empty unused memory.
+        # 5. Reduce gradients.
+        # 6. Update parameters.
+        # 7. Gather params when using Distributed Optimizer (Data Parallelism).
+        # 8. Update learning rate if scheduler is specified.
+        # 9. Empty unused memory.
+        # 10. Average loss across microbatches and across DP ranks.
+        #
+        # During evaluation, we use eval_step()
+        args = get_args()
+        if self.module[0].training:
+            loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = self.train_step(**batch_data)
+            self.iteration += 1
+            if args.tensorboard_dir is not None:
+                # Logging.
+                loss_scale = self.optimizer.get_loss_scale().item()
+                params_norm = None
+                if args.log_params_norm:
+                    params_norm = calc_params_l2_norm(self.model)
+                self.report_memory_flag = training_log(
+                    loss_dict,
+                    self.total_loss_dict,
+                    self.optimizer.param_groups[0]["lr"],
+                    self.iteration,
+                    loss_scale,
+                    self.report_memory_flag,
+                    skipped_iter,
+                    grad_norm,
+                    params_norm,
+                    num_zeros_in_grad,
+                )
+        else:
+            loss_dict = self.eval_step(**batch_data)
+            if args.tensorboard_dir is not None:
+                for key in loss_dict:
+                    self.eval_total_loss_dict[key] = (
+                        self.eval_total_loss_dict.get(key, torch.cuda.FloatTensor([0.0])) + loss_dict[key]
+                    )
+                    self.eval_total_loss_dict[key + "_num_iters"] = self.eval_total_loss_dict.get(
+                        key + "_num_iters", torch.cuda.FloatTensor([0.0])
+                    ) + torch.cuda.FloatTensor([1.0])
+
+        loss = torch.tensor(0.0, device=args.local_rank)
+        for key in loss_dict:
+            loss += loss_dict[key]
+        # loss = reduce(loss)
+        if self.train_step_handler.model_output_class is not None:
+            return self.train_step_handler.model_output_class(loss=loss)
+        return loss
+
+    def log_eval_results(self):
+        args = get_args()
+        if args.tensorboard_dir is None or self.iteration == 0:
+            return
+        args = get_args()
+        writer = get_tensorboard_writer()
+        string = f"validation loss at iteration {self.iteration} | "
+        for key in self.eval_total_loss_dict:
+            if key.endswith("_num_iters"):
+                continue
+            value = self.eval_total_loss_dict[key] / self.eval_total_loss_dict[key + "_num_iters"]
+            string += f"{key} value: {value} | "
+            ppl = math.exp(min(20, value.item()))
+            if args.pretraining_flag:
+                string += f"{key} PPL: {ppl} | "
+            if writer:
+                writer.add_scalar(f"{key} validation", value.item(), self.iteration)
+                if args.pretraining_flag:
+                    writer.add_scalar(f"{key} validation ppl", ppl, self.iteration)
+
+        length = len(string) + 1
+        print_rank_last("-" * length)
+        print_rank_last(string)
+        print_rank_last("-" * length)
+        self.eval_total_loss_dict = {}
+
+    def save_checkpoint(self, output_dir):
+        self.log_eval_results()
+        args = get_args()
+        args.save = output_dir
+        save_checkpoint(self.iteration, self.module, self.optimizer, self.scheduler)
+
+    def load_checkpoint(self, input_dir):
+        args = get_args()
+        args.load = input_dir
+        iteration = load_checkpoint(self.module, self.optimizer, self.scheduler)
+        self.iteration = iteration
+
+
+# other utilities
 def broadcast_data(data):
     def _gpu_broadcast_one(tensor, src=0, group=None):
         torch.distributed.broadcast(tensor, src=src, group=group)
@@ -992,29 +1032,12 @@ def broadcast_data(data):
     )
 
 
-class MegatronPretrainingSamplerWrapper(MegatronPretrainingSampler):
-    def __len__(self):
-        length = self.total_samples // self.micro_batch_times_data_parallel_size
-        return length if self.drop_last else length + 1
+def avg_losses_across_data_parallel_group(losses):
+    """
+    Average losses across data parallel group.
 
+    Args:
+        losses (List[Tensor]): List of losses to average across data parallel group.
+    """
 
-def build_pretraining_data_loader(dataset, consumed_samples):
-    """Buld dataloader given an input dataset."""
-
-    if dataset is None:
-        return None
-    args = get_args()
-    micro_batch_size = args.micro_batch_size * args.num_micro_batches
-
-    # Megatron sampler
-    batch_sampler = MegatronPretrainingSamplerWrapper(
-        total_samples=len(dataset),
-        consumed_samples=consumed_samples,
-        micro_batch_size=micro_batch_size,
-        data_parallel_rank=mpu.get_data_parallel_rank(),
-        data_parallel_size=mpu.get_data_parallel_world_size(),
-    )
-    # Torch dataloader.
-    return torch.utils.data.DataLoader(
-        dataset, batch_sampler=batch_sampler, num_workers=args.num_workers, pin_memory=True
-    )
+    return average_losses_across_data_parallel_group(losses)
