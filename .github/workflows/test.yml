@@ -1,15 +1,24 @@
 name: Run Tests
 
-on: [pull_request]
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "setup.py"
+    types: [opened, synchronize, reopened]
 
 env:
   HF_HOME: ~/hf_cache
   TESTING_MOCKED_DATALOADERS: "1"
+  IS_GITHUB_CI: "1"
 
 jobs:
   run-tests:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         pytorch-version: [
           latest,
@@ -48,7 +57,13 @@ jobs:
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
         if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
         if [[ ${{ matrix.pytorch-version }} = minimum ]]; then pip install torch==1.6.0; fi
+        pip install pytest-reportlog
     
     - name: Run Tests
       run: |
         make ${{ matrix.test-kind }}
+
+    - name: Generate Report
+      if: always()
+      run: |
+        python utils/log_reports.py >> $GITHUB_STEP_SUMMARY

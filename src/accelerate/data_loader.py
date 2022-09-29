@@ -347,7 +347,6 @@ class DataLoaderShard(DataLoader):
         try:
             current_batch = next(dataloader_iter)
         except StopIteration:
-            self.gradient_state._iterate_samples_seen(find_batch_size(current_batch))
             yield
         while True:
             try:
