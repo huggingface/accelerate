@@ -830,8 +830,11 @@ def launch_command(args):
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_mps_device = defaults.distributed_type == DistributedType.MPS
-        if not args.gpu_ids and defaults.gpu_ids is not None:
-            args.gpu_ids = defaults.gpu_ids
+        if args.gpu_ids is None
+            if defaults.gpu_ids is not None:
+                args.gpu_ids = defaults.gpu_ids
+            else:
+                args.gpu_ids = "all"
         if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and (args.gpu_ids != "all"):
             args.multi_gpu = False
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
