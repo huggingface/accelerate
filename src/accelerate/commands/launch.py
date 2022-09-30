@@ -262,7 +262,7 @@ def launch_command_parser(subparsers=None):
     parser.add_argument(
         "--gpu_ids",
         default="all",
-        help="What GPUs (by id) should be used for training as a comma-seperated list",
+        help="What GPUs (by id) should be used for training on this machine as a comma-seperated list",
     )
     parser.add_argument(
         "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
@@ -827,6 +827,8 @@ def launch_command(args):
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_mps_device = defaults.distributed_type == DistributedType.MPS
+        if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and args.gpu_ids != "all":
+            args.multi_gpu = False
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
