@@ -367,12 +367,12 @@ def simple_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
-    if args.gpu_ids != "all":
-        current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
     current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
     if args.use_mps_device:
         current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    elif args.gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
@@ -830,13 +830,14 @@ def launch_command(args):
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_mps_device = defaults.distributed_type == DistributedType.MPS
-        if args.gpu_ids is None:
-            if defaults.gpu_ids is not None:
-                args.gpu_ids = defaults.gpu_ids
-            else:
-                args.gpu_ids = "all"
-        if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and (args.gpu_ids != "all"):
-            args.multi_gpu = False
+        if not args.use_mps_device:
+            if args.gpu_ids is None:
+                if defaults.gpu_ids is not None:
+                    args.gpu_ids = defaults.gpu_ids
+                else:
+                    args.gpu_ids = "all"
+            if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and (args.gpu_ids != "all"):
+                args.multi_gpu = False
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
