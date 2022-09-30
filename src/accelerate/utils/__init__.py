@@ -107,7 +107,6 @@ if is_megatron_lm_available():
         MegatronLMOptimizerWrapper,
         MegatronLMSchedulerWrapper,
         avg_losses_across_data_parallel_group,
-        broadcast_data,
         initialize,
         prepare_model,
         prepare_optimizer,

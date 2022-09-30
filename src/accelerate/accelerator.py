@@ -982,18 +982,24 @@ class Accelerator:
 
     def _prepare_megatron_lm(self, *args):
         megatron_lm_plugin = self.state.megatron_lm_plugin
-        batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
-        if len(batch_sizes) == 0:
-            raise ValueError(
-                "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
-            )
+        if not megatron_lm_plugin.megatron_dataset_flag:
+            batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
+            if len(batch_sizes) == 0:
+                raise ValueError(
+                    "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
+                )
 
-        micro_batch_size = min(batch_sizes) if megatron_lm_plugin.is_train_batch_min else max(batch_sizes)
-        if len(batch_sizes) > 1:
-            logger.info(
-                "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
-                f"{megatron_lm_plugin.is_train_batch_min} will decide the `train_batch_size` ({micro_batch_size})."
-            )
+            micro_batch_size = min(batch_sizes) if megatron_lm_plugin.is_train_batch_min else max(batch_sizes)
+            if len(batch_sizes) > 1:
+                logger.info(
+                    "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
+                    f"{megatron_lm_plugin.is_train_batch_min} will decide the `train_batch_size` ({micro_batch_size})."
+                )
+        else:
+            for obj in args:
+                if isinstance(obj, MegatronLMDummyDataLoader):
+                    micro_batch_size = obj.dataset_args["micro_batch_size"]
+                    break
 
         dp_degree = self.num_processes // (megatron_lm_plugin.tp_degree * megatron_lm_plugin.pp_degree)
         megatron_lm_plugin.set_training_args(micro_batch_size, dp_degree)
@@ -1031,7 +1037,7 @@ class Accelerator:
         result = []
         for obj in args:
             if isinstance(obj, torch.utils.data.DataLoader):
-                result.append(megatron_lm_prepare_data_loader(self, obj, consumed_samples_index=counter))
+                result.append(megatron_lm_prepare_data_loader(self, obj))
                 counter += 1
             elif isinstance(obj, MegatronLMDummyDataLoader):
                 if counter == 0:

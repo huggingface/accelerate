@@ -24,7 +24,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
 from .imports import is_megatron_lm_available, is_transformers_available
-from .operations import recursively_apply, send_to_device
+from .operations import send_to_device
 
 
 if is_transformers_available():
@@ -37,10 +37,8 @@ if is_transformers_available():
 
 if is_megatron_lm_available():
     from megatron import get_args, get_num_microbatches, get_tensorboard_writer, get_timers, mpu, print_rank_last
-    from megatron.arguments import _add_data_args, parse_args, validate_args
+    from megatron.arguments import _add_data_args, _add_validation_args, parse_args, validate_args
     from megatron.checkpointing import load_args_from_checkpoint, load_checkpoint, save_checkpoint
-    from megatron.data.data_samplers import MegatronPretrainingSampler
-    from megatron.data.dataset_utils import build_train_valid_test_datasets
     from megatron.global_vars import set_global_variables
     from megatron.initialize import (
         _compile_dependencies,
@@ -51,7 +49,6 @@ if is_megatron_lm_available():
     )
     from megatron.model import BertModel, GPTModel, ModelType, T5Model
     from megatron.model.classification import Classification
-    from megatron.mpu.initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_src_rank
     from megatron.optimizer import get_megatron_optimizer
     from megatron.schedules import get_forward_backward_func
     from megatron.tokenizer.tokenizer import _vocab_size_with_padding
@@ -133,6 +130,7 @@ class MegatronLMDummyDataLoader:
     def __init__(self, **dataset_kwargs):
         parser = argparse.ArgumentParser()
         parser = _add_data_args(parser)
+        parser = _add_validation_args(parser)
         data_args = parser.parse_known_args()
         self.dataset_args = vars(data_args[0])
         self.dataset_args.update(dataset_kwargs)
@@ -149,7 +147,7 @@ class MegatronLMDummyDataLoader:
             """Build train, valid, and test datasets."""
             args = get_args()
             dataset_args = {
-                "data_path": args.data_path,
+                "data_prefix": args.data_path,
                 "data_impl": args.data_impl,
                 "splits_string": args.split,
                 "train_valid_test_num_samples": train_val_test_num_samples,
@@ -183,50 +181,48 @@ class MegatronLMDummyDataLoader:
                 )
             else:
                 raise ValueError(f"Unsupported model type: {args.model_type_name}")
+            if args.model_type_name == "gpt":
+                from megatron.data.gpt_dataset import build_train_valid_test_datasets
+            else:
+                from megatron.data.dataset_utils import build_train_valid_test_datasets
             train_ds, valid_ds, test_ds = build_train_valid_test_datasets(**dataset_args)
             return train_ds, valid_ds, test_ds
 
         return train_valid_test_datasets_provider
 
 
-class MegatronPretrainingSamplerWrapper(MegatronPretrainingSampler):
-    def __len__(self):
-        length = self.total_samples // self.micro_batch_times_data_parallel_size
-        return length if self.drop_last else length + 1
-
-
-def build_pretraining_data_loader(dataset, consumed_samples):
-    """Buld dataloader given an input dataset."""
-
-    if dataset is None:
-        return None
-    args = get_args()
-    micro_batch_size = args.micro_batch_size * args.num_micro_batches
-
-    # Megatron sampler
-    batch_sampler = MegatronPretrainingSamplerWrapper(
-        total_samples=len(dataset),
-        consumed_samples=consumed_samples,
-        micro_batch_size=micro_batch_size,
-        data_parallel_rank=mpu.get_data_parallel_rank(),
-        data_parallel_size=mpu.get_data_parallel_world_size(),
-    )
-    # Torch dataloader.
-    return torch.utils.data.DataLoader(
-        dataset, batch_sampler=batch_sampler, num_workers=args.num_workers, pin_memory=True
-    )
-
-
-def prepare_data_loader(accelerator, dataloader, consumed_samples_index=-1, consumed_samples=0):
+def prepare_data_loader(accelerator, dataloader):
     accelerator.print("Preparing dataloader")
     args = get_args()
     if not args.megatron_dataset_flag:
-        collate_fn = dataloader.collate_fn
-        if args.consumed_samples is not None:
-            consumed_samples = args.consumed_samples[consumed_samples_index]
-        dataloader = build_pretraining_data_loader(dataloader.dataset, consumed_samples)
-        dataloader.collate_fn = collate_fn
-        return dataloader
+        from ..data_loader import _PYTORCH_DATALOADER_KWARGS, prepare_data_loader
+
+        args = get_args()
+        micro_batch_size = args.micro_batch_size * args.num_micro_batches
+        kwargs = {k: getattr(dataloader, k, _PYTORCH_DATALOADER_KWARGS[k]) for k in _PYTORCH_DATALOADER_KWARGS}
+        if kwargs["batch_size"] is None:
+            if isinstance(kwargs["sampler"], torch.utils.data.BatchSampler):
+                kwargs["sampler"].batch_size = micro_batch_size
+            else:
+                del kwargs["sampler"]
+                del kwargs["shuffle"]
+                del kwargs["batch_size"]
+                kwargs["batch_sampler"].batch_size = micro_batch_size
+        else:
+            del kwargs["batch_sampler"]
+            kwargs["batch_size"] = micro_batch_size
+
+        dataloader = torch.utils.data.DataLoader(dataloader.dataset, **kwargs)
+        return prepare_data_loader(
+            dataloader,
+            accelerator.device,
+            num_processes=mpu.get_data_parallel_world_size(),
+            process_index=mpu.get_data_parallel_rank(),
+            split_batches=accelerator.split_batches,
+            put_on_device=True,
+            rng_types=accelerator.rng_types.copy(),
+            dispatch_batches=accelerator.dispatch_batches,
+        )
     else:
         if args.consumed_samples is not None:
             (
@@ -241,10 +237,12 @@ def prepare_data_loader(accelerator, dataloader, consumed_samples_index=-1, cons
         )
         for dataloader in [train_data_iterator, valid_data_iterator, test_data_iterator]:
             if dataloader is not None:
-                dataloader.batch_sampler.micro_batch_size = args.micro_batch_size * args.num_micro_batches
-                dataloader.batch_sampler.micro_batch_times_data_parallel_size = (
-                    args.micro_batch_times_data_parallel_size * args.num_micro_batches
+                dataloader._index_sampler.micro_batch_size = args.micro_batch_size * args.num_micro_batches
+                dataloader._index_sampler.micro_batch_times_data_parallel_size = (
+                    dataloader._index_sampler.micro_batch_times_data_parallel_size * args.num_micro_batches
                 )
+        accelerator.state.megatron_lm_plugin.eval_iters = args.eval_iters
+        accelerator.state.megatron_lm_plugin.eval_interval = args.eval_interval
         return train_data_iterator, valid_data_iterator, test_data_iterator
 
 
@@ -367,30 +365,24 @@ class BertTrainStep(AbstractTrainStep):
 
         def get_batch_transformer(data_iterator):
             """Build the batch."""
-
-            # Broadcast data.
-            if data_iterator is not None:
-                data = next(data_iterator)
-                data = send_to_device(data, torch.cuda.current_device())
-            else:
-                data = None
-            data_b = broadcast_data(data)
+            data = next(data_iterator)
+            data = send_to_device(data, torch.cuda.current_device())
 
             # Unpack.
-            tokens = data_b["input_ids"].long()
-            padding_mask = data_b["attention_mask"].long()
-            if "token_type_ids" in data_b:
-                types = data_b["token_type_ids"].long()
+            tokens = data["input_ids"].long()
+            padding_mask = data["attention_mask"].long()
+            if "token_type_ids" in data:
+                types = data["token_type_ids"].long()
             else:
                 types = None
-            if "labels" in data_b:
-                lm_labels = data_b["labels"].long()
-                loss_mask = (data_b["labels"] != -100).to(torch.float)
+            if "labels" in data:
+                lm_labels = data["labels"].long()
+                loss_mask = (data["labels"] != -100).to(torch.float)
             else:
                 lm_labels = None
                 loss_mask = None
-            if "next_sentence_label" in data_b:
-                sentence_order = data_b["next_sentence_label"].long()
+            if "next_sentence_label" in data:
+                sentence_order = data["next_sentence_label"].long()
             else:
                 sentence_order = None
 
@@ -471,11 +463,8 @@ class GPTTrainStep(AbstractTrainStep):
 
     def get_batch_func(self, megatron_dataset_flag):
         def get_batch_megatron(data_iterator):
-            from megatron import get_tokenizer
-
             """Generate a batch"""
             args = get_args()
-            tokenizer = get_tokenizer()
 
             # Items and their type.
             keys = ["text"]
@@ -495,21 +484,17 @@ class GPTTrainStep(AbstractTrainStep):
 
             # Get the masks and postition ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                tokens, tokenizer.eod, args.reset_position_ids, args.reset_attention_mask, args.eod_mask_loss
+                tokens, self.eod_token, args.reset_position_ids, args.reset_attention_mask, args.eod_mask_loss
             )
 
             return tokens, labels, loss_mask, attention_mask, position_ids
 
         def get_batch_transformer(data_iterator):
-            # Broadcast data.
-            if data_iterator is not None:
-                data = next(data_iterator)
-                data = {"input_ids": data["input_ids"]}
-                data = send_to_device(data, torch.cuda.current_device())
-            else:
-                data = None
-            data_b = broadcast_data(data)
-            tokens_ = data_b["input_ids"].long()
+            data = next(data_iterator)
+            data = {"input_ids": data["input_ids"]}
+            data = send_to_device(data, torch.cuda.current_device())
+
+            tokens_ = data["input_ids"].long()
             padding = torch.zeros((tokens_.shape[0], 1), dtype=tokens_.dtype, device=tokens_.device) + self.eod_token
             tokens_ = torch.concat([tokens_, padding], dim=1)
             labels = tokens_[:, 1:].contiguous()
@@ -616,27 +601,22 @@ class T5TrainStep(AbstractTrainStep):
 
         def get_batch_transformer(data_iterator):
             """Build the batch."""
+            data = next(data_iterator)
+            data = send_to_device(data, torch.cuda.current_device())
 
-            # Broadcast data.
-            if data_iterator is not None:
-                data = next(data_iterator)
-                data = send_to_device(data, torch.cuda.current_device())
-            else:
-                data = None
-            data_b = broadcast_data(data)
-            tokens_enc = data_b["input_ids"].long()
-            labels = data_b["labels"].long()
+            tokens_enc = data["input_ids"].long()
+            labels = data["labels"].long()
             loss_mask = (labels != -100).to(torch.float)
-            if "decoder_input_ids" in data_b:
-                tokens_dec = data_b["decoder_input_ids"].long()
+            if "decoder_input_ids" in data:
+                tokens_dec = data["decoder_input_ids"].long()
             else:
                 tokens_dec = labels.new_zeros(labels.shape, device=labels.device, dtype=torch.long)
                 tokens_dec[..., 1:] = labels[..., :-1].clone()
                 tokens_dec[..., 0] = 0
                 tokens_dec.masked_fill_(tokens_dec == -100, 0)
-            enc_mask = T5TrainStep.attn_mask_postprocess(data_b["attention_mask"].long())
+            enc_mask = T5TrainStep.attn_mask_postprocess(data["attention_mask"].long())
             dec_mask = T5TrainStep.get_decoder_mask(tokens_dec.shape[1], tokens_dec.device)
-            enc_dec_mask = T5TrainStep.get_enc_dec_mask(data_b["attention_mask"].long())
+            enc_dec_mask = T5TrainStep.get_enc_dec_mask(data["attention_mask"].long())
 
             return tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, enc_dec_mask
 
@@ -753,6 +733,7 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     args.padded_vocab_size = _vocab_size_with_padding(args.orig_vocab_size, args)
     if args.model_type_name == "bert" and args.pretraining_flag and args.num_labels == 2:
         args.bert_binary_head = True
+    args.iteration = 0
 
 
 class MegatronEngine(torch.nn.Module):
@@ -767,9 +748,9 @@ class MegatronEngine(torch.nn.Module):
         self.optimizer = optimizer
         self.scheduler = scheduler
         args = get_args()
-        if accelerator.megatron_lm_plugin.custom_train_step_class is not None:
-            self.train_step_handler = accelerator.megatron_lm_plugin.custom_train_step_class(
-                args, **accelerator.megatron_lm_plugin.custom_train_step_kwargs
+        if accelerator.state.megatron_lm_plugin.custom_train_step_class is not None:
+            self.train_step_handler = accelerator.state.megatron_lm_plugin.custom_train_step_class(
+                args, **accelerator.state.megatron_lm_plugin.custom_train_step_kwargs
             )
         elif args.model_type_name == "bert":
             self.train_step_handler = BertTrainStep(args)
@@ -801,19 +782,28 @@ class MegatronEngine(torch.nn.Module):
     def train_step(self, **batch_data):
         args = get_args()
         timers = get_timers()
-        data_chunks = []
-        if args.num_micro_batches > 1:
-            for i in range(0, args.num_micro_batches):
-                data_chunks.append(
-                    {k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size] for k, v in batch_data.items()}
-                )
-        else:
-            data_chunks = [batch_data]
+
+        if len(batch_data) > 0:
+            data_chunks = []
+            if args.num_micro_batches > 1:
+                for i in range(0, args.num_micro_batches):
+                    data_chunks.append(
+                        {
+                            k: v[i * args.micro_batch_size : (i + 1) * args.micro_batch_size]
+                            for k, v in batch_data.items()
+                        }
+                    )
+            else:
+                data_chunks = [batch_data]
 
         if len(self.module) > 1:
-            batch_data_iterator = [iter(data_chunks) for _ in range(len(self.module))]
+            batch_data_iterator = (
+                [iter(data_chunks) for _ in range(len(self.module))]
+                if len(batch_data) > 0
+                else [None] * len(self.module)
+            )
         else:
-            batch_data_iterator = iter(data_chunks)
+            batch_data_iterator = iter(data_chunks) if len(batch_data) > 0 else None
 
         # Set grad to zero.
         if args.DDP_impl == "local" and args.use_contiguous_buffers_in_local_ddp:
@@ -1013,25 +1003,13 @@ class MegatronEngine(torch.nn.Module):
     def load_checkpoint(self, input_dir):
         args = get_args()
         args.load = input_dir
+        args.consumed_train_samples = 0
+        args.consumed_valid_samples = 0
         iteration = load_checkpoint(self.module, self.optimizer, self.scheduler)
         self.iteration = iteration
 
 
 # other utilities
-def broadcast_data(data):
-    def _gpu_broadcast_one(tensor, src=0, group=None):
-        torch.distributed.broadcast(tensor, src=src, group=group)
-        return tensor
-
-    return recursively_apply(
-        _gpu_broadcast_one,
-        data,
-        error_on_other_type=True,
-        src=get_tensor_model_parallel_src_rank(),
-        group=get_tensor_model_parallel_group(),
-    )
-
-
 def avg_losses_across_data_parallel_group(losses):
     """
     Average losses across data parallel group.
