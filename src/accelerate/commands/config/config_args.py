@@ -135,6 +135,7 @@ class ClusterConfig(BaseConfig):
     num_processes: int
     machine_rank: int = 0
     num_machines: int = 1
+    gpu_ids: Optional[str] = None
     main_process_ip: Optional[str] = None
     main_process_port: Optional[int] = None
     rdzv_backend: Optional[str] = "static"

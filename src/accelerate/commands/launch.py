@@ -260,6 +260,11 @@ def launch_command_parser(subparsers=None):
         "--num_machines", type=int, default=None, help="The total number of machines used in this training."
     )
     parser.add_argument(
+        "--gpu_ids",
+        default=None,
+        help="What GPUs (by id) should be used for training on this machine as a comma-seperated list",
+    )
+    parser.add_argument(
         "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
     )
     parser.add_argument("--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0.")
@@ -366,6 +371,8 @@ def simple_launcher(args):
     current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
     if args.use_mps_device:
         current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    elif args.gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
@@ -420,6 +427,9 @@ def multi_gpu_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    gpu_ids = getattr(args, "gpu_ids")
+    if gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
     try:
         mixed_precision = PrecisionType(mixed_precision)
@@ -549,6 +559,9 @@ def deepspeed_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    gpu_ids = getattr(args, "gpu_ids")
+    if gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
@@ -817,6 +830,14 @@ def launch_command(args):
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_mps_device = defaults.distributed_type == DistributedType.MPS
+        if not args.use_mps_device:
+            if args.gpu_ids is None:
+                if defaults.gpu_ids is not None:
+                    args.gpu_ids = defaults.gpu_ids
+                else:
+                    args.gpu_ids = "all"
+            if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and (args.gpu_ids != "all"):
+                args.multi_gpu = False
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
