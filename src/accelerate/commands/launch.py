@@ -261,7 +261,7 @@ def launch_command_parser(subparsers=None):
     )
     parser.add_argument(
         "--gpu_ids",
-        default="all",
+        default=None,
         help="What GPUs (by id) should be used for training on this machine as a comma-seperated list",
     )
     parser.add_argument(
@@ -427,7 +427,7 @@ def multi_gpu_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
-    gpu_ids = getattr(args, "gpu_ids", "all")
+    gpu_ids = getattr(args, "gpu_ids")
     if gpu_ids != "all":
         current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
@@ -559,7 +559,7 @@ def deepspeed_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
-    gpu_ids = getattr(args, "gpu_ids", "all")
+    gpu_ids = getattr(args, "gpu_ids")
     if gpu_ids != "all":
         current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
@@ -830,7 +830,9 @@ def launch_command(args):
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_mps_device = defaults.distributed_type == DistributedType.MPS
-        if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and args.gpu_ids != "all":
+        if not args.gpu_ids and defaults.gpu_ids is not None:
+            args.gpu_ids = defaults.gpu_ids
+        if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and (args.gpu_ids != "all"):
             args.multi_gpu = False
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
