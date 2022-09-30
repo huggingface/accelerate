@@ -427,7 +427,7 @@ def multi_gpu_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
-    gpu_ids = getattr(args, "gpu_ids")
+    gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all":
         current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
@@ -550,10 +550,6 @@ def deepspeed_launcher(args):
         setattr(args, "nproc_per_node", str(num_processes))
         if main_process_port is not None:
             setattr(args, "master_port", str(main_process_port))
-    
-    gpu_ids = getattr(args, "gpu_ids")
-    if gpu_ids != "all":
-        current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
@@ -563,6 +559,9 @@ def deepspeed_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    gpu_ids = getattr(args, "gpu_ids", "all")
+    if gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
