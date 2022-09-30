@@ -260,6 +260,11 @@ def launch_command_parser(subparsers=None):
         "--num_machines", type=int, default=None, help="The total number of machines used in this training."
     )
     parser.add_argument(
+        "--gpu_ids",
+        default="all",
+        help="What GPUs (by id) should be used for training as a comma-seperated list",
+    )
+    parser.add_argument(
         "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
     )
     parser.add_argument("--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0.")
@@ -362,6 +367,8 @@ def simple_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
+    if args.gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
     current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
     if args.use_mps_device:
@@ -398,6 +405,7 @@ def multi_gpu_launcher(args):
     num_machines = getattr(args, "num_machines")
     main_process_ip = getattr(args, "main_process_ip")
     main_process_port = getattr(args, "main_process_port")
+    gpu_ids = getattr(args, "gpu_ids")
     if num_machines > 1:
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
@@ -420,6 +428,8 @@ def multi_gpu_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    if gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
     try:
         mixed_precision = PrecisionType(mixed_precision)
