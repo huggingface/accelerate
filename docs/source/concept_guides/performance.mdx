@@ -57,7 +57,9 @@ as well as similarly for TPUs.
 The below table can be used as a quick reference to try out different batch sizes:
 
 <Tip>
-    In this example there are two GPUs for "Multi-GPU" and a TPU pod with 8 workers
+
+In this example there are two GPUs for "Multi-GPU" and a TPU pod with 8 workers
+
 </Tip>
 
 | Single GPU Batch Size | Multi-GPU Equivalent Batch Size | TPU Equivalent Batch Size |
@@ -73,8 +75,10 @@ As noted in multiple sources[[1](https://aws.amazon.com/blogs/machine-learning/s
 snippet shows doing so with Accelerate:
 
 <Tip>
-    Since users can have their own learning rate schedulers defined, we leave this up to the user to decide if they wish to scale their 
-    learning rate or not.
+
+Since users can have their own learning rate schedulers defined, we leave this up to the user to decide if they wish to scale their 
+learning rate or not.
+ 
 </Tip>
 
 ```python
