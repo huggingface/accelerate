@@ -37,6 +37,8 @@
     title: How to use Apple Silicon M1 GPUs
   title: How-To Guides
 - sections:
+  - local: concept_guides/performance
+    title: Comparing performance across distributed setups
   - local: concept_guides/gradient_synchronization
     title: Gradient synchronization
   - local: concept_guides/deferring_execution
