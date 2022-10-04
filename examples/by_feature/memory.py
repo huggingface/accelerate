@@ -122,24 +122,6 @@ def training_function(config, args):
 
     metric = evaluate.load("glue", "mrpc")
 
-    # If the batch size is too big we use gradient accumulation
-    gradient_accumulation_steps = 1
-    if batch_size > MAX_GPU_BATCH_SIZE and accelerator.distributed_type != DistributedType.TPU:
-        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
-        batch_size = MAX_GPU_BATCH_SIZE
-
-    set_seed(seed)
-    # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
-
-    # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
-    # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
-    # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
-    model = model.to(accelerator.device)
-
-    # Instantiate optimizer
-    optimizer = AdamW(params=model.parameters(), lr=lr)
-
     # New Code #
     # We now can define an inner training loop function. It should take a batch size as the only parameter,
     # and build the dataloaders in there.
@@ -147,16 +129,31 @@ def training_function(config, args):
     @find_executable_batch_size(starting_batch_size=batch_size)
     def inner_training_loop(batch_size):
         # And now just move everything below under this function
-        # Ensure that anything declared outside this function is set as `nonlocal`
-        # so it is in scope
-        nonlocal model, optimizer
+        # We need to bring in the Accelerator object from earlier
+        nonlocal accelerator
+        # And reset all of its attributes that could hold onto any memory:
+        accelerator.free_memory()
+
+        # Then we can declare the model, optimizer, and everything else:
+        set_seed(seed)
+
+        # Instantiate the model (we build the model here so that the seed also control new weights initialization)
+        model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
+
+        # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
+        # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
+        # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
+        model = model.to(accelerator.device)
+
+        # Instantiate optimizer
+        optimizer = AdamW(params=model.parameters(), lr=lr)
         train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
 
         # Instantiate scheduler
         lr_scheduler = get_linear_schedule_with_warmup(
             optimizer=optimizer,
             num_warmup_steps=100,
-            num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
+            num_training_steps=(len(train_dataloader) * num_epochs),
         )
 
         # Prepare everything
@@ -174,12 +171,10 @@ def training_function(config, args):
                 batch.to(accelerator.device)
                 outputs = model(**batch)
                 loss = outputs.loss
-                loss = loss / gradient_accumulation_steps
                 accelerator.backward(loss)
-                if step % gradient_accumulation_steps == 0:
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
 
             model.eval()
             for step, batch in enumerate(eval_dataloader):
@@ -217,7 +212,7 @@ def main():
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 256}
     training_function(config, args)
 
 
