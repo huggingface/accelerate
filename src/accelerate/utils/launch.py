@@ -52,6 +52,15 @@ def _filter_args(args):
     return new_args
 
 
+def env_var_path_add(env_var_name, new_path):
+    """
+    Extends path-based env variable with a new path
+    """
+    paths = [p for p in os.environ.get(env_var_name, "").split(":") if len(p) > 0]
+    paths.append(str(new_path))
+    return ":".join(paths)
+
+
 class PrepareForLaunch:
     """
     Prepare a function that will launched in a distributed setup.

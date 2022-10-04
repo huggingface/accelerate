@@ -45,6 +45,7 @@ from accelerate.utils import (
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
+from accelerate.utils.launch import env_var_path_add
 
 
 if is_rich_available():
@@ -573,13 +574,7 @@ def deepspeed_launcher(args):
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
         mixed_precision = "fp16"
 
-    def env_path_add(env_var_name, new_path):
-        """extend path-based env variable with a new path"""
-        paths = [p for p in os.environ.get(env_var_name, "").split(":") if len(p) > 0]
-        paths.append(str(new_path))
-        return ":".join(paths)
-
-    current_env["PYTHONPATH"] = env_path_add("PYTHONPATH", sys.executable)
+    current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", sys.executable)
     current_env["MIXED_PRECISION"] = str(mixed_precision)
     current_env["USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
