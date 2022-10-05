@@ -232,7 +232,7 @@ def gather(*tensor):
             return tensor
 
     if len(tensor) == 1: 
-        return _gather_one(tensor)
+        return (_gather_one(tensor))
     else: 
         return recursively_apply(_gather_one, tensor)
 
