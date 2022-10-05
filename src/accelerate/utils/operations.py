@@ -103,7 +103,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
     return data
 
 
-def send_to_device(tensor, device, non_blocking=True):
+def send_to_device(tensor, device, non_blocking=False):
     """
     Recursively sends the elements in a nested list/tuple/dictionary of tensors to a given device.
 
