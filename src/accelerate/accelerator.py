@@ -1088,10 +1088,11 @@ class Accelerator:
         self.unscale_gradients()
         torch.nn.utils.clip_grad_value_(parameters, clip_value)
 
-    def gather(self, tensor):
+    def gather(self, *tensor):
         """
-        Gather the values in *tensor* across all processes and concatenate them on the first dimension. Useful to
-        regroup the predictions from all processes when doing evaluation.
+        Gather the values from *tensor* across all processes and concatenate them on the first dimension. Useful to
+        regroup the predictions from all processes when doing evaluation. If multiple values are passed, will gather 
+        each and return them in the same order.
 
         Note:
             This gather happens in all processes.
@@ -1106,10 +1107,11 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_for_metrics(self, tensor):
+    def gather_for_metrics(self, *tensor):
         """
         Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
-        for gathering the inputs and targets for metric calculation.
+        for gathering the inputs and targets for metric calculation. If multiple values are passed, will gather 
+        each and return them in the same order
 
         Args:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
