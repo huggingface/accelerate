@@ -206,8 +206,8 @@ _cpu_gather = _gpu_gather
 
 def gather(*tensor):
     """
-    Recursively gathers all tensors passed from all devices. Each tensor can be a nested 
-    list/tuple/dictionary of tensors.
+    Recursively gathers all tensors passed from all devices. Each tensor can be a nested list/tuple/dictionary of
+    tensors.
 
     Args:
         *tensors (nested list/tuple/dictionary of `torch.Tensor`):
@@ -216,6 +216,7 @@ def gather(*tensor):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
+
     def _gather_one(tensor):
         if AcceleratorState().distributed_type == DistributedType.TPU:
             return _tpu_gather(tensor, name="accelerate.utils.gather")
@@ -229,7 +230,7 @@ def gather(*tensor):
             return _cpu_gather(tensor)
         else:
             return tensor
-    
+
     return recursively_apply(_gather_one, tensor)
 
 

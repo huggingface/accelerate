@@ -1091,7 +1091,7 @@ class Accelerator:
     def gather(self, *tensor):
         """
         Gather the values from *tensor* across all processes and concatenate them on the first dimension. Useful to
-        regroup the predictions from all processes when doing evaluation. If multiple values are passed, will gather 
+        regroup the predictions from all processes when doing evaluation. If multiple values are passed, will gather
         each and return them in the same order.
 
         Note:
@@ -1110,8 +1110,8 @@ class Accelerator:
     def gather_for_metrics(self, *tensor):
         """
         Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
-        for gathering the inputs and targets for metric calculation. If multiple values are passed, will gather 
-        each and return them in the same order
+        for gathering the inputs and targets for metric calculation. If multiple values are passed, will gather each
+        and return them in the same order
 
         Args:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):

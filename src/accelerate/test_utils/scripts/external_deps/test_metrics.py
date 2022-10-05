@@ -81,7 +81,7 @@ def generate_predictions(model, dataloader, accelerator):
         input, target = batch.values()
         with torch.no_grad():
             logit = model(input)
-            logit, target = accelerator.gather_for_metrics((logit, target))
+            logit, target = accelerator.gather_for_metrics(logit, target)
             logits_and_targets.append((logit, target))
     logits, targs = [], []
     for (logit, targ) in logits_and_targets:
@@ -122,7 +122,7 @@ def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
             outputs = model(**batch)
         preds = outputs.logits.argmax(dim=-1)
         references = batch["labels"]
-        preds, references = accelerator.gather_for_metrics((preds, references))
+        preds, references = accelerator.gather_for_metrics(preds, references)
         metric.add_batch(predictions=preds, references=references)
     distributed = metric.compute()
 

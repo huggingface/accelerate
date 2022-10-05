@@ -126,7 +126,7 @@ do with the [`~Accelerator.gather_for_metrics`] method.
 for inputs, targets in validation_dataloader:
     predictions = model(inputs)
     # Gather all predictions and targets
-    all_predictions, all_targets = accelerator.gather_for_metrics((predictions, targets))
+    all_predictions, all_targets = accelerator.gather_for_metrics(predictions, targets)
     # Example of use with a *Datasets.Metric*
     metric.add_batch(all_predictions, all_targets)
 ```
