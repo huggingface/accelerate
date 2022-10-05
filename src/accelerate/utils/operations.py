@@ -231,7 +231,10 @@ def gather(*tensor):
         else:
             return tensor
 
-    return recursively_apply(_gather_one, tensor)
+    if len(tensor) == 1: 
+        return _gather_one(tensor)
+    else: 
+        return recursively_apply(_gather_one, tensor)
 
 
 def _gpu_gather_object(object: Any):
