@@ -14,6 +14,7 @@
 
 import importlib
 import sys
+from functools import lru_cache
 
 import torch
 
@@ -50,6 +51,7 @@ def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
+@lru_cache()
 def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if _tpu_available and check_device:
@@ -93,6 +95,10 @@ def is_datasets_available():
     return importlib.util.find_spec("datasets") is not None
 
 
+def is_aim_available():
+    return importlib.util.find_spec("aim") is not None
+
+
 def is_tensorboard_available():
     return importlib.util.find_spec("tensorboard") is not None or importlib.util.find_spec("tensorboardX") is not None
 
@@ -107,6 +113,10 @@ def is_comet_ml_available():
 
 def is_boto3_available():
     return importlib.util.find_spec("boto3") is not None
+
+
+def is_rich_available():
+    return importlib.util.find_spec("rich") is not None
 
 
 def is_sagemaker_available():

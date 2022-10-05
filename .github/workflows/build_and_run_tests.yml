@@ -10,7 +10,7 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  check-for-setup:
+  check-for-source:
     runs-on: ubuntu-latest
     name: Check if setup was changed
     outputs:
@@ -28,18 +28,18 @@ jobs:
         id: was_changed
         run: |
           for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            if [ `basename "${file}"` = "setup.py" ]; then
+            if [ `basename "${file}"` == "setup.py" ]; then
               echo ::set-output name=changed::"1"
             fi
           done
           
   build-docker-containers:
-    needs: check-for-setup
-    if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
-    uses: ./.github/workflows/build-docker-images.yml
+    needs: check-for-source
+    if: (github.event_name == 'push') && (needs.check-for-source.outputs.changed == '1')
+    uses: ./.github/workflows/build_docker_images.yml
     secrets: inherit
 
-  run-tests:
+  run-merge-tests:
     needs: build-docker-containers
     if: always()
-    uses: ./.github/workflows/on-merge.yml
+    uses: ./.github/workflows/run_merge_tests.yml

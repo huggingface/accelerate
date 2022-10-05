@@ -196,7 +196,7 @@ from accelerate import notebook_launcher
 notebook_launcher(training_function)
 ```
 
-An example can be found in [this notebook](https://github.com/huggingface/notebooks/blob/master/examples/accelerate/simple_nlp_example.ipynb). [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/accelerate/simple_nlp_example.ipynb)
+An example can be found in [this notebook](https://github.com/huggingface/notebooks/blob/main/examples/accelerate_examples/simple_nlp_example.ipynb). [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/accelerate_examples/simple_nlp_example.ipynb)
 
 ## Why should I use 🤗 Accelerate?
 
@@ -243,3 +243,16 @@ pip install accelerate
 - FP16 with native AMP (apex on the roadmap)
 - DeepSpeed support (Experimental)
 - PyTorch Fully Sharded Data Parallel (FSDP) support (Experimental)
+
+## Citing 🤗 Accelerate
+
+If you use 🤗 Accelerate in your publication, please cite it by using the following BibTeX entry.
+
+```bibtex
+@Misc{accelerate,
+  title =        {Accelerate: Training and inference at scale made simple, efficient and adaptable.},
+  author =       {Sylvain Gugger, Lysandre Debut, Thomas Wolf, Philipp Schmid, Zachary Mueller, Sourab Mangrulkar},
+  howpublished = {\url{https://github.com/huggingface/accelerate}},
+  year =         {2022}
+}
+```

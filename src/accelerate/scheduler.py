@@ -28,7 +28,7 @@ class AcceleratedScheduler:
     to avoid making a scheduler step too fast when gradients went overflow and there was no training step (in mixed
     precision training)
 
-    When performing gradient accumulation scheduler lengths should not be changed accordingly, accelerate will always
+    When performing gradient accumulation scheduler lengths should not be changed accordingly, Accelerate will always
     step the scheduler to account for it.
 
     Args:
@@ -69,7 +69,9 @@ class AcceleratedScheduler:
             num_processes = AcceleratorState().num_processes
             for _ in range(num_processes):
                 # Special case when using OneCycle and `drop_last` was not used
-                if getattr(self.scheduler, "total_steps", 0) <= self.scheduler.last_epoch:
+                if hasattr(self.scheduler, "total_steps") and self.scheduler._step_count <= self.scheduler.total_steps:
+                    self.scheduler.step(*args, **kwargs)
+                else:
                     self.scheduler.step(*args, **kwargs)
 
     # Passthroughs

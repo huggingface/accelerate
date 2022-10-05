@@ -136,7 +136,7 @@ To run it in each of these various modes, use the following commands:
         ```
 - single GPU:
     ```bash
-    python ./nlp_example.py  # from a server with a GPU
+    python ./cv_example.py  # from a server with a GPU
     ```
 - with fp16 (mixed-precision)
     * from any server by passing `fp16=True` to the `Accelerator`.
@@ -184,6 +184,13 @@ To run it in each of these various modes, use the following commands:
     * In PyTorch:
         Add an `xmp.spawn` line in your script as you usually do.
 
+### Simple vision example (GANs)
+
+- [huggan project](https://github.com/huggingface/community-events/tree/main/huggan)
+
+### Using AWS SageMaker integration
+- [Examples showcasing AWS SageMaker integration of 🤗 Accelerate.](https://github.com/pacman100/accelerate-aws-sagemaker)
+    
 ## Finer Examples
 
 While the first two scripts are extremely barebones when it comes to what you can do with accelerate, more advanced features are documented in two other locations.

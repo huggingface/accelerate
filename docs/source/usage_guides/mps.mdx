@@ -19,7 +19,7 @@ This will map computational graphs and primitives on the MPS Graph framework and
 For more information please refer official documents [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
 and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html).
 
-### Benefits of Training and Inference using Apple M1 Chips
+### Benefits of Training and Inference using Apple Silicon Chips
 
 1. Enables users to train larger networks or batch sizes locally
 2. Reduces data retrieval latency and provides the GPU with direct access to the full memory store due to unified memory architecture. 
@@ -72,8 +72,9 @@ accelerate launch /examples/cv_example.py --data_dir images
 
 ## A few caveats to be aware of
 
-1. For `nlp_example.py` the metrics are too bad when compared to CPU-only training. 
-This means certain operations in BERT model are going wrong using mps device and this needs to be fixed by PyTorch.
+1. We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. 
+It has major fixes related to model correctness and performance improvements for transformer based models.
+Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details.
 2. Distributed setups `gloo` and `nccl` are not working with `mps` device. 
 This means that currently only single GPU of `mps` device type can be used.
 

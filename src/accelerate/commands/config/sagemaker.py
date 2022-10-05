@@ -157,7 +157,7 @@ def get_sagemaker_input():
         )
 
     distributed_type = _ask_field(
-        "Which type of machine are you using? ([0] No distributed training, [1] data parallelism): ",
+        "What is the distributed mode? ([0] No distributed training, [1] data parallelism): ",
         _convert_sagemaker_distributed_mode,
         error_message="Please enter 0 or 1",
     )
