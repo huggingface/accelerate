@@ -120,7 +120,7 @@ def send_to_device(tensor, device, non_blocking=False):
     def _send_to_device(t, device, non_blocking):
         try:
             return t.to(device, non_blocking=non_blocking)
-        except TypeError: # .to() doesn't accept non_blocking as kwarg
+        except TypeError:  # .to() doesn't accept non_blocking as kwarg
             return t.to(device)
 
     def _has_to_method(t):
