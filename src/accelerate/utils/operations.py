@@ -233,9 +233,9 @@ def gather(*tensor):
 
     results = [_gather_one(t) for t in tensor]
     # For backward compatibility of someone passing tensor = ((tensor_a, tensor_b))
-    # if len(tensor) == 1 and len(tensor[0]) > 1:
-    #     (results,) = results
-    #     results = list(results)
+    if len(tensor) == 1 and len(tensor[0]) > 1:
+        (results,) = results
+        # results = list(results)
     return results if len(results) > 1 else results[0]
 
 
