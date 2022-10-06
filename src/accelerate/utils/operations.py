@@ -235,7 +235,7 @@ def gather(*tensor):
     # For backward compatibility of someone passing tensor = ((tensor_a, tensor_b))
     if len(results) == 1 and len(results[0]) > 1:
         (results,) = results
-        results = list(results)
+        # results = list(results)
     return results if len(results) > 1 else results[0]
 
 
