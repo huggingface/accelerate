@@ -160,7 +160,7 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
-            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
+            predictions, references = accelerator.gather_for_metrics(predictions, batch["labels"])
             metric.add_batch(
                 predictions=predictions,
                 references=references,

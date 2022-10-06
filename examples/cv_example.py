@@ -173,7 +173,7 @@ def training_function(config, args):
             with torch.no_grad():
                 outputs = model(inputs)
             predictions = outputs.argmax(dim=-1)
-            predictions, references = accelerator.gather_for_metrics((predictions, batch["label"]))
+            predictions, references = accelerator.gather_for_metrics(predictions, batch["label"])
             accurate_preds = predictions == references
             num_elems += accurate_preds.shape[0]
             accurate += accurate_preds.long().sum()
