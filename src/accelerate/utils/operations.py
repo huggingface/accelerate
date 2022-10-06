@@ -235,7 +235,7 @@ def gather(*tensor):
     # For backward compatibility of someone passing tensor = ((tensor_a, tensor_b))
     if len(tensor) == 1:
         (results,) = results
-    return results if len(tensor) > 1 else results[0]
+    return results if len(results) > 1 else results[0]
 
 
 def _gpu_gather_object(object: Any):
