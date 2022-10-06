@@ -210,7 +210,7 @@ def gather(*tensor):
     tensors.
 
     Args:
-        *tensors (nested list/tuple/dictionary of `torch.Tensor`):
+        *tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to gather.
 
     Returns:
@@ -232,6 +232,9 @@ def gather(*tensor):
             return tensor
 
     results = [recursively_apply(_gather_one, t) for t in tensor]
+    # For backward compatibility of someone passing tensor = ((tensor_a, tensor_b))
+    if len(tensor) == 1:
+        (results,) = results
     return results if len(tensor) > 1 else results[0]
 
 
