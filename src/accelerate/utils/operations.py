@@ -231,11 +231,11 @@ def gather(*tensor):
         else:
             return tensor
 
-    results = [_gather_one(t) for t in tensor]
+    results = _gather_one(*tensor)
     # For backward compatibility of someone passing tensor = ((tensor_a, tensor_b))
-    if len(tensor) == 1 and len(tensor[0]) > 1:
+    if len(results) == 1 and len(results[0]) > 1:
         (results,) = results
-        # results = list(results)
+        results = list(results)
     return results if len(results) > 1 else results[0]
 
 
