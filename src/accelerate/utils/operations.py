@@ -231,8 +231,8 @@ def gather(*tensor):
         else:
             return tensor
 
-    result = recursively_apply(_gather_one, tensor)
-    return result if len(result) > 1 else result[0]
+    results = [recursively_apply(_gather_one, t) for t in tensor]
+    return results if len(results) > 1 else results[0]
 
 
 def _gpu_gather_object(object: Any):
