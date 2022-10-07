@@ -35,6 +35,7 @@ def get_cluster_input():
 
     machine_rank = 0
     num_machines = 1
+    num_processes = 1
     gpu_ids = None
     main_process_ip = None
     main_process_port = None
