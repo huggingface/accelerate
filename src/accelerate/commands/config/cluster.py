@@ -295,12 +295,6 @@ def get_cluster_input():
             default=1,
             error_message="Please enter an integer.",
         )
-
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO] and not use_cpu:
-        gpu_ids = _ask_field(
-            "What GPU(s) (by id) should be used for training on this machine as a comma-seperated list? [all]:",
-            default="all",
-        )
     elif distributed_type in [DistributedType.FSDP, DistributedType.DEEPSPEED]:
         num_processes = _ask_field(
             "How many GPU(s) should be used for distributed training? [1]:",
@@ -310,6 +304,12 @@ def get_cluster_input():
         )
     else:
         num_processes = 1
+
+    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO] and not use_cpu:
+        gpu_ids = _ask_field(
+            "What GPU(s) (by id) should be used for training on this machine as a comma-seperated list? [all]:",
+            default="all",
+        )
 
     if distributed_type != DistributedType.TPU:
         if distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config:
