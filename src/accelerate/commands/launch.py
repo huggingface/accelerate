@@ -45,6 +45,7 @@ from accelerate.utils import (
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
+from accelerate.utils.launch import env_var_path_add
 
 
 if is_rich_available():
@@ -320,6 +321,11 @@ def launch_command_parser(subparsers=None):
         "--num_machines", type=int, default=None, help="The total number of machines used in this training."
     )
     parser.add_argument(
+        "--gpu_ids",
+        default=None,
+        help="What GPUs (by id) should be used for training on this machine as a comma-seperated list",
+    )
+    parser.add_argument(
         "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
     )
     parser.add_argument("--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0.")
@@ -426,6 +432,8 @@ def simple_launcher(args):
     current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
     if args.use_mps_device:
         current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    elif args.gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
@@ -480,6 +488,9 @@ def multi_gpu_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    gpu_ids = getattr(args, "gpu_ids")
+    if gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
     try:
         mixed_precision = PrecisionType(mixed_precision)
@@ -625,6 +636,9 @@ def deepspeed_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    gpu_ids = getattr(args, "gpu_ids")
+    if gpu_ids != "all":
+        current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
@@ -636,7 +650,7 @@ def deepspeed_launcher(args):
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
         mixed_precision = "fp16"
 
-    current_env["PYTHONPATH"] = sys.executable
+    current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
     current_env["MIXED_PRECISION"] = str(mixed_precision)
     current_env["USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
@@ -895,6 +909,14 @@ def launch_command(args):
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_mps_device = defaults.distributed_type == DistributedType.MPS
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
+        if not args.use_mps_device:
+            if args.gpu_ids is None:
+                if defaults.gpu_ids is not None:
+                    args.gpu_ids = defaults.gpu_ids
+                else:
+                    args.gpu_ids = "all"
+            if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and (args.gpu_ids != "all"):
+                args.multi_gpu = False
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():

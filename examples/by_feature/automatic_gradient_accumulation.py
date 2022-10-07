@@ -28,8 +28,9 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_
 
 ########################################################################
 # This is a fully working simple example to use Accelerate,
-# specifically showcasing how to ensure out-of-memory errors never
-# interrupt training, and builds off the `nlp_example.py` script.
+# specifically showcasing how to combine both the gradient accumulation
+# and automatic batch size finder utilities of Accelerate to perfrom
+# automatic gradient accumulation
 #
 # This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):
@@ -47,8 +48,6 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_
 #
 ########################################################################
 
-
-MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
 
@@ -118,23 +117,32 @@ def training_function(config, args):
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     seed = int(config["seed"])
-    batch_size = int(config["batch_size"])
+    observed_batch_size = int(config["batch_size"])
 
     metric = evaluate.load("glue", "mrpc")
 
     # New Code #
-    # We now can define an inner training loop function. It should take a batch size as the only parameter,
-    # and build the dataloaders in there.
-    # It also gets our decorator
-    @find_executable_batch_size(starting_batch_size=batch_size)
+    # We use the `find_executable_batch_size` decorator, passing in the desired observed batch size
+    # to train on. If a CUDA OOM error occurs, it will retry this loop cutting the batch size in
+    # half each time. From this, we can calculate the number of gradient accumulation steps needed
+    # and modify the Accelerator object as a result
+    @find_executable_batch_size(starting_batch_size=int(observed_batch_size))
     def inner_training_loop(batch_size):
-        # And now just move everything below under this function
-        # We need to bring in the Accelerator object from earlier
+        # Since we need to modify the outside accelerator object, we need to bring it
+        # to the local scope
         nonlocal accelerator
-        # And reset all of its attributes that could hold onto any memory:
+
+        # We can calculate the number of gradient accumulation steps based on the current
+        # batch size vs the starting batch size
+        num_gradient_accumulation_steps = observed_batch_size // batch_size
+
+        # And then set it in the Accelerator directly:
+        accelerator.gradient_accumulation_steps = num_gradient_accumulation_steps
+
+        # Next we need to free all of the stored model references in the Accelerator each time
         accelerator.free_memory()
 
-        # Then we can declare the model, optimizer, and everything else:
+        # And set the seed so our results are reproducable each reset
         set_seed(seed)
 
         # Instantiate the model (we build the model here so that the seed also control new weights initialization)
@@ -167,14 +175,16 @@ def training_function(config, args):
         for epoch in range(num_epochs):
             model.train()
             for step, batch in enumerate(train_dataloader):
-                # We could avoid this line since we set the accelerator with `device_placement=True`.
-                batch.to(accelerator.device)
-                outputs = model(**batch)
-                loss = outputs.loss
-                accelerator.backward(loss)
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+                # And perform gradient accumulation
+                with accelerator.accumulate(model):
+                    # We could avoid this line since we set the accelerator with `device_placement=True`.
+                    batch.to(accelerator.device)
+                    outputs = model(**batch)
+                    loss = outputs.loss
+                    accelerator.backward(loss)
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
 
             model.eval()
             for step, batch in enumerate(eval_dataloader):
@@ -212,7 +222,9 @@ def main():
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
+    # New Code #
+    # We modify the starting batch size to be an observed batch size of 256, to guarentee an initial CUDA OOM
+    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 256}
     training_function(config, args)
 
 

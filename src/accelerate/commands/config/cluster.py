@@ -35,6 +35,7 @@ def get_cluster_input():
 
     machine_rank = 0
     num_machines = 1
+    gpu_ids = None
     main_process_ip = None
     main_process_port = None
     rdzv_backend = "static"
@@ -354,6 +355,12 @@ def get_cluster_input():
             default=1,
             error_message="Please enter an integer.",
         )
+
+    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO] and not use_cpu:
+        gpu_ids = _ask_field(
+            "What GPU(s) (by id) should be used for training on this machine as a comma-seperated list? [all]:",
+            default="all",
+        )
     elif distributed_type in [DistributedType.FSDP, DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
         num_processes = _ask_field(
             "How many GPU(s) should be used for distributed training? [1]:",
@@ -386,6 +393,7 @@ def get_cluster_input():
         compute_environment=ComputeEnvironment.LOCAL_MACHINE,
         distributed_type=distributed_type,
         num_processes=num_processes,
+        gpu_ids=gpu_ids,
         mixed_precision=mixed_precision,
         downcast_bf16=downcast_bf16,
         machine_rank=machine_rank,
