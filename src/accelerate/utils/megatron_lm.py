@@ -36,9 +36,18 @@ if is_transformers_available():
 
 
 if is_megatron_lm_available():
-    from megatron import get_args, get_num_microbatches, get_tensorboard_writer, get_timers, mpu, print_rank_last
+    from megatron import (
+        get_args,
+        get_num_microbatches,
+        get_tensorboard_writer,
+        get_timers,
+        mpu,
+        print_rank_0,
+        print_rank_last,
+    )
     from megatron.arguments import _add_data_args, _add_validation_args, parse_args, validate_args
     from megatron.checkpointing import load_args_from_checkpoint, load_checkpoint, save_checkpoint
+    from megatron.data.data_samplers import MegatronPretrainingRandomSampler, MegatronPretrainingSampler
     from megatron.global_vars import set_global_variables
     from megatron.initialize import (
         _compile_dependencies,
@@ -52,12 +61,7 @@ if is_megatron_lm_available():
     from megatron.optimizer import get_megatron_optimizer
     from megatron.schedules import get_forward_backward_func
     from megatron.tokenizer.tokenizer import _vocab_size_with_padding
-    from megatron.training import (
-        build_train_valid_test_data_iterators,
-        get_model,
-        get_optimizer_param_scheduler,
-        training_log,
-    )
+    from megatron.training import get_model, get_optimizer_param_scheduler, training_log
     from megatron.utils import (
         average_losses_across_data_parallel_group,
         calc_params_l2_norm,
@@ -141,8 +145,7 @@ class MegatronLMDummyDataLoader:
         for key, value in self.dataset_args.items():
             setattr(args, key, value)
 
-    @staticmethod
-    def get_train_valid_test_datasets_provider():
+    def get_train_valid_test_datasets_provider(self):
         def train_valid_test_datasets_provider(train_val_test_num_samples):
             """Build train, valid, and test datasets."""
             args = get_args()
@@ -190,6 +193,136 @@ class MegatronLMDummyDataLoader:
 
         return train_valid_test_datasets_provider
 
+    def build_pretraining_data_loader(self, dataset, consumed_samples):
+        """Buld dataloader given an input dataset."""
+
+        if dataset is None:
+            return None
+        args = get_args()
+        micro_batch_size = args.micro_batch_size * args.num_micro_batches
+
+        # Megatron sampler
+        if args.dataloader_type == "single":
+            batch_sampler = MegatronPretrainingSampler(
+                total_samples=len(dataset),
+                consumed_samples=consumed_samples,
+                micro_batch_size=micro_batch_size,
+                data_parallel_rank=mpu.get_data_parallel_rank(),
+                data_parallel_size=mpu.get_data_parallel_world_size(),
+            )
+        elif args.dataloader_type == "cyclic":
+            batch_sampler = MegatronPretrainingRandomSampler(
+                dataset,
+                total_samples=len(dataset),
+                consumed_samples=consumed_samples,
+                micro_batch_size=micro_batch_size,
+                data_parallel_rank=mpu.get_data_parallel_rank(),
+                data_parallel_size=mpu.get_data_parallel_world_size(),
+                data_sharding=args.data_sharding,
+            )
+        else:
+            raise Exception("{} dataloader type is not supported.".format(args.dataloader_type))
+
+        # Torch dataloader.
+        return torch.utils.data.DataLoader(
+            dataset, batch_sampler=batch_sampler, num_workers=args.num_workers, pin_memory=True
+        )
+
+    def build_train_valid_test_data_iterators(self):
+        """XXX"""
+
+        def cyclic_iter(iter):
+            while True:
+                for x in iter:
+                    yield x
+
+        args = get_args()
+
+        (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
+
+        print_rank_0("> building train, validation, and test datasets ...")
+
+        # Backward compatibility, assume fixed batch size.
+        if args.iteration > 0 and args.consumed_train_samples == 0:
+            assert args.train_samples is None, "only backward compatiblity support for iteration-based training"
+            args.consumed_train_samples = args.iteration * args.global_batch_size
+        if args.iteration > 0 and args.consumed_valid_samples == 0:
+            if args.train_samples is None:
+                args.consumed_valid_samples = (
+                    (args.iteration // args.eval_interval) * args.eval_iters * args.global_batch_size
+                )
+
+        # Data loader only on rank 0 of each model parallel group.
+        if mpu.get_tensor_model_parallel_rank() == 0:
+
+            # Number of train/valid/test samples.
+            if args.train_samples:
+                train_samples = args.train_samples
+            else:
+                train_samples = args.train_iters * args.global_batch_size
+            eval_iters = (args.train_iters // args.eval_interval + 1) * args.eval_iters
+            test_iters = args.eval_iters
+            train_val_test_num_samples = [
+                train_samples,
+                eval_iters * args.global_batch_size,
+                test_iters * args.global_batch_size,
+            ]
+            print_rank_0(" > datasets target sizes (minimum size):")
+            print_rank_0("    train:      {}".format(train_val_test_num_samples[0]))
+            print_rank_0("    validation: {}".format(train_val_test_num_samples[1]))
+            print_rank_0("    test:       {}".format(train_val_test_num_samples[2]))
+
+            # Build the datasets.
+            train_valid_test_datasets_provider = self.get_train_valid_test_datasets_provider()
+            train_ds, valid_ds, test_ds = train_valid_test_datasets_provider(train_val_test_num_samples)
+
+            # Build dataloders.
+            train_dataloader = self.build_pretraining_data_loader(train_ds, args.consumed_train_samples)
+            valid_dataloader = self.build_pretraining_data_loader(valid_ds, args.consumed_valid_samples)
+            test_dataloader = self.build_pretraining_data_loader(test_ds, 0)
+
+            # Flags to know if we need to do training/validation/testing.
+            do_train = train_dataloader is not None and args.train_iters > 0
+            do_valid = valid_dataloader is not None and args.eval_iters > 0
+            do_test = test_dataloader is not None and args.eval_iters > 0
+            # Need to broadcast num_tokens and num_type_tokens.
+            flags = torch.cuda.LongTensor([int(do_train), int(do_valid), int(do_test)])
+        else:
+            flags = torch.cuda.LongTensor([0, 0, 0])
+
+        # Broadcast num tokens.
+        torch.distributed.broadcast(
+            flags, mpu.get_tensor_model_parallel_src_rank(), group=mpu.get_tensor_model_parallel_group()
+        )
+        args.do_train = flags[0].item()
+        args.do_valid = flags[1].item()
+        args.do_test = flags[2].item()
+
+        # Build iterators.
+        dl_type = args.dataloader_type
+        assert dl_type in ["single", "cyclic"]
+
+        if train_dataloader is not None:
+            train_data_iterator = (
+                iter(train_dataloader) if dl_type == "single" else iter(cyclic_iter(train_dataloader))
+            )
+        else:
+            train_data_iterator = None
+
+        if valid_dataloader is not None:
+            valid_data_iterator = (
+                iter(valid_dataloader) if dl_type == "single" else iter(cyclic_iter(valid_dataloader))
+            )
+        else:
+            valid_data_iterator = None
+
+        if test_dataloader is not None:
+            test_data_iterator = iter(test_dataloader) if dl_type == "single" else iter(cyclic_iter(test_dataloader))
+        else:
+            test_data_iterator = None
+
+        return train_data_iterator, valid_data_iterator, test_data_iterator
+
 
 def prepare_data_loader(accelerator, dataloader):
     accelerator.print("Preparing dataloader")
@@ -232,15 +365,11 @@ def prepare_data_loader(accelerator, dataloader):
             ) = args.consumed_samples
         else:
             args.consumed_train_samples, args.consumed_valid_samples, args.consumed_test_samples = 0, 0, 0
-        train_data_iterator, valid_data_iterator, test_data_iterator = build_train_valid_test_data_iterators(
-            MegatronLMDummyDataLoader.get_train_valid_test_datasets_provider()
-        )
-        for dataloader in [train_data_iterator, valid_data_iterator, test_data_iterator]:
-            if dataloader is not None:
-                dataloader._index_sampler.micro_batch_size = args.micro_batch_size * args.num_micro_batches
-                dataloader._index_sampler.micro_batch_times_data_parallel_size = (
-                    dataloader._index_sampler.micro_batch_times_data_parallel_size * args.num_micro_batches
-                )
+        (
+            train_data_iterator,
+            valid_data_iterator,
+            test_data_iterator,
+        ) = dataloader.build_train_valid_test_data_iterators()
         accelerator.state.megatron_lm_plugin.eval_iters = args.eval_iters
         accelerator.state.megatron_lm_plugin.eval_interval = args.eval_interval
         return train_data_iterator, valid_data_iterator, test_data_iterator

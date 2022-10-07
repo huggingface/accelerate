@@ -919,6 +919,8 @@ class MegatronLMPlugin:
             self.megatron_lm_default_args["fp16"] = True
         elif mixed_precision == "bf16":
             self.megatron_lm_default_args["bf16"] = True
+            self.DDP_impl = "local"
+            self.megatron_lm_default_args["DDP_impl"] = self.DDP_impl
 
     def set_training_args(self, micro_batch_size, dp_degree):
         self.data_parallel_size = dp_degree

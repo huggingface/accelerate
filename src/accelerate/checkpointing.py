@@ -155,15 +155,18 @@ def load_accelerator_state(input_dir, models, optimizers, schedulers, process_in
         logger.info("GradScaler state loaded successfully")
 
     # Random states
-    states = torch.load(os.path.join(input_dir, f"{RNG_STATE_NAME}_{process_index}.pkl"))
-    random.setstate(states["random_state"])
-    np.random.set_state(states["numpy_random_seed"])
-    torch.set_rng_state(states["torch_manual_seed"])
-    torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
-    # ^^ safe to call this function even if cuda is not available
-    if is_tpu_available():
-        xm.set_rng_state(states["xm_seed"])
-    logger.info("All random states loaded successfully")
+    try:
+        states = torch.load(os.path.join(input_dir, f"{RNG_STATE_NAME}_{process_index}.pkl"))
+        random.setstate(states["random_state"])
+        np.random.set_state(states["numpy_random_seed"])
+        torch.set_rng_state(states["torch_manual_seed"])
+        torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
+        # ^^ safe to call this function even if cuda is not available
+        if is_tpu_available():
+            xm.set_rng_state(states["xm_seed"])
+        logger.info("All random states loaded successfully")
+    except:
+        logger.info("Could not load random states")
 
 
 def save_custom_state(obj, path, index: int = 0):
