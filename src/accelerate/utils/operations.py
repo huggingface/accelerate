@@ -436,7 +436,7 @@ def reduce(tensor, reduction="mean"):
         tensor (nested list/tuple/dictionary of `torch.Tensor`):
             The data to reduce.
         reduction (`str`, *optional*, defaults to `"mean"`):
-            A reduction method. Can be of "mean", "sum", or "none"
+            A reduction method. Can be either "mean" or "sum"
 
     Returns:
         The same data structure as `data` with all the tensors reduced.
@@ -445,27 +445,25 @@ def reduce(tensor, reduction="mean"):
     def _reduce_across_processes(tensor, reduction="mean"):
         state = AcceleratorState()
         cloned_tensor = tensor.clone()
+        
+        ### Since only sum operation is avaiable in xm.all_reduce and torch.distributed.all_reduce
         if state.distributed_type == DistributedType.TPU:
             xm.all_reduce("sum", cloned_tensor)
-            if reduction=='sum':
-                return cloned_tensor
-            else:
-                return cloned_tensor/tensor.Tensor(state.num_processes, device=cloned_tensor.device)
         elif state.distributed_type in [
             DistributedType.DEEPSPEED,
             DistributedType.MULTI_GPU,
             DistributedType.FSDP,
         ]:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
-            if reduction=='sum':
-                return cloned_tensor
-            else:
-                return cloned_tensor/tensor.Tensor(state.num_processes, device=cloned_tensor.device)
         else:
-            if reduction == "sum":
-                return cloned_tensor.sum()
-            else:
-                return cloned_tensor.mean()
+            cloned_tensor.sum()
+            
+        if reduction=='sum':
+            return cloned_tensor
+        elif reduction=='mean':
+            return cloned_tensor/torch.tensor(state.num_processes, device=cloned_tensor.device)
+        else:
+            raise TypeError(f"Only mean and sum reductions are supported, found {reduction}.")
 
     return recursively_apply(_reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction)
 
