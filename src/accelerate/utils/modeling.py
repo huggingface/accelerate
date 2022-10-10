@@ -258,7 +258,7 @@ def get_max_layer_size(
     modules_to_treat = modules.copy()
     while len(modules_to_treat) > 0:
         module_name, module = modules_to_treat.pop(0)
-        modules_children = list(module.named_children())
+        modules_children = list(module.named_children()) if isinstance(module, torch.nn.Module) else []
         if len(modules_children) == 0 or module.__class__.__name__ in no_split_module_classes:
             # No splitting this one so we compare to the max_size
             size = module_sizes[module_name]
