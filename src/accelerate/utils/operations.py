@@ -67,7 +67,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
             The base type of the objects to which apply `func`.
         error_on_other_type (`bool`, *optional*, defaults to `False`):
             Whether to return an error or not if after unpacking `data`, we get on an object that is not of type
-            `main_type`. If `False`, the function will leave objects of types different than `main_type` unchanged.
+            `main_type`. If `False`, the function will leave objects of types different than `main_type` unchanged. 
         **kwargs:
             Keyword arguments that will be passed to `func` when applied on the unpacked data.
 
@@ -384,7 +384,7 @@ def concatenate(data, dim=0):
 def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     """
     Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so they
-    can safely be gathered.
+    can safely be gathered. 
 
     Args:
         tensor (nested list/tuple/dictionary of `torch.Tensor`):
@@ -430,7 +430,7 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
 def reduce(tensor, reduction="mean"):
     """
     Recursively reduce the tensors in a nested list/tuple/dictionary of lists of tensors across all processes by the
-    mean of a given operation.
+    mean of a given operation. 
 
     Args:
         tensor (nested list/tuple/dictionary of `torch.Tensor`):
@@ -445,7 +445,7 @@ def reduce(tensor, reduction="mean"):
     def _reduce_across_processes(tensor, reduction="mean"):
         state = AcceleratorState()
         cloned_tensor = tensor.clone()
-        
+
         ### Since only sum operation is avaiable in xm.all_reduce and torch.distributed.all_reduce
         if state.distributed_type == DistributedType.TPU:
             xm.all_reduce("sum", cloned_tensor)
@@ -457,11 +457,11 @@ def reduce(tensor, reduction="mean"):
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
         else:
             cloned_tensor.sum()
-            
-        if reduction=='sum':
+
+        if reduction == "sum":
             return cloned_tensor
-        elif reduction=='mean':
-            return cloned_tensor/torch.tensor(state.num_processes, device=cloned_tensor.device)
+        elif reduction == "mean":
+            return cloned_tensor / torch.tensor(state.num_processes, device=cloned_tensor.device)
         else:
             raise TypeError(f"Only mean and sum reductions are supported, found {reduction}.")
 
@@ -494,7 +494,7 @@ def convert_to_fp32(tensor):
 class ConvertOutputsToFp32:
     """
     Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
-    precision will be convert back to FP32.
+    precision will be convert back to FP32. 
 
     Use a class instead of a decorator because otherwise, the prepared model can no longer be pickled (issue #273).
 
