@@ -779,6 +779,12 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Custom train step kwargs."},
     )
+    eval_iters: int = field(
+        default=100, metadata={"help": "Number of iterations to run for evaluation validation/test for."}
+    )
+    eval_interval: int = field(
+        default=1000, metadata={"help": "Interval between running evaluation on validation set."}
+    )
 
     def __post_init__(self):
         prefix = "MEGATRON_LM_"
@@ -825,6 +831,8 @@ class MegatronLMPlugin:
             "scale_lr_cond": self.scale_lr_cond,
             "lr_mult": self.lr_mult,
             "megatron_dataset_flag": self.megatron_dataset_flag,
+            "eval_iters": self.eval_iters,
+            "eval_interval": self.eval_interval,
         }
         if self.recompute_activation:
             self.megatron_lm_default_args["recompute_granularity"] = "selective"

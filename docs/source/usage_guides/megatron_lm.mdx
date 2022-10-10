@@ -11,7 +11,7 @@ specific language governing permissions and limitations under the License.
 -->
 
 
-# Megatron LM
+# Megatron-LM
 
 ## What is integrated?
 
@@ -20,8 +20,21 @@ specific language governing permissions and limitations under the License.
 
 ### Accelerate Megatron-LM Plugin
 
-### Advanced features to leverage Megatron Indexed Datasets and writing custom train step
+### Advanced features to leverage writing custom train step and Megatron-LM Indexed Datasets
 
+### Caveats:
+1. Supports Transformers GPT2, Megatron-BERT and T5 models.
+This covers Decoder only, Encode only and Encoder-Decoder model classes.
+2. Only loss is returned from model forward pass as 
+there is quite complex interplay of pipeline, tensor and data parallelsim behind the scenes.
+The `model(**batch_data)` call return loss(es) averaged across the data parallel ranks.
+This is fine for most cases wherein pre-training jobs are run using Megatron-LM features and
+you can easily compute the `perplexity` using the loss. 
+3. The main process is the last rank as the losses are available in the last stage of pipeline.
+`accelerator.is_main_process` and `accelerator.is_local_main_process` return `True` for last rank when using 
+Megatron-LM integration
+4. in `accelerator.prepare` call, a Megatron-LM model corresponding to a given Transformers model is created
+with random weights.
 
 
 

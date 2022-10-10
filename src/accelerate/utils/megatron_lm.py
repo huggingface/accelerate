@@ -370,8 +370,6 @@ def prepare_data_loader(accelerator, dataloader):
             valid_data_iterator,
             test_data_iterator,
         ) = dataloader.build_train_valid_test_data_iterators()
-        accelerator.state.megatron_lm_plugin.eval_iters = args.eval_iters
-        accelerator.state.megatron_lm_plugin.eval_interval = args.eval_interval
         return train_data_iterator, valid_data_iterator, test_data_iterator
 
 
@@ -1127,15 +1125,21 @@ class MegatronEngine(torch.nn.Module):
         self.log_eval_results()
         args = get_args()
         args.save = output_dir
+        torch.distributed.barrier()
         save_checkpoint(self.iteration, self.module, self.optimizer, self.scheduler)
+        torch.distributed.barrier()
 
     def load_checkpoint(self, input_dir):
         args = get_args()
         args.load = input_dir
         args.consumed_train_samples = 0
         args.consumed_valid_samples = 0
+        torch.distributed.barrier()
         iteration = load_checkpoint(self.module, self.optimizer, self.scheduler)
+        torch.distributed.barrier()
         self.iteration = iteration
+        if args.fp16 and self.iteration == 0:
+            self.optimizer.reload_model_params()
 
 
 # other utilities

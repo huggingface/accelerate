@@ -986,7 +986,7 @@ class Accelerator:
             batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
             if len(batch_sizes) == 0:
                 raise ValueError(
-                    "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
+                    "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using Megatron-LM."
                 )
 
             micro_batch_size = min(batch_sizes) if megatron_lm_plugin.is_train_batch_min else max(batch_sizes)
