@@ -107,12 +107,12 @@ from .megatron_lm import (
     MegatronLMSchedulerWrapper,
     T5TrainStep,
     avg_losses_across_data_parallel_group,
-    initialize,
-    prepare_data_loader,
-    prepare_model,
-    prepare_optimizer,
-    prepare_scheduler,
 )
+from .megatron_lm import initialize as megatron_lm_initialize
+from .megatron_lm import prepare_data_loader as megatron_lm_prepare_data_loader
+from .megatron_lm import prepare_model as megatron_lm_prepare_model
+from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
+from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
 from .memory import find_executable_batch_size
 from .other import (
     extract_model_from_parallel,

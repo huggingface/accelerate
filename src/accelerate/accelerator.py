@@ -80,12 +80,12 @@ if is_megatron_lm_available():
         MegatronLMDummyScheduler,
         MegatronLMOptimizerWrapper,
         MegatronLMSchedulerWrapper,
+        megatron_lm_initialize,
+        megatron_lm_prepare_data_loader,
+        megatron_lm_prepare_model,
+        megatron_lm_prepare_optimizer,
+        megatron_lm_prepare_scheduler,
     )
-    from .utils import initialize as megatron_lm_initialize
-    from .utils import prepare_data_loader as megatron_lm_prepare_data_loader
-    from .utils import prepare_model as megatron_lm_prepare_model
-    from .utils import prepare_optimizer as megatron_lm_prepare_optimizer
-    from .utils import prepare_scheduler as megatron_lm_prepare_scheduler
 
 
 if is_tpu_available(check_device=False):
