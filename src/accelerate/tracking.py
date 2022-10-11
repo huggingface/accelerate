@@ -62,7 +62,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
     A base Tracker class to be used for all logging integration implementations.
 
     Each function should take in `**kwargs` that will automatically be passed in from a base dictionary provided to
-    [`Accelerator`]
+    [`Accelerator`] 
     """
 
     @abstractproperty
@@ -81,12 +81,12 @@ class GeneralTracker(object, metaclass=ABCMeta):
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Implementations should use the experiment configuration
-        functionality of a tracking API.
+        functionality of a tracking API. 
 
         Args:
             values (Dictionary `str` to `bool`, `str`, `float` or `int`):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
-                `str`, `float`, `int`, or `None`.
+                `str`, `float`, `int`, or `None`. 
         """
         pass
 
@@ -94,7 +94,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
     def log(self, values: dict, step: Optional[int], **kwargs):
         """
         Logs `values` to the current run. Base `log` implementations of a tracking API should go in here, along with
-        special behavior for the `step parameter.
+        special behavior for the `step parameter. 
 
         Args:
             values (Dictionary `str` to `str`, `float`, or `int`):
@@ -107,7 +107,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
     def finish(self):
         """
         Should run any finalizing functions within the tracking API. If the API should not have one, just don't
-        overwrite that method.
+        overwrite that method. 
         """
         pass
 
@@ -151,12 +151,12 @@ class TensorBoardTracker(GeneralTracker):
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment. Stores the
-        hyperparameters in a yaml file for future use.
+        hyperparameters in a yaml file for future use. 
 
         Args:
             values (Dictionary `str` to `bool`, `str`, `float` or `int`):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
-                `str`, `float`, `int`, or `None`.
+                `str`, `float`, `int`, or `None`. 
         """
         self.writer.add_hparams(values, metric_dict={})
         self.writer.flush()
@@ -178,12 +178,12 @@ class TensorBoardTracker(GeneralTracker):
         Args:
             values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
                 Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int` or `dict` of
-                `str` to `float`/`int`.
+                `str` to `float`/`int`. 
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
             kwargs:
                 Additional key word arguments passed along to either `SummaryWriter.add_scaler`,
-                `SummaryWriter.add_text`, or `SummaryWriter.add_scalers` method based on the contents of `values`.
+                `SummaryWriter.add_text`, or `SummaryWriter.add_scalers` method based on the contents of `values`. 
         """
         for k, v in values.items():
             if isinstance(v, (int, float)):
@@ -236,7 +236,7 @@ class WandBTracker(GeneralTracker):
         Args:
             values (Dictionary `str` to `bool`, `str`, `float` or `int`):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
-                `str`, `float`, `int`, or `None`.
+                `str`, `float`, `int`, or `None`. 
         """
         wandb.config.update(values)
         logger.debug("Stored initial configuration hyperparameters to WandB")
@@ -248,7 +248,7 @@ class WandBTracker(GeneralTracker):
         Args:
             values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
                 Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int` or `dict` of
-                `str` to `float`/`int`.
+                `str` to `float`/`int`. 
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
             kwargs:
@@ -300,7 +300,7 @@ class CometMLTracker(GeneralTracker):
         Args:
             values (Dictionary `str` to `bool`, `str`, `float` or `int`):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
-                `str`, `float`, `int`, or `None`.
+                `str`, `float`, `int`, or `None`. 
         """
         self.writer.log_parameters(values)
         logger.debug("Stored initial configuration hyperparameters to CometML")
@@ -312,12 +312,12 @@ class CometMLTracker(GeneralTracker):
         Args:
             values (Dictionary `str` to `str`, `float`, `int` or `dict` of `str` to `float`/`int`):
                 Values to be logged as key-value pairs. The values need to have type `str`, `float`, `int` or `dict` of
-                `str` to `float`/`int`.
+                `str` to `float`/`int`. 
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
             kwargs:
                 Additional key word arguments passed along to either `Experiment.log_metric`, `Experiment.log_other`,
-                or `Experiment.log_metrics` method based on the contents of `values`.
+                or `Experiment.log_metrics` method based on the contents of `values`. 
         """
         if step is not None:
             self.writer.set_step(step)
@@ -411,21 +411,21 @@ def filter_trackers(
 ):
     """
     Takes in a list of potential tracker types and checks that:
-        - The tracker wanted is available in that environment
-        - Filters out repeats of tracker types
-        - If `all` is in `log_with`, will return all trackers in the environment
-        - If a tracker requires a `logging_dir`, ensures that `logging_dir` is not `None`
+        - The tracker wanted is available in that environment 
+        - Filters out repeats of tracker types 
+        - If `all` is in `log_with`, will return all trackers in the environment 
+        - If a tracker requires a `logging_dir`, ensures that `logging_dir` is not `None` 
 
     Args:
         log_with (list of `str`, [`~utils.LoggerType`] or [`~tracking.GeneralTracker`], *optional*):
             A list of loggers to be setup for experiment tracking. Should be one or several of:
 
-            - `"all"`
-            - `"tensorboard"`
-            - `"wandb"`
-            - `"comet_ml"`
+            - `"all"` 
+            - `"tensorboard"` 
+            - `"wandb"` 
+            - `"comet_ml"` 
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
-            also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
+            also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`. 
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
     """

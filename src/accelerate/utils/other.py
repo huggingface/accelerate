@@ -118,7 +118,7 @@ def get_pretty_name(obj):
 def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file):
     """
     Creates and saves a basic cluster config to be used on a local machine with potentially multiple GPUs. Will also
-    set CPU if it is a CPU-only machine.
+    set CPU if it is a CPU-only machine. 
 
     Args:
         mixed_precision (`str`, *optional*, defaults to "no"):
@@ -126,7 +126,7 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         save_location (`str`, *optional*, defaults to `default_json_config_file`):
             Optional custom save location. Should be passed to `--config_file` when using `accelerate launch`. Default
             location is inside the huggingface cache folder (`~/.cache/huggingface`) but can be overriden by setting
-            the `HF_HOME` environmental variable, followed by `accelerate/default_config.yaml`.
+            the `HF_HOME` environmental variable, followed by `accelerate/default_config.yaml`. 
     """
     path = Path(save_location)
     path.parent.mkdir(parents=True, exist_ok=True)

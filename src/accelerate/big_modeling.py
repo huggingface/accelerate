@@ -36,7 +36,7 @@ from .utils.versions import is_torch_version
 def init_empty_weights(include_buffers: bool = False):
     """
     A context manager under which models are initialized with all parameters on the meta device, therefore creating an
-    empty model. Useful when just initializing the model would blow the available RAM.
+    empty model. Useful when just initializing the model would blow the available RAM. 
 
     Args:
         include_buffers (`bool`, *optional*, defaults to `False`):
@@ -56,7 +56,7 @@ def init_empty_weights(include_buffers: bool = False):
     <Tip warning={true}>
 
     Any model created under this context manager has no weights. As such you can't do something like
-    `model.to(some_device)` with it. To load weights inside your empty model, see [`load_checkpoint_and_dispatch`].
+    `model.to(some_device)` with it. To load weights inside your empty model, see [`load_checkpoint_and_dispatch`]. 
 
     </Tip>
     """
@@ -119,14 +119,14 @@ def cpu_offload(
     """
     Activates full CPU offload for a model. As a result, all parameters of the model will be offloaded and only one
     copy of the state dict of the model will be kept. During the forward pass, parameters will be extracted from that
-    state dict and put on the execution device passed as they are needed, then offloaded again.
+    state dict and put on the execution device passed as they are needed, then offloaded again. 
 
     Args:
         model (`torch.nn.Module`):
             The model to offload.
         execution_device (`torch.device`, *optional*):
             The device on which the forward pass of the model will be executed (should be a GPU). Will default to the
-            model first parameter device.
+            model first parameter device. 
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to offload the buffers with the model parameters.
         state_dict (`Dict[str, torch.Tensor]`, *optional*):
@@ -135,7 +135,7 @@ def cpu_offload(
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
-            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly. 
     """
     if not is_torch_version(">=", "1.9.0"):
         raise NotImplementedError("CPU offloading requires torch >= 1.9.0")
@@ -165,7 +165,7 @@ def disk_offload(
     """
     Activates full disk offload for a model. As a result, all parameters of the model will be offloaded as
     memory-mapped array in a given folder. During the forward pass, parameters will be accessed from that folder and
-    put on the execution device passed as they are needed, then offloaded again.
+    put on the execution device passed as they are needed, then offloaded again. 
 
     Args:
         model (`torch.nn.Module`): The model to offload.
@@ -173,14 +173,14 @@ def disk_offload(
             The folder in which to offload the model weights (or where the model weights are already offloaded).
         execution_device (`torch.device`, *optional*):
             The device on which the forward pass of the model will be executed (should be a GPU). Will default to the
-            model's first parameter device.
+            model's first parameter device. 
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to offload the buffers with the model parameters.
         preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
-            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly. 
     """
     if not is_torch_version(">=", "1.9.0"):
         raise NotImplementedError("Disk offloading requires torch >= 1.9.0")
@@ -212,17 +212,17 @@ def dispatch_model(
 ):
     """
     Dispatches a model according to a given device map. Layers of the model might be spread across GPUs, offloaded on
-    the CPU or even the disk.
+    the CPU or even the disk. 
 
     Args:
         model (`torch.nn.Module`):
             The model to dispatch.
         device_map (`Dict[str, Union[str, int, torch.device]]`):
             A dictionary mapping module names in the models `state_dict` to the device they should go to. Note that
-            `"disk"` is accepted even if it's not a proper value for `torch.device`.
+            `"disk"` is accepted even if it's not a proper value for `torch.device`. 
         main_device (`str`, `int` or `torch.device`, *optional*):
             The main execution device. Will default to the first device in the `device_map` different from `"cpu"` or
-            `"disk"`.
+            `"disk"`. 
         state_dict (`Dict[str, torch.Tensor]`, *optional*):
             The state dict of the part of the model that will be kept on CPU.
         offload_dir (`str` or `os.PathLike`):
@@ -233,7 +233,7 @@ def dispatch_model(
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
-            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly. 
     """
     if not is_torch_version(">=", "1.9.0"):
         raise NotImplementedError("Model dispatching requires torch >= 1.9.0")
@@ -295,43 +295,43 @@ def load_checkpoint_and_dispatch(
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
-    loaded and adds the various hooks that will make this model run properly (even if split across devices).
+    loaded and adds the various hooks that will make this model run properly (even if split across devices). 
 
     Args:
         model (`torch.nn.Module`): The model in which we want to load a checkpoint.
         checkpoint (`str` or `os.PathLike`):
             The folder checkpoint to load. It can be:
-            - a path to a file containing a whole model state dict
-            - a path to a `.json` file containing the index to a sharded checkpoint
-            - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint.
+            - a path to a file containing a whole model state dict 
+            - a path to a `.json` file containing the index to a sharded checkpoint 
+            - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint. 
         device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
             A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
-            name, once a given module name is inside, every submodule of it will be sent to the same device.
+            name, once a given module name is inside, every submodule of it will be sent to the same device. 
 
             To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`. For more
-            information about each option see [here](big_modeling#designing-a-device-map).
+            information about each option see [here](big_modeling#designing-a-device-map). 
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available for each GPU
-            and the available CPU RAM if unset.
+            and the available CPU RAM if unset. 
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
-            residual connection).
+            residual connection). 
         offload_folder (`str` or `os.PathLike`, *optional*):
             If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             In the layers that are offloaded on the CPU or the hard drive, whether or not to offload the buffers as
-            well as the parameters.
+            well as the parameters. 
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
         offload_state_dict (`bool`, *optional*):
             If `True`, will temporarily offload the CPU state dict on the hard drive to avoid getting out of CPU RAM if
             the weight of the CPU state dict + the biggest shard does not fit. Will default to `True` if the device map
-            picked contains `"disk"` values.
+            picked contains `"disk"` values. 
         preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
-            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly. 
     """
     if not is_torch_version(">=", "1.9.0"):
         raise NotImplementedError("Loading and dispatching requires torch >= 1.9.0")

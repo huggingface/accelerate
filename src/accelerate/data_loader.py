@@ -44,11 +44,11 @@ if is_tpu_available(check_device=False):
 
         **Available attributes:**
 
-        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
+        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes. 
             Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
-            number of processes
+            number of processes 
 
-        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
+        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes. 
         """
 
         @property
@@ -93,7 +93,7 @@ class BatchSamplerShard(BatchSampler):
     Wraps a PyTorch `BatchSampler` to generate batches for one of the processes only. Instances of this class will
     always yield a number of batches that is a round multiple of `num_processes` and that all have the same size.
     Depending on the value of the `drop_last` attribute of the batch sampler passed, it will either stop the iteration
-    at the first batch that would be too small / not present on all processes or loop with indices from the beginning.
+    at the first batch that would be too small / not present on all processes or loop with indices from the beginning. 
 
     Args:
         batch_sampler (`torch.utils.data.sampler.BatchSampler`):
@@ -104,14 +104,14 @@ class BatchSamplerShard(BatchSampler):
             The index of the current process.
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the shards should be created by splitting a batch to give a piece of it on each process, or by
-            yielding different full batches on each process.
+            yielding different full batches on each process. 
 
             On two processes with a sampler of `[[0, 1, 2, 3], [4, 5, 6, 7]]`, this will result in:
 
             - the sampler on process 0 to yield `[0, 1, 2, 3]` and the sampler on process 1 to yield `[4, 5, 6, 7]` if
-              this argument is set to `False`.
+              this argument is set to `False`. 
             - the sampler on process 0 to yield `[0, 1]` then `[4, 5]` and the sampler on process 1 to yield `[2, 3]`
-              then `[6, 7]` if this argument is set to `True`.
+              then `[6, 7]` if this argument is set to `True`. 
 
     <Tip warning={true}>
 
@@ -219,31 +219,31 @@ class IterableDatasetShard(IterableDataset):
     always yield a number of samples that is a round multiple of the actual batch size (depending of the value of
     `split_batches`, this is either `batch_size` or `batch_size x num_processes`). Depending on the value of the
     `drop_last` attribute of the batch sampler passed, it will either stop the iteration at the first batch that would
-    be too small or loop with indices from the beginning.
+    be too small or loop with indices from the beginning. 
 
     Args:
         dataset (`torch.utils.data.dataset.IterableDataset`):
             The batch sampler to split in several shards.
         batch_size (`int`, *optional*, defaults to 1):
             The size of the batches per shard (if `split_batches=False`) or the size of the batches (if
-            `split_batches=True`).
+            `split_batches=True`). 
         drop_last (`bool`, *optional*, defaults to `False`):
             Whether or not to drop the last incomplete batch or complete the last batches by using the samples from the
-            beginning.
+            beginning. 
         num_processes (`int`, *optional*, defaults to 1):
             The number of processes running concurrently.
         process_index (`int`, *optional*, defaults to 0):
             The index of the current process.
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the shards should be created by splitting a batch to give a piece of it on each process, or by
-            yielding different full batches on each process.
+            yielding different full batches on each process. 
 
             On two processes with an iterable dataset yielding of `[0, 1, 2, 3, 4, 5, 6, 7]`, this will result in:
 
             - the shard on process 0 to yield `[0, 1, 2, 3]` and the shard on process 1 to yield `[4, 5, 6, 7]` if this
-              argument is set to `False`.
+              argument is set to `False`. 
             - the shard on process 0 to yield `[0, 1, 4, 5]` and the sampler on process 1 to yield `[2, 3, 6, 7]` if
-              this argument is set to `True`.
+              this argument is set to `True`. 
     """
 
     def __init__(
@@ -305,12 +305,12 @@ class DataLoaderShard(DataLoader):
             If passed, the device to put all batches on.
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration. Should be one or
-            several of:
+            several of: 
 
-            - `"torch"`: the base torch random number generator
-            - `"cuda"`: the CUDA random number generator (GPU only)
-            - `"xla"`: the XLA random number generator (TPU only)
-            - `"generator"`: an optional `torch.Generator`
+            - `"torch"`: the base torch random number generator 
+            - `"cuda"`: the CUDA random number generator (GPU only) 
+            - `"xla"`: the XLA random number generator (TPU only) 
+            - `"generator"`: an optional `torch.Generator` 
         generator (`torch.Generator`, *optional*):
             A random number generator to keep synchronized across processes.
         kwargs:
@@ -318,11 +318,11 @@ class DataLoaderShard(DataLoader):
 
     **Available attributes:**
 
-        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
+        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes. 
             Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
-            number of processes
+            number of processes 
 
-        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
+        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes. 
     """
 
     def __init__(self, dataset, device=None, rng_types=None, generator=None, **kwargs):
@@ -389,15 +389,15 @@ class DataLoaderDispatcher(DataLoader):
             `num_processes` batches at each iteration). Another way to see this is that the observed batch size will be
             the same as the initial `dataloader` if this option is set to `True`, the batch size of the initial
             `dataloader` multiplied by `num_processes` otherwise. Setting this option to `True` requires that the batch
-            size of the `dataloader` is a round multiple of `batch_size`.
+            size of the `dataloader` is a round multiple of `batch_size`. 
 
     **Available attributes:**
 
-        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
+        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes. 
             Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
-            number of processes
+            number of processes 
 
-        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
+        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes. 
     """
 
     def __init__(self, dataset, split_batches: bool = False, _drop_last: bool = False, **kwargs):
@@ -548,7 +548,7 @@ def prepare_data_loader(
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
 
     Depending on the value of the `drop_last` attribute of the `dataloader` passed, it will either stop the iteration
-    at the first batch that would be too small / not present on all processes or loop with indices from the beginning.
+    at the first batch that would be too small / not present on all processes or loop with indices from the beginning. 
 
     Args:
         dataloader (`torch.utils.data.dataloader.DataLoader`):
@@ -557,37 +557,37 @@ def prepare_data_loader(
             The target device for the returned `DataLoader`.
         num_processes (`int`, *optional*):
             The number of processes running concurrently. Will default to the value given by
-            [`~state.AcceleratorState`].
+            [`~state.AcceleratorState`]. 
         process_index (`int`, *optional*):
             The index of the current process. Will default to the value given by [`~state.AcceleratorState`].
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the resulting `DataLoader` should split the batches of the original data loader across devices or
             yield full batches (in which case it will yield batches starting at the `process_index`-th and advancing of
-            `num_processes` batches at each iteration).
+            `num_processes` batches at each iteration). 
 
             Another way to see this is that the observed batch size will be the same as the initial `dataloader` if
             this option is set to `True`, the batch size of the initial `dataloader` multiplied by `num_processes`
-            otherwise.
+            otherwise. 
 
             Setting this option to `True` requires that the batch size of the `dataloader` is a round multiple of
-            `batch_size`.
+            `batch_size`. 
         put_on_device (`bool`, *optional*, defaults to `False`):
             Whether or not to put the batches on `device` (only works if the batches are nested list, tuples or
-            dictionaries of tensors).
+            dictionaries of tensors). 
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration. Should be one or
-            several of:
+            several of: 
 
-            - `"torch"`: the base torch random number generator
-            - `"cuda"`: the CUDA random number generator (GPU only)
-            - `"xla"`: the XLA random number generator (TPU only)
+            - `"torch"`: the base torch random number generator 
+            - `"cuda"`: the CUDA random number generator (GPU only) 
+            - `"xla"`: the XLA random number generator (TPU only) 
             - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
-              dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
+              dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type. 
 
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the datalaoder prepared is only iterated through on the main process and then the batches
             are split and broadcast to each process. Will default to `True` when the underlying dataset is an
-            `IterableDataset`, `False` otherwise.
+            `IterableDataset`, `False` otherwise. 
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches

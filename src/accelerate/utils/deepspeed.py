@@ -26,11 +26,11 @@ class HfDeepSpeedConfig:
 
     A `weakref` of this object is stored in the module's globals to be able to access the config from areas where
     things like the Trainer object is not available (e.g. `from_pretrained` and `_get_resized_embeddings`). Therefore
-    it's important that this object remains alive while the program is still running.
+    it's important that this object remains alive while the program is still running. 
 
     [`Trainer`] uses the `HfTrainerDeepSpeedConfig` subclass instead. That subclass has logic to sync the configuration
     with values of [`TrainingArguments`] by replacing special placeholder values: `"auto"`. Without this special logic
-    the DeepSpeed configuration is not modified in any way.
+    the DeepSpeed configuration is not modified in any way. 
 
     Args:
         config_file_or_dict (`Union[str, Dict]`): path to DeepSpeed config file or dict.
@@ -116,7 +116,7 @@ class HfDeepSpeedConfig:
     def is_true(self, ds_key_long):
         """
         Returns `True`/``False` only if the value is set, always `False` otherwise. So use this method to ask the very
-        specific question of whether the value is set to `True` (and it's not set to `False`` or isn't set).
+        specific question of whether the value is set to `True` (and it's not set to `False`` or isn't set). 
 
         """
         value = self.get_value(ds_key_long)
@@ -125,7 +125,7 @@ class HfDeepSpeedConfig:
     def is_false(self, ds_key_long):
         """
         Returns `True`/``False` only if the value is set, always `False` otherwise. So use this method to ask the very
-        specific question of whether the value is set to `False` (and it's not set to `True`` or isn't set).
+        specific question of whether the value is set to `False` (and it's not set to `True`` or isn't set). 
         """
         value = self.get_value(ds_key_long)
         return False if value is None else not bool(value)
@@ -209,7 +209,7 @@ class DeepSpeedSchedulerWrapper(AcceleratedScheduler):
 class DummyOptim:
     """
     Dummy optimizer presents model parameters or param groups, this is primarily used to follow conventional training
-    loop when optimizer config is specified in the deepspeed config file.
+    loop when optimizer config is specified in the deepspeed config file. 
 
     Args:
         lr (float):
@@ -232,7 +232,7 @@ class DummyOptim:
 class DummyScheduler:
     """
     Dummy scheduler presents model parameters or param groups, this is primarily used to follow conventional training
-    loop when scheduler config is specified in the deepspeed config file.
+    loop when scheduler config is specified in the deepspeed config file. 
 
     Args:
         optimizer (`torch.optim.optimizer.Optimizer`):

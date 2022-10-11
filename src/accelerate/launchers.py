@@ -26,17 +26,17 @@ from .utils import PrecisionType, PrepareForLaunch, patch_environment
 def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mixed_precision="no", use_port="29500"):
     """
     Launches a training function, using several processes if it's possible in the current environment (TPU with
-    multiple cores for instance).
+    multiple cores for instance). 
 
     Args:
         function (`Callable`):
             The training function to execute. If it accepts arguments, the first argument should be the index of the
-            process run.
+            process run. 
         args (`Tuple`):
             Tuple of arguments to pass to the function (it will receive `*args`).
         num_processes (`int`, *optional*):
             The number of processes to use for training. Will default to 8 in Colab/Kaggle if a TPU is available, to
-            the number of GPUs available otherwise.
+            the number of GPUs available otherwise. 
         mixed_precision (`str`, *optional*, defaults to `"no"`):
             If `fp16` or `bf16`, will use mixed precision training on multi-GPU.
         use_port (`str`, *optional*, defaults to `"29500"`):
@@ -141,7 +141,7 @@ def debug_launcher(function, args=(), num_processes=2):
     <Tip warning={true}>
 
     This function is provided for internal testing and debugging, but it's not intended for real trainings. It will
-    only use the CPU.
+    only use the CPU. 
 
     </Tip>
 

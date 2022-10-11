@@ -68,7 +68,7 @@ def skip(test_case):
 def slow(test_case):
     """
     Decorator marking a test as slow. Slow tests are skipped by default. Set the RUN_SLOW environment variable to a
-    truthy value to run them.
+    truthy value to run them. 
     """
     return unittest.skipUnless(_run_slow_tests, "test is slow")(test_case)
 
@@ -106,7 +106,7 @@ def require_tpu(test_case):
 def require_single_gpu(test_case):
     """
     Decorator marking a test that requires CUDA on a single GPU. These tests are skipped when there are no GPU
-    available or number of GPUs is more than one.
+    available or number of GPUs is more than one. 
     """
     return unittest.skipUnless(torch.cuda.device_count() == 1, "test requires a GPU")(test_case)
 
@@ -114,7 +114,7 @@ def require_single_gpu(test_case):
 def require_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
-    GPUs.
+    GPUs. 
     """
     return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
 
@@ -136,7 +136,7 @@ def require_fsdp(test_case):
 def require_torch_min_version(test_case=None, version=None):
     """
     Decorator marking that a test requires a particular torch version to be tested. These tests are skipped when an
-    installed torch version is less than the required one.
+    installed torch version is less than the required one. 
     """
     if test_case is None:
         return partial(require_torch_min_version, version=version)
@@ -146,7 +146,7 @@ def require_torch_min_version(test_case=None, version=None):
 def require_tensorboard(test_case):
     """
     Decorator marking a test that requires tensorboard installed. These tests are skipped when tensorboard isn't
-    installed
+    installed 
     """
     return unittest.skipUnless(is_tensorboard_available(), "test requires Tensorboard")(test_case)
 
@@ -173,7 +173,7 @@ _atleast_one_tracker_available = (
 def require_trackers(test_case):
     """
     Decorator marking that a test requires at least one tracking library installed. These tests are skipped when none
-    are installed
+    are installed 
     """
     return unittest.skipUnless(
         _atleast_one_tracker_available,
@@ -184,7 +184,7 @@ def require_trackers(test_case):
 class TempDirTestCase(unittest.TestCase):
     """
     A TestCase class that keeps a single `tempfile.TemporaryDirectory` open for the duration of the class, wipes its
-    data at the start of a test, and then destroyes it at the end of the TestCase.
+    data at the start of a test, and then destroyes it at the end of the TestCase. 
 
     Useful for when a class or API requires a single constant folder throughout it's use, such as Weights and Biases
 
@@ -217,13 +217,13 @@ class TempDirTestCase(unittest.TestCase):
 class MockingTestCase(unittest.TestCase):
     """
     A TestCase class designed to dynamically add various mockers that should be used in every test, mimicking the
-    behavior of a class-wide mock when defining one normally will not do.
+    behavior of a class-wide mock when defining one normally will not do. 
 
     Useful when a mock requires specific information available only initialized after `TestCase.setUpClass`, such as
-    setting an environment variable with that information.
+    setting an environment variable with that information. 
 
     The `add_mocks` function should be ran at the end of a `TestCase`'s `setUp` function, after a call to
-    `super().setUp()` such as:
+    `super().setUp()` such as: 
     ```python
     def setUp(self):
         super().setUp()
@@ -235,7 +235,7 @@ class MockingTestCase(unittest.TestCase):
     def add_mocks(self, mocks: Union[mock.Mock, List[mock.Mock]]):
         """
         Add custom mocks for tests that should be repeated on each test. Should be called during
-        `MockingTestCase.setUp`, after `super().setUp()`.
+        `MockingTestCase.setUp`, after `super().setUp()`. 
 
         Args:
             mocks (`mock.Mock` or list of `mock.Mock`):
@@ -340,7 +340,7 @@ class SubprocessCallException(Exception):
 def run_command(command: List[str], return_stdout=False):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
-    if an error occured while running `command`
+    if an error occured while running `command` 
     """
     try:
         output = subprocess.check_output(command, stderr=subprocess.STDOUT)

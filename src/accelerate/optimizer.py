@@ -40,14 +40,14 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     Internal wrapper around a torch optimizer.
 
     Conditionally will perform `step` and `zero_grad` if gradients should be synchronized when performing gradient
-    accumulation.
+    accumulation. 
 
     Args:
         optimizer (`torch.optim.optimizer.Optimizer`):
             The optimizer to wrap.
         device_placement (`bool`, *optional*, defaults to `True`):
             Whether or not the optimizer should handle device placement. If so, it will place the state dictionary of
-            `optimizer` on the right device.
+            `optimizer` on the right device. 
         scaler (`torch.cuda.amp.grad_scaler.GradScaler`, *optional*):
             The scaler to use in the step function if training with mixed precision.
     """

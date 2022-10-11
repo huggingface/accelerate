@@ -22,7 +22,7 @@ class MultiProcessAdapter(logging.LoggerAdapter):
     An adapter to assist with logging in multiprocess.
 
     `log` takes in an additional `main_process_only` kwarg, which dictates whether it should be called on all processes
-    or only the main executed one. Default is `main_process_only=True`.
+    or only the main executed one. Default is `main_process_only=True`. 
     """
 
     @staticmethod
@@ -35,7 +35,7 @@ class MultiProcessAdapter(logging.LoggerAdapter):
         Delegates logger call after checking if we should log.
 
         Accepts a new kwarg of `main_process_only`, which will dictate whether it will be logged across all processes
-        or only the main executed one. Default is `True` if not passed
+        or only the main executed one. Default is `True` if not passed 
         """
         main_process_only = kwargs.pop("main_process_only", True)
         if self.isEnabledFor(level) and self._should_log(main_process_only):

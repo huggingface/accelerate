@@ -28,7 +28,7 @@ if is_torch_version(">=", "1.9.0"):
 def get_launch_prefix():
     """
     Grabs the correct launcher for starting a distributed command, such as either `torchrun`, `python -m
-    torch.distributed.run`, etc
+    torch.distributed.run`, etc 
     """
     if is_torch_version(">=", "1.10.0"):
         cmd = ["torchrun"]
@@ -55,7 +55,7 @@ def _filter_args(args):
 def env_var_path_add(env_var_name, path_to_add):
     """
     Extends a path-based environment variable's value with a new path and returns the updated value. It's up to the
-    caller to set it in os.environ.
+    caller to set it in os.environ. 
     """
     paths = [p for p in os.environ.get(env_var_name, "").split(":") if len(p) > 0]
     paths.append(str(path_to_add))

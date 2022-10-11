@@ -90,7 +90,7 @@ def set_module_tensor_to_device(
 ):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
-    `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function).
+    `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). 
 
     Args:
         module (`torch.nn.Module`): The module in which the tensor we want to move lives.
@@ -137,7 +137,7 @@ def set_module_tensor_to_device(
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
     """
     A helper function that gathers all the tensors (parameters + buffers) of a given module. If `include_buffers=True`
-    it's the same as doing `module.named_parameters(recurse=recurse) + module.named_buffers(recurse=recurse)`.
+    it's the same as doing `module.named_parameters(recurse=recurse) + module.named_buffers(recurse=recurse)`. 
 
     Args:
         module (`torch.nn.Module`): The module we want the tensors or.
@@ -163,7 +163,7 @@ def find_tied_parameters(model: nn.Module, **kwargs):
     <Tip warning={true}>
 
     The signature accepts keyword arguments, but they are for the recursive part of this function and you should ignore
-    them.
+    them. 
 
     </Tip>
 
@@ -238,9 +238,9 @@ def get_max_layer_size(
 ):
     """
     Utility function that will scan a list of named modules and return the maximum size used by one full layer. The
-    definition of a layer being:
-    - a module with no direct children (just parameters and buffers)
-    - a module whose class name is in the list `no_split_module_classes`
+    definition of a layer being: 
+    - a module with no direct children (just parameters and buffers) 
+    - a module whose class name is in the list `no_split_module_classes` 
 
     Args:
         modules (`List[Tuple[str, torch.nn.Module]]`):
@@ -342,7 +342,7 @@ def get_balanced_memory(
     <Tip>
 
     All computation is done analyzing sizes and dtypes of the model parameters. As a result, the model can be on the
-    meta device (as it would if initialized within the `init_empty_weights` context manager).
+    meta device (as it would if initialized within the `init_empty_weights` context manager). 
 
     </Tip>
 
@@ -352,12 +352,12 @@ def get_balanced_memory(
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
-            residual connection).
+            residual connection). 
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
         low_zero (`bool`, *optional*):
             Minimizes the number of weights on GPU 0, which is convenient when it's used for other operations (like the
-            Transformers generate function).
+            Transformers generate function). 
     """
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
@@ -427,18 +427,18 @@ def infer_auto_device_map(
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
-    such that:
-    - we don't exceed the memory available of any of the GPU.
+    such that: 
+    - we don't exceed the memory available of any of the GPU. 
     - if offload to the CPU is needed, there is always room left on GPU 0 to put back the layer offloaded on CPU that
-      has the largest size.
-    - if offload to the CPU is needed,we don't exceed the RAM available on the CPU.
+      has the largest size. 
+    - if offload to the CPU is needed,we don't exceed the RAM available on the CPU. 
     - if offload to the disk is needed, there is always room left on the CPU to put back the layer offloaded on disk
-      that has the largest size.
+      that has the largest size. 
 
     <Tip>
 
     All computation is done analyzing sizes and dtypes of the model parameters. As a result, the model can be on the
-    meta device (as it would if initialized within the `init_empty_weights` context manager).
+    meta device (as it would if initialized within the `init_empty_weights` context manager). 
 
     </Tip>
 
@@ -448,7 +448,7 @@ def infer_auto_device_map(
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
-            residual connection).
+            residual connection). 
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
     """
@@ -593,12 +593,12 @@ def load_checkpoint_in_model(
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
-    loaded.
+    loaded. 
 
     <Tip warning={true}>
 
     Once loaded across devices, you still need to call [`dispatch_model`] on your model to make it able to run. To
-    group the checkpoint loading and dispatch in one single call, use [`load_checkpoint_and_dispatch`].
+    group the checkpoint loading and dispatch in one single call, use [`load_checkpoint_and_dispatch`]. 
 
     </Tip>
 
@@ -606,19 +606,19 @@ def load_checkpoint_in_model(
         model (`torch.nn.Module`): The model in which we want to load a checkpoint.
         checkpoint (`str` or `os.PathLike`):
             The folder checkpoint to load. It can be:
-            - a path to a file containing a whole model state dict
-            - a path to a `.json` file containing the index to a sharded checkpoint
-            - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint.
+            - a path to a file containing a whole model state dict 
+            - a path to a `.json` file containing the index to a sharded checkpoint 
+            - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint. 
         device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
             A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
-            name, once a given module name is inside, every submodule of it will be sent to the same device.
+            name, once a given module name is inside, every submodule of it will be sent to the same device. 
         offload_folder (`str` or `os.PathLike`, *optional*):
             If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
         offload_state_dict (`bool`, *optional*, defaults to `False`):
             If `True`, will temporarily offload the CPU state dict on the hard drive to avoid getting out of CPU RAM if
-            the weight of the CPU state dict + the biggest shard does not fit.
+            the weight of the CPU state dict + the biggest shard does not fit. 
     """
     if offload_folder is None and device_map is not None and "disk" in device_map.values():
         raise ValueError(

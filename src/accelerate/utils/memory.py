@@ -14,7 +14,7 @@
 
 """
 A collection of utilities for ensuring that training can always occur. Heavily influenced by the
-[toma](https://github.com/BlackHC/toma) library.
+[toma](https://github.com/BlackHC/toma) library. 
 """
 
 import functools
@@ -45,7 +45,7 @@ def should_reduce_batch_size(exception: Exception) -> bool:
 def find_executable_batch_size(function: callable = None, starting_batch_size: int = 128):
     """
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function`
+    CUDNN, the batch size is cut in half and passed to `function` 
 
     `function` must take in a `batch_size` parameter as its first argument.
 

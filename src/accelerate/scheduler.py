@@ -26,10 +26,10 @@ class AcceleratedScheduler:
     """
     A wrapper around a learning rate scheduler that will only step when the optimizer(s) have a training step. Useful
     to avoid making a scheduler step too fast when gradients went overflow and there was no training step (in mixed
-    precision training)
+    precision training) 
 
     When performing gradient accumulation scheduler lengths should not be changed accordingly, Accelerate will always
-    step the scheduler to account for it.
+    step the scheduler to account for it. 
 
     Args:
         scheduler (`torch.optim.lr_scheduler._LRScheduler`):
@@ -41,7 +41,7 @@ class AcceleratedScheduler:
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether or not the dataloaders split one batch across the different processes (so batch size is the same
             regardless of the number of processes) or create batches on each process (so batch size is the original
-            batch size multiplied by the number of processes).
+            batch size multiplied by the number of processes). 
     """
 
     def __init__(self, scheduler, optimizers, step_with_optimizer: bool = True, split_batches: bool = False):

@@ -84,76 +84,76 @@ class Accelerator:
     Args:
         device_placement (`bool`, *optional*, defaults to `True`):
             Whether or not the accelerator should put objects on device (tensors yielded by the dataloader, model,
-            etc...).
+            etc...). 
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
             `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a
             round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
-            in your script multiplied by the number of processes.
+            in your script multiplied by the number of processes. 
         mixed_precision (`str`, *optional*):
             Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'. Will
             default to the value in the environment variable `MIXED_PRECISION`, which will use the default value in the
             accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
-            requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+            requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher. 
         gradient_accumulation_steps (`int`, *optional*, default to 1):
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
-            `Accelerator.accumulate`.
+            `Accelerator.accumulate`. 
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
-            the execution on one process only.
+            the execution on one process only. 
         deepspeed_plugin (`DeepSpeedPlugin`, *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
-            directly using *accelerate config*
+            directly using *accelerate config* 
         fsdp_plugin (`FullyShardedDataParallelPlugin`, *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
-            using *accelerate config*
+            using *accelerate config* 
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
-            dataloaders. Should be one or several of:
+            dataloaders. Should be one or several of: 
 
-            - `"torch"`: the base torch random number generator
-            - `"cuda"`: the CUDA random number generator (GPU only)
-            - `"xla"`: the XLA random number generator (TPU only)
+            - `"torch"`: the base torch random number generator 
+            - `"cuda"`: the CUDA random number generator (GPU only) 
+            - `"xla"`: the XLA random number generator (TPU only) 
             - `"generator"`: the `torch.Generator` of the sampler (or batch sampler if there is no sampler in your
-              dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type.
+              dataloader) or of the iterable dataset (if it exists) if the underlying dataset is of that type. 
 
             Will default to `["torch"]` for PyTorch versions <=1.5.1 and `["generator"]` for PyTorch versions >= 1.6.
         log_with (list of `str`, [`~utils.LoggerType`] or [`~tracking.GeneralTracker`], *optional*):
             A list of loggers to be setup for experiment tracking. Should be one or several of:
 
-            - `"all"`
-            - `"tensorboard"`
-            - `"wandb"`
-            - `"comet_ml"`
+            - `"all"` 
+            - `"tensorboard"` 
+            - `"wandb"` 
+            - `"comet_ml"` 
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
-            also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
+            also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`. 
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
-            underlying dataset is an `IterableDataset`, `False` otherwise.
+            underlying dataset is an `IterableDataset`, `False` otherwise. 
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
-            done under certain circumstances (at the end of each epoch, for instance).
+            done under certain circumstances (at the end of each epoch, for instance). 
         kwargs_handlers (`List[KwargHandler]`, *optional*)
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
-            are created. See [kwargs](kwargs) for more information.
+            are created. See [kwargs](kwargs) for more information. 
 
     **Available attributes:**
 
-        - **device** (`torch.device`) -- The device to use.
-        - **distributed_type** ([`~utils.DistributedType`]) -- The distributed training configuration.
-        - **local_process_index** (`int`) -- The process index on the current machine.
-        - **mixed_precision** (`str`) -- The configured mixed precision mode.
-        - **num_processes** (`int`) -- The total number of processes used for training.
+        - **device** (`torch.device`) -- The device to use. 
+        - **distributed_type** ([`~utils.DistributedType`]) -- The distributed training configuration. 
+        - **local_process_index** (`int`) -- The process index on the current machine. 
+        - **mixed_precision** (`str`) -- The configured mixed precision mode. 
+        - **num_processes** (`int`) -- The total number of processes used for training. 
         - **optimizer_step_was_skipped** (`bool`) -- Whether or not the optimizer update was skipped (because of
-          gradient overflow in mixed precision), in which
+          gradient overflow in mixed precision), in which 
         case the learning rate should not be changed.
-        - **process_index** (`int`) -- The overall index of the current process among all processes.
-        - **state** ([`~state.AcceleratorState`]) -- The distributed setup state.
-        - **sync_gradients** (`bool`) -- Whether the gradients are currently being synced across all processes.
-        - **use_distributed** (`bool`) -- Whether the current configuration is for distributed training.
+        - **process_index** (`int`) -- The overall index of the current process among all processes. 
+        - **state** ([`~state.AcceleratorState`]) -- The distributed setup state. 
+        - **sync_gradients** (`bool`) -- Whether the gradients are currently being synced across all processes. 
+        - **use_distributed** (`bool`) -- Whether the current configuration is for distributed training. 
     """
 
     def __init__(
@@ -454,7 +454,7 @@ class Accelerator:
     def no_sync(self, model):
         """
         A context manager to disable gradient synchronizations across DDP processes by calling
-        `torch.nn.parallel.DistributedDataParallel.no_sync`.
+        `torch.nn.parallel.DistributedDataParallel.no_sync`. 
 
         If `model` is not in DDP, this context manager does nothing
 
@@ -605,20 +605,20 @@ class Accelerator:
     def prepare(self, *args, device_placement=None):
         """
         Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
-        order.
+        order. 
 
         Args:
             *args (list of objects):
                 Any of the following type of objects:
 
-                - `torch.utils.data.DataLoader`: PyTorch Dataloader
-                - `torch.nn.Module`: PyTorch Module
-                - `torch.optim.Optimizer`: PyTorch Optimizer
-                - `torch.optim.lr_scheduler._LRScheduler`: PyTorch LR Scheduler
+                - `torch.utils.data.DataLoader`: PyTorch Dataloader 
+                - `torch.nn.Module`: PyTorch Module 
+                - `torch.optim.Optimizer`: PyTorch Optimizer 
+                - `torch.optim.lr_scheduler._LRScheduler`: PyTorch LR Scheduler 
 
             device_placement (`List[bool]`, *optional*):
                 Used to customize whether automatic device placement should be performed for each object passed. Needs
-                to be a list of the same length as `args`.
+                to be a list of the same length as `args`. 
 
         <Tip>
 
@@ -701,12 +701,12 @@ class Accelerator:
     def prepare_model(self, model: torch.nn.Module, device_placement=None):
         """
         Prepares a PyTorch model for training in any distributed setup. It is recommended to use
-        [`Accelerator.prepare`] instead.
+        [`Accelerator.prepare`] instead. 
 
         Args:
             model (`torch.nn.Module`):
                 A PyTorch model to prepare. You don't need to prepare a model if it is used only for inference without
-                any kind of mixed precision
+                any kind of mixed precision 
             device_placement (`bool`, *optional*):
                 Whether or not to place the model on the proper device. Will default to `self.device_placement`.
         """
@@ -926,14 +926,14 @@ class Accelerator:
     def prepare_data_loader(self, data_loader: torch.utils.data.DataLoader, device_placement=None):
         """
         Prepares a PyTorch DataLoader for training in any distributed setup. It is recommended to use
-        [`Accelerator.prepare`] instead.
+        [`Accelerator.prepare`] instead. 
 
         Args:
             data_loader (`torch.utils.data.DataLoader`):
                 A vanilla PyTorch DataLoader to prepare
             device_placement (`bool`, *optional*):
                 Whether or not to place the batches on the proper device in the prepared dataloader. Will default to
-                `self.device_placement`.
+                `self.device_placement`. 
         """
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
@@ -951,7 +951,7 @@ class Accelerator:
     def prepare_optimizer(self, optimizer: torch.optim.Optimizer, device_placement=None):
         """
         Prepares a PyTorch Optimizer for training in any distributed setup. It is recommended to use
-        [`Accelerator.prepare`] instead.
+        [`Accelerator.prepare`] instead. 
 
         Args:
             optimizer (`torch.optim.Optimizer`):
@@ -968,7 +968,7 @@ class Accelerator:
     def prepare_scheduler(self, scheduler: torch.optim.lr_scheduler._LRScheduler):
         """
         Prepares a PyTorch Scheduler for training in any distributed setup. It is recommended to use
-        [`Accelerator.prepare`] instead.
+        [`Accelerator.prepare`] instead. 
 
         Args:
             scheduler (`torch.optim.lr_scheduler._LRScheduler`):
@@ -992,7 +992,7 @@ class Accelerator:
     def backward(self, loss, **kwargs):
         """
         Scales the gradients in accordance to `Accelerator.gradient_accumulation_steps` and calls the correct
-        `backward()` based on the configuration.
+        `backward()` based on the configuration. 
 
         Should be used in lieu of `loss.backward()`.
         """
@@ -1013,7 +1013,7 @@ class Accelerator:
         Args:
             optimizer (`torch.optim.Optimizer` or `List[torch.optim.Optimizer]`, *optional*):
                 The optimizer(s) for which to unscale gradients. If not set, will unscale gradients on all optimizers
-                that were passed to [`~Accelerator.prepare`].
+                that were passed to [`~Accelerator.prepare`]. 
         """
         if self.use_fp16 and self.native_amp:
             if optimizer is None:
@@ -1091,7 +1091,7 @@ class Accelerator:
     def gather(self, tensor):
         """
         Gather the values in *tensor* across all processes and concatenate them on the first dimension. Useful to
-        regroup the predictions from all processes when doing evaluation.
+        regroup the predictions from all processes when doing evaluation. 
 
         Note:
             This gather happens in all processes.
@@ -1102,14 +1102,14 @@ class Accelerator:
 
         Returns:
             `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The gathered tensor(s). Note that the
-            first dimension of the result is *num_processes* multiplied by the first dimension of the input tensors.
+            first dimension of the result is *num_processes* multiplied by the first dimension of the input tensors. 
         """
         return gather(tensor)
 
     def gather_for_metrics(self, tensor):
         """
         Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
-        for gathering the inputs and targets for metric calculation.
+        for gathering the inputs and targets for metric calculation. 
 
         Args:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
@@ -1159,7 +1159,7 @@ class Accelerator:
     def pad_across_processes(self, tensor, dim=0, pad_index=0, pad_first=False):
         """
         Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so
-        they can safely be gathered.
+        they can safely be gathered. 
 
         Args:
             tensor (nested list/tuple/dictionary of `torch.Tensor`):
@@ -1176,7 +1176,7 @@ class Accelerator:
     def unwrap_model(self, model):
         """
         Unwraps the `model` from the additional layer possible added by [`~Accelerator.prepare`]. Useful before saving
-        the model.
+        the model. 
 
         Args:
             model (`torch.nn.Module`):
@@ -1187,7 +1187,7 @@ class Accelerator:
     def wait_for_everyone(self):
         """
         Will stop the execution of the current process until every other process has reached that point (so this does
-        nothing when the script is only run in one process). Useful to do before saving a model.
+        nothing when the script is only run in one process). Useful to do before saving a model. 
         """
         wait_for_everyone()
 
@@ -1203,7 +1203,7 @@ class Accelerator:
                 Optional starting configuration to be logged.
             init_kwargs (`dict`, *optional*):
                 A nested dictionary of kwargs to be passed to a specific tracker's `__init__` function. Should be
-                formatted like so:
+                formatted like so: 
                 ```python
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
@@ -1252,7 +1252,7 @@ class Accelerator:
                 The run step. If included, the log will be affiliated with this step.
             log_kwargs (`dict`, *optional*):
                 A nested dictionary of kwargs to be passed to a specific tracker's `log` function. Should be formatted
-                like so:
+                like so: 
                 ```python
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
@@ -1264,7 +1264,7 @@ class Accelerator:
     def end_training(self):
         """
         Runs any special end training behaviors, such as stopping trackers on the main process only. Should always be
-        called at the end of your script if using experiment tracking.
+        called at the end of your script if using experiment tracking. 
         """
         for tracker in self.trackers:
             tracker.finish()
@@ -1287,7 +1287,7 @@ class Accelerator:
         <Tip>
 
         Should only be used when wanting to save a checkpoint during training and restoring the state in the same
-        environment.
+        environment. 
 
         </Tip>
 
@@ -1412,7 +1412,7 @@ class Accelerator:
     def free_memory(self):
         """
         Will release all references to the internal objects stored and call the garbage collector. You should call this
-        method between two trainings with different models/optimizers.
+        method between two trainings with different models/optimizers. 
         """
         self._schedulers = []
         self._optimizers = []
@@ -1424,7 +1424,7 @@ class Accelerator:
     def clear(self):
         """
         Alias for [`Accelerate.free_memory`], releases all references to the internal objects stored and call the
-        garbage collector. You should call this method between two trainings with different models/optimizers.
+        garbage collector. You should call this method between two trainings with different models/optimizers. 
         """
         self.free_memory()
 
@@ -1494,7 +1494,7 @@ class Accelerator:
         Makes note of `objects` and will save or load them in during `save_state` or `load_state`.
 
         These should be utilized when the state is being loaded or saved in the same script. It is not designed to be
-        used in different scripts
+        used in different scripts 
 
         <Tip>
 
@@ -1517,7 +1517,7 @@ class Accelerator:
     def autocast(self):
         """
         Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
-        different will happen otherwise.
+        different will happen otherwise. 
         """
         if self.native_amp:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
@@ -1539,7 +1539,7 @@ class Accelerator:
     def optimizer_step_was_skipped(self):
         """
         Whether or not the optimizer update was skipped (because of gradient overflow in mixed precision), in which
-        case the learning rate should not be changed.
+        case the learning rate should not be changed. 
         """
         for optimizer in self._optimizers:
             if optimizer.step_was_skipped:

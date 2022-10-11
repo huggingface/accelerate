@@ -54,7 +54,7 @@ class DistributedDataParallelKwargs(KwargsHandler):
     Use this object in your [`Accelerator`] to customize how your model is wrapped in a
     `torch.nn.parallel.DistributedDataParallel`. Please refer to the documentation of this
     [wrapper](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) for more
-    information on each argument.
+    information on each argument. 
 
     <Tip warning={true}>
 
@@ -78,7 +78,7 @@ class GradScalerKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize the behavior of mixed precision, specifically how the
     `torch.cuda.amp.GradScaler` used is created. Please refer to the documentation of this
-    [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more information on each argument.
+    [scaler](https://pytorch.org/docs/stable/amp.html?highlight=gradscaler) for more information on each argument. 
 
     <Tip warning={true}>
 
@@ -99,7 +99,7 @@ class InitProcessGroupKwargs(KwargsHandler):
     Use this object in your [`Accelerator`] to customize the initialization of the distributed processes. Please refer
     to the documentation of this
     [method](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
-    information on each argument.
+    information on each argument. 
     """
 
     init_method: Optional[str] = None
@@ -112,11 +112,11 @@ class DistributedType(str, enum.Enum):
 
     Values:
 
-        - **NO** -- Not a distributed environment, just a single process.
-        - **MULTI_CPU** -- Distributed on multiple CPU nodes.
-        - **MULTI_GPU** -- Distributed on multiple GPUs.
-        - **DEEPSPEED** -- Using DeepSpeed.
-        - **TPU** -- Distributed on TPUs.
+        - **NO** -- Not a distributed environment, just a single process. 
+        - **MULTI_CPU** -- Distributed on multiple CPU nodes. 
+        - **MULTI_GPU** -- Distributed on multiple GPUs. 
+        - **DEEPSPEED** -- Using DeepSpeed. 
+        - **TPU** -- Distributed on TPUs. 
     """
 
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
@@ -135,9 +135,9 @@ class SageMakerDistributedType(str, enum.Enum):
 
     Values:
 
-        - **NO** -- Not a distributed environment, just a single process.
-        - **DATA_PARALLEL** -- using sagemaker distributed data parallelism.
-        - **MODEL_PARALLEL** -- using sagemaker distributed model parallelism.
+        - **NO** -- Not a distributed environment, just a single process. 
+        - **DATA_PARALLEL** -- using sagemaker distributed data parallelism. 
+        - **MODEL_PARALLEL** -- using sagemaker distributed model parallelism. 
     """
 
     # Subclassing str as well as Enum allows the `SageMakerDistributedType` to be JSON-serializable out of the box.
@@ -152,8 +152,8 @@ class ComputeEnvironment(str, enum.Enum):
 
     Values:
 
-        - **LOCAL_MACHINE** -- private/custom cluster hardware.
-        - **AMAZON_SAGEMAKER** -- Amazon SageMaker as compute environment.
+        - **LOCAL_MACHINE** -- private/custom cluster hardware. 
+        - **AMAZON_SAGEMAKER** -- Amazon SageMaker as compute environment. 
     """
 
     # Subclassing str as well as Enum allows the `ComputeEnvironment` to be JSON-serializable out of the box.
@@ -189,10 +189,10 @@ class LoggerType(BaseEnum):
 
     Values:
 
-        - **ALL** -- all available trackers in the environment that are supported
-        - **TENSORBOARD** -- TensorBoard as an experiment tracker
-        - **WANDB** -- wandb as an experiment tracker
-        - **COMETML** -- comet_ml as an experiment tracker
+        - **ALL** -- all available trackers in the environment that are supported 
+        - **TENSORBOARD** -- TensorBoard as an experiment tracker 
+        - **WANDB** -- wandb as an experiment tracker 
+        - **COMETML** -- comet_ml as an experiment tracker 
     """
 
     ALL = "all"
@@ -207,9 +207,9 @@ class PrecisionType(BaseEnum):
 
     Values:
 
-        - **NO** -- using full precision (FP32)
-        - **FP16** -- using half precision
-        - **BF16** -- using brain floating point precision
+        - **NO** -- using full precision (FP32) 
+        - **FP16** -- using half precision 
+        - **BF16** -- using brain floating point precision 
     """
 
     NO = "no"

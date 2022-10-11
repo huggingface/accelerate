@@ -52,14 +52,14 @@ class AcceleratorState:
 
     **Available attributes:**
 
-        - **device** (`torch.device`) -- The device to use.
+        - **device** (`torch.device`) -- The device to use. 
         - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
-          in use.
-        - **local_process_index** (`int`) -- The index of the current process on the current server.
+          in use. 
+        - **local_process_index** (`int`) -- The index of the current process on the current server. 
         - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision, and if so the type
-          of mixed precision being performed.
-        - **num_processes** (`int`) -- The number of processes currently launched in parallel.
-        - **process_index** (`int`) -- The index of the current process.
+          of mixed precision being performed. 
+        - **num_processes** (`int`) -- The number of processes currently launched in parallel. 
+        - **process_index** (`int`) -- The index of the current process. 
     """
 
     _shared_state = {}
@@ -280,9 +280,9 @@ class GradientState:
 
     **Available attributes:**
 
-        - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
-        - **remainder** (`int`) -- The number of extra samples that were added from padding the dataloader
-        - **sync_gradients** (`bool`) -- Whether the gradients should be synced across all devices
+        - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader 
+        - **remainder** (`int`) -- The number of extra samples that were added from padding the dataloader 
+        - **sync_gradients** (`bool`) -- Whether the gradients should be synced across all devices 
     """
 
     _shared_state = {}

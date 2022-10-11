@@ -24,11 +24,11 @@ from .utils import PrefixedDataset, find_device, named_module_tensors, send_to_d
 class ModelHook:
     """
     A hook that contains callbacks to be executed just before and after the forward method of a model. The difference
-    with PyTorch existing hooks is that they get passed along the kwargs.
+    with PyTorch existing hooks is that they get passed along the kwargs. 
 
     Class attribute:
     - **no_grad** (`bool`, *optional*, defaults to `False`) -- Whether or not to execute the actual forward pass under
-      the `torch.no_grad()` context manager.
+      the `torch.no_grad()` context manager. 
     """
 
     no_grad = False
@@ -111,12 +111,12 @@ class SequentialHook(ModelHook):
 def add_hook_to_module(module: nn.Module, hook: ModelHook):
     """
     Adds a hook to a given module. This will rewrite the `forward` method of the module to include the hook, to remove
-    this behavior and restore the original `forward` method, use `remove_hook_from_module`.
+    this behavior and restore the original `forward` method, use `remove_hook_from_module`. 
 
     <Tip warning={true}>
 
     If the module already contains a hook, this will replace it with the new hook passed. To chain two hooks together,
-    use the `SequentialHook` class.
+    use the `SequentialHook` class. 
 
     </Tip>
 
@@ -126,7 +126,7 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook):
 
     Returns:
         `torch.nn.Module`: The same module, with the hook attached (the module is modified in place, so the result can
-        be discarded).
+        be discarded). 
     """
     if hasattr(module, "_hf_hook") and hasattr(module, "_old_forward"):
         # If we already put some hook on this module, we replace it with the new one.
@@ -161,7 +161,7 @@ def remove_hook_from_module(module: nn.Module):
 
     Returns:
         `torch.nn.Module`: The same module, with the hook detached (the module is modified in place, so the result can
-        be discarded).
+        be discarded). 
     """
     if hasattr(module, "_hf_hook"):
         module._hf_hook.detach_hook(module)
@@ -177,7 +177,7 @@ def remove_hook_from_module(module: nn.Module):
 class AlignDevicesHook(ModelHook):
     """
     A generic `ModelHook` that ensures inputs and model weights are on the same device for the forward pass of the
-    associated module, potentially offloading the weights after the forward pass.
+    associated module, potentially offloading the weights after the forward pass. 
 
     Args:
         execution_device (`torch.device`, *optional*):
@@ -277,7 +277,7 @@ def attach_execution_device_hook(
 ):
     """
     Recursively attaches `AlignDevicesHook` to all submodules of a given model to make sure they have the right
-    execution device
+    execution device 
 
     Args:
         module (`torch.nn.Module`):
@@ -288,7 +288,7 @@ def attach_execution_device_hook(
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
-            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly. 
     """
     if not hasattr(module, "_hf_hook") and len(module.state_dict()) > 0:
         add_hook_to_module(module, AlignDevicesHook(execution_device))
@@ -312,7 +312,7 @@ def attach_align_device_hook(
 ):
     """
     Recursively attaches `AlignDevicesHook` to all submodules of a given model that have direct parameters and/or
-    buffers.
+    buffers. 
 
     Args:
         module (`torch.nn.Module`):
@@ -331,7 +331,7 @@ def attach_align_device_hook(
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
-            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly. 
     """
     # Attach the hook on this module if it has any direct tensor.
     directs = named_module_tensors(module)
@@ -401,10 +401,10 @@ def attach_align_device_hook_on_blocks(
             The module where we want to attach the hooks.
         execution_device (`torch.device` or `Dict[str, torch.device]`, *optional*):
             The device on which inputs and model weights should be placed before the forward pass. It can be one device
-            for the whole module, or a dictionary mapping module name to device.
+            for the whole module, or a dictionary mapping module name to device. 
         offload (`bool`, *optional*, defaults to `False`):
             Whether or not the weights should be offloaded after the forward pass. It can be one boolean for the whole
-            module, or a dictionary mapping module name to boolean.
+            module, or a dictionary mapping module name to boolean. 
         weights_map (`Mapping[str, torch.Tensor]`, *optional*):
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
         offload_buffers (`bool`, *optional*, defaults to `False`):
@@ -415,7 +415,7 @@ def attach_align_device_hook_on_blocks(
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
-            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+            `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly. 
     """
     # If one device and one offload, we've got one hook.
     if not isinstance(execution_device, Mapping) and not isinstance(offload, dict):

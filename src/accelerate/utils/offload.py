@@ -132,7 +132,7 @@ class OffloadedWeightsLoader(Mapping):
             The directory in which the weights are stored (by `offload_state_dict` for instance).
         index (`Dict`, *optional*):
             A dictionary from weight name to their information (`dtype` and `shape`). Will default to the index saved
-            in `save_folder`.
+            in `save_folder`. 
     """
 
     def __init__(

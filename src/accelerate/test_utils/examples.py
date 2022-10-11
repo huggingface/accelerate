@@ -16,7 +16,7 @@
 """
 A collection of utilities for comparing `examples/complete_*_example.py` scripts with the capabilities inside of each
 `examples/by_feature` example. `compare_against_test` is the main function that should be used when testing, while the
-others are used to either get the code that matters, or to preprocess them (such as stripping comments)
+others are used to either get the code that matters, or to preprocess them (such as stripping comments) 
 """
 
 import os
@@ -64,25 +64,25 @@ def compare_against_test(base_filename: str, feature_filename: str, parser_only:
     """
     Tests whether the additional code inside of `feature_filename` was implemented in `base_filename`. This should be
     used when testing to see if `complete_*_.py` examples have all of the implementations from each of the
-    `examples/by_feature/*` scripts.
+    `examples/by_feature/*` scripts. 
 
     It utilizes `nlp_example.py` to extract out all of the repeated training code, so that only the new additional code
     is examined and checked. If something *other* than `nlp_example.py` should be used, such as `cv_example.py` for the
-    `complete_cv_example.py` script, it should be passed in for the `secondary_filename` parameter.
+    `complete_cv_example.py` script, it should be passed in for the `secondary_filename` parameter. 
 
     Args:
         base_filename (`str` or `os.PathLike`):
             The filepath of a single "complete" example script to test, such as `examples/complete_cv_example.py`
         feature_filename (`str` or `os.PathLike`):
             The filepath of a single feature example script. The contents of this script are checked to see if they
-            exist in `base_filename`
+            exist in `base_filename` 
         parser_only (`bool`):
             Whether to compare only the `main()` sections in both files, or to compare the contents of
-            `training_loop()`
+            `training_loop()` 
         secondary_filename (`str`, *optional*):
             A potential secondary filepath that should be included in the check. This function extracts the base
             functionalities off of "examples/nlp_example.py", so if `base_filename` is a script other than
-            `complete_nlp_example.py`, the template script should be included here. Such as `examples/cv_example.py`
+            `complete_nlp_example.py`, the template script should be included here. Such as `examples/cv_example.py` 
     """
     with open(base_filename, "r") as f:
         base_file_contents = f.readlines()
