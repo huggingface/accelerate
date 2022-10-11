@@ -194,8 +194,6 @@ class MegatronLMDummyDataLoader:
         return train_valid_test_datasets_provider
 
     def build_pretraining_data_loader(self, dataset, consumed_samples):
-        """Buld dataloader given an input dataset."""
-
         if dataset is None:
             return None
         args = get_args()
@@ -229,8 +227,6 @@ class MegatronLMDummyDataLoader:
         )
 
     def build_train_valid_test_data_iterators(self):
-        """XXX"""
-
         def cyclic_iter(iter):
             while True:
                 for x in iter:

@@ -95,7 +95,6 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
-# if is_megatron_lm_available():
 from .launch import PrepareForLaunch, _filter_args, get_launch_prefix
 from .megatron_lm import (
     AbstractTrainStep,

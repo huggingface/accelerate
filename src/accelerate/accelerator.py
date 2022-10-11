@@ -246,6 +246,10 @@ class Accelerator:
                 raise TypeError("`megatron_lm_plugin` must be a MegatronLMPlugin object.")
             os.environ["USE_MEGATRON_LM"] = "true"  # use MegatronLM if plugin is provided
 
+        if megatron_lm_plugin:
+            if not is_megatron_lm_available():
+                raise ImportError("Megatron is not installed. please build it from source.")
+
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
