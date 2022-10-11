@@ -383,9 +383,9 @@ felixble and extensible 🤗 Accelerate is. The changes required are as follows.
 
     a. For Megatron-LM indexed datasets, we need to use `MegatronLMDummyDataLoader`
     and pass the required dataset args to it such as `data_path`, `seq_length` etc.
-    See `megatron.rguments._add_data_args` for the list of available args. 
+    See `megatron.arguments._add_data_args` for the list of available args. 
     
-    ```
+    ```python
     from accelerate.utils import MegatronLMDummyDataLoader
 
     megatron_dataloader_config = {
@@ -401,7 +401,7 @@ felixble and extensible 🤗 Accelerate is. The changes required are as follows.
     b. `megatron_dataloader` is repeated 3 times to get training, validation and test dataloaders
     as per the `args.splits_string` proportions
     
-    ```
+    ```python
     model, optimizer, lr_scheduler, train_dataloader, eval_dataloader, _ = accelerator.prepare(
         model, optimizer, lr_scheduler, megatron_dataloader, megatron_dataloader, megatron_dataloader
     )
@@ -413,13 +413,13 @@ felixble and extensible 🤗 Accelerate is. The changes required are as follows.
     This is similar to the Megatron-LM setup wherein user has to provide `max_train_steps` when using Megaton-LM indexed datasets.
     This displays how flexible and extensible 🤗 Accelerate is.
 
-    ```
+    ```python
     while completed_steps < args.max_train_steps:
         model.train()
         batch = next(train_dataloader) if train_dataloader is not None else {}
         outputs = model(**batch)
         loss = outputs.loss
-        ... 
+        ...
 
         if completed_steps % eval_interval == 0:
             eval_completed_steps = 0
