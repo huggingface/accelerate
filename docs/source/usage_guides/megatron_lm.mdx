@@ -397,6 +397,7 @@ felixble and extensible 🤗 Accelerate is. The changes required are as follows.
     megatron_dataloader = MegatronLMDummyDataLoader(**megatron_dataloader_config)
     accelerator.state.megatron_lm_plugin.megatron_dataset_flag = True
     ```
+
     b. `megatron_dataloader` is repeated 3 times to get training, validation and test dataloaders
     as per the `args.splits_string` proportions
     
@@ -477,9 +478,8 @@ you can easily compute the `perplexity` using the loss.
 Megatron-LM integration.
 
 4. In `accelerator.prepare` call, a Megatron-LM model corresponding to a given Transformers model is created
-with random weights. 
+with random weights. Please use `accelerator.load_state` to load the Megatron-LM checkpoint with matching TP, PP and DP partitions.
 
-Please use `accelerator.load_state` to load the Megatron-LM checkpoint with matching TP, PP and DP partitions.
 5. Currently, checkpoint reshaping and interoperability support is only available for GPT. 
 Soon it will be extended to BERT and T5.
 
