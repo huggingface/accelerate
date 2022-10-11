@@ -137,6 +137,7 @@ cd ..
 ## Accelerate Megatron-LM Plugin
 Important features are directly supported via the `accelerate config` command. 
 An example of thr corresponding questions for using Megatron-LM features is shown below:
+
 ```bash
 :~$ accelerate config --config_file "megatron_gpt_config.yaml"
 In which compute environment are you running? ([0] This machine, [1] AWS (Amazon SageMaker)): 0
@@ -448,21 +449,28 @@ python checkpoint_utils/megatgron_gpt2/checkpoint_reshaping_and_interoperability
 ```
 
 ## Caveats:
+
 1. Supports Transformers GPT2, Megatron-BERT and T5 models.
 This covers Decoder only, Encode only and Encoder-Decoder model classes.
+
 2. Only loss is returned from model forward pass as 
 there is quite complex interplay of pipeline, tensor and data parallelsim behind the scenes.
 The `model(**batch_data)` call return loss(es) averaged across the data parallel ranks.
 This is fine for most cases wherein pre-training jobs are run using Megatron-LM features and
 you can easily compute the `perplexity` using the loss. 
+
 3. The main process is the last rank as the losses are available in the last stage of pipeline.
 `accelerator.is_main_process` and `accelerator.is_local_main_process` return `True` for last rank when using 
-Megatron-LM integration
+Megatron-LM integration.
+
 4. In `accelerator.prepare` call, a Megatron-LM model corresponding to a given Transformers model is created
 with random weights. 
+
 Please use `accelerator.load_state` to load the Megatron-LM checkpoint with matching TP, PP and DP partitions.
 5. Currently, checkpoint reshaping and interoperability support is only available for GPT. 
 Soon it will be extended to BERT and T5.
+
 6. `gradient_accumulation_steps` needs to be 1. When using Megatron-LM, micro batches in pipeline parallelism 
 setting is synonymous with gradient accumulation. 
+
 7. When using Megatron-LM, use `accelerator.save_state` and `accelerator.load_state` for saving and loading checkpoints.
