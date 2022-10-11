@@ -364,6 +364,59 @@ def main():
     }
 ```
 
+2. For using the Megatron-LM datasets, a few more changes are required. Dataloaders for these datasets
+are available only on rank 0 of each tensor parallel group. As such, there are rank where dataloader won't be
+avaiable and this requires tweaks to the training loop. Being able to do all this shows how
+felixble and extensible 🤗 Accelerate is. The changes required are as follows.
+
+    a. For Megatron-LM indexed datasets, we need to use `MegatronLMDummyDataLoader`
+    and pass the required dataset args to it such as `data_path`, `seq_length` etc.
+    See `megatron.rguments._add_data_args` for the list of available args. 
+    
+    ```
+    from accelerate.utils import MegatronLMDummyDataLoader
+
+    megatron_dataloader_config = {
+        "data_path": args.data_path,
+        "splits_string": args.splits_string,
+        "seq_length": args.block_size,
+        "micro_batch_size": args.per_device_train_batch_size,
+    }
+    megatron_dataloader = MegatronLMDummyDataLoader(**megatron_dataloader_config)
+    accelerator.state.megatron_lm_plugin.megatron_dataset_flag = True
+    ```
+    b. `megatron_dataloader` is repeated 3 times to get training, validation and test dataloaders
+    as per the `args.splits_string` proportions
+    ```
+    model, optimizer, lr_scheduler, train_dataloader, eval_dataloader, _ = accelerator.prepare(
+        model, optimizer, lr_scheduler, megatron_dataloader, megatron_dataloader, megatron_dataloader
+    )
+    ```
+
+    c. Changes to training and evaluation loops as dataloader is only available on tensor parallel ranks 0
+    So, we need to iterate only if the dataloader isn't `None` else provide empty dict
+    As such, we loop using `while` loop and break when `completed_steps` is equal to `args.max_train_steps`
+    This is similar to the Megatron-LM setup wherein user has to provide `max_train_steps` when using Megaton-LM indexed datasets.
+    This displays how flexible and extensible 🤗 Accelerate is.
+    ```
+    while completed_steps < args.max_train_steps:
+        model.train()
+        batch = next(train_dataloader) if train_dataloader is not None else {}
+        outputs = model(**batch)
+        loss = outputs.loss
+        ... 
+
+        if completed_steps % eval_interval == 0:
+            eval_completed_steps = 0
+            losses = []
+            while eval_completed_steps < eval_iters:
+                model.eval()
+                with torch.no_grad():
+                    batch = next(eval_dataloader) if eval_dataloader is not None else {}
+                    outputs = model(**batch)
+    ```
+
+    
 ## Utility for Checkpoint reshaping and interoperability
 
 1. The scripts for these are present in 🤗 Transformers library under respective models. 
