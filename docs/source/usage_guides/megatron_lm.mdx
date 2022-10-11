@@ -299,11 +299,100 @@ There are a large number of other options/features that one can set using `accel
 
 ## Advanced features to leverage writing custom train step and Megatron-LM Indexed Datasets
 
-ToDo
+1. Below is an example of changes required to customize the Train Step while using Megatron-LM. 
+You will implement the `accelerate.utils.AbstractTrainStep` or inherit from their corresponding childern 
+`accelerate.utils.GPTTrainStep`, `accelerate.utils.BertTrainStep` or `accelerate.utils.T5TrainStep`.
+```python
+from accelerate.utils import MegatronLMDummyScheduler, GPTTrainStep, avg_losses_across_data_parallel_group
+
+# Custom loss function for the Megatron model
+class GPTTrainStepWithCustomLoss(GPTTrainStep):
+    def __init__(self, megatron_args, **kwargs):
+        super().__init__(megatron_args)
+        self.kwargs = kwargs
+
+    def get_loss_func(self):
+        def loss_func(inputs, loss_mask, output_tensor):
+            batch_size, seq_length = output_tensor.shape
+            losses = output_tensor.float()
+            loss_mask = loss_mask.view(-1).float()
+            loss = losses.view(-1) * loss_mask
+
+            # Resize and average loss per sample
+            loss_per_sample = loss.view(batch_size, seq_length).sum(axis=1)
+            loss_mask_per_sample = loss_mask.view(batch_size, seq_length).sum(axis=1)
+            loss_per_sample = loss_per_sample / loss_mask_per_sample
+
+            # Calculate and scale weighting
+            weights = torch.stack([(inputs == kt).float() for kt in self.kwargs["keytoken_ids"]]).sum(axis=[0, 2])
+            weights = 1.0 + self.kwargs["alpha"] * weights
+            # Calculate weighted average
+            weighted_loss = (loss_per_sample * weights).mean()
+
+            # Reduce loss across data parallel groups
+            averaged_loss = avg_losses_across_data_parallel_group([weighted_loss])
+
+            return weighted_loss, {"lm loss": averaged_loss[0]}
+
+        return loss_func
+
+    def get_forward_step_func(self):
+        def forward_step(data_iterator, model):
+            """Forward step."""
+            # Get the batch.
+            tokens, labels, loss_mask, attention_mask, position_ids = self.get_batch(data_iterator)
+            output_tensor = model(tokens, position_ids, attention_mask, labels=labels)
+
+            return output_tensor, partial(self.loss_func, tokens, loss_mask)
+
+        return forward_step
+
+
+def main():
+    # Custom loss function for the Megatron model
+    keytoken_ids = []
+    keywords = ["plt", "pd", "sk", "fit", "predict", " plt", " pd", " sk", " fit", " predict"]
+    for keyword in keywords:
+        ids = tokenizer([keyword]).input_ids[0]
+        if len(ids) == 1:
+            keytoken_ids.append(ids[0])
+    accelerator.print(f"Keytoken ids: {keytoken_ids}")
+    accelerator.state.megatron_lm_plugin.custom_train_step_class = GPTTrainStepWithCustomLoss
+    accelerator.state.megatron_lm_plugin.custom_train_step_kwargs = {
+        "keytoken_ids": keytoken_ids,
+        "alpha": 0.25,
+    }
+```
 
 ## Utility for Checkpoint reshaping and interoperability
 
-ToDo
+1. The scripts for these are present in 🤗 Transformers library under respective models. 
+Currently, it is available for GPT model [checkpoint_reshaping_and_interoperability.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/megatron_gpt2/checkpoint_reshaping_and_interoperability.py)
+
+2. Below is an example of conversion of checkpoint from Megatron-LM to universal 🤗 Transformers sharded checkpoint.
+```bash
+python checkpoint_reshaping_and_interoperability.py \
+--convert_checkpoint_from_megatron_to_transformers \
+--load_path "gpt/iter_0005000" \
+--save_path "gpt/trfs_checkpoint" \
+--max_shard_size "200MB" \
+--tokenizer_name "gpt2" \
+--print-checkpoint-structure
+```
+
+3. Conversion of checkpoint from transformers to megatron with `tp_size=2`, `pp_size=2` and `dp_size=2`.
+```bash
+python checkpoint_utils/megatgron_gpt2/checkpoint_reshaping_and_interoperability.py \
+--load_path "gpt/trfs_checkpoint" \
+--save_path "gpt/megatron_lm_checkpoint" \
+--target_tensor_model_parallel_size 2 \
+--target_pipeline_model_parallel_size 2 \
+--target_data_parallel_size 2 \
+--target_params_dtype "bf16" \
+--make_vocab_size_divisible_by 128 \
+--use_distributed_optimizer \
+--print-checkpoint-structure
+```
 
 ## Caveats:
 1. Supports Transformers GPT2, Megatron-BERT and T5 models.
