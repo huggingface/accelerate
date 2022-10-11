@@ -12,12 +12,14 @@ specific language governing permissions and limitations under the License.
 
 
 # Megatron-LM
+
 [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) enables training large transformer language models at scale.
 It provides efficient tensor, pipeline and sequence based model parallelism for pre-training transformer based
 Language Models such as [GPT](https://arxiv.org/abs/2005.14165) (Decoder Only), [BERT](https://arxiv.org/pdf/1810.04805.pdf) (Encoder Only) and [T5](https://arxiv.org/abs/1910.10683) (Encoder-Decoder).
 For detailed information and how things work behind the scene please refer the github [repo](https://github.com/NVIDIA/Megatron-LM).
 
 ## What is integrated?
+
 Accelerate integrates following feature of Megatron-LM to enable large scale pre-training/finetuning
 of BERT (Encoder), GPT (Decoder) or T5 models (Encoder and Decoder):
 
@@ -135,6 +137,7 @@ cd ..
     ```
 
 ## Accelerate Megatron-LM Plugin
+
 Important features are directly supported via the `accelerate config` command. 
 An example of thr corresponding questions for using Megatron-LM features is shown below:
 
@@ -158,6 +161,7 @@ Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: bf16
 ```
 
 The resulting config is shown below:
+
 ```
 ~$ cat megatron_gpt_config.yaml 
 compute_environment: LOCAL_MACHINE
@@ -191,6 +195,7 @@ to use Megatron-LM are as follows:
 1. As Megatron-LM uses its own implementation of Optimizer, the corresponding scheduler compatible with it needs to be used.
 As such, support for only the Megatron-LM's scheduler is present. User will need to create `accelerate.utils.MegatronLMDummyScheduler`.
 Example is given below:
+
 ```python
 from accelerate.utils import MegatronLMDummyScheduler
 
@@ -211,6 +216,7 @@ else:
 
 2. Getting the details of the total batch size now needs to be cognization of tensor and pipeline parallel sizes.
 Example of getting the effective total batch size is shown below:
+
 ```python
 if accelerator.distributed_type == DistributedType.MEGATRON_LM:
     total_batch_size = accelerator.state.megatron_lm_plugin.global_batch_size
@@ -219,6 +225,7 @@ else:
 ```
 
 3. When using Megatron-LM, the losses are already averaged across the data parallel group
+
 ```python
 if accelerator.distributed_type == DistributedType.MEGATRON_LM:
     losses.append(loss)
@@ -232,6 +239,7 @@ else:
 ```
 
 4. For Megatron-LM, we need to save the model using `accelerator.save_state`
+
 ```python
 if accelerator.distributed_type == DistributedType.MEGATRON_LM:
     accelerator.save_state(args.output_dir)
@@ -244,6 +252,7 @@ else:
 
 That's it! We are good to go 🚀. Please find the example script in the examples folder at the path `accelerate/examples/by_feature/megatron_lm_gpt_pretraining.py`.
 Let's run it for `gpt-large` model architecture using 4 A100-80GB GPUs.
+
 ```bash
 accelerate launch --config_file megatron_gpt_config.yaml \
 examples/by_feature/megatron_lm_gpt_pretraining.py \
@@ -262,6 +271,7 @@ examples/by_feature/megatron_lm_gpt_pretraining.py \
 ```
 
 Below are some important excerpts from the output logs:
+
 ```bash
 Loading extension module fused_dense_cuda...
 >>> done with compiling and loading fused kernels. Compilation time: 3.569 seconds
@@ -303,6 +313,7 @@ There are a large number of other options/features that one can set using `accel
 1. Below is an example of changes required to customize the Train Step while using Megatron-LM. 
 You will implement the `accelerate.utils.AbstractTrainStep` or inherit from their corresponding childern 
 `accelerate.utils.GPTTrainStep`, `accelerate.utils.BertTrainStep` or `accelerate.utils.T5TrainStep`.
+
 ```python
 from accelerate.utils import MegatronLMDummyScheduler, GPTTrainStep, avg_losses_across_data_parallel_group
 
@@ -388,6 +399,7 @@ felixble and extensible 🤗 Accelerate is. The changes required are as follows.
     ```
     b. `megatron_dataloader` is repeated 3 times to get training, validation and test dataloaders
     as per the `args.splits_string` proportions
+    
     ```
     model, optimizer, lr_scheduler, train_dataloader, eval_dataloader, _ = accelerator.prepare(
         model, optimizer, lr_scheduler, megatron_dataloader, megatron_dataloader, megatron_dataloader
@@ -399,6 +411,7 @@ felixble and extensible 🤗 Accelerate is. The changes required are as follows.
     As such, we loop using `while` loop and break when `completed_steps` is equal to `args.max_train_steps`
     This is similar to the Megatron-LM setup wherein user has to provide `max_train_steps` when using Megaton-LM indexed datasets.
     This displays how flexible and extensible 🤗 Accelerate is.
+
     ```
     while completed_steps < args.max_train_steps:
         model.train()
