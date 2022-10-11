@@ -95,26 +95,25 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
-if is_megatron_lm_available():
-    from .megatron_lm import (
-        AbstractTrainStep,
-        BertTrainStep,
-        GPTTrainStep,
-        T5TrainStep,
-        MegatronLMDummyScheduler,
-        MegatronLMDummyDataLoader,
-        MegatronEngine,
-        MegatronLMOptimizerWrapper,
-        MegatronLMSchedulerWrapper,
-        avg_losses_across_data_parallel_group,
-        initialize,
-        prepare_model,
-        prepare_optimizer,
-        prepare_scheduler,
-        prepare_data_loader,
-    )
-
+# if is_megatron_lm_available():
 from .launch import PrepareForLaunch, _filter_args, get_launch_prefix
+from .megatron_lm import (
+    AbstractTrainStep,
+    BertTrainStep,
+    GPTTrainStep,
+    MegatronEngine,
+    MegatronLMDummyDataLoader,
+    MegatronLMDummyScheduler,
+    MegatronLMOptimizerWrapper,
+    MegatronLMSchedulerWrapper,
+    T5TrainStep,
+    avg_losses_across_data_parallel_group,
+    initialize,
+    prepare_data_loader,
+    prepare_model,
+    prepare_optimizer,
+    prepare_scheduler,
+)
 from .memory import find_executable_batch_size
 from .other import (
     extract_model_from_parallel,
