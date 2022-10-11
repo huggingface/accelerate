@@ -73,4 +73,6 @@
     title: Kwargs handlers
   - local: package_reference/utilities
     title: Utility functions and classes
+  - local: package_reference/megatron_lm
+    title: Megatron-LM Utilities
   title: "Reference"

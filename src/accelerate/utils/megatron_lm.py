@@ -436,7 +436,7 @@ def prepare_scheduler(accelerator, optimizer, scheduler):
 
 
 class AbstractTrainStep(ABC):
-    """Abstract class for batching, forwardPass and loss handler."""
+    """Abstract class for batching, forward pass and loss handler."""
 
     def __init__(self, name):
         super().__init__()
@@ -453,7 +453,12 @@ class AbstractTrainStep(ABC):
 
 
 class BertTrainStep(AbstractTrainStep):
-    """Bert train step class."""
+    """
+    Bert train step class.
+
+    Args:
+        args (`argparse.Namespace`): Megatron-LM arguments.
+    """
 
     def __init__(self, args):
         super().__init__("BertTrainStep")
@@ -577,6 +582,13 @@ class BertTrainStep(AbstractTrainStep):
 
 
 class GPTTrainStep(AbstractTrainStep):
+    """
+    GPT train step class.
+
+    Args:
+        args (`argparse.Namespace`): Megatron-LM arguments.
+    """
+
     def __init__(self, args):
         super().__init__("GPTTrainStep")
         self.get_batch = self.get_batch_func(args.megatron_dataset_flag)
@@ -663,6 +675,13 @@ class GPTTrainStep(AbstractTrainStep):
 
 
 class T5TrainStep(AbstractTrainStep):
+    """
+    T5 train step class.
+
+    Args:
+        args (`argparse.Namespace`): Megatron-LM arguments.
+    """
+
     def __init__(self, args):
         super().__init__("T5TrainStep")
         self.get_batch = self.get_batch_func(args.megatron_dataset_flag)
@@ -866,6 +885,12 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
 class MegatronEngine(torch.nn.Module):
     """
     Megatron-LM model wrapper
+
+    Args:
+        accelerator (:class:`~accelerate.Accelerator`): The accelerator object to use.
+        model: Megatron-LM model
+        optimizer: Megatron-LM optimizer
+        lr_scheduler: Megatron-LM lr scheduler
     """
 
     def __init__(self, accelerator, model, optimizer, scheduler):
@@ -907,6 +932,13 @@ class MegatronEngine(torch.nn.Module):
             model_module.eval()
 
     def train_step(self, **batch_data):
+        """
+        Training step for Megatron-LM
+
+        Args:
+            batch_data (:obj:`dict`): The batch data to train on.
+        """
+
         args = get_args()
         timers = get_timers()
 
@@ -998,6 +1030,13 @@ class MegatronEngine(torch.nn.Module):
         return {}, skipped_iter, grad_norm, num_zeros_in_grad
 
     def eval_step(self, **batch_data):
+        """
+        Evaluation step for Megatron-LM
+
+        Args:
+            batch_data (:obj:`dict`): The batch data to evaluate on.
+        """
+
         args = get_args()
         data_chunks = []
         if args.num_micro_batches > 1:
