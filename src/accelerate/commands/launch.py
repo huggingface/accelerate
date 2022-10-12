@@ -877,7 +877,7 @@ def launch_command(args):
         if not hasattr(args, "use_cpu"):
             args.use_cpu = args.cpu
 
-    if not args.num_cpu_threads_per_process:
+    if args.num_cpu_threads_per_process is None:
         args.num_cpu_threads_per_process = 1
         if args.use_cpu and args.num_processes > 1:
             local_size = get_int_from_env(
