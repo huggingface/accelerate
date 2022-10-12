@@ -146,6 +146,8 @@ class ClusterConfig(BaseConfig):
     deepspeed_config: dict = None
     # args for fsdp
     fsdp_config: dict = None
+    # args for megatron_lm
+    megatron_lm_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
 
@@ -154,6 +156,8 @@ class ClusterConfig(BaseConfig):
             self.deepspeed_config = {}
         if self.fsdp_config is None:
             self.fsdp_config = {}
+        if self.megatron_lm_config is None:
+            self.megatron_lm_config = {}
         return super().__post_init__()
 
 

@@ -70,6 +70,7 @@ class AcceleratorState:
         cpu: bool = False,
         deepspeed_plugin=None,
         fsdp_plugin=None,
+        megatron_lm_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -162,6 +163,10 @@ class AcceleratorState:
                     if self.mixed_precision != "no":
                         fsdp_plugin.set_mixed_precision(self.mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
+                if os.environ.get("USE_MEGATRON_LM", "false") == "true":
+                    self.distributed_type = DistributedType.MEGATRON_LM
+                    megatron_lm_plugin.set_mixed_precision(self.mixed_precision)
+                    self.megatron_lm_plugin = megatron_lm_plugin
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:

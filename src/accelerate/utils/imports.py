@@ -87,6 +87,10 @@ def is_bf16_available(ignore_tpu=False):
     return False
 
 
+def is_megatron_lm_available():
+    return importlib.util.find_spec("megatron") is not None
+
+
 def is_transformers_available():
     return importlib.util.find_spec("transformers") is not None
 

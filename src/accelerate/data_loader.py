@@ -625,7 +625,7 @@ def prepare_data_loader(
     sampler_is_batch_sampler = False
     generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
-    if num_processes != 1 and not dispatch_batches:
+    if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
             if getattr(dataloader.dataset, "generator", None) is not None:
                 generator = dataloader.dataset.generator

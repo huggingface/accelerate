@@ -13,6 +13,7 @@ from .dataclasses import (
     InitProcessGroupKwargs,
     KwargsHandler,
     LoggerType,
+    MegatronLMPlugin,
     PrecisionType,
     RNGType,
     SageMakerDistributedType,
@@ -28,6 +29,7 @@ from .imports import (
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_megatron_lm_available,
     is_rich_available,
     is_sagemaker_available,
     is_tensorboard_available,
@@ -94,6 +96,23 @@ if is_deepspeed_available():
     )
 
 from .launch import PrepareForLaunch, _filter_args, get_launch_prefix
+from .megatron_lm import (
+    AbstractTrainStep,
+    BertTrainStep,
+    GPTTrainStep,
+    MegatronEngine,
+    MegatronLMDummyDataLoader,
+    MegatronLMDummyScheduler,
+    MegatronLMOptimizerWrapper,
+    MegatronLMSchedulerWrapper,
+    T5TrainStep,
+    avg_losses_across_data_parallel_group,
+)
+from .megatron_lm import initialize as megatron_lm_initialize
+from .megatron_lm import prepare_data_loader as megatron_lm_prepare_data_loader
+from .megatron_lm import prepare_model as megatron_lm_prepare_model
+from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
+from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
 from .memory import find_executable_batch_size
 from .other import (
     extract_model_from_parallel,

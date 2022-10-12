@@ -224,6 +224,7 @@ def gather(tensor):
         DistributedType.DEEPSPEED,
         DistributedType.MULTI_GPU,
         DistributedType.FSDP,
+        DistributedType.MEGATRON_LM,
     ]:
         return _gpu_gather(tensor)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
@@ -261,6 +262,7 @@ def gather_object(object: Any):
         DistributedType.DEEPSPEED,
         DistributedType.MULTI_GPU,
         DistributedType.FSDP,
+        DistributedType.MEGATRON_LM,
     ]:
         return _gpu_gather_object(object)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
@@ -304,6 +306,7 @@ def broadcast(tensor, from_process: int = 0):
         DistributedType.DEEPSPEED,
         DistributedType.MULTI_GPU,
         DistributedType.FSDP,
+        DistributedType.MEGATRON_LM,
     ]:
         return _gpu_broadcast(tensor, src=from_process)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
@@ -332,6 +335,7 @@ def broadcast_object_list(object_list, from_process: int = 0):
         DistributedType.DEEPSPEED,
         DistributedType.MULTI_GPU,
         DistributedType.FSDP,
+        DistributedType.MEGATRON_LM,
     ]:
         torch.distributed.broadcast_object_list(object_list, src=from_process)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
@@ -452,6 +456,7 @@ def reduce(tensor, reduction="mean"):
             DistributedType.DEEPSPEED,
             DistributedType.MULTI_GPU,
             DistributedType.FSDP,
+            DistributedType.MEGATRON_LM,
         ]:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
             return cloned_tensor

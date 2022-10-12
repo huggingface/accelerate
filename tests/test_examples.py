@@ -39,6 +39,7 @@ EXCLUDE_EXAMPLES = [
     "automatic_gradient_accumulation.py",
     "fsdp_with_peak_mem_tracking.py",
     "deepspeed_with_config_support.py",
+    "megatron_lm_gpt_pretraining.py",
 ]
 
 
