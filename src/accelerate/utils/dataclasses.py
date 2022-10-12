@@ -852,7 +852,7 @@ class MegatronLMPlugin:
             max_position_embeddings = model.config.max_position_embeddings
             num_labels = model.config.num_labels
             orig_vocab_size = model.config.vocab_size
-            if "maskedlm" in model.config.architectures[0].lower():
+            if "maskedlm" in model.__class__.__name__.lower():
                 pretraining_flag = True
             if self.seq_length is not None:
                 if self.encoder_seq_length is not None:
@@ -865,7 +865,7 @@ class MegatronLMPlugin:
             else:
                 self.seq_length = max_position_embeddings
             self.megatron_lm_default_args["seq_length"] = self.seq_length
-        elif "gpt" in model.config.model_type.lower():
+        elif "gpt2" in model.config.model_type.lower():
             model_type_name = "gpt"
             num_layers = model.config.n_layer
             hidden_size = model.config.n_embd
@@ -889,7 +889,7 @@ class MegatronLMPlugin:
             num_layers = model.config.num_layers
             hidden_size = model.config.d_model
             num_attention_heads = model.config.num_heads
-            max_position_embeddings = model.config.n_positions
+            max_position_embeddings = model.config.n_positions if hasattr(model.config, "n_positions") else 1024
             orig_vocab_size = model.config.vocab_size
             pretraining_flag = True
             if self.encoder_seq_length is None:

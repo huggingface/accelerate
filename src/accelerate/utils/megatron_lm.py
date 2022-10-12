@@ -118,6 +118,8 @@ def prepare_model(accelerator):
         model_type = ModelType.encoder_or_decoder
     elif args.model_type_name == "t5":
         model_type = ModelType.encoder_and_decoder
+        if args.pipeline_model_parallel_split_rank is None and args.pipeline_model_parallel_size > 1:
+            args.pipeline_model_parallel_split_rank = args.pipeline_model_parallel_size // 2
     model = get_model(model_provider_func, model_type)
     return model
 
@@ -708,11 +710,15 @@ class T5TrainStep(AbstractTrainStep):
         return attention_mask
 
     @staticmethod
-    def get_enc_dec_mask(attention_mask):
+    def get_enc_dec_mask(attention_mask, dec_seq_length, device):
+        batch_size, _ = attention_mask.shape
         # We create a 3D attention mask from a 2D tensor mask.
         # [b, 1, s]
         attention_mask_b1s = attention_mask.unsqueeze(1)
-        extended_attention_mask = attention_mask_b1s < 0.5
+        # [b, s, 1]
+        attention_mask_bs1 = torch.ones((batch_size, dec_seq_length, 1), device=device)
+        attention_mask_bss = attention_mask_bs1 * attention_mask_b1s
+        extended_attention_mask = attention_mask_bss < 0.5
         return extended_attention_mask
 
     def get_batch_func(self, megatron_dataset_flag):
@@ -758,7 +764,9 @@ class T5TrainStep(AbstractTrainStep):
                 tokens_dec.masked_fill_(tokens_dec == -100, 0)
             enc_mask = T5TrainStep.attn_mask_postprocess(data["attention_mask"].long())
             dec_mask = T5TrainStep.get_decoder_mask(tokens_dec.shape[1], tokens_dec.device)
-            enc_dec_mask = T5TrainStep.get_enc_dec_mask(data["attention_mask"].long())
+            enc_dec_mask = T5TrainStep.get_enc_dec_mask(
+                data["attention_mask"].long(), tokens_dec.shape[1], tokens_dec.device
+            )
 
             return tokens_enc, tokens_dec, loss_mask, labels, enc_mask, dec_mask, enc_dec_mask
 
@@ -875,6 +883,8 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     args.padded_vocab_size = _vocab_size_with_padding(args.orig_vocab_size, args)
     if args.model_type_name == "bert" and args.pretraining_flag and args.num_labels == 2:
         args.bert_binary_head = True
+    else:
+        args.bert_binary_head = False
     args.iteration = 0
 
 

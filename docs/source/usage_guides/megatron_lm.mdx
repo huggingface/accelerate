@@ -489,3 +489,19 @@ Soon it will be extended to BERT and T5.
 setting is synonymous with gradient accumulation. 
 
 7. When using Megatron-LM, use `accelerator.save_state` and `accelerator.load_state` for saving and loading checkpoints.
+
+8. Below are the mapping from Megatron-LM model architectures to the the equivalent 🤗 transformers model architectures.
+Only these 🤗 transformers model architectures are supported.
+
+a. Megatron-LM [BertModel](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/bert_model.py) : 
+🤗 transformers models with `megatron-bert` in config's model type, e.g., 
+[MegatronBERT](https://huggingface.co/docs/transformers/model_doc/megatron-bert)
+    
+b. Megatron-LM [GPTModel](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py) : 
+🤗 transformers models with `gpt2` in config's model type, e.g., 
+[OpenAI GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
+   
+c. Megatron-LM [T5Model](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/t5_model.py) : 
+🤗 transformers models with `t5` in  config's model type, e.g., 
+[T5](https://huggingface.co/docs/transformers/model_doc/t5) and 
+[MT5](https://huggingface.co/docs/transformers/model_doc/mt5)
