@@ -958,15 +958,17 @@ def launch_command(args):
             args.use_cpu = args.cpu
 
     if args.num_cpu_threads_per_process is None:
-        local_size = get_int_from_env(
-            ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
-        )
-        args.num_cpu_threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
-        if args.num_cpu_threads_per_process == 0:
-            args.num_cpu_threads_per_process = 1
-        warned.append(
-            f"\t`--num_cpu_threads_per_process` was set to `{args.num_cpu_threads_per_process}` to improve out-of-box performance"
-        )
+        args.num_cpu_threads_per_process = 1
+        if args.use_cpu and args.num_processes > 1:
+            local_size = get_int_from_env(
+                ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
+            )
+            threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
+            if args.num_cpu_threads_per_process > 1:
+                args.num_cpu_threads_per_process = threads_per_process
+                warned.append(
+                    f"\t`--num_cpu_threads_per_process` was set to `{args.num_cpu_threads_per_process}` to improve out-of-box performance when training on CPUs"
+                )
 
     if any(warned):
         message = "The following values were not passed to `accelerate launch` and had defaults used instead:\n"
