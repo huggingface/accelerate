@@ -94,8 +94,7 @@ def is_megatron_lm_available():
     if package_exists:
         megatron_version = parse(importlib_metadata.version("megatron-lm"))
         return compare_versions(megatron_version, ">=", "2.2.0")
-    else:
-        return False
+    return False
 
 
 def is_transformers_available():
