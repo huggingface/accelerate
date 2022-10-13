@@ -16,11 +16,11 @@ import importlib
 import sys
 from functools import lru_cache
 
-from packaging.version import parse
-
 import torch
 
-from .versions import is_torch_version, compare_versions
+from packaging.version import parse
+
+from .versions import compare_versions, is_torch_version
 
 
 # The package importlib_metadata is in a different place, depending on the Python version.
