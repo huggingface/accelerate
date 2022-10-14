@@ -1194,6 +1194,9 @@ class Accelerator:
         """
         Should be used in place of `torch.nn.utils.clip_grad_norm_`.
 
+        Returns:
+            `torch.Tensor`: Total norm of the parameter gradients (viewed as a single vector).
+
         Example:
 
         ```python
@@ -1217,13 +1220,13 @@ class Accelerator:
             parameters = [p for p in parameters]
             for model in self._models:
                 if parameters == [p for p in model.parameters()]:
-                    model.clip_grad_norm_(max_norm, norm_type)
-                    return
+                    return model.clip_grad_norm_(max_norm, norm_type)
         elif self.distributed_type == DistributedType.DEEPSPEED:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
-            return
+            # We cannot return the gradient norm because DeepSpeed does it.
+            return None
         self.unscale_gradients()
-        torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
+        return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
     def clip_grad_value_(self, parameters, clip_value):
         """
