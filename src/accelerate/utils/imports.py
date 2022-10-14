@@ -18,7 +18,9 @@ from functools import lru_cache
 
 import torch
 
-from .versions import is_torch_version
+from packaging.version import parse
+
+from .versions import compare_versions, is_torch_version
 
 
 # The package importlib_metadata is in a different place, depending on the Python version.
@@ -88,7 +90,11 @@ def is_bf16_available(ignore_tpu=False):
 
 
 def is_megatron_lm_available():
-    return importlib.util.find_spec("megatron") is not None
+    package_exists = importlib.util.find_spec("megatron") is not None
+    if package_exists:
+        megatron_version = parse(importlib_metadata.version("megatron-lm"))
+        return compare_versions(megatron_version, ">=", "2.2.0")
+    return False
 
 
 def is_transformers_available():
