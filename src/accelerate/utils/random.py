@@ -19,6 +19,7 @@ import numpy as np
 import torch
 
 from ..state import AcceleratorState
+from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, RNGType
 from .imports import is_tpu_available
 
@@ -64,12 +65,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     state = AcceleratorState()
     if state.distributed_type == DistributedType.TPU:
         rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
-    elif state.distributed_type in [
-        DistributedType.DEEPSPEED,
-        DistributedType.MULTI_GPU,
-        DistributedType.FSDP,
-        DistributedType.MEGATRON_LM,
-    ]:
+    elif state.distributed_type in CUDA_DISTRIBUTED_TYPES:
         rng_state = rng_state.to(state.device)
         torch.distributed.broadcast(rng_state, 0)
         rng_state = rng_state.cpu()

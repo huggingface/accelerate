@@ -58,3 +58,5 @@ TORCH_LAUNCH_PARAMS = [
     "master_addr",
     "master_port",
 ]
+
+CUDA_DISTRIBUTED_TYPES = ["DEEPSPEED", "MULTI_GPU", "FSDP", "MEGATRON_LM"]
