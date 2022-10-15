@@ -243,6 +243,7 @@ pip install accelerate
 - FP16 with native AMP (apex on the roadmap)
 - DeepSpeed support (Experimental)
 - PyTorch Fully Sharded Data Parallel (FSDP) support (Experimental)
+- Megatron-LM support (Experimental)
 
 ## Citing 🤗 Accelerate
 
