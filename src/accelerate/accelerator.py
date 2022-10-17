@@ -777,10 +777,11 @@ class Accelerator:
         if device_placement:
             model = model.to(self.device)
         if self.distributed_type == DistributedType.MULTI_GPU:
-            kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
-            model = torch.nn.parallel.DistributedDataParallel(
-                model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
-            )
+            if any(p.requires_grad for p in model.parameters()):
+                kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                model = torch.nn.parallel.DistributedDataParallel(
+                    model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
+                )
         elif self.distributed_type == DistributedType.FSDP:
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
