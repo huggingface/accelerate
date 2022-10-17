@@ -103,65 +103,9 @@ cd ..
 
 4. Installing Megatron-LM
 
-    a. Cloning the Megatron-LM repo
-    ```
-    git clone https://github.com/NVIDIA/Megatron-LM.git
-    cd Megatron-LM
-    ```
-
-    b. Create a file `setup.py`, paste the below code and put in the root folder
-    ```python
-    """Setup for pip package."""
-
-    import os
-    import sys
-    import setuptools
-
-    if sys.version_info < (3,):
-        raise Exception("Python 2 is not supported by Megatron.")
-
-    with open("README.md", "r") as fh:
-        long_description = fh.read()
-
-    setuptools.setup(
-        name="megatron-lm",
-        version="3.0.0",
-        description="Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism.",
-        long_description=long_description,
-        long_description_content_type="text/markdown",
-        # The project's main homepage.
-        url="https://github.com/NVIDIA/Megatron-LM",
-        author="NVIDIA INC",
-        maintainer="NVIDIA INC",
-        # The licence under which the project is released
-        license="See https://github.com/NVIDIA/Megatron-LM/blob/master/LICENSE",
-        classifiers=[
-            "Intended Audience :: Developers",
-            "Intended Audience :: Science/Research",
-            "Intended Audience :: Information Technology",
-            # Indicate what your project relates to
-            "Topic :: Scientific/Engineering :: Artificial Intelligence",
-            "Topic :: Software Development :: Libraries :: Python Modules",
-            # Additional Setting
-            "Environment :: Console",
-            "Natural Language :: English",
-            "Operating System :: OS Independent",
-        ],
-        python_requires=">=3.6",
-        packages=setuptools.find_packages(),
-        install_requires=["nltk", "six", "regex", "torch>=1.12.0", "pybind11"],
-        # Add in any packaged data.
-        include_package_data=True,
-        zip_safe=False,
-        # PyPI package information.
-        keywords="deep learning, Megatron, gpu, NLP, nvidia, pytorch, torch, language",
-    )
-    ```
-
-    c. installing via below command
-    ```
-    pip install "."
-    ```
+```
+pip install git+https://github.com/huggingface/Megatron-LM.git
+```
 
 ## Accelerate Megatron-LM Plugin
 
@@ -183,7 +127,7 @@ What is the number of micro-batches? [1]:2
 Do you want to enable selective activation recomputation? [YES/no]: 
 Do you want to use distributed optimizer which shards optimizer state and gradients across data pralellel ranks? [YES/no]: 
 What is the gradient clipping value based on global L2 Norm (0 to disable)? [1.0]: 
-How many GPU(s) should be used for distributed training? [1]:8
+How many GPU(s) should be used for distributed training? [1]:4
 Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: bf16
 ```
 
@@ -210,7 +154,7 @@ megatron_lm_config:
   megatron_lm_use_distributed_optimizer: true
 mixed_precision: bf16
 num_machines: 1
-num_processes: 8
+num_processes: 4
 rdzv_backend: static
 same_network: true
 use_cpu: false
@@ -289,8 +233,8 @@ examples/by_feature/megatron_lm_gpt_pretraining.py \
 --dataset_config_name wikitext-2-raw-v1 \
 --block_size 1024 \
 --learning_rate 5e-5 \
---per_device_train_batch_size 4 \
---per_device_eval_batch_size 4 \
+--per_device_train_batch_size 24 \
+--per_device_eval_batch_size 24 \
 --num_train_epochs 5 \
 --with_tracking \
 --report_to "wandb" \

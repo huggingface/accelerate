@@ -672,8 +672,10 @@ def main():
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
-    if args.with_tracking:
-        accelerator.end_training()
+    # this is causing some issue with Megatron-LM when using `wandb` at the end of the main function.
+    # Everything works fine inspite of commenting this out. (wandb finishes/closes the run without error)
+    # if args.with_tracking:
+    #     accelerator.end_training()
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
