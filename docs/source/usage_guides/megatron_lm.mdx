@@ -127,7 +127,7 @@ What is the number of micro-batches? [1]:2
 Do you want to enable selective activation recomputation? [YES/no]: 
 Do you want to use distributed optimizer which shards optimizer state and gradients across data pralellel ranks? [YES/no]: 
 What is the gradient clipping value based on global L2 Norm (0 to disable)? [1.0]: 
-How many GPU(s) should be used for distributed training? [1]:8
+How many GPU(s) should be used for distributed training? [1]:4
 Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: bf16
 ```
 
@@ -154,7 +154,7 @@ megatron_lm_config:
   megatron_lm_use_distributed_optimizer: true
 mixed_precision: bf16
 num_machines: 1
-num_processes: 8
+num_processes: 4
 rdzv_backend: static
 same_network: true
 use_cpu: false
@@ -233,8 +233,8 @@ examples/by_feature/megatron_lm_gpt_pretraining.py \
 --dataset_config_name wikitext-2-raw-v1 \
 --block_size 1024 \
 --learning_rate 5e-5 \
---per_device_train_batch_size 4 \
---per_device_eval_batch_size 4 \
+--per_device_train_batch_size 24 \
+--per_device_eval_batch_size 24 \
 --num_train_epochs 5 \
 --with_tracking \
 --report_to "wandb" \
