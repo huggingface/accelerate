@@ -18,6 +18,7 @@ for log in Path().glob("*.log"):
                     duration = f'{line["duration"]:.4f}'
                     if line.get("outcome", "") == "failed":
                         section_num_failed += 1
+                        print(log.name, log.name.split('_')[0])
                         failed.append([test, duration, log.name.split('_')[0]])
                     else:
                         passed.append([test, duration, log.name.split('_')[0]])
