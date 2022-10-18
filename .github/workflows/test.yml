@@ -50,7 +50,7 @@ jobs:
         path: |
           ${{ env.pythonLocation }}
           ${{ env.HF_HOME }}
-        key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version}}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
+        key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
     
     - name: Install the library
       run: |
@@ -67,5 +67,7 @@ jobs:
 
     - name: Generate Report
       if: always()
+      env: 
+        PYTORCH_VERSION: ${{ matrix.pytorch-version }}
       run: |
         python utils/log_reports.py >> $GITHUB_STEP_SUMMARY

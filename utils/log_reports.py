@@ -1,6 +1,5 @@
 import json
-from pathlib import Path 
-import subprocess
+from pathlib import Path
 
 failed = []
 passed = []
@@ -19,16 +18,16 @@ for log in Path().glob("*.log"):
                     duration = f'{line["duration"]:.4f}'
                     if line.get("outcome", "") == "failed":
                         section_num_failed += 1
-                        failed.append([test, duration])
+                        failed.append([test, duration, log.name.split('_')[0]])
                     else:
-                        passed.append([test, duration])
+                        passed.append([test, duration, log.name.split('_')[0]])
     group_info.append([str(log), section_num_failed])
 
 if len(failed) > 0:
     result = "## Failed Tests:\n"
-    failed_table = '| Test Location | Test Class | Test Name |\n|---|---|---|\n| '
+    failed_table = '| Test Location | Test Class | Test Name | PyTorch Version |\n|---|---|---|---|\n| '
     for test in failed:
         failed_table += ' | '.join(test[0].split("::"))
-    failed_table += " |"
+    failed_table += f" | {test[2]} |"
     result += failed_table
     print(result)
