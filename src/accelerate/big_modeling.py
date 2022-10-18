@@ -144,6 +144,7 @@ def cpu_offload(
     if state_dict is None:
         state_dict = {n: p.to("cpu") for n, p in model.state_dict().items()}
 
+    add_hook_to_module(model, AlignDevicesHook(io_same_device=True), append=True)
     attach_align_device_hook(
         model,
         execution_device=execution_device,
@@ -152,7 +153,6 @@ def cpu_offload(
         weights_map=state_dict,
         preload_module_classes=preload_module_classes,
     )
-    add_hook_to_module(model, AlignDevicesHook(io_same_device=True), append=True)
 
     return model
 
@@ -192,6 +192,7 @@ def disk_offload(
         execution_device = next(iter(model.parameters())).device
     weights_map = OffloadedWeightsLoader(save_folder=offload_dir)
 
+    add_hook_to_module(model, AlignDevicesHook(io_same_device=True), append=True)
     attach_align_device_hook(
         model,
         execution_device=execution_device,
@@ -200,7 +201,6 @@ def disk_offload(
         weights_map=weights_map,
         preload_module_classes=preload_module_classes,
     )
-    add_hook_to_module(model, AlignDevicesHook(io_same_device=True), append=True)
 
     return model
 

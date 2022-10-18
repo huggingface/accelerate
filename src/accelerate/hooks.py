@@ -360,7 +360,7 @@ def attach_align_device_hook(
             offload_buffers=offload_buffers,
             place_submodules=full_offload,
         )
-        add_hook_to_module(module, hook)
+        add_hook_to_module(module, hook, append=True)
 
     # We stop the recursion in case we hit the full offload.
     if full_offload:
