@@ -70,5 +70,5 @@ jobs:
       env: 
         PYTORCH_VERSION: ${{ matrix.pytorch-version }}
       run: |
-        echo "PyTorch Version: $(PYTORCH_VERSION)"
+        echo "PyTorch Version: $PYTORCH_VERSION"
         python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
