@@ -114,7 +114,6 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
         for child in Path(f"{self.tmpdir}/wandb/latest-run").glob("*"):
-            logger.info(child)
             if child.is_file() and child.suffix == ".wandb":
                 content = subprocess.check_output(
                     ["wandb", "sync", "--view", "--verbose", str(child)], env=os.environ.copy()
