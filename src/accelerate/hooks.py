@@ -108,7 +108,7 @@ class SequentialHook(ModelHook):
         return module
 
 
-def add_hook_to_module(module: nn.Module, hook: ModelHook):
+def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False):
     """
     Adds a hook to a given module. This will rewrite the `forward` method of the module to include the hook, to remove
     this behavior and restore the original `forward` method, use `remove_hook_from_module`.
@@ -128,6 +128,15 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook):
         `torch.nn.Module`: The same module, with the hook attached (the module is modified in place, so the result can
         be discarded).
     """
+
+    if append:
+        if hasattr(module, "_hf_hook") and (module._hf_hook is not None):
+            old_hook = module._hf_hook
+            remove_hook_from_module(module)
+
+            hooks = [old_hook, hook]
+            hook = SequentialHook(*hooks)
+
     if hasattr(module, "_hf_hook") and hasattr(module, "_old_forward"):
         # If we already put some hook on this module, we replace it with the new one.
         old_forward = module._old_forward
