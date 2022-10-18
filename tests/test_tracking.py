@@ -86,7 +86,7 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         self.add_mocks(mock.patch.dict(os.environ, {"WANDB_DIR": self.tmpdir}))
 
     @staticmethod
-    def parse_log(log: str, section: str):
+    def parse_log(log: str, section: str, record: bool = True):
         """
         Parses wandb log for `section` and returns a dictionary of
         all items in that section. Section names are based on the
@@ -94,7 +94,10 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         with "Record" in that result
         """
         # Big thanks to the W&B team for helping us parse their logs
-        cleaned_record = re.findall(rf"Record: {section} ([\S\s]*?)\n\n", log)[0]
+        pattern = rf"{section} ([\S\s]*?)\n\n"
+        if record:
+            pattern = rf"Record: {pattern}"
+        cleaned_record = re.findall(pattern, log)[0]
         # A config
         if section == "config" or section == "history":
             cleaned_record = re.findall(r'"([a-zA-Z0-9_.,]+)', cleaned_record)
@@ -119,7 +122,6 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
                     ["wandb", "sync", "--view", "--verbose", str(child)], env=os.environ.copy()
                 ).decode("utf8", "ignore")
                 break
-        print(content)
 
         # Check HPS through careful parsing and cleaning
         logged_items = self.parse_log(content, "config")
@@ -130,7 +132,7 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         self.assertEqual(logged_items["some_string"], "some_value")
 
         # Run tags
-        logged_items = self.parse_log(content, "run")
+        logged_items = self.parse_log(content, "run", False)
         self.assertEqual(logged_items["tags"], "my_tag")
 
         # Actual logging
