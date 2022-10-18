@@ -69,6 +69,25 @@ class HooksModelTester(unittest.TestCase):
         self.assertFalse(hasattr(test_model, "_hf_hook"))
         self.assertFalse(hasattr(test_model, "_old_forward"))
 
+    def test_append_and_remove_hooks(self):
+        test_model = ModelForTest()
+        test_hook = ModelHook()
+
+        add_hook_to_module(test_model, test_hook)
+        add_hook_to_module(test_model, test_hook, append=True)
+
+        self.assertEqual(isinstance(test_model._hf_hook, SequentialHook), True)
+        self.assertEqual(len(test_model._hf_hook.hooks), 2)
+        self.assertTrue(hasattr(test_model, "_old_forward"))
+
+        # Check adding the hook did not change the name or the signature
+        self.assertEqual(test_model.forward.__name__, "forward")
+        self.assertListEqual(list(inspect.signature(test_model.forward).parameters), ["x"])
+
+        remove_hook_from_module(test_model)
+        self.assertFalse(hasattr(test_model, "_hf_hook"))
+        self.assertFalse(hasattr(test_model, "_old_forward"))
+
     def test_pre_forward_hook_is_executed(self):
         test_model = ModelForTest()
         x = torch.randn(2, 3)
