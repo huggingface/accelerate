@@ -115,28 +115,26 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
 
     <Tip warning={true}>
 
-    If the module already contains a hook, this will replace it with the new hook passed. To chain two hooks together,
-    use the `SequentialHook` class.
+    If the module already contains a hook, this will replace it with the new hook passed by default. To chain two hooks
+    together, pass `append=True`, so it chains the current and new hook into an instance of the `SequentialHook` class.
 
     </Tip>
 
     Args:
         module (`torch.nn.Module`): The module to attach a hook to.
         hook (`ModelHook`): The hook to attach.
-        append (`bool`): Whether, if module already contains a hook, should chain the new one with SequentialHook
+        append (`bool`, *optional*, defaults to `False`):
+            Whether the hook should be chained with an existing one (if module already contains a hook) or not.
 
     Returns:
         `torch.nn.Module`: The same module, with the hook attached (the module is modified in place, so the result can
         be discarded).
     """
 
-    if append:
-        if hasattr(module, "_hf_hook") and (module._hf_hook is not None):
-            old_hook = module._hf_hook
-            remove_hook_from_module(module)
-
-            hooks = [old_hook, hook]
-            hook = SequentialHook(*hooks)
+    if append and (getattr(module, "_hf_hook", None) is not None):
+        old_hook = module._hf_hook
+        remove_hook_from_module(module)
+        hook = SequentialHook(old_hook, hook)
 
     if hasattr(module, "_hf_hook") and hasattr(module, "_old_forward"):
         # If we already put some hook on this module, we replace it with the new one.
