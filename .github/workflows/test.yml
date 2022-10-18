@@ -62,12 +62,12 @@ jobs:
         pip install pytest-reportlog
     
     - name: Run Tests
+      env: 
+        PYTORCH_VERSION: ${{ matrix.pytorch-version }}
       run: |
         make ${{ matrix.test-kind }}
 
     - name: Generate Report
       if: always()
-      env: 
-        PYTORCH_VERSION: ${{ matrix.pytorch-version }}
       run: |
         python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
