@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - id: step1
-        run: echo "::set-output name=version::$(python setup.py --version)"
+        run: echo "version=$(python setup.py --version)" >> $GITHUB_OUTPUT
 
   version-cpu:
     name: "Latest Accelerate CPU [version]"

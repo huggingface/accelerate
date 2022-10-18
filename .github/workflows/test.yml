@@ -38,7 +38,7 @@ jobs:
           test_rest
         ]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v3.1.0
     - name: Set up python 3.7
       uses: actions/setup-python@v3
       with:
@@ -50,7 +50,7 @@ jobs:
         path: |
           ${{ env.pythonLocation }}
           ${{ env.HF_HOME }}
-        key: ${{ env.pythonLocation }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
+        key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
     
     - name: Install the library
       run: |
@@ -62,6 +62,8 @@ jobs:
         pip install pytest-reportlog
     
     - name: Run Tests
+      env: 
+        PYTORCH_VERSION: ${{ matrix.pytorch-version }}
       run: |
         make ${{ matrix.test-kind }}
 
