@@ -432,7 +432,7 @@ def simple_launcher(args):
     current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
     if args.use_mps_device:
         current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-    elif args.gpu_ids != "all":
+    elif args.gpu_ids != "all" and args.gpu_ids is not None:
         current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
@@ -489,7 +489,7 @@ def multi_gpu_launcher(args):
 
     current_env = os.environ.copy()
     gpu_ids = getattr(args, "gpu_ids")
-    if gpu_ids != "all":
+    if gpu_ids != "all" and args.gpu_ids is not None:
         current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
     try:
@@ -637,7 +637,7 @@ def deepspeed_launcher(args):
 
     current_env = os.environ.copy()
     gpu_ids = getattr(args, "gpu_ids")
-    if gpu_ids != "all":
+    if gpu_ids != "all" and args.gpu_ids is not None:
         current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
@@ -947,7 +947,7 @@ def launch_command(args):
     else:
         if args.num_processes is None:
             args.num_processes = torch.cuda.device_count() if args.multi_gpu else 1
-            warned.append("\t`--num_processes` was set to a value of `{args.num_processes}`")
+            warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
         if args.num_machines is None:
             warned.append("\t`--num_machines` was set to a value of `1`")
             args.num_machines = 1
