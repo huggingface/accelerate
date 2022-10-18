@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -85,59 +86,59 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         self.add_mocks(mock.patch.dict(os.environ, {"WANDB_DIR": self.tmpdir}))
 
     @staticmethod
-    def get_value_from_log(key: str, log: str, key_occurrence: int = 0):
+    def parse_log(log: str, section: str):
         """
-        Parses wandb log for `key` and returns the value.
-        If parsing through multiple calls to .log, pass in a `key_occurrence`
+        Parses wandb log for `section` and returns a dictionary of
+        all items in that section. Section names are based on the
+        output of `wandb sync --view --verbose` and items starting
+        with "Record" in that result
         """
-        res = re.findall(rf"(?<={key} )[^\s]+", log)[key_occurrence]
-        if '"' in res:
-            return re.findall(r'"([^"]*)"', res)[0]
+        # Big thanks to the W&B team for helping us parse their logs
+        cleaned_record = re.findall(rf"Record: {section} ([\S\s]*?)\n\n", log)[0]
+        # A config
+        if section == "config" or section == "history":
+            cleaned_record = re.findall(r'"([a-zA-Z0-9_.,]+)', cleaned_record)
+            return {key: val for key, val in zip(cleaned_record[0::2], cleaned_record[1::2])}
+        # Everything else
         else:
-            return res
+            return dict(re.findall(r'(\w+): "([^\s]+)"', cleaned_record))
 
-    def test_init_trackers(self):
+    def test_wandb(self):
         project_name = "test_project_with_config"
         accelerator = Accelerator(log_with="wandb")
         config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
         kwargs = {"wandb": {"tags": ["my_tag"]}}
         accelerator.init_trackers(project_name, config, kwargs)
-        accelerator.end_training()
-        # The latest offline log is stored at wandb/latest-run/*.wandb
-        for child in Path(f"{self.tmpdir}/wandb/latest-run").glob("*"):
-            logger.info(child)
-            if child.is_file() and child.suffix == ".wandb":
-                with open(child, "rb") as f:
-                    content = f.read()
-                break
-
-        # Check HPS through careful parsing and cleaning
-        cleaned_log = re.sub(r"[\x00-\x1f]+", " ", content.decode("utf8", "ignore"))
-        self.assertEqual(self.get_value_from_log("num_iterations", cleaned_log), "12")
-        self.assertEqual(self.get_value_from_log("learning_rate", cleaned_log), "0.01")
-        self.assertEqual(self.get_value_from_log("some_boolean", cleaned_log), "false")
-        self.assertEqual(self.get_value_from_log("some_string", cleaned_log), "some_value")
-        self.assertIn("my_tag", cleaned_log)
-
-    def test_log(self):
-        project_name = "test_project_with_log"
-        accelerator = Accelerator(log_with="wandb")
-        accelerator.init_trackers(project_name)
         values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
         accelerator.log(values, step=0)
         accelerator.end_training()
         # The latest offline log is stored at wandb/latest-run/*.wandb
         for child in Path(f"{self.tmpdir}/wandb/latest-run").glob("*"):
+            logger.info(child)
             if child.is_file() and child.suffix == ".wandb":
-                with open(child, "rb") as f:
-                    content = f.read()
+                content = subprocess.check_output(
+                    ["wandb", "sync", "--view", "--verbose", str(child)], env=os.environ.copy()
+                ).decode("utf8", "ignore")
                 break
+
         # Check HPS through careful parsing and cleaning
-        cleaned_log = re.sub(r"[\x00-\x1f]+", " ", content.decode("utf8", "ignore"))
-        self.assertTrue("0.1" in self.get_value_from_log("total_loss", cleaned_log))
-        self.assertTrue("1" in self.get_value_from_log("iteration", cleaned_log))
-        self.assertTrue("some_value" in self.get_value_from_log("my_text", cleaned_log))
-        self.assertTrue("0" in self.get_value_from_log("_step", cleaned_log))
+        logged_items = self.parse_log(content, "config")
+        self.assertEqual(logged_items["num_iterations"], "12")
+        self.assertEqual(logged_items["learning_rate"], "0.01")
+        self.assertEqual(logged_items["some_boolean"], "false")
+        self.assertEqual(logged_items["some_string"], "some_value")
+        self.assertEqual(logged_items["some_string"], "some_value")
+
+        # Run tags
+        logged_items = self.parse_log(content, "run")
+        self.assertEqual(logged_items["tags"], "my_tag")
+
+        # Actual logging
+        logged_items = self.parse_log(content, "history")
+        self.assertEqual(logged_items["total_loss"], "0.1")
+        self.assertEqual(logged_items["iteration"], "1")
+        self.assertEqual(logged_items["my_text"], "some_value")
+        self.assertEqual(logged_items["_step"], "0")
 
 
 # Comet has a special `OfflineExperiment` we need to use for testing
