@@ -50,7 +50,7 @@ jobs:
         path: |
           ${{ env.pythonLocation }}
           ${{ env.HF_HOME }}
-        key: ${{ env.pythonLocation }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
+        key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version}}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
     
     - name: Install the library
       run: |
