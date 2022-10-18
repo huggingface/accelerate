@@ -29,6 +29,11 @@ jobs:
           pip install -e .[testing,test_trackers]
           pip install pytest-reportlog
 
+      - name: Run CLI tests
+        run: |
+          source activate accelerate
+          make test_cli
+          
       - name: Run test on GPUs
         run: |
           source activate accelerate
@@ -61,6 +66,11 @@ jobs:
           git fetch && git checkout ${{ github.sha }}
           pip install -e .[testing,test_trackers]
           pip install pytest-reportlog
+
+      - name: Run CLI tests
+        run: |
+          source activate accelerate
+          make test_cli
 
       - name: Run test on GPUs
         run: |

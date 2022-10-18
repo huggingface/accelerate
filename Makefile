@@ -34,6 +34,9 @@ test_core:
 	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/deepspeed --ignore=./tests/test_big_modeling.py \
 	--ignore=./tests/fsdp $(if $(IS_GITHUB_CI),--report-log 'core.log',)
 
+test_cli:
+	python -m pytest -s -v ./tests/test_cli.py $(if $(IS_GITHUB_CI),--report-log 'cli.log',)
+
 test_deepspeed:
 	python -m pytest -s -v ./tests/deepspeed $(if $(IS_GITHUB_CI),--report-log 'deepspeed.log',)
 
