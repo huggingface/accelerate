@@ -29,7 +29,7 @@ jobs:
         run: |
           for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
             if [ `basename "${file}"` == "setup.py" ]; then
-              echo "changed=1" >> $GITHUB_ENV
+              echo "changed=1" >> $GITHUB_OUTPUT
             fi
           done
           
