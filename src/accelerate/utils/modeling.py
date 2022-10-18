@@ -365,7 +365,7 @@ def get_balanced_memory(
     if not torch.cuda.is_available():
         return max_memory
 
-    num_devices = len([d for d in max_memory if torch.device(d).type == "cuda"])
+    num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
     module_sizes = compute_module_sizes(model, dtype=dtype)
     per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
 
