@@ -375,3 +375,7 @@ class ModelingUtilsTester(unittest.TestCase):
         # Last device always get max memory to give more buffer and avoid accidental CPU offload
         max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 500})
         self.assertDictEqual({0: 215, 1: 500}, max_memory)
+
+        # If we set a device to 0, it's not counted.
+        max_memory = get_balanced_memory(model, max_memory={0: 0, 1: 300, 2: 300})
+        self.assertDictEqual({0: 0, 1: 215, 2: 300}, max_memory)
