@@ -114,7 +114,7 @@ class BatchSamplerShard(BatchSampler):
               then `[6, 7]` if this argument is set to `True`.
         even_batches (`bool`, *optional*, defaults to `True`):
             Whether or not to loop back at the beginning of the sampler when the number of samples is not a round
-            multiple of the batch size/number of processes.
+            multiple of (original batch size / number of processes).
 
     <Tip warning={true}>
 
