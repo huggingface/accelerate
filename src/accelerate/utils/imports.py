@@ -127,7 +127,7 @@ def is_boto3_available():
 
 
 def is_rich_available():
-    return is_rich_available() and (not os.environ.get("DISABLE_RICH", "0") == "1")
+    return (importlib.util.find_spec("rich") is not None) and (not os.environ.get("DISABLE_RICH", "0") == "1")
 
 
 def is_sagemaker_available():
