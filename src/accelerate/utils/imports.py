@@ -20,6 +20,7 @@ import torch
 
 from packaging.version import parse
 
+from .environment import parse_flag_from_env
 from .versions import compare_versions, is_torch_version
 
 
@@ -126,7 +127,7 @@ def is_boto3_available():
 
 
 def is_rich_available():
-    return importlib.util.find_spec("rich") is not None
+    return (importlib.util.find_spec("rich") is not None) and (not parse_flag_from_env("DISABLE_RICH"))
 
 
 def is_sagemaker_available():

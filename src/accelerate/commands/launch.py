@@ -573,7 +573,7 @@ def multi_gpu_launcher(args):
         try:
             distrib_run.run(args)
         except:
-            if debug:
+            if is_rich_available() and debug:
                 console = get_console()
                 console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
                 console.print_exception(suppress=[__file__], show_locals=False)
@@ -684,7 +684,7 @@ def deepspeed_launcher(args):
             try:
                 distrib_run.run(args)
             except:
-                if debug:
+                if is_rich_available() and debug:
                     console = get_console()
                     console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
                     console.print_exception(suppress=[__file__], show_locals=False)
