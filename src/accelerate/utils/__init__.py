@@ -31,7 +31,6 @@ from .imports import (
     is_deepspeed_available,
     is_megatron_lm_available,
     is_rich_available,
-    is_rich_enabled,
     is_sagemaker_available,
     is_tensorboard_available,
     is_tpu_available,

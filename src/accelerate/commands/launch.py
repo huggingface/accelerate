@@ -38,7 +38,7 @@ from accelerate.utils import (
     PrepareForLaunch,
     _filter_args,
     is_deepspeed_available,
-    is_rich_enabled,
+    is_rich_available,
     is_sagemaker_available,
     is_torch_version,
     patch_environment,
@@ -48,7 +48,7 @@ from accelerate.utils.dataclasses import SageMakerDistributedType
 from accelerate.utils.launch import env_var_path_add
 
 
-if is_rich_enabled():
+if is_rich_available():
     from rich import get_console
     from rich.logging import RichHandler
 
@@ -573,7 +573,7 @@ def multi_gpu_launcher(args):
         try:
             distrib_run.run(args)
         except:
-            if debug and is_rich_enabled():
+            if is_rich_available() and debug:
                 console = get_console()
                 console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
                 console.print_exception(suppress=[__file__], show_locals=False)
@@ -684,7 +684,7 @@ def deepspeed_launcher(args):
             try:
                 distrib_run.run(args)
             except:
-                if debug:
+                if is_rich_available() and debug:
                     console = get_console()
                     console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
                     console.print_exception(suppress=[__file__], show_locals=False)

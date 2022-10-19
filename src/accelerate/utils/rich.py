@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .imports import is_rich_available, is_rich_enabled
+from .imports import is_rich_available
 
 
 if is_rich_available():
-    if is_rich_enabled():
-        from rich.traceback import install
+    from rich.traceback import install
 
-        install(show_locals=False)
+    install(show_locals=False)
 
 else:
     raise ModuleNotFoundError("To use the rich extension, install rich with `pip install rich`")
