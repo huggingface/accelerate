@@ -470,7 +470,7 @@ def multi_gpu_launcher(args):
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
         setattr(args, "node_rank", int(args.machine_rank))
-        if getattr(args, "same_network"):
+        if getattr(args, "same_network", False):
             setattr(args, "master_addr", str(main_process_ip))
             setattr(args, "master_port", str(main_process_port))
         else:
@@ -488,7 +488,7 @@ def multi_gpu_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
-    gpu_ids = getattr(args, "gpu_ids")
+    gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
         current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
@@ -618,7 +618,7 @@ def deepspeed_launcher(args):
         setattr(args, "nproc_per_node", str(num_processes // num_machines))
         setattr(args, "nnodes", str(num_machines))
         setattr(args, "node_rank", int(args.machine_rank))
-        if getattr(args, "same_network"):
+        if getattr(args, "same_network", False):
             setattr(args, "master_addr", str(main_process_ip))
             setattr(args, "master_port", str(main_process_port))
         else:
@@ -636,7 +636,7 @@ def deepspeed_launcher(args):
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
-    gpu_ids = getattr(args, "gpu_ids")
+    gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
         current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
