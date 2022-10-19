@@ -16,11 +16,11 @@ from .utils import (
     InitProcessGroupKwargs,
     find_executable_batch_size,
     infer_auto_device_map,
-    is_rich_available,
+    is_rich_enabled,
     load_checkpoint_in_model,
     synchronize_rng_states,
 )
 
 
-if is_rich_available():
+if is_rich_enabled():
     from .utils import rich

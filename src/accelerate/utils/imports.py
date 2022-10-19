@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import importlib
+import os
 import sys
 from functools import lru_cache
 
@@ -127,6 +128,10 @@ def is_boto3_available():
 
 def is_rich_available():
     return importlib.util.find_spec("rich") is not None
+
+
+def is_rich_enabled():
+    return is_rich_available() and (not os.environ.get("DISABLE_RICH", "0") == "1")
 
 
 def is_sagemaker_available():
