@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import importlib
-import os
 import sys
 from functools import lru_cache
 
@@ -21,6 +20,7 @@ import torch
 
 from packaging.version import parse
 
+from .environment import parse_flag_from_env
 from .versions import compare_versions, is_torch_version
 
 
@@ -127,7 +127,7 @@ def is_boto3_available():
 
 
 def is_rich_available():
-    return (importlib.util.find_spec("rich") is not None) and (not os.environ.get("DISABLE_RICH", "0") == "1")
+    return (importlib.util.find_spec("rich") is not None) and (not parse_flag_from_env("DISABLE_RICH"))
 
 
 def is_sagemaker_available():

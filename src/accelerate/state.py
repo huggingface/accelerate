@@ -14,35 +14,24 @@
 
 import os
 import warnings
-from distutils.util import strtobool
 
 import torch
 
-from .utils import DistributedType, get_ccl_version, is_ccl_available, is_deepspeed_available, is_tpu_available
+from .utils import (
+    DistributedType,
+    get_ccl_version,
+    get_int_from_env,
+    is_ccl_available,
+    is_deepspeed_available,
+    is_tpu_available,
+    parse_choice_from_env,
+    parse_flag_from_env,
+)
 from .utils.dataclasses import SageMakerDistributedType
 
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
-
-
-def get_int_from_env(env_keys, default):
-    """Returns the first positive env value found in the `env_keys` list or the default."""
-    for e in env_keys:
-        val = int(os.environ.get(e, -1))
-        if val >= 0:
-            return val
-    return default
-
-
-def parse_flag_from_env(key, default=False):
-    value = os.environ.get(key, str(default))
-    return strtobool(value) == 1  # As its name indicates `strtobool` actually returns an int...
-
-
-def parse_choice_from_env(key, default="no"):
-    value = os.environ.get(key, str(default))
-    return value
 
 
 # Inspired by Alex Martelli's 'Borg'.
