@@ -326,6 +326,12 @@ def launch_command_parser(subparsers=None):
         help="What GPUs (by id) should be used for training on this machine as a comma-seperated list",
     )
     parser.add_argument(
+        "--same_network",
+        default=False,
+        action="store_true",
+        help="Whether all machines used for multinode training exist on the same local network.",
+    )
+    parser.add_argument(
         "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
     )
     parser.add_argument("--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0.")
@@ -363,7 +369,7 @@ def launch_command_parser(subparsers=None):
     parser.add_argument(
         "--downcast_bf16",
         action="store_true",
-        help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32",
+        help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
     )
     parser.add_argument(
         "-m",
