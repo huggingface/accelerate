@@ -118,7 +118,8 @@ class BatchSamplerShard(BatchSampler):
 
     <Tip warning={true}>
 
-    This does not support `BatchSampler` with varying batch size yet.
+    `BatchSampler`s with varying batch sizes are not enabled by default. To enable this behaviour, set `even_batches`
+    equal to `True`
 
     </Tip>"""
 
@@ -624,6 +625,12 @@ def prepare_data_loader(
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
 
+    <Tip warning={true}>
+
+    `BatchSampler`s with varying batch sizes are not enabled by default. To enable this behaviour, set `even_batches`
+    equal to `True`
+
+    </Tip>
     """
     if dispatch_batches is None:
         if is_torch_version("<", "1.8.0") or not put_on_device:
