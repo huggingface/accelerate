@@ -3,12 +3,12 @@
     "name": "accelerate_dev_environment",
     "build": {
         // ACTION NEEDED: comment/uncomment the relevant line depending on whether you are in a CPU/GPU environment
-        // "dockerfile": "../docker/accelerate-cpu/Dockerfile"
-        "dockerfile": "../docker/accelerate-gpu/Dockerfile"
+         "dockerfile": "../docker/accelerate-cpu/Dockerfile"
+//        "dockerfile": "../docker/accelerate-gpu/Dockerfile"
     },
     "runArgs": [
-        // ACTION NEEDED: comment the next line if your local machine has no GPUs available
-        "--gpus", "all",
+        // ACTION NEEDED: uncomment the next line if your local machine has no GPUs available
+//        "--gpus", "all",
         // Enable the docker container to access system resources
         "--ipc", "host"
     ],
