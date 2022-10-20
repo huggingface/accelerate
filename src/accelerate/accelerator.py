@@ -153,7 +153,7 @@ class Accelerator:
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
             underlying dataset is an `IterableDataset`, `False` otherwise.
-        even_batches ('bool', defaults to `True`):
+        even_batches (`bool`, *optional*, defaults to `True`):
             If set to `True`, in cases where the total batch size across all processes does not exactly divide the
             dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
             all workers.
