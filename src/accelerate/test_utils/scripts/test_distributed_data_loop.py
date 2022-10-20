@@ -19,8 +19,13 @@ from typing import List
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from accelerate import notebook_launcher
 from accelerate.accelerator import Accelerator
+
+
+def create_accelerator(even_batches=True):
+    accelerator = Accelerator(even_batches=even_batches)
+    assert accelerator.num_processes == 2, "this script expects that two GPUs are available"
+    return accelerator
 
 
 def create_dataloader(accelerator: Accelerator, dataset_size: int, batch_size: int):
@@ -56,7 +61,9 @@ def verify_dataloader_batch_sizes(
         assert batch_sizes == process_1_expected_batch_sizes
 
 
-def test_default_ensures_even_batch_sizes(accelerator):
+def test_default_ensures_even_batch_sizes():
+
+    accelerator = create_accelerator()
 
     # without padding, we would expect a different number of batches
     verify_dataloader_batch_sizes(
@@ -77,7 +84,9 @@ def test_default_ensures_even_batch_sizes(accelerator):
     )
 
 
-def test_can_disable_even_batches(accelerator):
+def test_can_disable_even_batches():
+    accelerator = create_accelerator(even_batches=False)
+
     verify_dataloader_batch_sizes(
         accelerator,
         dataset_size=3,
@@ -93,15 +102,3 @@ def test_can_disable_even_batches(accelerator):
         process_0_expected_batch_sizes=[2, 2],
         process_1_expected_batch_sizes=[2, 1],
     )
-
-
-def run():
-    accelerator = Accelerator()
-    assert accelerator.num_processes == 2, "this script expects that two GPUs are available"
-
-    test_default_ensures_even_batch_sizes(accelerator)
-    test_can_disable_even_batches(Accelerator(even_batches=False))
-
-
-if __name__ == "__main__":
-    run()
