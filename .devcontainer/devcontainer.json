@@ -7,7 +7,7 @@
 //        "dockerfile": "../docker/accelerate-gpu/Dockerfile"
     },
     "runArgs": [
-        // ACTION NEEDED: uncomment the next line if your local machine has no GPUs available
+        // ACTION NEEDED: uncomment the next line if your local machine has GPUs available
 //        "--gpus", "all",
         // Enable the docker container to access system resources
         "--ipc", "host"
