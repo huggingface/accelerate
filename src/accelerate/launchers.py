@@ -43,12 +43,12 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
             The port to use to communicate between processes when launching a multi-GPU training.
     """
     # Are we in a google colab or a Kaggle Kernel?
+    in_colab = False
+    in_kaggle = False
     if any(key.startswith("KAGGLE") for key in os.environ.keys()):
-        in_colab_or_kaggle = True
+        in_kaggle = True
     elif "IPython" in sys.modules:
-        in_colab_or_kaggle = "google.colab" in str(sys.modules["IPython"].get_ipython())
-    else:
-        in_colab_or_kaggle = False
+        in_colab = "google.colab" in str(sys.modules["IPython"].get_ipython())
 
     try:
         mixed_precision = PrecisionType(mixed_precision.lower())
@@ -57,31 +57,29 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
             f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
         )
 
-    if in_colab_or_kaggle:
-        if os.environ.get("TPU_NAME", None) is not None:
-            # TPU launch
-            import torch_xla.distributed.xla_multiprocessing as xmp
+    if (in_colab or in_kaggle) and (os.environ.get("TPU_NAME", None) is not None):
+        # TPU launch
+        import torch_xla.distributed.xla_multiprocessing as xmp
 
-            if len(AcceleratorState._shared_state) > 0:
-                raise ValueError(
-                    "To train on TPU in Colab or Kaggle Kernel, the `Accelerator` should only be initialized inside "
-                    "your training function. Restart your notebook and make sure no cells initializes an "
-                    "`Accelerator`."
-                )
-            if num_processes is None:
-                num_processes = 8
+        if len(AcceleratorState._shared_state) > 0:
+            raise ValueError(
+                "To train on TPU in Colab or Kaggle Kernel, the `Accelerator` should only be initialized inside "
+                "your training function. Restart your notebook and make sure no cells initializes an "
+                "`Accelerator`."
+            )
+        if num_processes is None:
+            num_processes = 8
 
-            launcher = PrepareForLaunch(function, distributed_type="TPU")
-            print(f"Launching a training on {num_processes} TPU cores.")
-            xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
+        launcher = PrepareForLaunch(function, distributed_type="TPU")
+        print(f"Launching a training on {num_processes} TPU cores.")
+        xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
+    elif in_colab:
+        # No need for a distributed launch otherwise as it's either CPU or one GPU.
+        if torch.cuda.is_available():
+            print("Launching training on one GPU.")
         else:
-            # No need for a distributed launch otherwise as it's either CPU or one GPU.
-            if torch.cuda.is_available():
-                print("Launching training on one GPU.")
-            else:
-                print("Launching training on one CPU.")
-            function(*args)
-
+            print("Launching training on one CPU.")
+        function(*args)
     else:
         if num_processes is None:
             raise ValueError(
