@@ -119,7 +119,7 @@ class BatchSamplerShard(BatchSampler):
     <Tip warning={true}>
 
     `BatchSampler`s with varying batch sizes are not enabled by default. To enable this behaviour, set `even_batches`
-    equal to `True`
+    equal to `False`
 
     </Tip>"""
 
@@ -628,7 +628,7 @@ def prepare_data_loader(
     <Tip warning={true}>
 
     `BatchSampler`s with varying batch sizes are not enabled by default. To enable this behaviour, set `even_batches`
-    equal to `True`
+    equal to `False`
 
     </Tip>
     """
