@@ -28,6 +28,9 @@ class MultiGPUTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
         self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_script.py"])
+        self.data_loop_file_path = os.path.sep.join(
+            mod_file.split(os.path.sep)[:-1] + ["scripts", "test_distributed_data_loop.py"]
+        )
 
     @require_multi_gpu
     def test_multi_gpu(self):
@@ -40,6 +43,17 @@ class MultiGPUTester(unittest.TestCase):
     def test_pad_across_processes(self):
         cmd = get_launch_prefix() + [inspect.getfile(self.__class__)]
         with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd, env=os.environ.copy())
+
+    @require_multi_gpu
+    def test_distributed_data_loop(self):
+        """
+        This TestCase checks the behaviour that occurs during distributed training or evaluation,
+        when the batch size does not evenly divide the dataset size.
+        """
+        print(f"Found {torch.cuda.device_count()} devices, using 2 devices only")
+        cmd = get_launch_prefix() + [self.data_loop_file_path]
+        with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
 
