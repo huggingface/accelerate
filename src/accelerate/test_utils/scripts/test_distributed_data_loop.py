@@ -101,3 +101,13 @@ def test_can_disable_even_batches():
         process_0_expected_batch_sizes=[2, 2],
         process_1_expected_batch_sizes=[2, 1],
     )
+
+
+if __name__ == "__main__":
+    accelerator = create_accelerator()
+
+    accelerator.print("Test that even_batches variable ensures uniform batches across processes")
+    test_default_ensures_even_batch_sizes()
+
+    accelerator.print("Run tests with even_batches disabled")
+    test_can_disable_even_batches()
