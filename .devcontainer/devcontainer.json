@@ -1,0 +1,25 @@
+// File only needed for VSCode users to have proper Docker based interpreters
+{
+    "name": "accelerate_dev_environment",
+    "build": {
+        // ACTION NEEDED: comment/uncomment the relevant line depending on whether you are in a CPU/GPU environment
+         "dockerfile": "../docker/accelerate-cpu/Dockerfile"
+//        "dockerfile": "../docker/accelerate-gpu/Dockerfile"
+    },
+    "runArgs": [
+        // ACTION NEEDED: uncomment the next line if your local machine has GPUs available
+//        "--gpus", "all",
+        // Enable the docker container to access system resources
+        "--ipc", "host"
+    ],
+    "remoteEnv": {
+        "PYTHONPATH": "${containerEnv:PATH}:${containerWorkspaceFolder}"
+    },
+    "extensions": [
+        // Ensure we have IntelliSense in VSCode when running inside container
+        "ms-python.python"
+    ],
+    "workspaceFolder": "/workspaces/accelerate",
+    // Need git for VSCode to color code modifications. Only runs when building environment.
+    "onCreateCommand": "apt-get update && apt-get install -y git && pip install -e '.[dev]'"
+}

@@ -130,6 +130,9 @@ Follow these steps to start contributing:
    it with `pip uninstall accelerate` before reinstalling it in editable
    mode with the `-e` flag.)
 
+   Alternatively, if you are using [Visual Studio Code](https://code.visualstudio.com/Download), the fastest way to get set up is by using
+   the provided Dev Container. Documentation on how to get started with dev containers is available [here](https://code.visualstudio.com/docs/remote/containers).
+
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
