@@ -507,11 +507,6 @@ class MLflowTracker(GeneralTracker):
 
         values_list = list(values.items())
 
-        if os.getenv("AML_CloudName") == "AzureCloud":
-            logger.info(
-                "It looks like you are using AzureML. Please note that there is a log limit of 100 total parameters when using AzureML."
-            )
-
         # MLflow cannot log more than 100 values in one go, so we have to split it
         for i in range(0, len(values_list), self._MAX_PARAMS_TAGS_PER_BATCH):
             mlflow.log_params(dict(values_list[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
