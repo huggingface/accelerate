@@ -32,7 +32,6 @@ def create_dataloader(accelerator: Accelerator, dataset_size: int, batch_size: i
     """
     Create a simple DataLoader to use during the test cases
     """
-    # accelerator.free_memory()
     dataset = TensorDataset(torch.as_tensor(range(dataset_size)))
 
     dl = DataLoader(dataset, batch_size=batch_size)
