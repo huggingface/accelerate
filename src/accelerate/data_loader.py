@@ -352,24 +352,16 @@ class DataLoaderShard(DataLoader):
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
-    def __init__(self, dataset, device=None, rng_types=None, generator=None, **kwargs):
+    def __init__(self, dataset, device=None, rng_types=None, synchronized_generator=None, **kwargs):
         super().__init__(dataset, **kwargs)
         self.device = device
         self.rng_types = rng_types
-        self.generator = generator
+        self.synchronized_generator = synchronized_generator
         self.gradient_state = GradientState()
 
     def __iter__(self):
         if self.rng_types is not None:
-            batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
-            sampler = (
-                batch_sampler.batch_sampler.sampler
-                if hasattr(batch_sampler, "batch_sampler")
-                else batch_sampler.sampler
-            )
-            if hasattr(sampler, "generator"):
-                generator = sampler.generator
-                synchronize_rng_states(self.rng_types, generator)
+            synchronize_rng_states(self.rng_types, self.synchronized_generator)
         self.gradient_state._set_end_of_dataloader(False)
         try:
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
@@ -658,12 +650,12 @@ def prepare_data_loader(
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
     sampler_is_batch_sampler = False
-    generator = getattr(dataloader, "generator", None)
+    synchronized_generator = getattr(dataloader, "generator", None)
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
             if getattr(dataloader.dataset, "generator", None) is not None:
-                generator = dataloader.dataset.generator
+                synchronized_generator = dataloader.dataset.generator
             new_dataset = IterableDatasetShard(
                 new_dataset,
                 batch_size=dataloader.batch_size,
@@ -682,8 +674,7 @@ def prepare_data_loader(
             if hasattr(sampler, "generator"):
                 if sampler.generator is None:
                     sampler.generator = torch.Generator()
-                generator = sampler.generator
-                generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
+                synchronized_generator = sampler.generator
 
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(
@@ -700,10 +691,9 @@ def prepare_data_loader(
         "sampler",
         "batch_sampler",
         "drop_last",
-        "generator",
     ]
 
-    if rng_types is not None and generator is None and "generator" in rng_types:
+    if rng_types is not None and synchronized_generator is None and "generator" in rng_types:
         rng_types.remove("generator")
 
     kwargs = {
@@ -718,6 +708,7 @@ def prepare_data_loader(
         kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
 
     if dispatch_batches:
+        kwargs.pop("generator")
         dataloader = DataLoaderDispatcher(
             new_dataset,
             split_batches=split_batches,
@@ -730,9 +721,9 @@ def prepare_data_loader(
             new_dataset,
             device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
             sampler=new_batch_sampler,
-            batch_size=getattr(dataloader, "batch_size", _PYTORCH_DATALOADER_KWARGS["batch_size"]),
+            batch_size=dataloader.batch_size,
             rng_types=rng_types,
-            generator=getattr(dataloader, "generator", _PYTORCH_DATALOADER_KWARGS["generator"]),
+            synchronized_generator=synchronized_generator,
             **kwargs,
         )
     else:
@@ -741,7 +732,7 @@ def prepare_data_loader(
             device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
-            generator=getattr(dataloader, "generator", _PYTORCH_DATALOADER_KWARGS["generator"]),
+            synchronized_generator=synchronized_generator,
             **kwargs,
         )
 
