@@ -409,6 +409,7 @@ class AimTracker(GeneralTracker):
         """
         self.writer.close()
 
+
 class MLflowTracker(GeneralTracker):
     """
     A `Tracker` class that supports `mlflow`. Should be initialized at the start of your script.
