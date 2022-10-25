@@ -650,7 +650,7 @@ def prepare_data_loader(
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
     sampler_is_batch_sampler = False
-    synchronized_generator = getattr(dataloader, "generator", None)
+    synchronized_generator = None
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
