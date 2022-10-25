@@ -361,7 +361,15 @@ class DataLoaderShard(DataLoader):
 
     def __iter__(self):
         if self.rng_types is not None:
-            synchronize_rng_states(self.rng_types, self.generator)
+            batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
+            sampler = (
+                batch_sampler.batch_sampler.sampler
+                if hasattr(batch_sampler, "batch_sampler")
+                else batch_sampler.sampler
+            )
+            if hasattr(sampler, "generator"):
+                generator = sampler.generator
+                synchronize_rng_states(self.rng_types, generator)
         self.gradient_state._set_end_of_dataloader(False)
         try:
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
@@ -724,7 +732,7 @@ def prepare_data_loader(
             sampler=new_batch_sampler,
             batch_size=getattr(dataloader, "batch_size", _PYTORCH_DATALOADER_KWARGS["batch_size"]),
             rng_types=rng_types,
-            generator=generator,
+            generator=getattr(dataloader, "generator", _PYTORCH_DATALOADER_KWARGS["generator"]),
             **kwargs,
         )
     else:
@@ -733,7 +741,7 @@ def prepare_data_loader(
             device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
-            generator=generator,
+            generator=getattr(dataloader, "generator", _PYTORCH_DATALOADER_KWARGS["generator"]),
             **kwargs,
         )
 
