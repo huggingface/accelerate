@@ -145,6 +145,7 @@ class Accelerator:
             - `"tensorboard"`
             - `"wandb"`
             - `"comet_ml"`
+            - `"mlflow"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):
