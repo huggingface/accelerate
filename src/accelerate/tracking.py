@@ -417,7 +417,7 @@ class MLflowTracker(GeneralTracker):
     Args:
         experiment_name (`str`):
             Name of the experiment. Environment variable MLFLOW_EXPERIMENT_NAME has priority over this argument.
-        logging_dir (`str`, `os.PathLike`):
+        logging_dir (`str` or `os.PathLike`, defaults to `"."`):
             Location for mlflow logs to be stored.
         run_id (`str`, *optional*):
             If specified, get the run with the specified UUID and log parameters and metrics under that run. The run’s
