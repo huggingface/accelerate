@@ -427,7 +427,7 @@ class MLflowTracker(GeneralTracker):
             An optional `dict` of `str` keys and values, or a `str` dump from a `dict`, to set as tags on the run. If a
             run is being resumed, these tags are set on the resumed run. If a new run is being created, these tags are
             set on the new run. Environment variable MLFLOW_TAGS has priority over this argument.
-        nested_run (`bool`):
+        nested_run (`bool`, *optional*, defaults to `False`):
             Controls whether run is nested in parent run. True creates a nested run. Environment variable
             MLFLOW_NESTED_RUN has priority over this argument.
         run_name (`str`):
