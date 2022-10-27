@@ -475,10 +475,11 @@ def infer_auto_device_map(
     current_device = 0
     current_memory_used = 0
 
-    # Direct submodules and parameters
-    modules_to_treat = (
-        list(model.named_parameters(recurse=False)) + list(model.named_children()) + list(model.named_buffers())
-    )
+    # Direct submodules and parameters, including tensors that are registered as buffers
+    # but excluding buffers such as `running_mean` for batch_norm
+    filtered_buffers = list((m[0], m[1]) for m in model.named_buffers() if m[0] in model._buffers)
+    modules_to_treat = list(model.named_parameters(recurse=False)) + list(model.named_children()) + filtered_buffers
+
     # Initialize maximum largest layer, to know which space to keep in memory
     max_layer_size, max_layer_names = get_max_layer_size(modules_to_treat, module_sizes, no_split_module_classes)
 
