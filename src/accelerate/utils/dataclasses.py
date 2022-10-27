@@ -203,6 +203,7 @@ class LoggerType(BaseEnum):
     TENSORBOARD = "tensorboard"
     WANDB = "wandb"
     COMETML = "comet_ml"
+    MLFLOW = "mlflow"
 
 
 class PrecisionType(BaseEnum):
