@@ -452,7 +452,6 @@ class MLflowTracker(GeneralTracker):
         description: Optional[str] = None,
     ):
 
-
         experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", experiment_name)
         run_id = os.getenv("MLFLOW_RUN_ID", run_id)
         tags = os.getenv("MLFLOW_TAGS", tags)
