@@ -430,7 +430,7 @@ class MLflowTracker(GeneralTracker):
         nested_run (`bool`, *optional*, defaults to `False`):
             Controls whether run is nested in parent run. True creates a nested run. Environment variable
             MLFLOW_NESTED_RUN has priority over this argument.
-        run_name (`str`):
+        run_name (`str`, *optional*):
             Name of new run (stored as a mlflow.runName tag). Used only when run_id is unspecified.
         description (`str`):
             An optional string that populates the description box of the run. If a run is being resumed, the
