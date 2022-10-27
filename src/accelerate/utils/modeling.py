@@ -475,18 +475,18 @@ def infer_auto_device_map(
     current_device = 0
     current_memory_used = 0
 
-    # Direct submodules and parameters, including tensors that are registered as buffers
-    # but excluding buffers such as `running_mean` for batch_norm
-    filtered_buffers = list((m[0], m[1]) for m in model.named_buffers() if m[0] in model._buffers)
-    modules_to_treat = list(model.named_parameters(recurse=False)) + list(model.named_children()) + filtered_buffers
-
+    # Direct submodules and parameters
+    modules_to_treat = (
+        list(model.named_parameters(recurse=False))
+        + list(model.named_children())
+        + list(model.named_buffers(recurse=False))
+    )
     # Initialize maximum largest layer, to know which space to keep in memory
     max_layer_size, max_layer_names = get_max_layer_size(modules_to_treat, module_sizes, no_split_module_classes)
 
     # Ready ? This is going to be a bit messy.
     while len(modules_to_treat) > 0:
         name, module = modules_to_treat.pop(0)
-
         # Max size in the remaining layers may have changed since we took one, so we maybe update it.
         max_layer_names = [n for n in max_layer_names if not n.startswith(name)]
         if len(max_layer_names) == 0:
@@ -506,13 +506,6 @@ def infer_auto_device_map(
         # Reduce max size available by the largest layer.
         if devices[current_device] in main_devices:
             current_max_size = current_max_size - max_layer_size
-
-        # Case 0: Put directly the buffer on the device_map - usually buffers are small
-        if name in model._buffers:
-            current_memory_used += module_size
-            device_map[name] = devices[current_device]
-            continue
-
         # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
