@@ -452,8 +452,6 @@ class MLflowTracker(GeneralTracker):
         description: Optional[str] = None,
     ):
 
-        self._MAX_PARAM_VAL_LENGTH = mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
-        self._MAX_PARAMS_TAGS_PER_BATCH = mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH
 
         experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", experiment_name)
         run_id = os.getenv("MLFLOW_RUN_ID", run_id)
@@ -498,18 +496,18 @@ class MLflowTracker(GeneralTracker):
 
         for name, value in list(values.items()):
             # internally, all values are converted to str in MLflow
-            if len(str(value)) > self._MAX_PARAM_VAL_LENGTH:
+            if len(str(value)) > mlflow.utils.validation.MAX_PARAM_VAL_LENGTH:
                 logger.warning(
                     f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
-                    f" log_param() only accepts values no longer than {self._MAX_PARAM_VAL_LENGTH} characters so we dropped this attribute."
+                    f" log_param() only accepts values no longer than {mlflow.utils.validation.MAX_PARAM_VAL_LENGTH} characters so we dropped this attribute."
                 )
                 del values[name]
 
         values_list = list(values.items())
 
         # MLflow cannot log more than 100 values in one go, so we have to split it
-        for i in range(0, len(values_list), self._MAX_PARAMS_TAGS_PER_BATCH):
-            mlflow.log_params(dict(values_list[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
+        for i in range(0, len(values_list), mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH):
+            mlflow.log_params(dict(values_list[i : i + mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH]))
 
         logger.debug("Stored initial configuration hyperparameters to MLflow")
 
