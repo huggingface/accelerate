@@ -15,15 +15,23 @@
 # Expectation:
 # Provide a project dir name, then each type of logger gets stored in project/{`logging_dir`}
 
+import json
 import os
 import time
 from abc import ABCMeta, abstractmethod, abstractproperty
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
 from .logging import get_logger
-from .utils import LoggerType, is_aim_available, is_comet_ml_available, is_tensorboard_available, is_wandb_available
+from .utils import (
+    LoggerType,
+    is_aim_available,
+    is_comet_ml_available,
+    is_mlflow_available,
+    is_tensorboard_available,
+    is_wandb_available,
+)
 
 
 _available_trackers = []
@@ -48,6 +56,10 @@ if is_aim_available():
 
     _available_trackers.append(LoggerType.AIM)
 
+if is_mlflow_available():
+    import mlflow
+
+    _available_trackers.append(LoggerType.MLFLOW)
 
 logger = get_logger(__name__)
 
@@ -398,9 +410,143 @@ class AimTracker(GeneralTracker):
         self.writer.close()
 
 
+class MLflowTracker(GeneralTracker):
+    """
+    A `Tracker` class that supports `mlflow`. Should be initialized at the start of your script.
+
+    Args:
+        experiment_name (`str`):
+            Name of the experiment. Environment variable MLFLOW_EXPERIMENT_NAME has priority over this argument.
+        logging_dir (`str`, `os.PathLike`):
+            Location for mlflow logs to be stored.
+        run_id (`str`):
+            If specified, get the run with the specified UUID and log parameters and metrics under that run. The run’s
+            end time is unset and its status is set to running, but the run’s other attributes (source_version,
+            source_type, etc.) are not changed. Environment variable MLFLOW_RUN_ID has priority over this argument.
+        tags (`dict`, `str`):
+            An optional `dict` of `str` keys and values, or a `str` dump from a `dict`, to set as tags on the run. If a
+            run is being resumed, these tags are set on the resumed run. If a new run is being created, these tags are
+            set on the new run. Environment variable MLFLOW_TAGS has priority over this argument.
+        nested_run (`bool`):
+            Controls whether run is nested in parent run. True creates a nested run. Environment variable
+            MLFLOW_NESTED_RUN has priority over this argument.
+        run_name (`str`):
+            Name of new run (stored as a mlflow.runName tag). Used only when run_id is unspecified.
+        description (`str`):
+            An optional string that populates the description box of the run. If a run is being resumed, the
+            description is set on the resumed run. If a new run is being created, the description is set on the new
+            run.
+    """
+
+    name = "mlflow"
+    requires_logging_directory = True
+
+    def __init__(
+        self,
+        experiment_name: str = None,
+        logging_dir: Optional[Union[str, os.PathLike]] = ".",
+        run_id: Optional[str] = None,
+        tags: Optional[Union[Dict[str, Any], str]] = None,
+        nested_run: Optional[bool] = False,
+        run_name: Optional[str] = None,
+        description: Optional[str] = None,
+    ):
+
+        self._MAX_PARAM_VAL_LENGTH = mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
+        self._MAX_PARAMS_TAGS_PER_BATCH = mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH
+
+        experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", experiment_name)
+        run_id = os.getenv("MLFLOW_RUN_ID", run_id)
+        tags = os.getenv("MLFLOW_TAGS", tags)
+        if isinstance(tags, str):
+            tags = json.loads(tags)
+
+        nested_run = os.getenv("MLFLOW_NESTED_RUN", nested_run)
+
+        experiment_id = mlflow.create_experiment(
+            name=experiment_name,
+            artifact_location=logging_dir,
+            tags=tags,
+        )
+
+        self.active_run = mlflow.start_run(
+            run_id=run_id,
+            experiment_id=experiment_id,
+            run_name=run_name,
+            nested=nested_run,
+            tags=tags,
+            description=description,
+        )
+
+        logger.debug(f"Initialized mlflow experiment {experiment_name}")
+        logger.debug(
+            "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
+        )
+
+    @property
+    def tracker(self):
+        return self.active_run
+
+    def store_init_configuration(self, values: dict):
+        """
+        Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
+
+        Args:
+            values (`dict`):
+                Values to be stored as initial hyperparameters as key-value pairs.
+        """
+
+        for name, value in list(values.items()):
+            # internally, all values are converted to str in MLflow
+            if len(str(value)) > self._MAX_PARAM_VAL_LENGTH:
+                logger.warning(
+                    f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
+                    f" log_param() only accepts values no longer than {self._MAX_PARAM_VAL_LENGTH} characters so we dropped this attribute."
+                )
+                del values[name]
+
+        values_list = list(values.items())
+
+        # MLflow cannot log more than 100 values in one go, so we have to split it
+        for i in range(0, len(values_list), self._MAX_PARAMS_TAGS_PER_BATCH):
+            mlflow.log_params(dict(values_list[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
+
+        logger.debug("Stored initial configuration hyperparameters to MLflow")
+
+    def log(self, values: dict, step: Optional[int]):
+        """
+        Logs `values` to the current run.
+
+        Args:
+            values (`dict`):
+                Values to be logged as key-value pairs.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+        """
+        metrics = {}
+        for k, v in values.items():
+            if isinstance(v, (int, float)):
+                metrics[k] = v
+            else:
+                logger.warning(
+                    f'MLflowTracker is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
+                    "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
+                )
+
+        mlflow.log_metrics(metrics, step=step)
+        logger.debug("Successfully logged to mlflow")
+
+    def finish(self):
+        """
+        End the active MLflow run.
+        """
+        mlflow.end_run()
+
+
 LOGGER_TYPE_TO_CLASS = {
     "aim": AimTracker,
     "comet_ml": CometMLTracker,
+    "mlflow": MLflowTracker,
     "tensorboard": TensorBoardTracker,
     "wandb": WandBTracker,
 }
@@ -424,6 +570,7 @@ def filter_trackers(
             - `"tensorboard"`
             - `"wandb"`
             - `"comet_ml"`
+            - `"mlflow"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):
