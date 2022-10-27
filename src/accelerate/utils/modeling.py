@@ -485,6 +485,7 @@ def infer_auto_device_map(
     # Ready ? This is going to be a bit messy.
     while len(modules_to_treat) > 0:
         name, module = modules_to_treat.pop(0)
+
         # Max size in the remaining layers may have changed since we took one, so we maybe update it.
         max_layer_names = [n for n in max_layer_names if not n.startswith(name)]
         if len(max_layer_names) == 0:
@@ -504,6 +505,13 @@ def infer_auto_device_map(
         # Reduce max size available by the largest layer.
         if devices[current_device] in main_devices:
             current_max_size = current_max_size - max_layer_size
+
+        # Case 0: Put directly the buffer on the device_map - usually buffers are small
+        if name in model._buffers:
+            current_memory_used += module_size
+            device_map[name] = devices[current_device]
+            continue
+
         # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
