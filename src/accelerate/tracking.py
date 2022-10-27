@@ -415,7 +415,7 @@ class MLflowTracker(GeneralTracker):
     A `Tracker` class that supports `mlflow`. Should be initialized at the start of your script.
 
     Args:
-        experiment_name (`str`):
+        experiment_name (`str`, *optional*):
             Name of the experiment. Environment variable MLFLOW_EXPERIMENT_NAME has priority over this argument.
         logging_dir (`str` or `os.PathLike`, defaults to `"."`):
             Location for mlflow logs to be stored.
