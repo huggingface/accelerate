@@ -432,7 +432,7 @@ class MLflowTracker(GeneralTracker):
             MLFLOW_NESTED_RUN has priority over this argument.
         run_name (`str`, *optional*):
             Name of new run (stored as a mlflow.runName tag). Used only when `run_id` is unspecified.
-        description (`str`):
+        description (`str`, *optional*):
             An optional string that populates the description box of the run. If a run is being resumed, the
             description is set on the resumed run. If a new run is being created, the description is set on the new
             run.
