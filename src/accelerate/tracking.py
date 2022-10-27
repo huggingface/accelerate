@@ -423,7 +423,7 @@ class MLflowTracker(GeneralTracker):
             If specified, get the run with the specified UUID and log parameters and metrics under that run. The run’s
             end time is unset and its status is set to running, but the run’s other attributes (source_version,
             source_type, etc.) are not changed. Environment variable MLFLOW_RUN_ID has priority over this argument.
-        tags (`dict`, `str`):
+        tags (`Dict[str, str]`, *optional*):
             An optional `dict` of `str` keys and values, or a `str` dump from a `dict`, to set as tags on the run. If a
             run is being resumed, these tags are set on the resumed run. If a new run is being created, these tags are
             set on the new run. Environment variable MLFLOW_TAGS has priority over this argument.
