@@ -245,11 +245,15 @@ def dispatch_model(
     check_device_map(model, device_map)
 
     if main_device is None:
-        main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]
+        if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
+            main_device = "cpu"
+        else:
+            main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]
 
-    cpu_modules = [name for name, device in device_map.items() if device == "cpu"]
-    if state_dict is None and len(cpu_modules) > 0:
-        state_dict = extract_submodules_state_dict(model.state_dict(), cpu_modules)
+    if main_device != "cpu":
+        cpu_modules = [name for name, device in device_map.items() if device == "cpu"]
+        if state_dict is None and len(cpu_modules) > 0:
+            state_dict = extract_submodules_state_dict(model.state_dict(), cpu_modules)
 
     disk_modules = [name for name, device in device_map.items() if device == "disk"]
     if offload_dir is None and len(disk_modules) > 0:
@@ -266,7 +270,8 @@ def dispatch_model(
     execution_device = {
         name: main_device if device in ["cpu", "disk"] else device for name, device in device_map.items()
     }
-    offload = {name: device in ["cpu", "disk"] for name, device in device_map.items()}
+    offloaded_devices = ["disk"] if main_device == "cpu" else ["cpu", "disk"]
+    offload = {name: device in offloaded_devices for name, device in device_map.items()}
     save_folder = offload_dir if len(disk_modules) > 0 else None
     if state_dict is not None or save_folder is not None:
         weights_map = OffloadedWeightsLoader(state_dict=state_dict, save_folder=save_folder)
