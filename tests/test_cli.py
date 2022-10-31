@@ -134,6 +134,26 @@ class PodConfigTester(unittest.TestCase):
             f"gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; ls --worker all",
         )
 
+    def test_with_config_file_and_multiple_command(self):
+        output = run_command(
+            self.cmd
+            + [
+                "--config_file",
+                "tests/test_configs/latest.yaml",
+                "--command",
+                self._command,
+                "--command",
+                'echo "Hello World"',
+                "--debug",
+            ],
+            return_stdout=True,
+        )
+        output = ast.literal_eval(output)
+        self.assertEqual(
+            " ".join(output),
+            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; ls; echo "Hello World" --worker all',
+        )
+
     def test_with_config_file_and_command_file(self):
         output = run_command(
             self.cmd
