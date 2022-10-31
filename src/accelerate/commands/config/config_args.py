@@ -65,13 +65,6 @@ def load_config_from_file(config_file):
             return config_class.from_yaml_file(yaml_file=config_file)
 
 
-def load_pod_config_from_file(pod_config_file):
-    if pod_config_file.endswith(".json"):
-        return PodConfig.from_json_file(json_file=pod_config_file)
-    else:
-        return PodConfig.from_yaml_file(yaml_file=pod_config_file)
-
-
 @dataclass
 class BaseConfig:
     compute_environment: ComputeEnvironment
@@ -139,33 +132,6 @@ class BaseConfig:
 
 
 @dataclass
-class PodConfig:
-    command_file: str
-    commands: List[str]
-
-    @classmethod
-    def from_json_file(cls, json_file):
-        with open(json_file, "r", encoding="utf-8") as f:
-            config_dict = json.load(f)
-        return cls(**config_dict)
-
-    def to_json_file(self, json_file):
-        with open(json_file, "w", encoding="utf-8") as f:
-            content = json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
-            f.write(content)
-
-    @classmethod
-    def from_yaml_file(cls, yaml_file):
-        with open(yaml_file, "r", encoding="utf-8") as f:
-            config_dict = yaml.safe_load(f)
-        return cls(**config_dict)
-
-    def to_yaml_file(self, yaml_file):
-        with open(yaml_file, "w", encoding="utf-8") as f:
-            yaml.safe_dump(self.to_dict(), f)
-
-
-@dataclass
 class ClusterConfig(BaseConfig):
     num_processes: int
     machine_rank: int = 0
@@ -181,12 +147,16 @@ class ClusterConfig(BaseConfig):
     deepspeed_config: dict = None
     # args for fsdp
     fsdp_config: dict = None
+    # args for megatron_lm
+    megatron_lm_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
 
     # args for TPU pods
     tpu_name: str = None
     tpu_zone: str = None
+    command_file: str = None
+    command: List[str] = None
 
     def __post_init__(self):
         if self.deepspeed_config is None:

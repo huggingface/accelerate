@@ -18,11 +18,7 @@ import argparse
 import os
 import subprocess
 
-from accelerate.commands.config.config_args import (
-    default_pod_config_file,
-    load_config_from_file,
-    load_pod_config_from_file,
-)
+from accelerate.commands.config.config_args import default_config_file, load_config_from_file
 from packaging.version import Version, parse
 
 
@@ -75,6 +71,9 @@ def pod_command_parser(subparsers=None):
         default="latest",
         help="The version of accelerate to install on the pod. If not specified, will use the latest pypi version. Specify 'dev' to install from GitHub.",
     )
+    parser.add_argument(
+        "--debug", action="store_true", help="If set, will print the command that would be run instead of running it."
+    )
 
     if subparsers is not None:
         parser.set_defaults(func=pod_launcher)
@@ -83,16 +82,14 @@ def pod_command_parser(subparsers=None):
 
 def pod_launcher(args):
     defaults = None
-    pod_defaults = None
 
     # Get the default from the config file if it exists.
-    if args.pod_config_file is not None or os.path.isfile(default_pod_config_file):
-        pod_defaults = load_pod_config_from_file(args.pod_config_file)
+    if args.config_file is not None or os.path.isfile(default_config_file):
         defaults = load_config_from_file(args.config_file)
-        if not args.command_file and pod_defaults.command_file is not None:
-            args.command_file = pod_defaults.command_file
-        elif not args.command and pod_defaults.command is not None:
-            args.command = pod_defaults.command
+        if not args.command_file and defaults.command_file is not None and not args.command:
+            args.command_file = defaults.command_file
+        if not args.command and defaults.command is not None:
+            args.command = defaults.command
         if not args.tpu_name:
             args.tpu_name = defaults.tpu_name
         if not args.tpu_zone:
@@ -133,6 +130,9 @@ def pod_launcher(args):
         "--worker",
         "all",
     ]
+    if args.debug:
+        print(cmd)
+        return
     subprocess.run(cmd)
     print("Successfully setup pod.")
 

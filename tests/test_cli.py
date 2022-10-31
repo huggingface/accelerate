@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ast
 import inspect
 import os
 import unittest
@@ -21,6 +22,7 @@ import torch
 
 import accelerate
 from accelerate.test_utils import execute_subprocess_async
+from accelerate.test_utils.testing import run_command
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -63,3 +65,105 @@ class AccelerateLauncherTester(unittest.TestCase):
                 execute_subprocess_async(
                     self.base_cmd + ["--config_file", str(config), self.test_file_path], env=os.environ.copy()
                 )
+
+
+class PodConfigTester(unittest.TestCase):
+    """
+    Test case for verifying the `accelerate pod-config` CLI passes the right `gcloud` command.
+    """
+
+    _tpu_name = "test-tpu"
+    _tpu_zone = "us-central1-a"
+    _command = "ls"
+    cmd = ["accelerate", "pod-config"]
+    _base_output = "cd /usr/share; pip install accelerate -U"
+    _command_file = "tests/test_samples/test_command_file.sh"
+
+    def test_base(self):
+        output = run_command(
+            self.cmd
+            + ["--command", self._command, "--tpu_zone", self._tpu_zone, "--tpu_name", self._tpu_name, "--debug"],
+            return_stdout=True,
+        )
+        output = ast.literal_eval(output)
+        self.assertEqual(
+            " ".join(output),
+            f"gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; ls --worker all",
+        )
+
+    def test_base_backward_compatibility(self):
+        output = run_command(
+            self.cmd
+            + [
+                "--config_file",
+                "tests/test_configs/0_12_0.yaml",
+                "--command",
+                self._command,
+                "--tpu_zone",
+                self._tpu_zone,
+                "--tpu_name",
+                self._tpu_name,
+                "--debug",
+            ],
+            return_stdout=True,
+        )
+        output = ast.literal_eval(output)
+        self.assertEqual(
+            " ".join(output),
+            f"gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; ls --worker all",
+        )
+
+    def test_with_config_file(self):
+        output = run_command(
+            self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--debug"], return_stdout=True
+        )
+        output = ast.literal_eval(output)
+        self.assertEqual(
+            " ".join(output),
+            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; echo "hello world"; echo "this is a second command" --worker all',
+        )
+
+    def test_with_config_file_and_command(self):
+        output = run_command(
+            self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--command", self._command, "--debug"],
+            return_stdout=True,
+        )
+        output = ast.literal_eval(output)
+        self.assertEqual(
+            " ".join(output),
+            f"gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; ls --worker all",
+        )
+
+    def test_with_config_file_and_command_file(self):
+        output = run_command(
+            self.cmd
+            + ["--config_file", "tests/test_configs/latest.yaml", "--command_file", self._command_file, "--debug"],
+            return_stdout=True,
+        )
+        output = ast.literal_eval(output)
+        self.assertEqual(
+            " ".join(output),
+            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; echo "hello world"; echo "this is a second command" --worker all',
+        )
+
+    def test_with_config_file_and_command_file_backward_compatibility(self):
+        output = run_command(
+            self.cmd
+            + [
+                "--config_file",
+                "tests/test_configs/0_12_0.yaml",
+                "--command_file",
+                self._command_file,
+                "--tpu_zone",
+                self._tpu_zone,
+                "--tpu_name",
+                self._tpu_name,
+                "--debug",
+            ],
+            return_stdout=True,
+        )
+        output = ast.literal_eval(output)
+        self.assertEqual(
+            " ".join(output),
+            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; echo "hello world"; echo "this is a second command" --worker all',
+        )

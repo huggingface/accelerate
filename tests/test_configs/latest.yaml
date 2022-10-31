@@ -15,3 +15,7 @@ num_processes: 1
 rdzv_backend: static
 same_network: true
 use_cpu: false
+tpu_name: 'test-tpu'
+tpu_zone: 'us-central1-a'
+command: null
+command_file: tests/test_samples/test_command_file.sh
