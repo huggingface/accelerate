@@ -18,7 +18,7 @@ import json
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import yaml
 
@@ -32,6 +32,7 @@ hf_cache_home = os.path.expanduser(
 cache_dir = os.path.join(hf_cache_home, "accelerate")
 default_json_config_file = os.path.join(cache_dir, "default_config.yaml")
 default_yaml_config_file = os.path.join(cache_dir, "default_config.yaml")
+default_pod_config_file = os.path.join(cache_dir, "default_pod_config.yaml")
 
 # For backward compatibility: the default config is the json one if it's the only existing file.
 if os.path.isfile(default_yaml_config_file) or not os.path.isfile(default_json_config_file):
@@ -62,6 +63,13 @@ def load_config_from_file(config_file):
             else:
                 config_class = SageMakerConfig
             return config_class.from_yaml_file(yaml_file=config_file)
+
+
+def load_pod_config_from_file(pod_config_file):
+    if pod_config_file.endswith(".json"):
+        return PodConfig.from_json_file(json_file=pod_config_file)
+    else:
+        return PodConfig.from_yaml_file(yaml_file=pod_config_file)
 
 
 @dataclass
@@ -131,6 +139,33 @@ class BaseConfig:
 
 
 @dataclass
+class PodConfig:
+    command_file: str
+    commands: List[str]
+
+    @classmethod
+    def from_json_file(cls, json_file):
+        with open(json_file, "r", encoding="utf-8") as f:
+            config_dict = json.load(f)
+        return cls(**config_dict)
+
+    def to_json_file(self, json_file):
+        with open(json_file, "w", encoding="utf-8") as f:
+            content = json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+            f.write(content)
+
+    @classmethod
+    def from_yaml_file(cls, yaml_file):
+        with open(yaml_file, "r", encoding="utf-8") as f:
+            config_dict = yaml.safe_load(f)
+        return cls(**config_dict)
+
+    def to_yaml_file(self, yaml_file):
+        with open(yaml_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump(self.to_dict(), f)
+
+
+@dataclass
 class ClusterConfig(BaseConfig):
     num_processes: int
     machine_rank: int = 0
@@ -146,18 +181,18 @@ class ClusterConfig(BaseConfig):
     deepspeed_config: dict = None
     # args for fsdp
     fsdp_config: dict = None
-    # args for megatron_lm
-    megatron_lm_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
+
+    # args for TPU pods
+    tpu_name: str = None
+    tpu_zone: str = None
 
     def __post_init__(self):
         if self.deepspeed_config is None:
             self.deepspeed_config = {}
         if self.fsdp_config is None:
             self.fsdp_config = {}
-        if self.megatron_lm_config is None:
-            self.megatron_lm_config = {}
         return super().__post_init__()
 
 
@@ -169,7 +204,6 @@ class SageMakerConfig(BaseConfig):
     profile: Optional[str] = None
     region: str = "us-east-1"
     num_machines: int = 1
-    gpu_ids: str = "all"
     base_job_name: str = f"accelerate-sagemaker-{num_machines}"
     pytorch_version: str = SAGEMAKER_PYTORCH_VERSION
     transformers_version: str = SAGEMAKER_TRANSFORMERS_VERSION

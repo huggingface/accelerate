@@ -19,6 +19,7 @@ from argparse import ArgumentParser
 from accelerate.commands.config import config_command_parser
 from accelerate.commands.env import env_command_parser
 from accelerate.commands.launch import launch_command_parser
+from accelerate.commands.pod import pod_command_parser
 from accelerate.commands.test import test_command_parser
 
 
@@ -31,6 +32,7 @@ def main():
     launch_command_parser(subparsers=subparsers)
     test_command_parser(subparsers=subparsers)
     env_command_parser(subparsers=subparsers)
+    pod_command_parser(subparsers=subparsers)
 
     # Let's go
     args = parser.parse_args()
