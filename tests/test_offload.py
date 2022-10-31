@@ -21,6 +21,7 @@ import torch.nn as nn
 
 from accelerate.utils import (
     OffloadedWeightsLoader,
+    extract_submodules_state_dict,
     is_torch_version,
     load_offloaded_weight,
     offload_state_dict,
@@ -105,3 +106,12 @@ class OffloadTester(unittest.TestCase):
             self.assertEqual(sorted(weight_map), sorted(state_dict.keys()))
             for key, param in state_dict.items():
                 self.assertTrue(torch.allclose(param, weight_map[key]))
+
+    def test_extract_submodules_state_dict(self):
+        state_dict = {"a.1": 0, "a.10": 1, "a.2": 2}
+        extracted = extract_submodules_state_dict(state_dict, ["a.1", "a.2"])
+        self.assertDictEqual(extracted, {"a.1": 0, "a.2": 2})
+
+        state_dict = {"a.1.a": 0, "a.10.a": 1, "a.2.a": 2}
+        extracted = extract_submodules_state_dict(state_dict, ["a.1", "a.2"])
+        self.assertDictEqual(extracted, {"a.1.a": 0, "a.2.a": 2})

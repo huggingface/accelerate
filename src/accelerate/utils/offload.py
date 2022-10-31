@@ -178,5 +178,13 @@ def extract_submodules_state_dict(state_dict: Dict[str, torch.Tensor], submodule
     """
     result = {}
     for module_name in submodule_names:
-        result.update({key: param for key, param in state_dict.items() if key.startswith(module_name)})
+        # We want to catch module_name parameter (module_name.xxx) or potentially module_name, but not any of the
+        # submodules that could being like module_name (transformers.h.1 and transformers.h.10 for instance)
+        result.update(
+            {
+                key: param
+                for key, param in state_dict.items()
+                if key == module_name or key.startswith(module_name + ".")
+            }
+        )
     return result
