@@ -652,8 +652,7 @@ class Accelerator:
                 except TypeError:
                     if "differentiable" in obj.optimizer.defaults:
                         # https://github.com/huggingface/accelerate/issues/801
-                        defaults = obj.optimizer.defaults.copy()
-                        del defaults["differentiable"]
+                        defaults = {k: v for k, v in obj.optimizer.defaults.items() if k != "differentiable"}
                         optimizer = obj.optimizer.__class__(model.parameters(), **defaults)
                     else:
                         raise
