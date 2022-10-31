@@ -67,6 +67,11 @@ def pod_command_parser(subparsers=None):
         help="The zone of the TPU to use. If not specified, will use the zone specified in the config file.",
     )
     parser.add_argument(
+        "--install_accelerate",
+        action="store_true",
+        help="Whether to install accelerate on the pod. Defaults to False.",
+    )
+    parser.add_argument(
         "--accelerate_version",
         default="latest",
         help="The version of accelerate to install on the pod. If not specified, will use the latest pypi version. Specify 'dev' to install from GitHub.",
@@ -111,8 +116,11 @@ def pod_launcher(args):
     # To turn list of lists into list of strings
     args.command = [line for cmd in args.command for line in cmd]
     # Default to the shared folder and install accelerate
-    args.command = ["cd /usr/share", f"pip install {args.accelerate_version}"] + args.command
-    args.command = "; ".join(args.command)
+    new_cmd = ["cd /usr/share"]
+    if args.install_accelerate:
+        new_cmd += [f"pip install {args.accelerate_version}"]
+    new_cmd += args.command
+    args.command = "; ".join(new_cmd)
 
     # Then send it to gcloud
     # Eventually try to use google-api-core to do this instead of subprocess
