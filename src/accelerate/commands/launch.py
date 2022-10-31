@@ -592,6 +592,12 @@ def deepspeed_launcher(args):
     num_machines = getattr(args, "num_machines")
     main_process_ip = getattr(args, "main_process_ip")
     main_process_port = getattr(args, "main_process_port")
+
+    # make sure launcher is not None
+    if args.deepspeed_multinode_launcher is None:
+        # set to default pdsh
+        setattr(args, "deepspeed_multinode_launcher", DEEPSPEED_MULTINODE_LAUNCHERS[0])
+
     if num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         cmd = ["deepspeed", "--no_local_rank"]
         cmd.extend(["--hostfile", str(args.deepspeed_hostfile), "--launcher", str(args.deepspeed_multinode_launcher)])
