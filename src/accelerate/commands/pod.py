@@ -26,11 +26,14 @@ from accelerate.commands.config.config_args import (
 from packaging.version import Version, parse
 
 
+_description = "Run commands across a pod of TPU VMs for initial setup before running `accelerate launch`. Will also install Accelerate on the pod."
+
+
 def pod_command_parser(subparsers=None):
     if subparsers is not None:
-        parser = subparsers.add_subparsers(help="pod-config")
+        parser = subparsers.add_parser("pod-config", description=_description)
     else:
-        parser = argparse.ArgumentParser("Accelerate pod-config command")
+        parser = argparse.ArgumentParser("Accelerate pod-config command", description=_description)
 
     parser.add_argument(
         "--config_file",
@@ -65,7 +68,7 @@ def pod_command_parser(subparsers=None):
     parser.add_argument(
         "--tpu_zone",
         default=None,
-        help="The zone of the TPU to use. If not specified, will use the TPU specified in the config file.",
+        help="The zone of the TPU to use. If not specified, will use the zone specified in the config file.",
     )
     parser.add_argument(
         "--accelerate_version",
@@ -106,17 +109,31 @@ def pod_launcher(args):
 
     if args.command_file:
         with open(args.command_file, "r") as f:
-            args.command = f.read().splitlines()
-    # Install Accelerate first
+            args.command = [f.read().splitlines()]
+
+    # To turn list of lists into list of strings
+    args.command = [line for cmd in args.command for line in cmd]
+    # Default to the shared folder and install accelerate
     args.command = ["cd /usr/share", f"pip install {args.accelerate_version}"] + args.command
+    args.command = "; ".join(args.command)
 
     # Then send it to gcloud
     # Eventually try to use google-api-core to do this instead of subprocess
-    subprocess.run(
-        f"gcloud compute tpus tpu-vm ssh {args.tpu_name} --zone {args.tpu_zone} --command '{';'.join(args.command)}' --worker=all".split(
-            " "
-        )
-    )
+    cmd = [
+        "gcloud",
+        "compute",
+        "tpus",
+        "tpu-vm",
+        "ssh",
+        args.tpu_name,
+        "--zone",
+        args.tpu_zone,
+        "--command",
+        args.command,
+        "--worker",
+        "all",
+    ]
+    subprocess.run(cmd)
     print("Successfully setup pod.")
 
 

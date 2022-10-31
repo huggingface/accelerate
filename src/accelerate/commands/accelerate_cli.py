@@ -29,10 +29,10 @@ def main():
 
     # Register commands
     config_command_parser(subparsers=subparsers)
-    launch_command_parser(subparsers=subparsers)
-    test_command_parser(subparsers=subparsers)
     env_command_parser(subparsers=subparsers)
+    launch_command_parser(subparsers=subparsers)
     pod_command_parser(subparsers=subparsers)
+    test_command_parser(subparsers=subparsers)
 
     # Let's go
     args = parser.parse_args()
