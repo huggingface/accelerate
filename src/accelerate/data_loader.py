@@ -118,7 +118,8 @@ class BatchSamplerShard(BatchSampler):
 
     <Tip warning={true}>
 
-    This does not support `BatchSampler` with varying batch size yet.
+    `BatchSampler`s with varying batch sizes are not enabled by default. To enable this behaviour, set `even_batches`
+    equal to `False`
 
     </Tip>"""
 
@@ -570,6 +571,7 @@ def prepare_data_loader(
     put_on_device: bool = False,
     rng_types: Optional[List[Union[str, RNGType]]] = None,
     dispatch_batches: Optional[bool] = None,
+    even_batches: bool = True,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -615,15 +617,21 @@ def prepare_data_loader(
             If set to `True`, the datalaoder prepared is only iterated through on the main process and then the batches
             are split and broadcast to each process. Will default to `True` when the underlying dataset is an
             `IterableDataset`, `False` otherwise.
+        even_batches (`bool`, *optional*, defaults to `True`):
+            If set to `True`, in cases where the total batch size across all processes does not exactly divide the
+            dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
+            all workers.
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
 
     <Tip warning={true}>
 
-    This does not support `BatchSampler` with varying batch size yet.
+    `BatchSampler`s with varying batch sizes are not enabled by default. To enable this behaviour, set `even_batches`
+    equal to `False`
 
-    </Tip>"""
+    </Tip>
+    """
     if dispatch_batches is None:
         if is_torch_version("<", "1.8.0") or not put_on_device:
             dispatch_batches = False
@@ -682,6 +690,7 @@ def prepare_data_loader(
                 num_processes=num_processes,
                 process_index=process_index,
                 split_batches=split_batches,
+                even_batches=even_batches,
             )
 
     # We ignore all of those since they are all dealt with by our new_batch_sampler

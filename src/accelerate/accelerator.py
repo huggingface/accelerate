@@ -153,6 +153,10 @@ class Accelerator:
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
             underlying dataset is an `IterableDataset`, `False` otherwise.
+        even_batches (`bool`, *optional*, defaults to `True`):
+            If set to `True`, in cases where the total batch size across all processes does not exactly divide the
+            dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
+            all workers.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
@@ -191,6 +195,7 @@ class Accelerator:
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         dispatch_batches: Optional[bool] = None,
+        even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
     ):
@@ -305,6 +310,7 @@ class Accelerator:
             raise ImportError(
                 "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
+        self.even_batches = even_batches
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
@@ -1109,6 +1115,7 @@ class Accelerator:
             put_on_device=device_placement,
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
+            even_batches=self.even_batches,
         )
 
     def prepare_optimizer(self, optimizer: torch.optim.Optimizer, device_placement=None):
