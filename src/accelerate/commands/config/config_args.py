@@ -32,7 +32,6 @@ hf_cache_home = os.path.expanduser(
 cache_dir = os.path.join(hf_cache_home, "accelerate")
 default_json_config_file = os.path.join(cache_dir, "default_config.yaml")
 default_yaml_config_file = os.path.join(cache_dir, "default_config.yaml")
-default_pod_config_file = os.path.join(cache_dir, "default_pod_config.yaml")
 
 # For backward compatibility: the default config is the json one if it's the only existing file.
 if os.path.isfile(default_yaml_config_file) or not os.path.isfile(default_json_config_file):
