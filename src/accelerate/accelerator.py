@@ -647,7 +647,15 @@ class Accelerator:
                         "FSDP Warning: When using FSDP, several parameter groups will be conflated into "
                         "a single one due to nested module wrapping and parameter flattening."
                     )
-                optimizer = obj.optimizer.__class__(model.parameters(), **obj.optimizer.defaults)
+                try:
+                    optimizer = obj.optimizer.__class__(model.parameters(), **obj.optimizer.defaults)
+                except TypeError:
+                    if "differentiable" in obj.optimizer.defaults:
+                        # https://github.com/huggingface/accelerate/issues/801
+                        del obj.optimizer.defaults["differentiable"]
+                        optimizer = obj.optimizer.__class__(model.parameters(), **obj.optimizer.defaults)
+                    else:
+                        raise
                 obj = self.prepare_optimizer(optimizer)
                 optimizers.append(obj)
             elif isinstance(obj, torch.nn.Module):
