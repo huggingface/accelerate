@@ -52,7 +52,7 @@ class MultiGPUTester(unittest.TestCase):
         when the batch size does not evenly divide the dataset size.
         """
         print(f"Found {torch.cuda.device_count()} devices, using 2 devices only")
-        cmd = get_launch_prefix() + [self.data_loop_file_path]
+        cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}", self.data_loop_file_path]
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
