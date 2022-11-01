@@ -55,8 +55,6 @@ if is_rich_available():
     FORMAT = "%(message)s"
     logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
-    from rich import print
-
 
 if is_torch_version(">=", "1.9.0"):
     import torch.distributed.run as distrib_run
@@ -82,10 +80,11 @@ def _clean_option(option):
 
 class _CustomHelpAction(argparse._HelpAction):
     """
-    This is a custom help action that will hide all arguments that are not used in the command line 
-    when the help is called. This is useful for the case where the user is using a specific platform
-    and only wants to see the arguments for that platform.
+    This is a custom help action that will hide all arguments that are not used in the command line when the help is
+    called. This is useful for the case where the user is using a specific platform and only wants to see the arguments
+    for that platform.
     """
+
     def __call__(self, parser, namespace, values, option_string=None):
         args = sys.argv[1:]
         opts = parser._actions
