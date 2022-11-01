@@ -365,7 +365,7 @@ def get_cluster_input():
                 error_message="Please enter the zone of your TPU cluster.",
             )
             run_commands = _ask_field(
-                "Do you have code you wish to be ran on startup in each pod? [yes/NO]: ",
+                "Do you have code you wish to run on startup in each pod? [yes/NO]: ",
                 _convert_yes_no_to_bool,
                 default=False,
                 error_message="Please enter yes or no.",
