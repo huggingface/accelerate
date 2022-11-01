@@ -1,0 +1,58 @@
+name: New Dependency Versions and Compatibility
+
+on:
+  # schedule:
+  #   - cron: '0 0 * * *'
+  workflow_dispatch:
+
+env:
+  HF_HOME: ~/hf_cache
+  TESTING_MOCKED_DATALOADERS: "1"
+  IS_GITHUB_CI: "1"
+
+jobs:
+  check-upgrades:
+    runs-on: ubuntu-latest 
+    outputs:
+      upgrades: ${{ steps.step1.outputs.upgrades }}
+    steps:
+    - uses: actions/checkout
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.7
+    - name: Install dependencies
+      run: |
+        pip install -e .
+    - name: Check for dependency upgrades
+      id: step1
+      run: |
+        cd utils
+        python -c 'from upgrade import post_upgrades; post_upgrades()'
+  
+  run-upgrade-tests:
+    runs-on: ubuntu-latest
+    needs: check-upgrades
+    if: ${{ needs.check-upgrades.outputs.upgrades != '' }}
+    env:
+      UPGRADES: ${{ needs.check-upgrades.outputs.upgrades }}
+    steps:
+    - uses: actions/checkout
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.7
+    - name: Install the library
+      run: |
+        pip install --upgrade pip
+        pip install -e . -U
+        pip install pytest-reportlog
+    
+    - name: Run Tests
+      run: |
+        make test
+
+    - name: Generate Report
+      run: |
+        cd utils
+        python -c 'from upgrade import comment_failures; comment_failures()'
