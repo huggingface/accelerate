@@ -55,251 +55,122 @@ if is_rich_available():
     FORMAT = "%(message)s"
     logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
+    from rich import print
+
 
 if is_torch_version(">=", "1.9.0"):
     import torch.distributed.run as distrib_run
 
 logger = logging.getLogger(__name__)
 
+_options_to_group = {
+    "--multi-gpu": "Distributed GPUs",
+    "--tpu": "TPU",
+    "--use_mps_device": "MPS",
+    "--use_deepspeed": "DeepSpeed",
+    "--use_fsdp": "FSDP",
+    "--use_megatron_lm": "Megatron-LM",
+    "AWS": "AWS",
+}
+
+
+def _clean_option(option):
+    if option.startswith("--"):
+        return option[:3] + option[3:].replace("-", "_")
+
+
+class _CustomHelpAction(argparse._HelpAction):
+    def __call__(self, parser, namespace, values, option_string=None):
+        args = sys.argv[1:]
+        opts = parser._actions
+        titles = [
+            "Hardware Selection",
+            "Resource Selection",
+            "Training Paradigm Selection",
+            "positional arguments",
+            "optional arguments",
+        ]
+        if len(args) > 1:
+            used_platforms = [arg for arg in args if arg in _options_to_group.keys()]
+            args = list(map(_clean_option, args))
+            used_titles = [_options_to_group[o] for o in used_platforms]
+            for i, arg in enumerate(opts):
+                if arg.container.title not in titles + used_titles:
+                    setattr(opts[i], "help", argparse.SUPPRESS)
+                elif arg.container.title == "Hardware Selection" and set(arg.option_strings).isdisjoint(set(args)):
+                    setattr(opts[i], "help", argparse.SUPPRESS)
+                elif arg.container.title == "Training Paradigm Selection" and set(arg.option_strings).isdisjoint(
+                    set(used_platforms)
+                ):
+                    setattr(opts[i], "help", argparse.SUPPRESS)
+            for i, group in enumerate(list(parser._action_groups)):
+                if all([arg.help == argparse.SUPPRESS for arg in group._group_actions]):
+                    parser._action_groups.remove(group)
+
+        super().__call__(parser, namespace, values, option_string)
+
 
 def launch_command_parser(subparsers=None):
     if subparsers is not None:
-        parser = subparsers.add_parser("launch")
+        parser = subparsers.add_parser("launch", add_help=False)
     else:
-        parser = argparse.ArgumentParser("Accelerate launch command")
+        parser = argparse.ArgumentParser("Accelerate launch command", add_help=False)
+
+    parser.register("action", "help", _CustomHelpAction)
+    parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
 
     parser.add_argument(
         "--config_file", default=None, help="The config file to use for the default values in the launching script."
     )
-    parser.add_argument(
+    # Hardware selection arguments
+    hardware_args = parser.add_argument_group("Hardware Selection", "Arguments for selecting the hardware to be used.")
+    hardware_args.add_argument(
+        "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
+    )
+    hardware_args.add_argument(
         "--multi_gpu",
         default=False,
         action="store_true",
         help="Whether or not this should launch a distributed GPU training.",
     )
-    parser.add_argument(
+    hardware_args.add_argument(
+        "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
+    )
+    hardware_args.add_argument(
         "--use_mps_device",
         default=False,
         action="store_true",
         help="Whether or not this should use MPS-enabled GPU device on MacOS machines.",
     )
 
-    # deepspeed args
-    parser.add_argument(
+    # Training paradigm selection arguments
+    paradigm_args = parser.add_argument_group(
+        "Training Paradigm Selection", "Arguments for selecting which training paradigm to be used."
+    )
+    paradigm_args.add_argument(
         "--use_deepspeed",
         default=False,
         action="store_true",
         help="Whether to use deepspeed.",
     )
-    parser.add_argument(
-        "--deepspeed_config_file",
-        default=None,
-        type=str,
-        help="DeepSpeed config file.",
-    )
-    parser.add_argument(
-        "--zero_stage",
-        default=None,
-        type=int,
-        help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed).",
-    )
-    parser.add_argument(
-        "--offload_optimizer_device",
-        default=None,
-        type=str,
-        help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed).",
-    )
-    parser.add_argument(
-        "--offload_param_device",
-        default=None,
-        type=str,
-        help="Decides where (none|cpu|nvme) to offload parameters (useful only when `use_deepspeed` flag is passed).",
-    )
-    parser.add_argument(
-        "--gradient_accumulation_steps",
-        default=None,
-        type=int,
-        help="No of gradient_accumulation_steps used in your training script (useful only when `use_deepspeed` flag is passed).",
-    )
-    parser.add_argument(
-        "--gradient_clipping",
-        default=None,
-        type=float,
-        help="gradient clipping value used in your training script (useful only when `use_deepspeed` flag is passed).",
-    )
-    parser.add_argument(
-        "--zero3_init_flag",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models. "
-        "Only applicable with DeepSpeed ZeRO Stage-3.",
-    )
-    parser.add_argument(
-        "--zero3_save_16bit_model",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3. "
-        "Only applicable with DeepSpeed ZeRO Stage-3.",
-    )
-    parser.add_argument(
-        "--deepspeed_hostfile",
-        default=None,
-        type=str,
-        help="DeepSpeed hostfile for configuring multi-node compute resources.",
-    )
-    parser.add_argument(
-        "--deepspeed_exclusion_filter",
-        default=None,
-        type=str,
-        help="DeepSpeed exclusion filter string when using mutli-node setup.",
-    )
-    parser.add_argument(
-        "--deepspeed_inclusion_filter",
-        default=None,
-        type=str,
-        help="DeepSpeed inclusion filter string when using mutli-node setup.",
-    )
-    parser.add_argument(
-        "--deepspeed_multinode_launcher",
-        default=None,
-        type=str,
-        help="DeepSpeed multi-node launcher to use.",
-    )
-
-    # fsdp args
-    parser.add_argument(
+    paradigm_args.add_argument(
         "--use_fsdp",
         default=False,
         action="store_true",
         help="Whether to use fsdp.",
     )
-    parser.add_argument(
-        "--fsdp_offload_params",
-        default="false",
-        type=str,
-        help="Decides Whether (true|false) to offload parameters and gradients to CPU. (useful only when `use_fsdp` flag is passed).",
-    )
-    parser.add_argument(
-        "--fsdp_min_num_params",
-        type=int,
-        default=1e8,
-        help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
-    )
-    parser.add_argument(
-        "--fsdp_sharding_strategy",
-        type=int,
-        default=1,
-        help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
-    )
-    parser.add_argument(
-        "--fsdp_auto_wrap_policy",
-        type=str,
-        default=None,
-        help="FSDP's auto wrap policy. (useful only when `use_fsdp` flag is passed).",
-    )
-    parser.add_argument(
-        "--fsdp_transformer_layer_cls_to_wrap",
-        default=None,
-        type=str,
-        help="Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
-        "(useful only when `use_fsdp` flag is passed).",
-    )
-    parser.add_argument(
-        "--fsdp_backward_prefetch_policy",
-        default=None,
-        type=str,
-        help="FSDP's backward prefetch policy. (useful only when `use_fsdp` flag is passed).",
-    )
-    parser.add_argument(
-        "--fsdp_state_dict_type",
-        default=None,
-        type=str,
-        help="FSDP's state dict type. (useful only when `use_fsdp` flag is passed).",
-    )
-    parser.add_argument(
-        "--offload_params",
-        default=None,
-        type=str,
-        help="This argument is deprecated. Use `fsdp_offload_params` instead.",
-    )
-    parser.add_argument(
-        "--min_num_params",
-        type=int,
-        default=None,
-        help="This argument is deprecated. Use `fsdp_min_num_params` instead.",
-    )
-    parser.add_argument(
-        "--sharding_strategy",
-        type=int,
-        default=None,
-        help="This argument is deprecated. Use `fsdp_sharding_strategy` instead.",
-    )
-    parser.add_argument(
-        "--transformer_layer_cls_to_wrap",
-        default=None,
-        type=str,
-        help="This argument is deprecated. Use `fsdp_transformer_layer_cls_to_wrap` instead.",
-    )
-
-    # megatron_lm args
-    parser.add_argument(
+    paradigm_args.add_argument(
         "--use_megatron_lm",
         default=False,
         action="store_true",
         help="Whether to use Megatron-LM.",
     )
-    parser.add_argument(
-        "--megatron_lm_tp_degree",
-        type=int,
-        default=1,
-        help="Megatron-LM's Tensor Parallelism (TP) degree. (useful only when `use_megatron_lm` flag is passed).",
-    )
-    parser.add_argument(
-        "--megatron_lm_pp_degree",
-        type=int,
-        default=1,
-        help="Megatron-LM's Pipeline Parallelism (PP) degree. (useful only when `use_megatron_lm` flag is passed).",
-    )
-    parser.add_argument(
-        "--megatron_lm_num_micro_batches",
-        type=int,
-        default=None,
-        help="Megatron-LM's number of micro batches when PP degree > 1. (useful only when `use_megatron_lm` flag is passed).",
-    )
-    parser.add_argument(
-        "--megatron_lm_sequence_parallelism",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to enable Sequence Parallelism when TP degree > 1. "
-        "(useful only when `use_megatron_lm` flag is passed).",
-    )
-    parser.add_argument(
-        "--megatron_lm_recompute_activations",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to enable Selective Activation Recomputation. "
-        "(useful only when `use_megatron_lm` flag is passed).",
-    )
-    parser.add_argument(
-        "--megatron_lm_use_distributed_optimizer",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to use distributed optimizer "
-        "which shards optimizer state and gradients across Data Pralellel (DP) ranks. "
-        "(useful only when `use_megatron_lm` flag is passed).",
-    )
-    parser.add_argument(
-        "--megatron_lm_gradient_clipping",
-        default=1.0,
-        type=float,
-        help="Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable). "
-        "(useful only when `use_megatron_lm` flag is passed).",
-    )
 
-    parser.add_argument(
-        "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
+    # Resource selection arguments
+    resource_args = parser.add_argument_group(
+        "Resource Selection", "Arguments for fine-tuning how available hardware should be used."
     )
-    parser.add_argument(
+    resource_args.add_argument(
         "--mixed_precision",
         type=str,
         choices=["no", "fp16", "bf16"],
@@ -307,69 +178,65 @@ def launch_command_parser(subparsers=None):
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
     )
-
-    parser.add_argument(
+    resource_args.add_argument(
         "--fp16", default=False, action="store_true", help="Whether or not to use mixed precision training."
     )
-    parser.add_argument(
-        "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
-    )
-    parser.add_argument(
+    resource_args.add_argument(
         "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
     )
-    parser.add_argument(
+    resource_args.add_argument(
         "--num_machines", type=int, default=None, help="The total number of machines used in this training."
     )
-    parser.add_argument(
+    resource_args.add_argument(
+        "--num_cpu_threads_per_process",
+        type=int,
+        default=None,
+        help="The number of CPU threads per process. Can be tuned for optimal performance.",
+    )
+
+    # distributed GPU training arguments
+    distributed_args = parser.add_argument_group("Distributed GPUs", "Arguments related to distributed GPU training.")
+    distributed_args.add_argument(
         "--gpu_ids",
         default=None,
         help="What GPUs (by id) should be used for training on this machine as a comma-seperated list",
     )
-    parser.add_argument(
+    distributed_args.add_argument(
         "--same_network",
         default=False,
         action="store_true",
         help="Whether all machines used for multinode training exist on the same local network.",
     )
-    parser.add_argument(
+    distributed_args.add_argument(
         "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
     )
-    parser.add_argument("--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0.")
-    parser.add_argument(
+    distributed_args.add_argument(
+        "--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0."
+    )
+    distributed_args.add_argument(
         "--main_process_port",
         type=int,
         default=None,
         help="The port to use to communicate with the machine of rank 0.",
     )
     # Rendezvous related arguments
-    parser.add_argument(
+    distributed_args.add_argument(
         "--rdzv_conf",
         type=str,
         default="",
         help="Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).",
     )
-    parser.add_argument(
+    distributed_args.add_argument(
         "--max_restarts",
         type=int,
         default=0,
         help="Maximum number of worker group restarts before failing.",
     )
-    parser.add_argument(
+    distributed_args.add_argument(
         "--monitor_interval",
         type=float,
         default=5,
         help="Interval, in seconds, to monitor the state of workers.",
-    )
-    parser.add_argument(
-        "--main_training_function",
-        type=str,
-        default=None,
-        help="The name of the main function to be executed in your script (only for TPU training).",
-    )
-    parser.add_argument(
-        "--downcast_bf16",
-        action="store_true",
-        help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
     )
     parser.add_argument(
         "-m",
@@ -382,19 +249,227 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.",
     )
-    parser.add_argument(
-        "--num_cpu_threads_per_process",
+
+    # tpu arguments
+    tpu_args = parser.add_argument_group("TPU", "Arguments related to TPU.")
+    tpu_args.add_argument(
+        "--main_training_function",
+        type=str,
+        default=None,
+        help="The name of the main function to be executed in your script (only for TPU training).",
+    )
+    tpu_args.add_argument(
+        "--downcast_bf16",
+        action="store_true",
+        help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
+    )
+
+    # DeepSpeed arguments
+    deepspeed_args = parser.add_argument_group("DeepSpeed", "Arguments related to DeepSpeed.")
+    deepspeed_args.add_argument(
+        "--deepspeed_config_file",
+        default=None,
+        type=str,
+        help="DeepSpeed config file.",
+    )
+    deepspeed_args.add_argument(
+        "--zero_stage",
+        default=None,
+        type=int,
+        help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed).",
+    )
+    deepspeed_args.add_argument(
+        "--offload_optimizer_device",
+        default=None,
+        type=str,
+        help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed).",
+    )
+    deepspeed_args.add_argument(
+        "--offload_param_device",
+        default=None,
+        type=str,
+        help="Decides where (none|cpu|nvme) to offload parameters (useful only when `use_deepspeed` flag is passed).",
+    )
+    deepspeed_args.add_argument(
+        "--gradient_accumulation_steps",
+        default=None,
+        type=int,
+        help="No of gradient_accumulation_steps used in your training script (useful only when `use_deepspeed` flag is passed).",
+    )
+    deepspeed_args.add_argument(
+        "--gradient_clipping",
+        default=None,
+        type=float,
+        help="gradient clipping value used in your training script (useful only when `use_deepspeed` flag is passed).",
+    )
+    deepspeed_args.add_argument(
+        "--zero3_init_flag",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models. "
+        "Only applicable with DeepSpeed ZeRO Stage-3.",
+    )
+    deepspeed_args.add_argument(
+        "--zero3_save_16bit_model",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3. "
+        "Only applicable with DeepSpeed ZeRO Stage-3.",
+    )
+    deepspeed_args.add_argument(
+        "--deepspeed_hostfile",
+        default=None,
+        type=str,
+        help="DeepSpeed hostfile for configuring multi-node compute resources.",
+    )
+    deepspeed_args.add_argument(
+        "--deepspeed_exclusion_filter",
+        default=None,
+        type=str,
+        help="DeepSpeed exclusion filter string when using mutli-node setup.",
+    )
+    deepspeed_args.add_argument(
+        "--deepspeed_inclusion_filter",
+        default=None,
+        type=str,
+        help="DeepSpeed inclusion filter string when using mutli-node setup.",
+    )
+    deepspeed_args.add_argument(
+        "--deepspeed_multinode_launcher",
+        default=None,
+        type=str,
+        help="DeepSpeed multi-node launcher to use.",
+    )
+
+    # fsdp arguments
+    fsdp_args = parser.add_argument_group("FSDP", "Arguments related to Fully Shared Data Parallelism.")
+    fsdp_args.add_argument(
+        "--fsdp_offload_params",
+        default="false",
+        type=str,
+        help="Decides Whether (true|false) to offload parameters and gradients to CPU. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_min_num_params",
+        type=int,
+        default=1e8,
+        help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_sharding_strategy",
+        type=int,
+        default=1,
+        help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_auto_wrap_policy",
+        type=str,
+        default=None,
+        help="FSDP's auto wrap policy. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_transformer_layer_cls_to_wrap",
+        default=None,
+        type=str,
+        help="Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
+        "(useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_backward_prefetch_policy",
+        default=None,
+        type=str,
+        help="FSDP's backward prefetch policy. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_state_dict_type",
+        default=None,
+        type=str,
+        help="FSDP's state dict type. (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--offload_params",
+        default=None,
+        type=str,
+        help="This argument is deprecated. Use `fsdp_offload_params` instead.",
+    )
+    fsdp_args.add_argument(
+        "--min_num_params",
         type=int,
         default=None,
-        help="The number of CPU threads per process. Can be tuned for optimal performance.",
+        help="This argument is deprecated. Use `fsdp_min_num_params` instead.",
     )
-    parser.add_argument(
+    fsdp_args.add_argument(
+        "--sharding_strategy",
+        type=int,
+        default=None,
+        help="This argument is deprecated. Use `fsdp_sharding_strategy` instead.",
+    )
+    fsdp_args.add_argument(
+        "--transformer_layer_cls_to_wrap",
+        default=None,
+        type=str,
+        help="This argument is deprecated. Use `fsdp_transformer_layer_cls_to_wrap` instead.",
+    )
+
+    # megatron_lm args
+    megatron_lm_args = parser.add_argument_group("Megatron-LM", "Arguments related to Megatron-LM.")
+    megatron_lm_args.add_argument(
+        "--megatron_lm_tp_degree",
+        type=int,
+        default=1,
+        help="Megatron-LM's Tensor Parallelism (TP) degree. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_pp_degree",
+        type=int,
+        default=1,
+        help="Megatron-LM's Pipeline Parallelism (PP) degree. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_num_micro_batches",
+        type=int,
+        default=None,
+        help="Megatron-LM's number of micro batches when PP degree > 1. (useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_sequence_parallelism",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to enable Sequence Parallelism when TP degree > 1. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_recompute_activations",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to enable Selective Activation Recomputation. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_use_distributed_optimizer",
+        default=None,
+        type=str,
+        help="Decides Whether (true|false) to use distributed optimizer "
+        "which shards optimizer state and gradients across Data Pralellel (DP) ranks. "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+    megatron_lm_args.add_argument(
+        "--megatron_lm_gradient_clipping",
+        default=1.0,
+        type=float,
+        help="Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable). "
+        "(useful only when `use_megatron_lm` flag is passed).",
+    )
+
+    # AWS arguments
+    aws_args = parser.add_argument_group("AWS", "Arguments related to AWS.")
+    aws_args.add_argument(
         "--aws_access_key_id",
         type=str,
         default=None,
         help="The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job",
     )
-    parser.add_argument(
+    aws_args.add_argument(
         "--aws_secret_access_key",
         type=str,
         default=None,
