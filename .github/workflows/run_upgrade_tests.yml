@@ -2,6 +2,8 @@ name: New Dependency Versions and Compatibility
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
 
 env:
   HF_HOME: ~/hf_cache
