@@ -21,6 +21,7 @@ import torch
 
 import accelerate
 from accelerate.test_utils import execute_subprocess_async
+from accelerate.test_utils.testing import run_command
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -63,3 +64,151 @@ class AccelerateLauncherTester(unittest.TestCase):
                 execute_subprocess_async(
                     self.base_cmd + ["--config_file", str(config), self.test_file_path], env=os.environ.copy()
                 )
+
+
+class PodConfigTester(unittest.TestCase):
+    """
+    Test case for verifying the `accelerate pod-config` CLI passes the right `gcloud` command.
+    """
+
+    tpu_name = "test-tpu"
+    tpu_zone = "us-central1-a"
+    command = "ls"
+    cmd = ["accelerate", "pod-config"]
+    base_output = "cd /usr/share"
+    command_file = "tests/test_samples/test_command_file.sh"
+    gcloud = "Running gcloud compute tpus tpu-vm ssh"
+
+    @staticmethod
+    def clean_output(output):
+        return "".join(output).rstrip()
+
+    def test_base(self):
+        output = run_command(
+            self.cmd
+            + ["--command", self.command, "--tpu_zone", self.tpu_zone, "--tpu_name", self.tpu_name, "--debug"],
+            return_stdout=True,
+        )
+        self.assertEqual(
+            self.clean_output(output),
+            f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all",
+        )
+
+    def test_base_backward_compatibility(self):
+        output = run_command(
+            self.cmd
+            + [
+                "--config_file",
+                "tests/test_configs/0_12_0.yaml",
+                "--command",
+                self.command,
+                "--tpu_zone",
+                self.tpu_zone,
+                "--tpu_name",
+                self.tpu_name,
+                "--debug",
+            ],
+            return_stdout=True,
+        )
+        self.assertEqual(
+            self.clean_output(output),
+            f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all",
+        )
+
+    def test_with_config_file(self):
+        output = run_command(
+            self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--debug"], return_stdout=True
+        )
+        self.assertEqual(
+            self.clean_output(output),
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all',
+        )
+
+    def test_with_config_file_and_command(self):
+        output = run_command(
+            self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--command", self.command, "--debug"],
+            return_stdout=True,
+        )
+        self.assertEqual(
+            self.clean_output(output),
+            f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all",
+        )
+
+    def test_with_config_file_and_multiple_command(self):
+        output = run_command(
+            self.cmd
+            + [
+                "--config_file",
+                "tests/test_configs/latest.yaml",
+                "--command",
+                self.command,
+                "--command",
+                'echo "Hello World"',
+                "--debug",
+            ],
+            return_stdout=True,
+        )
+        self.assertEqual(
+            self.clean_output(output),
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls; echo "Hello World" --worker all',
+        )
+
+    def test_with_config_file_and_command_file(self):
+        output = run_command(
+            self.cmd
+            + ["--config_file", "tests/test_configs/latest.yaml", "--command_file", self.command_file, "--debug"],
+            return_stdout=True,
+        )
+        self.assertEqual(
+            self.clean_output(output),
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all',
+        )
+
+    def test_with_config_file_and_command_file_backward_compatibility(self):
+        output = run_command(
+            self.cmd
+            + [
+                "--config_file",
+                "tests/test_configs/0_12_0.yaml",
+                "--command_file",
+                self.command_file,
+                "--tpu_zone",
+                self.tpu_zone,
+                "--tpu_name",
+                self.tpu_name,
+                "--debug",
+            ],
+            return_stdout=True,
+        )
+        self.assertEqual(
+            self.clean_output(output),
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all',
+        )
+
+    def test_accelerate_install(self):
+        output = run_command(
+            self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--install_accelerate", "--debug"],
+            return_stdout=True,
+        )
+        self.assertEqual(
+            self.clean_output(output),
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate -U; echo "hello world"; echo "this is a second command" --worker all',
+        )
+
+    def test_accelerate_install_version(self):
+        output = run_command(
+            self.cmd
+            + [
+                "--config_file",
+                "tests/test_configs/latest.yaml",
+                "--install_accelerate",
+                "--accelerate_version",
+                "12.0.0",
+                "--debug",
+            ],
+            return_stdout=True,
+        )
+        self.assertEqual(
+            self.clean_output(output),
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate==12.0.0; echo "hello world"; echo "this is a second command" --worker all',
+        )

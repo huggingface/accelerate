@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available, is_transformers_available
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
@@ -41,6 +43,10 @@ def get_cluster_input():
     main_process_port = None
     rdzv_backend = "static"
     same_network = True
+    tpu_name = None
+    tpu_zone = None
+    commands = None
+    command_file = None
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
@@ -341,6 +347,50 @@ def get_cluster_input():
             "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
             default="main",
         )
+        use_cluster = _ask_field(
+            "Are you using a TPU cluster? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+        if use_cluster:
+            tpu_name = _ask_field(
+                "What is the name of your TPU cluster? ",
+                default=None,
+                error_message="Please enter the name of your TPU cluster.",
+            )
+            tpu_zone = _ask_field(
+                "What is the zone of your TPU cluster? ",
+                default=None,
+                error_message="Please enter the zone of your TPU cluster.",
+            )
+            run_commands = _ask_field(
+                "Do you have code you wish to run on startup in each pod? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            if run_commands:
+                use_command_file = _ask_field(
+                    "Is this code located in a bash script? [yes/NO]: ",
+                    _convert_yes_no_to_bool,
+                    default=False,
+                    error_message="Please enter yes or no.",
+                )
+                if use_command_file:
+                    command_file = _ask_field(
+                        "What is the path to your bash script? ",
+                        default=None,
+                        error_message="Please enter the path to your bash script.",
+                    )
+                    command_file = os.path.abspath(command_file)
+                else:
+                    commands = _ask_field(
+                        "What commands do you wish to run on startup in each pod? ",
+                        default=None,
+                        error_message="Please enter the commands you wish to run on startup in each pod as a single string.",
+                    )
+
     else:
         main_training_function = "main"
 
@@ -408,4 +458,8 @@ def get_cluster_input():
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
         same_network=same_network,
+        tpu_name=tpu_name,
+        tpu_zone=tpu_zone,
+        commands=commands,
+        command_file=command_file,
     )

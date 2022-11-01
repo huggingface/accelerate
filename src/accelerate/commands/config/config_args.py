@@ -18,7 +18,7 @@ import json
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import yaml
 
@@ -150,6 +150,12 @@ class ClusterConfig(BaseConfig):
     megatron_lm_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
+
+    # args for TPU pods
+    tpu_name: str = None
+    tpu_zone: str = None
+    command_file: str = None
+    command: List[str] = None
 
     def __post_init__(self):
         if self.deepspeed_config is None:
