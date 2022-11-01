@@ -1,8 +1,6 @@
 name: New Dependency Versions and Compatibility
 
 on:
-  # schedule:
-  #   - cron: '0 0 * * *'
   workflow_dispatch:
 
 env:
@@ -16,14 +14,15 @@ jobs:
     outputs:
       upgrades: ${{ steps.step1.outputs.upgrades }}
     steps:
-    - uses: actions/checkout
+    - uses: actions/checkout@v3
     - name: Set up Python 3.7
       uses: actions/setup-python@v2
       with:
         python-version: 3.7
     - name: Install dependencies
       run: |
-        pip install -e .
+        pip install -e . --no-deps
+        pip install PyGithub importlib_metadata packaging
     - name: Check for dependency upgrades
       id: step1
       run: |
@@ -32,27 +31,65 @@ jobs:
   
   run-upgrade-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test-kind: [
+          test_prod,
+          test_core,
+          test_cli,
+          test_big_modeling,
+          test_deepspeed,
+          test_fsdp,
+          test_example_differences,
+          test_checkpoint_step,
+          test_checkpoint_epoch,
+          test_rest
+        ]
+
     needs: check-upgrades
+    permissions:
+      issues: write
     if: ${{ needs.check-upgrades.outputs.upgrades != '' }}
     env:
       UPGRADES: ${{ needs.check-upgrades.outputs.upgrades }}
     steps:
-    - uses: actions/checkout
+    - uses: actions/checkout@v3
     - name: Set up Python 3.7
       uses: actions/setup-python@v2
       with:
         python-version: 3.7
+
+    - name: Activate python cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ${{ env.pythonLocation }}
+          ${{ env.HF_HOME }}
+        key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
+    
     - name: Install the library
       run: |
         pip install --upgrade pip
-        pip install -e . -U
+        if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod] -U; fi
+        if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers] -U; fi
+        if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
+        if [[ ${{ matrix.pytorch-version }} = minimum ]]; then pip install torch==1.6.0 -U; fi
         pip install pytest-reportlog
     
     - name: Run Tests
+      env: 
+        PYTORCH_VERSION: ${{ matrix.pytorch-version }}
       run: |
-        make test
+        make ${{ matrix.test-kind }}
+    - name: Run Tests
+      run: |
+        make test_core
 
     - name: Generate Report
+      if: always()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         cd utils
         python -c 'from upgrade import comment_failures; comment_failures()'

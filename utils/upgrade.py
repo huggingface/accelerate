@@ -42,19 +42,21 @@ def post_upgrades():
     upgraded = []
     for package in get_core_requirements("accelerate"):
         latest_release = get_latest_upload_time(package)
-        if latest_release - datetime.now().date() > -1:
+        if (latest_release - datetime.now().date()).days > -12:
             upgraded.append(package)
 
     # Call subprocess 
-    if upgraded:
-        subprocess.run(["echo", f"UPGRADES={upgraded}", ">>", "$GITHUB_OUTPUT"], check=True)
-    else:
-        subprocess.run(["echo", f"UPGRADES=''", ">>", "$GITHUB_OUTPUT"], check=True)
+    if len(upgraded) < 1: 
+        upgraded = ''
+    cmd = f"echo 'UPGRADES={upgraded}' >> $GITHUB_OUTPUT"
+    
+    subprocess.run(cmd, check=True, shell=True)
 
 def comment_failures():
+    print("Checking for failures...")
     failed = []
 
-    for log in Path().glob("*.log"):
+    for log in Path("../").glob("*.log"):
         with open(log, "r") as f:
             for line in f:
                 line = json.loads(line)
@@ -64,7 +66,7 @@ def comment_failures():
                         duration = f'{line["duration"]:.4f}'
                         if line.get("outcome", "") == "failed":
                             failed.append([test, duration, log.name.split('_')[0]])
-
+    print(f"Num failures: {len(failed)}")
     if len(failed) > 0:
         result = "## Failed Tests:\n"
         failed_table = '| Test Location | Test Class | Test Name |\n|---|---|---|\n| '
@@ -72,8 +74,8 @@ def comment_failures():
             failed_table += ' | '.join(test[0].split("::"))
         result += failed_table
         g = Github(os.environ["GITHUB_TOKEN"])
-        repo = g.get_repo("huggingface/accelerate")
+        repo = g.get_repo("muellerzr/accelerate")
         issue = repo.create_issue(
             title="New Dependency Version Released, Failed Tests", 
-            body=f'A new version of: {os.environ["UPGRADED"]} was released, but the tests failed. Please check the logs for more details:\n{result}'
+            body=f'A new version of: {os.environ["UPGRADES"]} was released, but the tests failed. Please check the logs for more details [here](https://github.com/muellerzr/accelerate/actions/runs/{os.environ["GITHUB_RUN_ID"]}):\n{result}'
         )
