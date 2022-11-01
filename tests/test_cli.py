@@ -82,8 +82,8 @@ class PodConfigTester(unittest.TestCase):
 
     def test_base(self):
         output = run_command(
-            self.cmd
-            + ["--command", self._command, "--tpu_zone", self._tpu_zone, "--tpu_name", self.tpu_name, "--debug"],
+            self.cmd_command
+            + ["--command", self.command, "--tpu_zone", self.tpu_zone, "--tpu_name", self.tpu_name, "--debug"],
             return_stdout=True,
         )
         output = ast.literal_eval(output)
@@ -99,9 +99,9 @@ class PodConfigTester(unittest.TestCase):
                 "--config_file",
                 "tests/test_configs/0_12_0.yaml",
                 "--command",
-                self._command,
+                self.command,
                 "--tpu_zone",
-                self._tpu_zone,
+                self.tpu_zone,
                 "--tpu_name",
                 self.tpu_name,
                 "--debug",
@@ -126,7 +126,7 @@ class PodConfigTester(unittest.TestCase):
 
     def test_with_config_file_and_command(self):
         output = run_command(
-            self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--command", self._command, "--debug"],
+            self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--command", self.command, "--debug"],
             return_stdout=True,
         )
         output = ast.literal_eval(output)
@@ -142,7 +142,7 @@ class PodConfigTester(unittest.TestCase):
                 "--config_file",
                 "tests/test_configs/latest.yaml",
                 "--command",
-                self._command,
+                self.command,
                 "--command",
                 'echo "Hello World"',
                 "--debug",
@@ -176,7 +176,7 @@ class PodConfigTester(unittest.TestCase):
                 "--command_file",
                 self.command_file,
                 "--tpu_zone",
-                self._tpu_zone,
+                self.tpu_zone,
                 "--tpu_name",
                 self.tpu_name,
                 "--debug",
