@@ -72,17 +72,17 @@ class PodConfigTester(unittest.TestCase):
     Test case for verifying the `accelerate pod-config` CLI passes the right `gcloud` command.
     """
 
-    _tpu_name = "test-tpu"
-    _tpu_zone = "us-central1-a"
+    tpu_name = "test-tpu"
+    tpu_zone = "us-central1-a"
     _command = "ls"
     cmd = ["accelerate", "pod-config"]
     _base_output = "cd /usr/share"
-    _command_file = "tests/test_samples/test_command_file.sh"
+    command_file = "tests/test_samples/test_command_file.sh"
 
     def test_base(self):
         output = run_command(
             self.cmd
-            + ["--command", self._command, "--tpu_zone", self._tpu_zone, "--tpu_name", self._tpu_name, "--debug"],
+            + ["--command", self._command, "--tpu_zone", self._tpu_zone, "--tpu_name", self.tpu_name, "--debug"],
             return_stdout=True,
         )
         output = ast.literal_eval(output)
@@ -102,7 +102,7 @@ class PodConfigTester(unittest.TestCase):
                 "--tpu_zone",
                 self._tpu_zone,
                 "--tpu_name",
-                self._tpu_name,
+                self.tpu_name,
                 "--debug",
             ],
             return_stdout=True,
@@ -157,7 +157,7 @@ class PodConfigTester(unittest.TestCase):
     def test_with_config_file_and_command_file(self):
         output = run_command(
             self.cmd
-            + ["--config_file", "tests/test_configs/latest.yaml", "--command_file", self._command_file, "--debug"],
+            + ["--config_file", "tests/test_configs/latest.yaml", "--command_file", self.command_file, "--debug"],
             return_stdout=True,
         )
         output = ast.literal_eval(output)
@@ -173,11 +173,11 @@ class PodConfigTester(unittest.TestCase):
                 "--config_file",
                 "tests/test_configs/0_12_0.yaml",
                 "--command_file",
-                self._command_file,
+                self.command_file,
                 "--tpu_zone",
                 self._tpu_zone,
                 "--tpu_name",
-                self._tpu_name,
+                self.tpu_name,
                 "--debug",
             ],
             return_stdout=True,
