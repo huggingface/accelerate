@@ -95,7 +95,7 @@ class _CustomHelpAction(argparse._HelpAction):
             "positional arguments",
             "optional arguments",
         ]
-        if len(args) > 1:
+        if len(args) > 2:
             used_platforms = [arg for arg in args if arg in _options_to_group.keys()]
             args = list(map(_clean_option, args))
             used_titles = [_options_to_group[o] for o in used_platforms]
