@@ -75,11 +75,17 @@ _options_to_group = {
 
 
 def _clean_option(option):
+    "Finds all cases of - after the first two characters and changes them to _"
     if option.startswith("--"):
         return option[:3] + option[3:].replace("-", "_")
 
 
 class _CustomHelpAction(argparse._HelpAction):
+    """
+    This is a custom help action that will hide all arguments that are not used in the command line 
+    when the help is called. This is useful for the case where the user is using a specific platform
+    and only wants to see the arguments for that platform.
+    """
     def __call__(self, parser, namespace, values, option_string=None):
         args = sys.argv[1:]
         opts = parser._actions
@@ -95,15 +101,19 @@ class _CustomHelpAction(argparse._HelpAction):
             args = list(map(_clean_option, args))
             used_titles = [_options_to_group[o] for o in used_platforms]
             for i, arg in enumerate(opts):
+                # If the argument's container is outside of the used titles, hide it
                 if arg.container.title not in titles + used_titles:
                     setattr(opts[i], "help", argparse.SUPPRESS)
+                # If the argument is hardware selection, but not being passed, hide it
                 elif arg.container.title == "Hardware Selection" and set(arg.option_strings).isdisjoint(set(args)):
                     setattr(opts[i], "help", argparse.SUPPRESS)
+                # If the argument is a training paradigm, but not being passed, hide it
                 elif arg.container.title == "Training Paradigm Selection" and set(arg.option_strings).isdisjoint(
                     set(used_platforms)
                 ):
                     setattr(opts[i], "help", argparse.SUPPRESS)
             for i, group in enumerate(list(parser._action_groups)):
+                # If all arguments in the group are hidden, hide the group
                 if all([arg.help == argparse.SUPPRESS for arg in group._group_actions]):
                     parser._action_groups.remove(group)
 
