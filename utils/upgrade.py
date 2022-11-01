@@ -77,5 +77,6 @@ def comment_failures():
         repo = g.get_repo("muellerzr/accelerate")
         issue = repo.create_issue(
             title="New Dependency Version Released, Failed Tests", 
-            body=f'A new version of: {os.environ["UPGRADES"]} was released, but the tests failed. Please check the logs for more details [here](https://github.com/muellerzr/accelerate/actions/runs/{os.environ["GITHUB_RUN_ID"]}):\n{result}'
+            body=f'A new version of: {os.environ["UPGRADES"]} was released, but the tests failed. Please check the logs for more details [here](https://github.com/muellerzr/accelerate/actions/runs/{os.environ["GITHUB_RUN_ID"]}):\n{result}',
+            labels=["bug"]
         )
