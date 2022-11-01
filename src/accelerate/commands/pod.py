@@ -139,7 +139,7 @@ def pod_launcher(args):
         "all",
     ]
     if args.debug:
-        print(cmd)
+        print(f"Running {' '.join(cmd)}")
         return
     subprocess.run(cmd)
     print("Successfully setup pod.")
