@@ -74,10 +74,11 @@ class PodConfigTester(unittest.TestCase):
 
     tpu_name = "test-tpu"
     tpu_zone = "us-central1-a"
-    _command = "ls"
+    command = "ls"
     cmd = ["accelerate", "pod-config"]
-    _base_output = "cd /usr/share"
+    base_output = "cd /usr/share"
     command_file = "tests/test_samples/test_command_file.sh"
+    gcloud = "Running gcloud compute tpus tpu-vm ssh "
 
     def test_base(self):
         output = run_command(
@@ -88,7 +89,7 @@ class PodConfigTester(unittest.TestCase):
         output = ast.literal_eval(output)
         self.assertEqual(
             " ".join(output),
-            f"gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; ls --worker all",
+            f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all",
         )
 
     def test_base_backward_compatibility(self):
@@ -110,7 +111,7 @@ class PodConfigTester(unittest.TestCase):
         output = ast.literal_eval(output)
         self.assertEqual(
             " ".join(output),
-            f"gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; ls --worker all",
+            f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all",
         )
 
     def test_with_config_file(self):
@@ -120,7 +121,7 @@ class PodConfigTester(unittest.TestCase):
         output = ast.literal_eval(output)
         self.assertEqual(
             " ".join(output),
-            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; echo "hello world"; echo "this is a second command" --worker all',
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all',
         )
 
     def test_with_config_file_and_command(self):
@@ -131,7 +132,7 @@ class PodConfigTester(unittest.TestCase):
         output = ast.literal_eval(output)
         self.assertEqual(
             " ".join(output),
-            f"gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; ls --worker all",
+            f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all",
         )
 
     def test_with_config_file_and_multiple_command(self):
@@ -151,7 +152,7 @@ class PodConfigTester(unittest.TestCase):
         output = ast.literal_eval(output)
         self.assertEqual(
             " ".join(output),
-            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; ls; echo "Hello World" --worker all',
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls; echo "Hello World" --worker all',
         )
 
     def test_with_config_file_and_command_file(self):
@@ -163,7 +164,7 @@ class PodConfigTester(unittest.TestCase):
         output = ast.literal_eval(output)
         self.assertEqual(
             " ".join(output),
-            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; echo "hello world"; echo "this is a second command" --worker all',
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all',
         )
 
     def test_with_config_file_and_command_file_backward_compatibility(self):
@@ -185,7 +186,7 @@ class PodConfigTester(unittest.TestCase):
         output = ast.literal_eval(output)
         self.assertEqual(
             " ".join(output),
-            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; echo "hello world"; echo "this is a second command" --worker all',
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all',
         )
 
     def test_accelerate_install(self):
@@ -196,7 +197,7 @@ class PodConfigTester(unittest.TestCase):
         output = ast.literal_eval(output)
         self.assertEqual(
             " ".join(output),
-            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; pip install accelerate -U; echo "hello world"; echo "this is a second command" --worker all',
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate -U; echo "hello world"; echo "this is a second command" --worker all',
         )
 
     def test_accelerate_install_version(self):
@@ -215,5 +216,5 @@ class PodConfigTester(unittest.TestCase):
         output = ast.literal_eval(output)
         self.assertEqual(
             " ".join(output),
-            f'gcloud compute tpus tpu-vm ssh test-tpu --zone us-central1-a --command {self._base_output}; pip install accelerate==12.0.0; echo "hello world"; echo "this is a second command" --worker all',
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate==12.0.0; echo "hello world"; echo "this is a second command" --worker all',
         )
