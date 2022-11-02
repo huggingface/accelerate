@@ -35,7 +35,7 @@ def get_launch_prefix():
     return cmd
 
 
-def filter_args(args, parser):
+def _filter_args(args, parser):
     """
     Filters out all `accelerate` specific args
     """

@@ -36,7 +36,7 @@ from accelerate.utils import (
     DistributedType,
     PrecisionType,
     PrepareForLaunch,
-    filter_args,
+    _filter_args,
     is_deepspeed_available,
     is_rich_available,
     is_sagemaker_available,
@@ -640,7 +640,7 @@ def multi_gpu_launcher(args):
         raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
 
     debug = getattr(args, "debug", False)
-    args = filter_args(args, distrib_run.get_args_parser())
+    args = _filter_args(args, distrib_run.get_args_parser())
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)
@@ -757,7 +757,7 @@ def deepspeed_launcher(args):
             raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
 
         debug = getattr(args, "debug", False)
-        args = filter_args(args, distrib_run.get_args_parser())
+        args = _filter_args(args, distrib_run.get_args_parser())
         with patch_environment(**current_env):
             try:
                 distrib_run.run(args)
@@ -815,7 +815,7 @@ def tpu_pod_launcher(args):
     training_script = args.training_script
     training_script_args = args.training_script_args
 
-    args = filter_args(args, xla_dist.get_args_parser())
+    args = _filter_args(args, xla_dist.get_args_parser())
     args.tpu = tpu_name
     args.positional = ["python3", training_script] + training_script_args
     bad_flags = ""
