@@ -214,7 +214,7 @@ class Accelerator:
 
         if fp16:
             warnings.warn(
-                "`fp16=True` is deprecated and will be removed in version 0.14.0 of 🤗 Accelerate. Use `mixed_precision='fp16'` instead.",
+                "`fp16=True` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `mixed_precision='fp16'` instead.",
                 FutureWarning,
             )
             mixed_precision = "fp16"
