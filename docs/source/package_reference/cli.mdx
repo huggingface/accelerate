@@ -93,6 +93,7 @@ values. They can also be passed in manually.
 * `--tpu` (`bool`) -- Whether or not this should launch a TPU training.
 
 **Resource Selection Arguments**:
+
 The following arguments are useful for fine-tuning how available hardware should be used
 
 * `--mixed_precision {no,fp16,bf16}` (`str`) -- Whether or not to use mixed precision training. Choose between FP16 and BF16 (bfloat16) training. BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.
@@ -101,6 +102,7 @@ The following arguments are useful for fine-tuning how available hardware should
 * `--num_cpu_threads_per_process NUM_CPU_THREADS_PER_PROCESS` (`int`) -- The number of CPU threads per process. Can be tuned for optimal performance.
 
 **Training Paradigm Arguments**:
+
 The following arguments are useful for selecting which training paradigm to use.
 
 * `--use_deepspeed` (`bool`) -- Whether or not to use DeepSpeed for training.
@@ -108,6 +110,7 @@ The following arguments are useful for selecting which training paradigm to use.
 * `--use_megatron_lm` (`bool`) -- Whether or not to use Megatron-LM for training.
 
 **Distributed GPU Arguments**:
+
 The following arguments are only useful when `multi_gpu` is passed or multi-gpu training is configured through `accelerate config`: 
 
 * `--gpu_ids` (`str`) -- What GPUs (by id) should be used for training on this machine as a comma-seperated list
@@ -120,12 +123,14 @@ The following arguments are only useful when `multi_gpu` is passed or multi-gpu 
 * `--monitor_interval` (`float`) -- Interval, in seconds, to monitor the state of workers.
 
 **TPU Arguments**:
+
 The following arguments are only useful when `tpu` is passed or TPU training is configured through `accelerate config`: 
 
 * `--main_training_function MAIN_TRAINING_FUNCTION` (`str`) -- The name of the main function to be executed in your script.
 * `--downcast_bf16` (`bool`) -- Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.
 
 **DeepSpeed Arguments**:
+
 The following arguments are only useful when `use_deepspeed` is passed or `deepspeed` is configured through `accelerate config`: 
 
 * `--deepspeed_config_file` (`str`) -- DeepSpeed config file.
@@ -142,6 +147,7 @@ The following arguments are only useful when `use_deepspeed` is passed or `deeps
 * `--deepspeed_multinode_launcher` (`str`) -- DeepSpeed multi-node launcher to use.
 
 **Fully Sharded Data Parallelism Arguments**:
+
 The following arguments are only useful when `use_fdsp` is passed or Fully Sharded Data Parallelism is configured through `accelerate config`:
 
 * `--fsdp_offload_params` (`str`) -- Decides Whether (true|false) to offload parameters and gradients to CPU.
@@ -153,6 +159,7 @@ The following arguments are only useful when `use_fdsp` is passed or Fully Shard
 * `--fsdp_state_dict_type` (`str`) -- FSDP's state dict type.
 
 **Megatron-LM Arguments**:
+
 The following arguments are only useful when `use_megatron_lm` is passed or Megatron-LM is configured through `accelerate config`:
 
 * `--megatron_lm_tp_degree` (``) -- Megatron-LM's Tensor Parallelism (TP) degree.
@@ -164,6 +171,7 @@ The following arguments are only useful when `use_megatron_lm` is passed or Mega
 * `--megatron_lm_gradient_clipping` (``) -- Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable).
 
 **AWS SageMaker Arguments**:
+
 The following arguments are only useful when training in SageMaker
 
 * `--aws_access_key_id AWS_ACCESS_KEY_ID` (`str`) -- The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job
