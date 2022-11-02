@@ -158,29 +158,6 @@ def launch_command_parser(subparsers=None):
         help="Whether or not this should use MPS-enabled GPU device on MacOS machines.",
     )
 
-    # Training paradigm selection arguments
-    paradigm_args = parser.add_argument_group(
-        "Training Paradigm Selection", "Arguments for selecting which training paradigm to be used."
-    )
-    paradigm_args.add_argument(
-        "--use_deepspeed",
-        default=False,
-        action="store_true",
-        help="Whether to use deepspeed.",
-    )
-    paradigm_args.add_argument(
-        "--use_fsdp",
-        default=False,
-        action="store_true",
-        help="Whether to use fsdp.",
-    )
-    paradigm_args.add_argument(
-        "--use_megatron_lm",
-        default=False,
-        action="store_true",
-        help="Whether to use Megatron-LM.",
-    )
-
     # Resource selection arguments
     resource_args = parser.add_argument_group(
         "Resource Selection", "Arguments for fine-tuning how available hardware should be used."
@@ -207,6 +184,29 @@ def launch_command_parser(subparsers=None):
         type=int,
         default=None,
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
+    )
+
+    # Training paradigm selection arguments
+    paradigm_args = parser.add_argument_group(
+        "Training Paradigm Selection", "Arguments for selecting which training paradigm to be used."
+    )
+    paradigm_args.add_argument(
+        "--use_deepspeed",
+        default=False,
+        action="store_true",
+        help="Whether to use deepspeed.",
+    )
+    paradigm_args.add_argument(
+        "--use_fsdp",
+        default=False,
+        action="store_true",
+        help="Whether to use fsdp.",
+    )
+    paradigm_args.add_argument(
+        "--use_megatron_lm",
+        default=False,
+        action="store_true",
+        help="Whether to use Megatron-LM.",
     )
 
     # distributed GPU training arguments
