@@ -160,17 +160,19 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
     return module
 
 
-def remove_hook_from_module(module: nn.Module):
+def remove_hook_from_module(module: nn.Module, recurse=False):
     """
     Removes any hook attached to a module via `add_hook_to_module`.
 
     Args:
         module (`torch.nn.Module`): The module to attach a hook to.
+        recurse (`bool`, **optional**): Whether to remove the hooks recursively
 
     Returns:
         `torch.nn.Module`: The same module, with the hook detached (the module is modified in place, so the result can
         be discarded).
     """
+
     if hasattr(module, "_hf_hook"):
         module._hf_hook.detach_hook(module)
         delattr(module, "_hf_hook")
@@ -178,6 +180,10 @@ def remove_hook_from_module(module: nn.Module):
     if hasattr(module, "_old_forward"):
         module.forward = module._old_forward
         delattr(module, "_old_forward")
+
+    if recurse:
+        for child in module.children():
+            remove_hook_from_module(child, recurse)
 
     return module
 
