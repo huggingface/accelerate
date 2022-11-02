@@ -47,7 +47,7 @@ def filter_args(args, parser):
     return new_args
 
 
-def prepare_tpu_environment(args, current_env, pod=False):
+def prepare_tpu(args, current_env, pod=False):
     """
     Prepares and returns an environment with the correct TPU environment variables.
     """
@@ -60,7 +60,11 @@ def prepare_tpu_environment(args, current_env, pod=False):
             current_env["XLA_USE_BF16"] = "1"
     if pod:
         current_env["XRT_TPU_CONFIG"] = "localservice;0;localhost:51011"
-    return current_env
+
+    # Take explicit args and set them up for XLA
+    args.vm = args.tpu_vm
+    args.tpu = args.tpu_name
+    return args, current_env
 
 
 def env_var_path_add(env_var_name, path_to_add):

@@ -347,49 +347,6 @@ def get_cluster_input():
             "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
             default="main",
         )
-        use_cluster = _ask_field(
-            "Are you using a TPU cluster? [yes/NO]: ",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
-        )
-        if use_cluster:
-            tpu_name = _ask_field(
-                "What is the name of your TPU cluster? ",
-                default=None,
-                error_message="Please enter the name of your TPU cluster.",
-            )
-            tpu_zone = _ask_field(
-                "What is the zone of your TPU cluster? ",
-                default=None,
-                error_message="Please enter the zone of your TPU cluster.",
-            )
-            run_commands = _ask_field(
-                "Do you have code you wish to run on startup in each pod? [yes/NO]: ",
-                _convert_yes_no_to_bool,
-                default=False,
-                error_message="Please enter yes or no.",
-            )
-            if run_commands:
-                use_command_file = _ask_field(
-                    "Is this code located in a bash script? [yes/NO]: ",
-                    _convert_yes_no_to_bool,
-                    default=False,
-                    error_message="Please enter yes or no.",
-                )
-                if use_command_file:
-                    command_file = _ask_field(
-                        "What is the path to your bash script? ",
-                        default=None,
-                        error_message="Please enter the path to your bash script.",
-                    )
-                    command_file = os.path.abspath(command_file)
-                else:
-                    commands = _ask_field(
-                        "What commands do you wish to run on startup in each pod? ",
-                        default=None,
-                        error_message="Please enter the commands you wish to run on startup in each pod as a single string.",
-                    )
 
     else:
         main_training_function = "main"
@@ -435,10 +392,65 @@ def get_cluster_input():
         mixed_precision = "no"
 
     downcast_bf16 = "no"
-    if distributed_type == DistributedType.TPU and mixed_precision == "bf16":
-        downcast_bf16 = _ask_field(
-            "Should `torch.float` be cast as `bfloat16` and `torch.double` remain `float32` on TPUs?", default="no"
+    if distributed_type == DistributedType.TPU:
+        if mixed_precision == "bf16":
+            downcast_bf16 = _ask_field(
+                "Should `torch.float` be cast as `bfloat16` and `torch.double` remain `float32` on TPUs?", default="no"
+            )
+
+        use_cluster = _ask_field(
+            "Are you using a TPU cluster? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
         )
+        if use_cluster:
+            tpu_name = _ask_field(
+                "What is the name of your TPU cluster? ",
+                default=None,
+                error_message="Please enter the name of your TPU cluster.",
+            )
+            tpu_zone = _ask_field(
+                "What is the zone of your TPU cluster? ",
+                default=None,
+                error_message="Please enter the zone of your TPU cluster.",
+            )
+            run_commands = _ask_field(
+                "Do you have code you wish to run on startup in each pod? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            if run_commands:
+                use_command_file = _ask_field(
+                    "Is this code located in a bash script? [yes/NO]: ",
+                    _convert_yes_no_to_bool,
+                    default=False,
+                    error_message="Please enter yes or no.",
+                )
+                if use_command_file:
+                    command_file = _ask_field(
+                        "What is the path to your bash script? ",
+                        default=None,
+                        error_message="Please enter the path to your bash script.",
+                    )
+                    command_file = os.path.abspath(command_file)
+                else:
+                    commands = _ask_field(
+                        "What commands do you wish to run on startup in each pod? ",
+                        default=None,
+                        error_message="Please enter the commands you wish to run on startup in each pod as a single string.",
+                    )
+
+            tpu_vm = _ask_field(
+                "If not using an instance group, what are the names of the Compute VM instances to be used, seperated by a comma: ",
+                default="",
+            ).split(",")
+
+            tpu_env = _ask_field(
+                "What environment variables do you wish to set in each pod, seperated by a comma: ",
+                default="",
+            ).split(",")
 
     return ClusterConfig(
         compute_environment=ComputeEnvironment.LOCAL_MACHINE,
@@ -460,6 +472,9 @@ def get_cluster_input():
         same_network=same_network,
         tpu_name=tpu_name,
         tpu_zone=tpu_zone,
+        tpu_vm=tpu_vm,
+        tpu_env=tpu_env,
+        tpu_cluster=use_cluster,
         commands=commands,
         command_file=command_file,
     )

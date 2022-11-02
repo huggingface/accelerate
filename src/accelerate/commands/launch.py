@@ -42,7 +42,7 @@ from accelerate.utils import (
     is_sagemaker_available,
     is_torch_version,
     patch_environment,
-    prepare_tpu_environment,
+    prepare_tpu,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
@@ -285,7 +285,7 @@ def launch_command_parser(subparsers=None):
         help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
     )
     tpu_args.add_argument(
-        "--use_pod",
+        "--use_cluster",
         action="store_true",
         help="Whether to use a GCP TPU pod for training.",
     )
@@ -776,7 +776,7 @@ def tpu_launcher(args):
     if args.no_python:
         raise ValueError("--no_python cannot be used with TPU launcher")
 
-    current_env = prepare_tpu_environment(args, current_env)
+    current_env = prepare_tpu(args, current_env)
 
     if args.module:
         mod_name = args.training_script
@@ -805,7 +805,7 @@ def tpu_pod_launcher(args):
     from torch_xla.distributed import xla_dist
 
     current_env = {}
-    current_env = prepare_tpu_environment(args, current_env, True)
+    current_env = prepare_tpu(args, current_env, True)
 
     # XLA uses the arg `tpu` to determine the TPU name, which will get erased
     if args.tpu_name:
@@ -1096,7 +1096,7 @@ def launch_command(args):
     elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
-        if args.use_pod:
+        if args.use_cluster:
             tpu_pod_launcher(args)
         else:
             tpu_launcher(args)
