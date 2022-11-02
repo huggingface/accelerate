@@ -166,7 +166,7 @@ def remove_hook_from_module(module: nn.Module, recurse=False):
 
     Args:
         module (`torch.nn.Module`): The module to attach a hook to.
-        recurse (`bool`): Whether to remove the hooks recursively
+        recurse (`bool`, **optional**): Whether to remove the hooks recursively
 
     Returns:
         `torch.nn.Module`: The same module, with the hook detached (the module is modified in place, so the result can
