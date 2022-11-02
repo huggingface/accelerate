@@ -68,7 +68,6 @@ _options_to_group = {
     "--use_deepspeed": "DeepSpeed",
     "--use_fsdp": "FSDP",
     "--use_megatron_lm": "Megatron-LM",
-    "AWS": "AWS",
 }
 
 
@@ -107,13 +106,17 @@ class _CustomHelpAction(argparse._HelpAction):
                 if arg.container.title not in titles + used_titles:
                     setattr(opts[i], "help", argparse.SUPPRESS)
                 # If the argument is hardware selection, but not being passed, hide it
-                elif arg.container.title == "Hardware Selection" and set(arg.option_strings).isdisjoint(set(args)):
-                    setattr(opts[i], "help", argparse.SUPPRESS)
+                elif arg.container.title == "Hardware Selection":
+                    if set(arg.option_strings).isdisjoint(set(args)):
+                        setattr(opts[i], "help", argparse.SUPPRESS)
+                    else:
+                        setattr(opts[i], "help", arg.help + " (currently selected)")
                 # If the argument is a training paradigm, but not being passed, hide it
-                elif arg.container.title == "Training Paradigm Selection" and set(arg.option_strings).isdisjoint(
-                    set(used_platforms)
-                ):
-                    setattr(opts[i], "help", argparse.SUPPRESS)
+                elif arg.container.title == "Training Paradigm Selection":
+                    if set(arg.option_strings).isdisjoint(set(used_platforms)):
+                        setattr(opts[i], "help", argparse.SUPPRESS)
+                    else:
+                        setattr(opts[i], "help", arg.help + " (currently selected)")
             for i, group in enumerate(list(parser._action_groups)):
                 # If all arguments in the group are hidden, hide the group
                 if all([arg.help == argparse.SUPPRESS for arg in group._group_actions]):
