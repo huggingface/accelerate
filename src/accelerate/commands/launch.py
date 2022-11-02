@@ -527,7 +527,7 @@ def simple_launcher(args):
 
     if args.fp16:
         warnings.warn(
-            "`fp16` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `--mixed_precision fp16` instead.",
+            "`fp16` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `mixed_precision fp16` instead.",
             FutureWarning,
         )
         mixed_precision = "fp16"
@@ -579,7 +579,7 @@ def multi_gpu_launcher(args):
 
     if args.fp16:
         warnings.warn(
-            "`fp16` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `--mixed_precision fp16` instead.",
+            "`fp16` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `mixed_precision fp16` instead.",
             FutureWarning,
         )
         mixed_precision = "fp16"
