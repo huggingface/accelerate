@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import imp
 import pickle
 import unittest
 
 import torch
 
 from accelerate import Accelerator
+from accelerate.state import AcceleratorState
 from accelerate.test_utils import require_cpu
 
 
@@ -28,4 +30,8 @@ class OptimizerTester(unittest.TestCase):
         optimizer = torch.optim.SGD(model.parameters(), 0.1)
         accelerator = Accelerator()
         optimizer = accelerator.prepare(optimizer)
-        pickle.loads(pickle.dumps(optimizer))
+        try:
+            pickle.loads(pickle.dumps(optimizer))
+        except Exception as e:
+            self.fail(f"Accelerated optimizer pickling failed with {e}")
+        AcceleratorState._reset_state()
