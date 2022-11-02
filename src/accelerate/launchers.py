@@ -105,7 +105,10 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                 )
 
             if use_fp16:
-                warnings.warn('use_fp16=True is deprecated. Use mixed_precision="fp16" instead.', DeprecationWarning)
+                warnings.warn(
+                    "`fp16=True` is deprecated and will be removed in version 0.14.0 of 🤗 Accelerate. Use `mixed_precision='fp16'` instead.",
+                    FutureWarning,
+                )
                 mixed_precision = "fp16"
 
             # torch.distributed will expect a few environment variable to be here. We set the ones common to each
