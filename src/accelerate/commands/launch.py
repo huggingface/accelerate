@@ -514,7 +514,7 @@ def simple_launcher(args):
     current_env = os.environ.copy()
     current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
     if args.use_mps_device:
-        warnings.warn('--use_mps_device flag is deprecated. Use "--mps" instead.', FutureWarning)
+        warnings.warn('`use_mps_device` flag is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use "--mps" instead.', FutureWarning)
         args.mps = True
     current_env["USE_MPS_DEVICE"] = str(args.mps)
     if args.mps:
@@ -714,7 +714,7 @@ def deepspeed_launcher(args):
         )
 
     if args.fp16:
-        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', FutureWarning)
+        warnings.warn('--fp16 flag is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use "--mixed_precision fp16" instead.', FutureWarning)
         mixed_precision = "fp16"
 
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
