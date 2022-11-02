@@ -86,7 +86,10 @@ class _CustomHelpAction(argparse._HelpAction):
     """
 
     def __call__(self, parser, namespace, values, option_string=None):
-        args = sys.argv[1:]
+        if "accelerate" in sys.argv[0] and "launch" in sys.argv[1:]:
+            args = sys.argv[2:]
+        else:
+            args = sys.argv[1:]
         opts = parser._actions
         titles = [
             "Hardware Selection",
@@ -95,7 +98,7 @@ class _CustomHelpAction(argparse._HelpAction):
             "positional arguments",
             "optional arguments",
         ]
-        if len(args) > 2:
+        if len(args) > 1:
             used_platforms = [arg for arg in args if arg in _options_to_group.keys()]
             args = list(map(_clean_option, args))
             used_titles = [_options_to_group[o] for o in used_platforms]
