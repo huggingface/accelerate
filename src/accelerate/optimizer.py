@@ -159,7 +159,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         return self._is_overflow
 
     def __getstate__(self):
-        return self.__dict__
+        return self.__dict__.copy()
 
     def __setstate__(self, state):
         self.__dict__.update(state)
