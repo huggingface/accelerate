@@ -64,6 +64,7 @@ logger = logging.getLogger(__name__)
 options_to_group = {
     "--multi-gpu": "Distributed GPUs",
     "--tpu": "TPU",
+    "--mps": "MPS",
     "--use_mps_device": "MPS",
     "--use_deepspeed": "DeepSpeed Arguments",
     "--use_fsdp": "FSDP Arguments",
@@ -145,6 +146,12 @@ def launch_command_parser(subparsers=None):
         "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
     )
     hardware_args.add_argument(
+        "--mps",
+        default=False,
+        action="store_true",
+        help="Whether or not this should use MPS-enabled GPU device on MacOS machines.",
+    )
+    hardware_args.add_argument(
         "--multi_gpu",
         default=False,
         action="store_true",
@@ -157,7 +164,7 @@ def launch_command_parser(subparsers=None):
         "--use_mps_device",
         default=False,
         action="store_true",
-        help="Whether or not this should use MPS-enabled GPU device on MacOS machines.",
+        help="This argument is deprecated, use `--mps` instead.",
     )
 
     # Resource selection arguments
@@ -506,8 +513,14 @@ def simple_launcher(args):
 
     current_env = os.environ.copy()
     current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
-    current_env["USE_MPS_DEVICE"] = str(args.use_mps_device)
     if args.use_mps_device:
+        warnings.warn(
+            '`use_mps_device` flag is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use "--mps" instead.',
+            FutureWarning,
+        )
+        args.mps = True
+    current_env["USE_MPS_DEVICE"] = str(args.mps)
+    if args.mps:
         current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     elif args.gpu_ids != "all" and args.gpu_ids is not None:
         current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
@@ -704,7 +717,10 @@ def deepspeed_launcher(args):
         )
 
     if args.fp16:
-        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', FutureWarning)
+        warnings.warn(
+            '--fp16 flag is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use "--mixed_precision fp16" instead.',
+            FutureWarning,
+        )
         mixed_precision = "fp16"
 
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
@@ -955,18 +971,18 @@ def launch_command(args):
         if (
             not args.multi_gpu
             and not args.tpu
+            and not args.mps
             and not args.use_deepspeed
             and not args.use_fsdp
-            and not args.use_mps_device
             and not args.use_megatron_lm
         ):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
-            args.use_mps_device = defaults.distributed_type == DistributedType.MPS
+            args.mps = defaults.distributed_type == DistributedType.MPS
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
-        if not args.use_mps_device:
+        if not args.mps:
             if args.gpu_ids is None:
                 if defaults.gpu_ids is not None:
                     args.gpu_ids = defaults.gpu_ids
