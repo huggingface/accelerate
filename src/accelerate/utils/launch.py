@@ -60,10 +60,9 @@ def prepare_tpu(args, current_env, pod=False):
             current_env["XLA_USE_BF16"] = "1"
     if pod:
         current_env["XRT_TPU_CONFIG"] = "localservice;0;localhost:51011"
-
-    # Take explicit args and set them up for XLA
-    args.vm = args.tpu_vm
-    args.tpu = args.tpu_name
+        # Take explicit args and set them up for XLA
+        args.vm = args.tpu_vm
+        args.tpu = args.tpu_name
     return args, current_env
 
 

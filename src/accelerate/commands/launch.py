@@ -776,7 +776,7 @@ def tpu_launcher(args):
     if args.no_python:
         raise ValueError("--no_python cannot be used with TPU launcher")
 
-    current_env = prepare_tpu(args, current_env)
+    args, current_env = prepare_tpu(args, current_env)
 
     if args.module:
         mod_name = args.training_script
@@ -805,18 +805,13 @@ def tpu_pod_launcher(args):
     from torch_xla.distributed import xla_dist
 
     current_env = {}
-    current_env = prepare_tpu(args, current_env, True)
-
-    # XLA uses the arg `tpu` to determine the TPU name, which will get erased
-    if args.tpu_name:
-        tpu_name = args.tpu_name
+    args, current_env = prepare_tpu(args, current_env, True)
     debug = getattr(args, "debug", False)
 
     training_script = args.training_script
     training_script_args = args.training_script_args
 
     args = _filter_args(args, xla_dist.get_args_parser())
-    args.tpu = tpu_name
     args.positional = ["python3", training_script] + training_script_args
     bad_flags = ""
     for k, v in vars(args):
