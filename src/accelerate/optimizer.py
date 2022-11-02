@@ -157,3 +157,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def step_was_skipped(self):
         """Whether or not the optimizer step was skipped."""
         return self._is_overflow
+
+    def __getstate__(self):
+        return self.__dict__.copy()
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
