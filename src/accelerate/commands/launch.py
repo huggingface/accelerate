@@ -173,7 +173,10 @@ def launch_command_parser(subparsers=None):
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
     )
     resource_args.add_argument(
-        "--fp16", default=False, action="store_true", help="Whether or not to use mixed precision training."
+        "--fp16",
+        default=False,
+        action="store_true",
+        help="This argument is deprecated, use `--mixed_precision fp16` instead.",
     )
     resource_args.add_argument(
         "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
@@ -403,30 +406,6 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="FSDP's state dict type. (useful only when `use_fsdp` flag is passed).",
     )
-    fsdp_args.add_argument(
-        "--offload_params",
-        default=None,
-        type=str,
-        help="This argument is deprecated. Use `fsdp_offload_params` instead.",
-    )
-    fsdp_args.add_argument(
-        "--min_num_params",
-        type=int,
-        default=None,
-        help="This argument is deprecated. Use `fsdp_min_num_params` instead.",
-    )
-    fsdp_args.add_argument(
-        "--sharding_strategy",
-        type=int,
-        default=None,
-        help="This argument is deprecated. Use `fsdp_sharding_strategy` instead.",
-    )
-    fsdp_args.add_argument(
-        "--transformer_layer_cls_to_wrap",
-        default=None,
-        type=str,
-        help="This argument is deprecated. Use `fsdp_transformer_layer_cls_to_wrap` instead.",
-    )
 
     # megatron_lm args
     megatron_lm_args = parser.add_argument_group("Megatron-LM Arguments", "Arguments related to Megatron-LM.")
@@ -547,7 +526,10 @@ def simple_launcher(args):
         )
 
     if args.fp16:
-        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
+        warnings.warn(
+            "`fp16` is deprecated and will be removed in version 0.14.0 of 🤗 Accelerate. Use `--mixed_precision fp16` instead.",
+            FutureWarning,
+        )
         mixed_precision = "fp16"
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
@@ -596,43 +578,14 @@ def multi_gpu_launcher(args):
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}.")
 
     if args.fp16:
-        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
+        warnings.warn(
+            "`fp16` is deprecated and will be removed in version 0.14.0 of 🤗 Accelerate. Use `--mixed_precision fp16` instead.",
+            FutureWarning,
+        )
         mixed_precision = "fp16"
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
     if args.use_fsdp:
-        if args.sharding_strategy is not None:
-            warnings.warn(
-                "`sharding_strategy` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
-                " `fsdp_sharding_strategy` instead",
-                FutureWarning,
-            )
-            args.fsdp_sharding_strategy = args.sharding_strategy
-
-        if args.offload_params is not None:
-            warnings.warn(
-                "`offload_params` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
-                " `fsdp_offload_params` instead",
-                FutureWarning,
-            )
-            args.fsdp_offload_params = args.offload_params
-
-        if args.min_num_params is not None:
-            warnings.warn(
-                "`min_num_params` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
-                " `fsdp_min_num_params` instead",
-                FutureWarning,
-            )
-            args.fsdp_min_num_params = args.min_num_params
-
-        if args.transformer_layer_cls_to_wrap is not None:
-            warnings.warn(
-                "`transformer_layer_cls_to_wrap` is deprecated and will be removed in version 0.13.0 of 🤗 Accelerate. Use"
-                " `fsdp_transformer_layer_cls_to_wrap` instead",
-                FutureWarning,
-            )
-            args.fsdp_transformer_layer_cls_to_wrap = args.transformer_layer_cls_to_wrap
-
         current_env["USE_FSDP"] = "true"
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
@@ -751,7 +704,7 @@ def deepspeed_launcher(args):
         )
 
     if args.fp16:
-        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
+        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', FutureWarning)
         mixed_precision = "fp16"
 
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
@@ -921,7 +874,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         )
 
     if args.fp16:
-        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', DeprecationWarning)
+        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', FutureWarning)
         mixed_precision = "fp16"
 
     # Environment variables to be set for use during training job
