@@ -181,7 +181,7 @@ def remove_hook_from_module(module: nn.Module, recurse=False):
         module.forward = module._old_forward
         delattr(module, "_old_forward")
 
-    if recurse and len(list(module.children())) > 1:
+    if recurse:
         for child in module.children():
             remove_hook_from_module(child, recurse)
 
