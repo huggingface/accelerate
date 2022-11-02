@@ -61,17 +61,17 @@ if is_torch_version(">=", "1.9.0"):
 
 logger = logging.getLogger(__name__)
 
-_options_to_group = {
+options_to_group = {
     "--multi-gpu": "Distributed GPUs",
     "--tpu": "TPU",
     "--use_mps_device": "MPS",
-    "--use_deepspeed": "DeepSpeed",
-    "--use_fsdp": "FSDP",
-    "--use_megatron_lm": "Megatron-LM",
+    "--use_deepspeed": "DeepSpeed Arguments",
+    "--use_fsdp": "FSDP Arguments",
+    "--use_megatron_lm": "Megatron-LM Arguments",
 }
 
 
-def _clean_option(option):
+def clean_option(option):
     "Finds all cases of - after the first two characters and changes them to _"
     if option.startswith("--"):
         return option[:3] + option[3:].replace("-", "_")
@@ -91,28 +91,28 @@ class _CustomHelpAction(argparse._HelpAction):
             args = sys.argv[1:]
         opts = parser._actions
         titles = [
-            "Hardware Selection",
-            "Resource Selection",
-            "Training Paradigm Selection",
+            "Hardware Selection Arguments",
+            "Resource Selection Arguments",
+            "Training Paradigm Arguments",
             "positional arguments",
             "optional arguments",
         ]
         if len(args) > 1:
-            used_platforms = [arg for arg in args if arg in _options_to_group.keys()]
-            args = list(map(_clean_option, args))
-            used_titles = [_options_to_group[o] for o in used_platforms]
+            used_platforms = [arg for arg in args if arg in options_to_group.keys()]
+            args = list(map(clean_option, args))
+            used_titles = [options_to_group[o] for o in used_platforms]
             for i, arg in enumerate(opts):
                 # If the argument's container is outside of the used titles, hide it
                 if arg.container.title not in titles + used_titles:
                     setattr(opts[i], "help", argparse.SUPPRESS)
                 # If the argument is hardware selection, but not being passed, hide it
-                elif arg.container.title == "Hardware Selection":
+                elif arg.container.title == "Hardware Selection Arguments":
                     if set(arg.option_strings).isdisjoint(set(args)):
                         setattr(opts[i], "help", argparse.SUPPRESS)
                     else:
                         setattr(opts[i], "help", arg.help + " (currently selected)")
                 # If the argument is a training paradigm, but not being passed, hide it
-                elif arg.container.title == "Training Paradigm Selection":
+                elif arg.container.title == "Training Paradigm Arguments":
                     if set(arg.option_strings).isdisjoint(set(used_platforms)):
                         setattr(opts[i], "help", argparse.SUPPRESS)
                     else:
@@ -138,7 +138,9 @@ def launch_command_parser(subparsers=None):
         "--config_file", default=None, help="The config file to use for the default values in the launching script."
     )
     # Hardware selection arguments
-    hardware_args = parser.add_argument_group("Hardware Selection", "Arguments for selecting the hardware to be used.")
+    hardware_args = parser.add_argument_group(
+        "Hardware Selection Arguments", "Arguments for selecting the hardware to be used."
+    )
     hardware_args.add_argument(
         "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
     )
@@ -160,7 +162,7 @@ def launch_command_parser(subparsers=None):
 
     # Resource selection arguments
     resource_args = parser.add_argument_group(
-        "Resource Selection", "Arguments for fine-tuning how available hardware should be used."
+        "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
     )
     resource_args.add_argument(
         "--mixed_precision",
@@ -186,9 +188,9 @@ def launch_command_parser(subparsers=None):
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
     )
 
-    # Training paradigm selection arguments
+    # Training Paradigm arguments
     paradigm_args = parser.add_argument_group(
-        "Training Paradigm Selection", "Arguments for selecting which training paradigm to be used."
+        "Training Paradigm Arguments", "Arguments for selecting which training paradigm to be used."
     )
     paradigm_args.add_argument(
         "--use_deepspeed",
@@ -280,7 +282,7 @@ def launch_command_parser(subparsers=None):
     )
 
     # DeepSpeed arguments
-    deepspeed_args = parser.add_argument_group("DeepSpeed", "Arguments related to DeepSpeed.")
+    deepspeed_args = parser.add_argument_group("DeepSpeed Arguments", "Arguments related to DeepSpeed.")
     deepspeed_args.add_argument(
         "--deepspeed_config_file",
         default=None,
@@ -357,7 +359,7 @@ def launch_command_parser(subparsers=None):
     )
 
     # fsdp arguments
-    fsdp_args = parser.add_argument_group("FSDP", "Arguments related to Fully Shared Data Parallelism.")
+    fsdp_args = parser.add_argument_group("FSDP Arguments", "Arguments related to Fully Shared Data Parallelism.")
     fsdp_args.add_argument(
         "--fsdp_offload_params",
         default="false",
@@ -427,7 +429,7 @@ def launch_command_parser(subparsers=None):
     )
 
     # megatron_lm args
-    megatron_lm_args = parser.add_argument_group("Megatron-LM", "Arguments related to Megatron-LM.")
+    megatron_lm_args = parser.add_argument_group("Megatron-LM Arguments", "Arguments related to Megatron-LM.")
     megatron_lm_args.add_argument(
         "--megatron_lm_tp_degree",
         type=int,
@@ -477,7 +479,7 @@ def launch_command_parser(subparsers=None):
     )
 
     # AWS arguments
-    aws_args = parser.add_argument_group("AWS", "Arguments related to AWS.")
+    aws_args = parser.add_argument_group("AWS Arguments", "Arguments related to AWS.")
     aws_args.add_argument(
         "--aws_access_key_id",
         type=str,
