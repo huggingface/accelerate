@@ -36,12 +36,13 @@ from accelerate.utils import (
     DistributedType,
     PrecisionType,
     PrepareForLaunch,
-    _filter_args,
+    filter_args,
     is_deepspeed_available,
     is_rich_available,
     is_sagemaker_available,
     is_torch_version,
     patch_environment,
+    prepare_tpu_environment,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
@@ -282,6 +283,26 @@ def launch_command_parser(subparsers=None):
         "--downcast_bf16",
         action="store_true",
         help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
+    )
+    tpu_args.add_argument(
+        "--use_pod",
+        action="store_true",
+        help="Whether to use a GCP TPU pod for training.",
+    )
+    tpu_args.add_argument(
+        "--vm",
+        type=str,
+        action="append",
+        help=(
+            "List of single Compute VM instance names. "
+            "If not provided we assume usage of instance groups. For TPU pods."
+        ),
+    )
+    tpu_args.add_argument(
+        "--env",
+        type=str,
+        action="append",
+        help="List of environment variables to set on the Compute VM instances. For TPU pods.",
     )
 
     # DeepSpeed arguments
@@ -619,7 +640,7 @@ def multi_gpu_launcher(args):
         raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
 
     debug = getattr(args, "debug", False)
-    args = _filter_args(args)
+    args = filter_args(args, distrib_run.get_args_parser())
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)
@@ -736,7 +757,7 @@ def deepspeed_launcher(args):
             raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
 
         debug = getattr(args, "debug", False)
-        args = _filter_args(args)
+        args = filter_args(args, distrib_run.get_args_parser())
         with patch_environment(**current_env):
             try:
                 distrib_run.run(args)
@@ -755,13 +776,7 @@ def tpu_launcher(args):
     if args.no_python:
         raise ValueError("--no_python cannot be used with TPU launcher")
 
-    if args.mixed_precision == "bf16":
-        if args.downcast_bf16:
-            current_env["XLA_USE_BF16"] = "0"
-            current_env["XLA_DOWNCAST_BF16"] = "1"
-        else:
-            current_env["XLA_USE_BF16"] = "1"
-            current_env["XLA_DOWNCAST_BF16"] = "0"
+    current_env = prepare_tpu_environment(args, current_env)
 
     if args.module:
         mod_name = args.training_script
@@ -784,6 +799,42 @@ def tpu_launcher(args):
     main_function = getattr(mod, args.main_training_function)
     with patch_environment(**current_env):
         xmp.spawn(PrepareForLaunch(main_function), args=(), nprocs=args.num_processes)
+
+
+def tpu_pod_launcher(args):
+    from torch_xla.distributed import xla_dist
+
+    current_env = {}
+    current_env = prepare_tpu_environment(args, current_env, True)
+
+    # XLA uses the arg `tpu` to determine the TPU name, which will get erased
+    if args.tpu_name:
+        tpu_name = args.tpu_name
+    debug = getattr(args, "debug", False)
+
+    training_script = args.training_script
+    training_script_args = args.training_script_args
+
+    args = filter_args(args, xla_dist.get_args_parser())
+    args.tpu = tpu_name
+    args.positional = ["python3", training_script] + training_script_args
+    bad_flags = ""
+    for k, v in vars(args):
+        if k.startswith("docker_") and v != "":
+            bad_flags += f'{k}="{v}"\n'
+    if bad_flags != "":
+        raise ValueError(
+            f"Docker containers are not supported for TPU pod launcher currently, please remove the following flags:\n{bad_flags}"
+        )
+
+    with patch_environment(**current_env):
+        try:
+            xla_dist.resolve_and_execute(args)
+        except:
+            if is_rich_available() and debug:
+                console = get_console()
+                console.print("\n[bold red]Using --debug, `torch_xla.xla_dist` Stack Trace:[/bold red]")
+                console.print_exception(suppress=[__file__], show_locals=False)
 
 
 def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
@@ -1045,7 +1096,10 @@ def launch_command(args):
     elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
-        tpu_launcher(args)
+        if args.use_pod:
+            tpu_pod_launcher(args)
+        else:
+            tpu_launcher(args)
     elif defaults is not None and defaults.compute_environment == ComputeEnvironment.AMAZON_SAGEMAKER:
         sagemaker_launcher(defaults, args)
     else:

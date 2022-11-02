@@ -21,10 +21,6 @@ from ..utils import is_torch_version
 from .dataclasses import DistributedType
 
 
-if is_torch_version(">=", "1.9.0"):
-    import torch.distributed.run as distrib_run
-
-
 def get_launch_prefix():
     """
     Grabs the correct launcher for starting a distributed command, such as either `torchrun`, `python -m
@@ -39,17 +35,32 @@ def get_launch_prefix():
     return cmd
 
 
-def _filter_args(args):
+def filter_args(args, parser):
     """
     Filters out all `accelerate` specific args
     """
-    distrib_args = distrib_run.get_args_parser()
-    new_args, _ = distrib_args.parse_known_args()
+    new_args, _ = parser.parse_known_args()
 
     for key, value in vars(args).items():
         if key in vars(new_args).keys():
             setattr(new_args, key, value)
     return new_args
+
+
+def prepare_tpu_environment(args, current_env, pod=False):
+    """
+    Prepares and returns an environment with the correct TPU environment variables.
+    """
+    current_env["XLA_USE_BF16"] = "0"
+    current_env["XLA_DOWNCAST_BF16"] = "0"
+    if args.mixed_precision == "bf16":
+        if args.downcast_bf16:
+            current_env["XLA_DOWNCAST_BF16"] = "1"
+        else:
+            current_env["XLA_USE_BF16"] = "1"
+    if pod:
+        current_env["XRT_TPU_CONFIG"] = "localservice;0;localhost:51011"
+    return current_env
 
 
 def env_var_path_add(env_var_name, path_to_add):
