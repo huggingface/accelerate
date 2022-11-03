@@ -177,6 +177,37 @@ The following arguments are only useful when training in SageMaker
 * `--aws_access_key_id AWS_ACCESS_KEY_ID` (`str`) -- The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job
 * `--aws_secret_access_key AWS_SECRET_ACCESS_KEY` (`str`) -- The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job
 
+## accelerate tpu-config
+
+`accelerate tpu-config`
+
+**Usage**:
+
+```bash
+accelerate tpu-config [arguments]
+```
+
+**Optional Arguments**:
+* `-h`, `--help` (`bool`) -- Show a help message and exit
+
+**Config Arguments**:
+
+Arguments that can be configured through `accelerate config`.
+
+* `--config_file` (`str`) -- Path to the config file to use for accelerate.
+* `--tpu_name` (`str`) -- The name of the TPU to use. If not specified, will use the TPU specified in the config file.
+* `--tpu_zone` (`str`) -- The zone of the TPU to use. If not specified, will use the zone specified in the config file.
+
+**TPU Arguments**:
+
+Arguments for options ran inside the TPU.
+
+* `--command_file` (`str`) -- The path to the file containing the commands to run on the pod on startup.
+* `--command` (`str`) -- A command to run on the pod. Can be passed multiple times.
+* `--install_accelerate` (`bool`) -- Whether to install accelerate on the pod. Defaults to False.
+* `--accelerate_version` (`str`) -- The version of accelerate to install on the pod. If not specified, will use the latest pypi version. Specify 'dev' to install from GitHub.
+* `--debug` (`bool`) -- If set, will print the command that would be run instead of running it.
+
 ## accelerate test
 
 `accelerate test` or `accelerate-test`
