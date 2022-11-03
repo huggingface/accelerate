@@ -14,7 +14,6 @@
 
 import argparse
 import math
-import os
 from abc import ABC
 from functools import partial
 
@@ -36,7 +35,7 @@ if is_transformers_available():
     )
 
 
-if is_megatron_lm_available() and os.environ.get("USE_MEGATRON_LM", "false") == "true":
+if is_megatron_lm_available():
     from megatron import (
         get_args,
         get_num_microbatches,

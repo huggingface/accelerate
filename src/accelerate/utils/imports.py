@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import importlib
+import os
 import sys
 from functools import lru_cache
 
@@ -90,10 +91,11 @@ def is_bf16_available(ignore_tpu=False):
 
 
 def is_megatron_lm_available():
-    package_exists = importlib.util.find_spec("megatron") is not None
-    if package_exists:
-        megatron_version = parse(importlib_metadata.version("megatron-lm"))
-        return compare_versions(megatron_version, ">=", "2.2.0")
+    if os.environ.get("USE_MEGATRON_LM", "false") == "true":
+        package_exists = importlib.util.find_spec("megatron") is not None
+        if package_exists:
+            megatron_version = parse(importlib_metadata.version("megatron-lm"))
+            return compare_versions(megatron_version, ">=", "2.2.0")
     return False
 
 
