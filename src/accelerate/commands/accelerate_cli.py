@@ -19,8 +19,8 @@ from argparse import ArgumentParser
 from accelerate.commands.config import config_command_parser
 from accelerate.commands.env import env_command_parser
 from accelerate.commands.launch import launch_command_parser
-from accelerate.commands.pod import tpu_command_parser
 from accelerate.commands.test import test_command_parser
+from accelerate.commands.tpu import tpu_command_parser
 
 
 def main():
