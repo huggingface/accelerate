@@ -14,12 +14,14 @@
 
 import argparse
 import math
+import warnings
 from abc import ABC
 from functools import partial
 
 import torch
 import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
@@ -57,7 +59,9 @@ if is_megatron_lm_available():
         set_jit_fusion_options,
         write_args_to_tensorboard,
     )
-    from megatron.model import BertModel, GPTModel, ModelType, T5Model
+    from megatron.model import BertModel
+    from megatron.model import DistributedDataParallel as LocalDDP
+    from megatron.model import Float16Module, GPTModel, ModelType, T5Model
     from megatron.model.classification import Classification
     from megatron.optimizer import get_megatron_optimizer
     from megatron.schedules import get_forward_backward_func
@@ -72,6 +76,7 @@ if is_megatron_lm_available():
         average_losses_across_data_parallel_group,
         calc_params_l2_norm,
         get_ltor_masks_and_position_ids,
+        unwrap_model,
     )
 
 
@@ -607,6 +612,12 @@ class GPTTrainStep(AbstractTrainStep):
         self.loss_func = self.get_loss_func()
         self.forward_step = self.get_forward_step_func()
         self.eod_token = args.padded_vocab_size - 1
+        if args.vocab_file is not None:
+            tokenizer = get_tokenizer()
+            self.eod_token = tokenizer.eod
+        self.reset_position_ids = args.reset_position_ids
+        self.reset_attention_mask = args.reset_attention_mask
+        self.eod_mask_loss = args.eod_mask_loss
         if not args.model_return_dict:
             self.model_output_class = None
         else:
@@ -615,8 +626,6 @@ class GPTTrainStep(AbstractTrainStep):
     def get_batch_func(self, megatron_dataset_flag):
         def get_batch_megatron(data_iterator):
             """Generate a batch"""
-            args = get_args()
-
             # Items and their type.
             keys = ["text"]
             datatype = torch.int64
@@ -635,7 +644,7 @@ class GPTTrainStep(AbstractTrainStep):
 
             # Get the masks and postition ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                tokens, self.eod_token, args.reset_position_ids, args.reset_attention_mask, args.eod_mask_loss
+                tokens, self.eod_token, self.reset_position_ids, self.reset_attention_mask, self.eod_mask_loss
             )
 
             return tokens, labels, loss_mask, attention_mask, position_ids
@@ -652,7 +661,7 @@ class GPTTrainStep(AbstractTrainStep):
             tokens = tokens_[:, :-1].contiguous()
             # Get the masks and postition ids.
             attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-                tokens, self.eod_token, False, False, True
+                tokens, self.eod_token, self.reset_position_ids, self.reset_attention_mask, True
             )
             return tokens, labels, loss_mask, attention_mask, position_ids
 
@@ -1054,7 +1063,7 @@ class MegatronEngine(torch.nn.Module):
             loss_reduced = {}
             for key in losses_reduced[0]:
                 losses_reduced_for_key = [x[key] for x in losses_reduced]
-                if len(losses_reduced_for_key[0].shape) == 1:
+                if len(losses_reduced_for_key[0].shape) == 0:
                     loss_reduced[key] = sum(losses_reduced_for_key) / len(losses_reduced_for_key)
                 else:
                     loss_reduced[key] = torch.concat(losses_reduced_for_key)
@@ -1105,7 +1114,7 @@ class MegatronEngine(torch.nn.Module):
             loss_reduced = {}
             for key in loss_dicts[0]:
                 losses_reduced_for_key = [x[key] for x in loss_dicts]
-                if len(losses_reduced_for_key[0].shape) == 1:
+                if len(losses_reduced_for_key[0].shape) == 0:
                     loss_reduced[key] = sum(losses_reduced_for_key) / len(losses_reduced_for_key)
                 else:
                     loss_reduced[key] = torch.concat(losses_reduced_for_key)
@@ -1163,7 +1172,7 @@ class MegatronEngine(torch.nn.Module):
 
         loss = torch.tensor(0.0, device=args.local_rank)
         for key in loss_dict:
-            if len(loss_dict[key].shape) == 1:
+            if len(loss_dict[key].shape) == 0:
                 loss += loss_dict[key]
 
         logits = None
@@ -1236,10 +1245,24 @@ class MegatronEngine(torch.nn.Module):
         length_penalty=None,
         **kwargs,
     ):
-        # Generate method for GPT2 model
-        # This method is used for inference
-        # Supports both greedy and beam search along with sampling
-        # Refer the Megatron-LM repo for more details
+        """
+        Generate method for GPT2 model. This method is used for inference. Supports both greedy and beam search along
+        with sampling. Refer the Megatron-LM repo for more details
+
+        Args:
+            inputs (torch.Tensor): input ids
+            attention_mask (torch.Tensor, optional): attention mask. Defaults to None.
+            max_length (int, optional): max length of the generated sequence. Defaults to None.
+            Either this or max_new_tokens should be provided.
+            max_new_tokens (int, optional): max number of tokens to be generated. Defaults to None.
+            Either this or max_length should be provided.
+            num_beams (int, optional): number of beams to use for beam search. Defaults to None.
+            temperature (float, optional): temperature for sampling. Defaults to 1.0.
+            top_k (int, optional): top k tokens to consider for sampling. Defaults to 0.0.
+            top_p (float, optional): tokens in top p probability are considered for sampling. Defaults to 0.0.
+            length_penalty (float, optional): length penalty for beam search. Defaults to None.
+            kwargs: additional key-value arguments
+        """
 
         # checking if required arguments are passed
         args = get_args()
@@ -1259,7 +1282,7 @@ class MegatronEngine(torch.nn.Module):
             raise ValueError("Vocab file is required for inference")
 
         # Prepare inputs
-        if max_length is None or max_new_tokens is None:
+        if max_length is None and max_new_tokens is None:
             raise ValueError("`max_length` or `max_new_tokens` are required for inference")
 
         if temperature is None:
@@ -1312,35 +1335,39 @@ class MegatronEngine(torch.nn.Module):
             length_penalty = 1.0
 
         if inputs.shape[0] % 4 != 0:
-            raise ValueError("Batch size must be a multiple of 4 to leverage fused kernels")
+            warnings.warn("Batch size must be a multiple of 4 to leverage fused kernels")
 
+        sizes_list = None
+        prompts_tokens_tensor = None
+        prompts_length_tensor = None
         if torch.distributed.get_rank() == 0:
             # Get the prompts length.
             if attention_mask is None:
                 prompts_length_tensor = torch.cuda.LongTensor([inputs.shape[1]] * inputs.shape[0])
             else:
-                prompts_length_tensor = attention_mask.sum(axis=-1)
+                prompts_length_tensor = attention_mask.sum(axis=-1).cuda()
 
             if max_new_tokens is None:
-                max_new_tokens = max_length - prompts_length_tensor
+                max_new_tokens = max_length - inputs.shape[1]
             if max_new_tokens <= 0:
                 raise ValueError("max_new_tokens must be greater than 0")
 
             if add_BOS:
-                max_length = max_new_tokens + prompts_length_tensor + 1
+                max_length = max_new_tokens + inputs.shape[1] + 1
                 # making sure that `max_length` is a multiple of 4 to leverage fused kernels
                 max_length = 4 * math.ceil(max_length / 4)
-                max_new_tokens = max_length - (prompts_length_tensor + 1)
+                max_new_tokens = max_length - (inputs.shape[1] + 1)
                 padding = torch.cuda.LongTensor([[tokenizer.eod] * max_new_tokens] * inputs.shape[0])
                 prompts_tokens_tensor = torch.concat(
-                    [torch.unsqueeze(padding[:, 0], axis=-1), inputs, padding], axis=-1
+                    [torch.unsqueeze(padding[:, 0], axis=-1), inputs.cuda(), padding], axis=-1
                 )
             else:
                 # making sure that `max_length` is a multiple of 4 to leverage fused kernels
+                max_length = max_new_tokens + inputs.shape[1]
                 max_length = 4 * math.ceil(max_length / 4)
-                max_new_tokens = max_length - prompts_length_tensor
+                max_new_tokens = max_length - inputs.shape[1]
                 padding = torch.cuda.LongTensor([[tokenizer.eod] * max_new_tokens] * inputs.shape[0])
-                prompts_tokens_tensor = torch.concat([inputs, padding], axis=-1)
+                prompts_tokens_tensor = torch.concat([inputs.cuda(), padding], axis=-1)
 
             # We need the sizes of these tensors for the boradcast
             sizes_list = [
@@ -1358,19 +1385,22 @@ class MegatronEngine(torch.nn.Module):
         context_length_tensor = broadcast_tensor(sizes[0], torch.int64, tensor=prompts_length_tensor, rank=0)
 
         # Run the inference
+        random_seed = kwargs.get("random_seed", 0)
+        torch.random.manual_seed(random_seed)
+        unwrapped_model = unwrap_model(self.base_model, (torchDDP, LocalDDP, Float16Module))
         if beam_width is not None:
             tokens, _ = beam_search_and_return_on_first_stage(
-                self.model,
+                unwrapped_model,
                 context_tokens_tensor,
                 context_length_tensor,
                 beam_width,
                 stop_token=stop_token,
-                num_return_gen=beam_width,
+                num_return_gen=1,
                 length_penalty=length_penalty,
             )
         else:
             tokens, _, _ = generate_tokens_probs_and_return_on_first_stage(
-                self.model,
+                unwrapped_model,
                 context_tokens_tensor,
                 context_length_tensor,
                 return_output_log_probs=False,
