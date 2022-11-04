@@ -14,7 +14,6 @@
 
 import argparse
 import math
-import warnings
 from abc import ABC
 from functools import partial
 
@@ -1333,9 +1332,6 @@ class MegatronEngine(torch.nn.Module):
 
         if length_penalty is None:
             length_penalty = 1.0
-
-        if inputs.shape[0] % 4 != 0:
-            warnings.warn("Batch size must be a multiple of 4 to leverage fused kernels")
 
         sizes_list = None
         prompts_tokens_tensor = None
