@@ -125,8 +125,8 @@ def prepare_model(accelerator):
             raise ValueError(
                 "You must provide a `custom_model_provider_function` when using a `custom_prepare_model_function`."
             )
-        model_provider_func = accelerator.state.megatron_lm_plugin.custom_model_provider_function
-        model = accelerator.state.megatron_lm_plugin.custom_prepare_model_function(model_provider_func)
+        custom_model_provider_func = accelerator.state.megatron_lm_plugin.custom_model_provider_function
+        model = accelerator.state.megatron_lm_plugin.custom_prepare_model_function(custom_model_provider_func)
     else:
         if args.model_type_name == "bert" or args.model_type_name == "gpt":
             model_type = ModelType.encoder_or_decoder
