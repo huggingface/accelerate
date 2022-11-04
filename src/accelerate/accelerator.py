@@ -23,7 +23,6 @@ from functools import wraps
 from typing import List, Optional, Union
 
 import torch
-from torch.distributed.algorithms.join import Join
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
@@ -87,6 +86,9 @@ if is_megatron_lm_available():
         megatron_lm_prepare_optimizer,
         megatron_lm_prepare_scheduler,
     )
+
+if is_torch_version(">", "1.10.0"):
+    from torch.distributed.algorithms.join import Join
 
 
 if is_tpu_available(check_device=False):
@@ -611,8 +613,8 @@ class Accelerator:
 
     @contextmanager
     def join_uneven_inputs(self, joinables):
-        if is_torch_version("<", "1.10.0"):
-            raise ValueError("Joining uneven inputs requires PyTorch >= 1.10.0")
+        if is_torch_version(">", "1.10.0"):
+            raise ValueError("Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
 
         if self.distributed_type == DistributedType.NO:
             # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
