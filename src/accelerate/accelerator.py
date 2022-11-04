@@ -612,7 +612,7 @@ class Accelerator:
     @contextmanager
     def join_uneven_inputs(self, joinables):
         if is_torch_version("<", "1.10.0"):
-            raise ValueError("Joining uneven inputs requires PyTorch >= 1.10.0")    
+            raise ValueError("Joining uneven inputs requires PyTorch >= 1.10.0")
 
         if self.distributed_type == DistributedType.NO:
             # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
@@ -623,9 +623,6 @@ class Accelerator:
                 yield
         else:
             raise ValueError("Joining uneven inputs is only supported for DistributedDataParallel training")
-
-      
-        
 
     def print(self, *args, **kwargs):
         """
