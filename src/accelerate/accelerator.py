@@ -618,7 +618,8 @@ class Accelerator:
 
         if self.distributed_type == DistributedType.NO:
             # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
-            yield
+            with contextlib.nullcontext(joinables):
+                yield
         elif self.distributed_type == DistributedType.MULTI_GPU:
             enable_join = False if self.even_batches else True
             with Join(joinables, enable=enable_join, throw_on_early_termination=False):
