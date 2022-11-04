@@ -23,6 +23,7 @@ from functools import wraps
 from typing import List, Optional, Union
 
 import torch
+from torch.distributed.algorithms.join import Join
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import prepare_data_loader
@@ -607,6 +608,24 @@ class Accelerator:
 
         with context(model):
             yield
+
+    @contextmanager
+    def join_uneven_inputs(self, joinables):
+        if is_torch_version("<", "1.10.0"):
+            raise ValueError("Joining uneven inputs requires PyTorch >= 1.10.0")    
+
+        if self.distributed_type == DistributedType.NO:
+            # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
+            yield
+        elif self.distributed_type == DistributedType.MULTI_GPU:
+            enable_join = False if self.even_batches else True
+            with Join(joinables, enable=enable_join, throw_on_early_termination=False):
+                yield
+        else:
+            raise ValueError("Joining uneven inputs is only supported for DistributedDataParallel training")
+
+      
+        
 
     def print(self, *args, **kwargs):
         """
