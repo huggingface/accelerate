@@ -17,5 +17,5 @@ same_network: true
 use_cpu: false
 tpu_name: 'test-tpu'
 tpu_zone: 'us-central1-a'
-command: null
+commands: null
 command_file: tests/test_samples/test_command_file.sh

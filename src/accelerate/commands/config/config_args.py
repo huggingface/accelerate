@@ -155,7 +155,7 @@ class ClusterConfig(BaseConfig):
     tpu_name: str = None
     tpu_zone: str = None
     command_file: str = None
-    command: List[str] = None
+    commands: List[str] = None
 
     def __post_init__(self):
         if self.deepspeed_config is None:

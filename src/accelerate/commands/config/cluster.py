@@ -385,11 +385,23 @@ def get_cluster_input():
                     )
                     command_file = os.path.abspath(command_file)
                 else:
-                    commands = _ask_field(
-                        "What commands do you wish to run on startup in each pod? ",
-                        default=None,
-                        error_message="Please enter the commands you wish to run on startup in each pod as a single string.",
-                    )
+                    print("Please enter each command seperately you wish to run on startup in each pod.")
+                    commands = []
+                    another_command = True
+                    while another_command:
+                        commands.append(
+                            _ask_field(
+                                "Please enter a single command to be ran ",
+                                default=None,
+                                error_message="Please enter the commands you wish to run on startup in each pod as a single string.",
+                            )
+                        )
+                        another_command = _ask_field(
+                            "Do you wish to add another command? [yes/NO]: ",
+                            _convert_yes_no_to_bool,
+                            default=False,
+                            error_message="Please enter yes or no.",
+                        )
 
     else:
         main_training_function = "main"
