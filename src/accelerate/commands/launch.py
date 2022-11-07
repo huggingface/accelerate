@@ -1113,10 +1113,8 @@ def launch_command(args):
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
         if args.tpu_cluster:
-            print("Calling pod launcher!")
             tpu_pod_launcher(args)
         else:
-            print("Calling tpu launcher!")
             tpu_launcher(args)
     elif defaults is not None and defaults.compute_environment == ComputeEnvironment.AMAZON_SAGEMAKER:
         sagemaker_launcher(defaults, args)
