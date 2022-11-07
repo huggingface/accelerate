@@ -8,6 +8,7 @@ from .dataclasses import (
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
+    DynamoBackend,
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,

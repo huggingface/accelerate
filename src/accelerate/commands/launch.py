@@ -30,10 +30,12 @@ import torch
 import psutil
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
+from accelerate.commands.config.config_utils import DYNAMO_BACKENDS
 from accelerate.state import get_int_from_env
 from accelerate.utils import (
     ComputeEnvironment,
     DistributedType,
+    DynamoBackend,
     PrecisionType,
     PrepareForLaunch,
     _filter_args,
@@ -170,6 +172,13 @@ def launch_command_parser(subparsers=None):
     # Resource selection arguments
     resource_args = parser.add_argument_group(
         "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
+    )
+    resource_args.add_argument(
+        "--dynamo_backend",
+        type=str,
+        choices=["no"] + [b.lower() for b in DYNAMO_BACKENDS],
+        help="Choose a backend to optimize your training with dynamo, see more at "
+        "https://github.com/pytorch/torchdynamo.",
     )
     resource_args.add_argument(
         "--mixed_precision",
@@ -546,6 +555,13 @@ def simple_launcher(args):
         mixed_precision = "fp16"
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
+
+    try:
+        dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
+    except ValueError:
+        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+    current_env["DYNAMO_BACKEND"] = str(dynamo_backend)
+
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
     process = subprocess.Popen(cmd, env=current_env)
@@ -598,6 +614,13 @@ def multi_gpu_launcher(args):
         mixed_precision = "fp16"
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
+
+    try:
+        dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
+    except ValueError:
+        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+    current_env["DYNAMO_BACKEND"] = str(dynamo_backend)
+
     if args.use_fsdp:
         current_env["USE_FSDP"] = "true"
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
@@ -893,10 +916,16 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', FutureWarning)
         mixed_precision = "fp16"
 
+    try:
+        dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
+    except ValueError:
+        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+
     # Environment variables to be set for use during training job
     environment = {
         "USE_SAGEMAKER": "true",
         "MIXED_PRECISION": str(mixed_precision),
+        "DYNAMO_BACKEND": str(dynamo_backend),
         "SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
     # configure distribution set up

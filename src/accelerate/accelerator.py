@@ -36,6 +36,7 @@ from .utils import (
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
+    DynamoBackend,
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -163,6 +164,8 @@ class Accelerator:
         kwargs_handlers (`List[KwargHandler]`, *optional*)
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
+        dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
+            Set to one of the possible dynamo backends to optimizer your training with torch dynamo.
 
     **Available attributes:**
 
@@ -198,6 +201,7 @@ class Accelerator:
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
+        dynamo_backend: Union[DynamoBackend, str] = None,
     ):
         self.logging_dir = logging_dir
         trackers = filter_trackers(log_with, self.logging_dir)
@@ -218,6 +222,9 @@ class Accelerator:
                 FutureWarning,
             )
             mixed_precision = "fp16"
+
+        if dynamo_backend is not None:
+            dynamo_backend = DynamoBackend(dynamo_backend.upper())
 
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None
@@ -285,6 +292,7 @@ class Accelerator:
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
             cpu=cpu,
+            dynamo_backend=dynamo_backend,
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
@@ -793,6 +801,10 @@ class Accelerator:
         self._models.append(model)
         if device_placement:
             model = model.to(self.device)
+        if self.state.dynamo_backend != DynamoBackend.NO:
+            import torch._dynamo as dynamo
+
+            model = dynamo.optimize(str(self.state.dynamo_backend).lower())(model)
         if self.distributed_type == DistributedType.MULTI_GPU:
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}

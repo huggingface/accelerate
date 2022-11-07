@@ -14,7 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils.dataclasses import ComputeEnvironment, DistributedType, SageMakerDistributedType
+from ...utils.dataclasses import ComputeEnvironment, DistributedType, DynamoBackend, SageMakerDistributedType
+
+
+DYNAMO_BACKENDS = [
+    "EAGER",
+    "AOT_EAGER",
+    "INDUCTOR",
+    "NVFUSER",
+    "AOT_NVFUSER",
+    "AOT_CUDAGRAPHS",
+    "OFI",
+    "FX2TRT",
+    "ONNXRT",
+    "IPEX",
+]
 
 
 def _ask_field(input_text, convert_value=None, default=None, error_message=None):
@@ -38,6 +52,11 @@ def _convert_compute_environment(value):
 def _convert_distributed_mode(value):
     value = int(value)
     return DistributedType(["NO", "MULTI_CPU", "MULTI_GPU", "TPU", "MPS"][value])
+
+
+def _convert_dynamo_backend(value):
+    value = int(value)
+    return DynamoBackend(DYNAMO_BACKENDS[value + 1])
 
 
 def _convert_sagemaker_distributed_mode(value):
