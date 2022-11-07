@@ -627,7 +627,7 @@ class Accelerator:
 
         elif self.distributed_type == DistributedType.MULTI_GPU:
             dl_even_batches_values = []
-            
+
             if even_batches is not None:
                 for dl in self._dataloaders:
                     if not hasattr(dl, "even_batches"):
