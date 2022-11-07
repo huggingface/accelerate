@@ -285,7 +285,7 @@ def launch_command_parser(subparsers=None):
         help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
     )
     tpu_args.add_argument(
-        "--use_cluster",
+        "--tpu_cluster",
         action="store_true",
         help="Whether to use a GCP TPU pod for training.",
     )
@@ -810,13 +810,16 @@ def tpu_pod_launcher(args):
 
     training_script = args.training_script
     training_script_args = args.training_script_args
-
-    args = _filter_args(args, xla_dist.get_args_parser())
+    args = _filter_args(
+        args, xla_dist.get_args_parser(), ["--tpu", args.tpu_name, "--positional", "", "--restart-tpuvm-pod-server"]
+    )
     args.positional = ["python3", training_script] + training_script_args
     bad_flags = ""
-    for k, v in vars(args):
-        if k.startswith("docker_") and v != "":
-            bad_flags += f'{k}="{v}"\n'
+    for arg in vars(args):
+        if arg.startswith("docker_"):
+            value = getattr(args, arg)
+            if value != "" and value is not None:
+                bad_flags += f'{arg}="{value}"\n'
     if bad_flags != "":
         raise ValueError(
             f"Docker containers are not supported for TPU pod launcher currently, please remove the following flags:\n{bad_flags}"
@@ -1001,6 +1004,7 @@ def launch_command(args):
         if (
             not args.multi_gpu
             and not args.tpu
+            and not args.tpu_cluster
             and not args.use_deepspeed
             and not args.use_fsdp
             and not args.use_mps_device
@@ -1009,6 +1013,7 @@ def launch_command(args):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
+            args.tpu_cluster = defaults.tpu_cluster and args.tpu
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_mps_device = defaults.distributed_type == DistributedType.MPS
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
@@ -1091,9 +1096,11 @@ def launch_command(args):
     elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
-        if args.use_cluster:
+        if args.tpu_cluster:
+            print("Calling pod launcher!")
             tpu_pod_launcher(args)
         else:
+            print("Calling tpu launcher!")
             tpu_launcher(args)
     elif defaults is not None and defaults.compute_environment == ComputeEnvironment.AMAZON_SAGEMAKER:
         sagemaker_launcher(defaults, args)
