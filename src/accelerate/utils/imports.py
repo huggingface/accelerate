@@ -15,6 +15,7 @@
 import importlib
 import os
 import sys
+from distutils.util import strtobool
 from functools import lru_cache
 
 import torch
@@ -91,7 +92,7 @@ def is_bf16_available(ignore_tpu=False):
 
 
 def is_megatron_lm_available():
-    if os.environ.get("USE_MEGATRON_LM", "false") == "true":
+    if strtobool(os.environ.get("USE_MEGATRON_LM", "False")) == 1:
         package_exists = importlib.util.find_spec("megatron") is not None
         if package_exists:
             megatron_version = parse(importlib_metadata.version("megatron-lm"))

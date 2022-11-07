@@ -1179,10 +1179,7 @@ class MegatronEngine(torch.nn.Module):
             logits = loss_dict["logits"]
         # loss = reduce(loss)
         if self.train_step_handler.model_output_class is not None:
-            return self.train_step_handler.model_output_class(
-                loss=loss,
-                logits=logits,
-            )
+            return self.train_step_handler.model_output_class(loss=loss, logits=logits)
         return loss
 
     def log_eval_results(self):
@@ -1231,7 +1228,7 @@ class MegatronEngine(torch.nn.Module):
         if args.fp16 and self.iteration == 0:
             self.optimizer.reload_model_params()
 
-    def generate(
+    def megatron_generate(
         self,
         inputs,
         attention_mask=None,
