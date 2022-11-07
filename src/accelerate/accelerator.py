@@ -356,6 +356,7 @@ class Accelerator:
         self._optimizers = []
         self._models = []
         self._schedulers = []
+        self._dataloaders = []
         self._custom_objects = []
 
         # RNG Types
@@ -1136,7 +1137,7 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
-        return prepare_data_loader(
+        prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
             num_processes=self.num_processes,
@@ -1147,6 +1148,8 @@ class Accelerator:
             dispatch_batches=self.dispatch_batches,
             even_batches=self.even_batches,
         )
+        self._dataloaders.append(prepared_data_loader)
+        return prepared_data_loader
 
     def prepare_optimizer(self, optimizer: torch.optim.Optimizer, device_placement=None):
         """
@@ -1630,6 +1633,7 @@ class Accelerator:
         self._schedulers = []
         self._optimizers = []
         self._models = []
+        self._dataloaders = []
         self.deepspeed_engine_wrapped = None
         gc.collect()
         torch.cuda.empty_cache()
