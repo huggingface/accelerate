@@ -615,7 +615,7 @@ class Accelerator:
     @contextmanager
     def join_uneven_inputs(self, joinables, even_batches=None):
         """
-        TODO: docstring
+        A context manager that facilitates distributed training on uneven inputs, which acts as a wrapper around `torch.distributed.algorithms.join`.
         """
         if is_torch_version("<", "1.10.0"):
             raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
