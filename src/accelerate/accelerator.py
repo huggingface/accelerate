@@ -613,18 +613,37 @@ class Accelerator:
             yield
 
     @contextmanager
-    def join_uneven_inputs(self, joinables):
-        if is_torch_version(">", "1.10.0"):
-            raise ValueError("Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
+    def join_uneven_inputs(self, joinables, even_batches=None):
+        """
+        TODO: docstring
+        """
+        if is_torch_version("<", "1.10.0"):
+            raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
 
         if self.distributed_type == DistributedType.NO:
             # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
             with contextlib.nullcontext(joinables):
                 yield
+
         elif self.distributed_type == DistributedType.MULTI_GPU:
-            enable_join = False if self.even_batches else True
-            with Join(joinables, enable=enable_join, throw_on_early_termination=False):
-                yield
+            dl_even_batches_values = []
+            
+            if even_batches is not None:
+                for dl in self._dataloaders:
+                    if not hasattr(dl, "even_batches"):
+                        raise ValueError("Overridding even_batches is not supported for iterable-style datasets")
+                    dl_even_batches_values.append(dl.even_batches)
+                    dl.even_batches = even_batches
+            else:
+                even_batches = self.even_batches
+
+            enable_join = False if even_batches else True
+            try:
+                with Join(joinables, enable=enable_join, throw_on_early_termination=False):
+                    yield
+            finally:
+                for dl, even_batches_value in zip(self._dataloaders, dl_even_batches_values):
+                    dl.even_batches = even_batches_value
         else:
             raise ValueError("Joining uneven inputs is only supported for DistributedDataParallel training")
 

@@ -14,12 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from typing import List
 
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, IterableDataset, TensorDataset
 
+import pytest
 from accelerate.accelerator import Accelerator
+
+
+class DummyIterableDataset(IterableDataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __iter__(self):
+        for element in self.data:
+            yield element
 
 
 def create_accelerator(even_batches=True):
@@ -28,11 +39,14 @@ def create_accelerator(even_batches=True):
     return accelerator
 
 
-def create_dataloader(accelerator: Accelerator, dataset_size: int, batch_size: int):
+def create_dataloader(accelerator: Accelerator, dataset_size: int, batch_size: int, iterable: bool = False):
     """
     Create a simple DataLoader to use during the test cases
     """
-    dataset = TensorDataset(torch.as_tensor(range(dataset_size)))
+    if iterable:
+        dataset = DummyIterableDataset(torch.as_tensor(range(dataset_size)))
+    else:
+        dataset = TensorDataset(torch.as_tensor(range(dataset_size)))
 
     dl = DataLoader(dataset, batch_size=batch_size)
     dl = accelerator.prepare(dl)
@@ -127,7 +141,37 @@ def test_can_join_uneven_inputs():
         assert batch_idxs == [0]
 
 
-if __name__ == "__main__":
+def test_can_override_even_batches():
+    default_even_batches = True
+    overridden_even_batches = False
+    accelerator = create_accelerator(even_batches=default_even_batches)
+    model = torch.nn.Linear(1, 1)
+    ddp_model = accelerator.prepare(model)
+    train_dl = create_dataloader(accelerator, dataset_size=3, batch_size=1)
+    valid_dl = create_dataloader(accelerator, dataset_size=3, batch_size=1)
+
+    with accelerator.join_uneven_inputs([ddp_model], even_batches=overridden_even_batches):
+        train_dl_overridden_value = train_dl.even_batches
+        valid_dl_overridden_value = valid_dl.even_batches
+
+    assert train_dl_overridden_value == overridden_even_batches
+    assert valid_dl_overridden_value == overridden_even_batches
+    assert train_dl.even_batches == default_even_batches
+    assert valid_dl.even_batches == default_even_batches
+
+
+def test_raises_exception_for_iterable_when_overriding_even_batches():
+    accelerator = create_accelerator()
+    model = torch.nn.Linear(1, 1)
+    ddp_model = accelerator.prepare(model)
+    train_dl = create_dataloader(accelerator, dataset_size=3, batch_size=1, iterable=True)
+
+    with pytest.raises(ValueError):
+        with accelerator.join_uneven_inputs([ddp_model], even_batches=False):
+            train_dl.even_batches
+
+
+def main():
     accelerator = create_accelerator()
 
     accelerator.print("Test that even_batches variable ensures uniform batches across processes")
@@ -138,3 +182,13 @@ if __name__ == "__main__":
 
     accelerator.print("Test joining uneven inputs")
     test_can_join_uneven_inputs()
+
+    accelerator.print("Test overriding even_batches when joining uneven inputs")
+    test_can_override_even_batches
+
+    accelerator.print("Test overriding even_batches raises an exception for iterable datasets")
+    test_raises_exception_for_iterable_when_overriding_even_batches()
+
+
+if __name__ == "__main__":
+    main()
