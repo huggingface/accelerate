@@ -297,6 +297,12 @@ def launch_command_parser(subparsers=None):
         help="Whether to use a GCP TPU pod for training.",
     )
     tpu_args.add_argument(
+        "--no_tpu_cluster",
+        action="store_false",
+        dest="tpu_cluster",
+        help="Whether to use a GCP TPU pod for training.",
+    )
+    tpu_args.add_argument(
         "--vm",
         type=str,
         action="append",
@@ -829,7 +835,7 @@ def tpu_pod_launcher(args):
     args = _filter_args(
         args, xla_dist.get_args_parser(), ["--tpu", args.tpu_name, "--positional", "", "--restart-tpuvm-pod-server"]
     )
-    args.positional = ["python3", training_script] + training_script_args
+    args.positional = ["accelerate", "launch", "--tpu", "--no_tpu_cluster", training_script] + training_script_args
     bad_flags = ""
     for arg in vars(args):
         if arg.startswith("docker_"):
