@@ -157,6 +157,7 @@ class ClusterConfig(BaseConfig):
     tpu_cluster: bool = False
     command_file: str = None
     command: List[str] = None
+    commands: List[str] = None
     tpu_vm: List[str] = None
     tpu_env: List[str] = None
 
