@@ -66,15 +66,15 @@ class AccelerateLauncherTester(unittest.TestCase):
                 )
 
 
-class PodConfigTester(unittest.TestCase):
+class TpuConfigTester(unittest.TestCase):
     """
-    Test case for verifying the `accelerate pod-config` CLI passes the right `gcloud` command.
+    Test case for verifying the `accelerate tpu-config` CLI passes the right `gcloud` command.
     """
 
     tpu_name = "test-tpu"
     tpu_zone = "us-central1-a"
     command = "ls"
-    cmd = ["accelerate", "pod-config"]
+    cmd = ["accelerate", "tpu-config"]
     base_output = "cd /usr/share"
     command_file = "tests/test_samples/test_command_file.sh"
     gcloud = "Running gcloud compute tpus tpu-vm ssh"
