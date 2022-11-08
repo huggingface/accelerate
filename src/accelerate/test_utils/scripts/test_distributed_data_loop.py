@@ -178,14 +178,14 @@ def test_join_can_override_for_mixed_type_dataloaders():
     accelerator = create_accelerator(even_batches=default_even_batches)
     model = torch.nn.Linear(1, 1)
     ddp_model = accelerator.prepare(model)
-    iter_dl = create_dataloader(accelerator, dataset_size=3, batch_size=1, iterable=True)
+    create_dataloader(accelerator, dataset_size=3, batch_size=1, iterable=True)
     batch_dl = create_dataloader(accelerator, dataset_size=3, batch_size=1)
 
     try:
         with accelerator.join_uneven_inputs([ddp_model], even_batches=overridden_even_batches):
             batch_dl_overridden_value = batch_dl.batch_sampler.even_batches
     except AttributeError:
-        # ensure attribute error is not raised when processing iter_dl
+        # ensure attribute error is not raised when processing iterable dl
         raise AssertionError
 
     assert batch_dl_overridden_value == overridden_even_batches
@@ -196,7 +196,7 @@ def test_join_raises_warning_for_all_iterable_when_overriding_even_batches():
     accelerator = create_accelerator()
     model = torch.nn.Linear(1, 1)
     ddp_model = accelerator.prepare(model)
-    train_dl = create_dataloader(accelerator, dataset_size=3, batch_size=1, iterable=True)
+    create_dataloader(accelerator, dataset_size=3, batch_size=1, iterable=True)
 
     with warnings.catch_warnings(record=True) as w:
         with accelerator.join_uneven_inputs([ddp_model], even_batches=False):
