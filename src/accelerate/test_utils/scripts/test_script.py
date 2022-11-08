@@ -304,6 +304,7 @@ def training_check():
         print("BF16 training check.")
         AcceleratorState._reset_state()
         accelerator = Accelerator(mixed_precision="bf16")
+        accelerator.free_memory()
         train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
