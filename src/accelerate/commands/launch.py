@@ -56,9 +56,6 @@ if is_rich_available():
     logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
 
-if is_torch_version(">=", "1.9.0"):
-    import torch.distributed.run as distrib_run
-
 logger = logging.getLogger(__name__)
 
 options_to_group = {
@@ -555,6 +552,8 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
+    if is_torch_version(">=", "1.9.0"):
+        import torch.distributed.run as distrib_run
     num_processes = getattr(args, "num_processes")
     num_machines = getattr(args, "num_machines")
     main_process_ip = getattr(args, "main_process_ip")
@@ -644,6 +643,8 @@ def multi_gpu_launcher(args):
 
 
 def deepspeed_launcher(args):
+    if is_torch_version(">=", "1.9.0"):
+        import torch.distributed.run as distrib_run
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
     num_processes = getattr(args, "num_processes")
