@@ -435,6 +435,103 @@ python checkpoint_utils/megatgron_gpt2/checkpoint_reshaping_and_interoperability
 --print-checkpoint-structure
 ```
 
+## Megatron-LM GPT models support returning logits and `megatron_generate` function for text generation
+
+1. Returning logits require setting `require_logits=True` in MegatronLMPlugin as shown below. 
+These would be available on the in the last stage of pipeline.
+```python
+megatron_lm_plugin = MegatronLMPlugin(return_logits=True)
+```
+
+2. `megatron_generate` method for Megatron-LM GPT model: This will use Tensor and Pipeline Parallelism to complete 
+generations for a batch of inputs when using greedy with/without top_k/top_p sampling and for individual prompt inputs when using beam search decoding. 
+Only a subset of features of transformers generate is supported. This will help in using large models via tensor and pipeline parallelism 
+for generation (already does key-value caching and uses fused kernels by default).
+This requires data parallel size to be 1, sequence parallelism and activation checkpointing to be disabled.
+It also requires specifying path to tokenizer's vocab file and merges file. 
+Below example shows how to configure and use `megatron_generate` method for Megatron-LM GPT model.
+```python
+# specifying tokenizer's vocab and merges file
+vocab_file = os.path.join(args.resume_from_checkpoint, "vocab.json")
+merge_file = os.path.join(args.resume_from_checkpoint, "merges.txt")
+other_megatron_args = {"vocab_file": vocab_file, "merge_file": merge_file}
+megatron_lm_plugin = MegatronLMPlugin(other_megatron_args=other_megatron_args)
+
+# inference using `megatron_generate` functionality
+tokenizer.pad_token = tokenizer.eos_token
+max_new_tokens = 64
+batch_texts = [
+    "Are you human?",
+    "The purpose of life is",
+    "The arsenal was constructed at the request of",
+    "How are you doing these days?",
+]
+batch_encodings = tokenizer(batch_texts, return_tensors="pt", padding=True)
+
+# top-p sampling
+generated_tokens = model.megatron_generate(
+    batch_encodings["input_ids"],
+    batch_encodings["attention_mask"],
+    max_new_tokens=max_new_tokens,
+    top_p=0.8,
+    top_p_decay=0.5,
+    temperature=0.9,
+)
+decoded_preds = tokenizer.batch_decode(generated_tokens.cpu().numpy())
+accelerator.print(decoded_preds)
+
+# top-k sampling
+generated_tokens = model.megatron_generate(
+    batch_encodings["input_ids"],
+    batch_encodings["attention_mask"],
+    max_new_tokens=max_new_tokens,
+    top_k=50,
+    temperature=0.9,
+)
+decoded_preds = tokenizer.batch_decode(generated_tokens.cpu().numpy())
+accelerator.print(decoded_preds)
+
+# adding `bos` token at the start
+generated_tokens = model.megatron_generate(
+    batch_encodings["input_ids"], batch_encodings["attention_mask"], max_new_tokens=max_new_tokens, add_BOS=True
+)
+decoded_preds = tokenizer.batch_decode(generated_tokens.cpu().numpy())
+accelerator.print(decoded_preds)
+
+# beam search => only takes single prompt
+batch_texts = ["The purpose of life is"]
+batch_encodings = tokenizer(batch_texts, return_tensors="pt", padding=True)
+generated_tokens = model.megatron_generate(
+    batch_encodings["input_ids"],
+    batch_encodings["attention_mask"],
+    max_new_tokens=max_new_tokens,
+    num_beams=20,
+    length_penalty=1.5,
+)
+decoded_preds = tokenizer.batch_decode(generated_tokens.cpu().numpy())
+accelerator.print(decoded_preds)
+```
+
+3. An end-to-end example of using `megatron_generate` method for Megatron-LM GPT model is available at
+[megatron_gpt2_generation.py](https://github.com/pacman100/accelerate-megatron-test/blob/main/src/inference/megatron_gpt2_generation.py) with 
+config file [megatron_lm_gpt_generate_config.yaml](https://github.com/pacman100/accelerate-megatron-test/blob/main/src/Configs/megatron_lm_gpt_generate_config.yaml).
+The bash script with accelerate launch command is available at [megatron_lm_gpt_generate.sh](https://github.com/pacman100/accelerate-megatron-test/blob/main/megatron_lm_gpt_generate.sh).
+The output logs of the script are available at [megatron_lm_gpt_generate.log](https://github.com/pacman100/accelerate-megatron-test/blob/main/output_logs/megatron_lm_gpt_generate.log).
+
+## Support for ROPE and ALiBi Positional embeddings and Multi-Query Attention
+
+1. For ROPE/ALiBi attention, pass `position_embedding_type` with `("absolute" | "rotary" | "alibi")` to `MegatronLMPlugin` as shown below.
+```python
+other_megatron_args = {"position_embedding_type": "alibi"}
+megatron_lm_plugin = MegatronLMPlugin(other_megatron_args=other_megatron_args)
+```
+
+2. For Multi-Query Attention, pass `attention_head_type` with `("multihead" | "multiquery")` to `MegatronLMPlugin` as shown below.
+```python
+other_megatron_args = {"attention_head_type": "multiquery"}
+megatron_lm_plugin = MegatronLMPlugin(other_megatron_args=other_megatron_args)
+```
+
 ## Caveats
 
 1. Supports Transformers GPT2, Megatron-BERT and T5 models.
@@ -445,8 +542,12 @@ there is quite complex interplay of pipeline, tensor and data parallelsim behind
 The `model(**batch_data)` call return loss(es) averaged across the data parallel ranks.
 This is fine for most cases wherein pre-training jobs are run using Megatron-LM features and
 you can easily compute the `perplexity` using the loss. 
+For GPT model, returning logits in addition to loss(es) is supported. 
+These logits aren't gathered across data prallel ranks. Use `accelerator.utils.gather_across_data_parallel_groups`
+to gather logits across data parallel ranks. These logits along with labels can be used for computing various 
+performance metrics. 
 
-3. The main process is the last rank as the losses are available in the last stage of pipeline.
+3. The main process is the last rank as the losses/logits are available in the last stage of pipeline.
 `accelerator.is_main_process` and `accelerator.is_local_main_process` return `True` for last rank when using 
 Megatron-LM integration.
 
