@@ -103,7 +103,7 @@ def get_cluster_input():
     )
     if use_dynamo:
         dynamo_backend = _ask_field(
-            "Which dynamo backend would you like to use? ([0] eager, [1] aot_eager, [2] inductor, [3] nvfuser, [5] aot_nvfuser, [6] aot_cudagraphs, [7] ofi, [8] onnxrt, [9] ipex) [3]: ",
+            "Which dynamo backend would you like to use? ([0] eager, [1] aot_eager, [2] inductor, [3] nvfuser, [5] aot_nvfuser, [6] aot_cudagraphs, [7] ofi, [8] onnxrt, [9] ipex) [2]: ",
             _convert_dynamo_backend,
             default=DynamoBackend.INDUCTOR,
             error_message="Please enter 0, 1, 2, 3, 4, 5, 6, 7, 8 or 9.",
