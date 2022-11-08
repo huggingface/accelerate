@@ -25,7 +25,7 @@ from typing import List, Optional, Union
 import torch
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import prepare_data_loader
+from .data_loader import DataLoaderDispatcher, prepare_data_loader
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -615,25 +615,67 @@ class Accelerator:
     @contextmanager
     def join_uneven_inputs(self, joinables, even_batches=None):
         """
-        A context manager that facilitates distributed training on uneven inputs, which acts as a wrapper around `torch.distributed.algorithms.join`.
+        A context manager that facilitates distributed training or evaluation on uneven inputs, which acts as a wrapper
+        around `torch.distributed.algorithms.join`. This is useful when the total batch size does not evenly divide the
+        length of the dataset.
+
+        Args:
+            joinables (`List[torch.distributed.algorithms.Joinable]`):
+                A list of models or optimizers that subclass `torch.distributed.algorithms.Joinable`. Most commonly, a
+                PyTorch Module that was prepared with `Accelerator.prepare` for DistributedDataParallel training.
+            even_batches (`bool`, *optional*)
+                If set, this will override the value of `even_batches` set in the `Accelerator`. If it is not provided,
+                the default `Accelerator` value wil be used.
+
+        <Tip warning={true}>
+
+        `join_uneven_inputs` is only supported for Distributed Data Parallel training on multiple GPUs. For any other
+        configuration, this method will have no effect.
+
+        </Tip>
+
+        <Tip warning={true}>
+
+        Overidding `even_batches` will not affect iterable-style data loaders.
+
+        </Tip>
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(even_batches=True)
+        >>> ddp_model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+
+        >>> with accelerator.join_uneven_inputs([ddp_model], even_batches=False):
+        ...     for input, output in dataloader:
+        ...         outputs = model(input)
+        ...         loss = loss_func(outputs)
+        ...         loss.backward()
+        ...         optimizer.step()
+        ...         optimizer.zero_grad()
+        ```
+
         """
         if is_torch_version("<", "1.10.0"):
             raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
 
-        if self.distributed_type == DistributedType.NO:
-            # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
-            with contextlib.nullcontext(joinables):
-                yield
-
-        elif self.distributed_type == DistributedType.MULTI_GPU:
+        if self.distributed_type == DistributedType.MULTI_GPU:
             dl_even_batches_values = []
 
             if even_batches is not None:
-                for dl in self._dataloaders:
-                    if not hasattr(dl, "even_batches"):
-                        raise ValueError("Overridding even_batches is not supported for iterable-style datasets")
-                    dl_even_batches_values.append(dl.even_batches)
-                    dl.even_batches = even_batches
+                # override value in batch sampler for map-style datasets
+                for dl_idx, dl in enumerate(self._dataloaders):
+                    if isinstance(dl, DataLoaderDispatcher):
+                        continue
+                    dl_even_batches_values.append((dl_idx, dl.batch_sampler.even_batches))
+                    dl.batch_sampler.even_batches = even_batches
+
+                if len(dl_even_batches_values) == 0:
+                    warnings.warn(
+                        "Overridding even_batches is only supported for map-style datasets, yet all dataloaders given were iterable"
+                    )
             else:
                 even_batches = self.even_batches
 
@@ -642,10 +684,18 @@ class Accelerator:
                 with Join(joinables, enable=enable_join, throw_on_early_termination=False):
                     yield
             finally:
-                for dl, even_batches_value in zip(self._dataloaders, dl_even_batches_values):
-                    dl.even_batches = even_batches_value
+                # reset any batch samplers that have been modified
+                for dl_idx, even_batches_value in dl_even_batches_values:
+                    self._dataloaders[dl_idx].batch_sampler.even_batches = even_batches_value
         else:
-            raise ValueError("Joining uneven inputs is only supported for DistributedDataParallel training")
+            # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
+            if self.distributed_type != DistributedType.NO:
+                warnings.warn(
+                    "Joining uneven inputs is only supported for DistributedDataParallel training, join_unenven_inputs has no effect."
+                )
+
+            with contextlib.nullcontext(joinables):
+                yield
 
     def print(self, *args, **kwargs):
         """
