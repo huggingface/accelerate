@@ -1046,6 +1046,9 @@ def launch_command(args):
                 args.mixed_precision = "fp16"
             else:
                 args.mixed_precision = defaults.mixed_precision
+        if args.dynamo_backend is None:
+            warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
+            args.dynamo_backend = "no"
     else:
         if args.num_processes is None:
             args.num_processes = torch.cuda.device_count() if args.multi_gpu else 1
@@ -1058,6 +1061,9 @@ def launch_command(args):
             args.mixed_precision = "no"
         if not hasattr(args, "use_cpu"):
             args.use_cpu = args.cpu
+        if args.dynamo_backend is None:
+            warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
+            args.dynamo_backend = "no"
 
     if args.num_cpu_threads_per_process is None:
         args.num_cpu_threads_per_process = 1

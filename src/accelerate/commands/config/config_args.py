@@ -134,7 +134,7 @@ class BaseConfig:
             else:
                 self.distributed_type = DistributedType(self.distributed_type)
         if isinstance(self.dynamo_backend, str):
-            self.dynamo_backend = DynamoBackend(self.dynamo_backend)
+            self.dynamo_backend = DynamoBackend(self.dynamo_backend.upper())
 
 
 @dataclass
