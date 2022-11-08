@@ -560,7 +560,7 @@ def simple_launcher(args):
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
         raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
-    current_env["DYNAMO_BACKEND"] = str(dynamo_backend)
+    current_env["DYNAMO_BACKEND"] = dynamo_backend.value
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
@@ -619,7 +619,7 @@ def multi_gpu_launcher(args):
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
         raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
-    current_env["DYNAMO_BACKEND"] = str(dynamo_backend)
+    current_env["DYNAMO_BACKEND"] = dynamo_backend.value
 
     if args.use_fsdp:
         current_env["USE_FSDP"] = "true"
@@ -925,7 +925,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     environment = {
         "USE_SAGEMAKER": "true",
         "MIXED_PRECISION": str(mixed_precision),
-        "DYNAMO_BACKEND": str(dynamo_backend),
+        "DYNAMO_BACKEND": dynamo_backend.value,
         "SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
     # configure distribution set up

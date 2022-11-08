@@ -804,7 +804,7 @@ class Accelerator:
         if self.state.dynamo_backend != DynamoBackend.NO:
             import torch._dynamo as dynamo
 
-            model = dynamo.optimize(str(self.state.dynamo_backend).lower())(model)
+            model = dynamo.optimize(self.state.dynamo_backend.value.lower())(model)
         if self.distributed_type == DistributedType.MULTI_GPU:
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
