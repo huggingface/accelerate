@@ -14,7 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils.dataclasses import ComputeEnvironment, DistributedType, DynamoBackend, SageMakerDistributedType
+from ...utils.dataclasses import (
+    ComputeEnvironment,
+    DistributedType,
+    DynamoBackend,
+    PrecisionType,
+    SageMakerDistributedType,
+)
+from ..menu import BulletMenu
 
 
 DYNAMO_BACKENDS = [
@@ -44,6 +51,12 @@ def _ask_field(input_text, convert_value=None, default=None, error_message=None)
                 print(error_message)
 
 
+def _ask_options(input_text, options=[], convert_value=None, default=0):
+    menu = BulletMenu(input_text, options)
+    result = menu.run(default_choice=default)
+    return convert_value(result) if convert_value is not None else result
+
+
 def _convert_compute_environment(value):
     value = int(value)
     return ComputeEnvironment(["LOCAL_MACHINE", "AMAZON_SAGEMAKER"][value])
@@ -56,7 +69,12 @@ def _convert_distributed_mode(value):
 
 def _convert_dynamo_backend(value):
     value = int(value)
-    return DynamoBackend(DYNAMO_BACKENDS[value + 1])
+    return DynamoBackend(DYNAMO_BACKENDS[value])
+
+
+def _convert_mixed_precision(value):
+    value = int(value)
+    return PrecisionType(["no", "fp16", "bf16"][value])
 
 
 def _convert_sagemaker_distributed_mode(value):

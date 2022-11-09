@@ -31,14 +31,21 @@ from ...utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from .config_args import ClusterConfig
-from .config_utils import _ask_field, _convert_distributed_mode, _convert_dynamo_backend, _convert_yes_no_to_bool
+from .config_utils import (
+    _ask_field,
+    _ask_options,
+    _convert_distributed_mode,
+    _convert_dynamo_backend,
+    _convert_mixed_precision,
+    _convert_yes_no_to_bool,
+)
 
 
 def get_cluster_input():
-    distributed_type = _ask_field(
-        "Which type of machine are you using? ([0] No distributed training, [1] multi-CPU, [2] multi-GPU, [3] TPU [4] MPS): ",
+    distributed_type = _ask_options(
+        "Which type of machine are you using?",
+        ["No distributed training", "multi-CPU", "multi-GPU", "TPU", "MPS"],
         _convert_distributed_mode,
-        error_message="Please enter 0, 1, 2, 3 or 4.",
     )
 
     machine_rank = 0
@@ -60,10 +67,10 @@ def get_cluster_input():
             default=1,
         )
         if num_machines > 1:
-            machine_rank = _ask_field(
-                "What is the rank of this machine (from 0 to the number of machines - 1 )? [0]: ",
+            machine_rank = _ask_options(
+                "What is the rank of this machine?",
+                list(range(num_machines)),
                 lambda x: int(x),
-                default=0,
             )
             main_process_ip = _ask_field(
                 "What is the IP address of the machine that will host the main process? ",
@@ -102,11 +109,22 @@ def get_cluster_input():
         error_message="Please enter yes or no.",
     )
     if use_dynamo:
-        dynamo_backend = _ask_field(
-            "Which dynamo backend would you like to use? ([0] eager, [1] aot_eager, [2] inductor, [3] nvfuser, [5] aot_nvfuser, [6] aot_cudagraphs, [7] ofi, [8] onnxrt, [9] ipex) [2]: ",
+        dynamo_backend = _ask_options(
+            "Which dynamo backend would you like to use?",
+            [
+                "eager",
+                "aot_eager",
+                "inductor",
+                "nvfuser",
+                "aot_nvfuser",
+                "aot_cudagraphs",
+                "ofi",
+                "fx2trt",
+                "onnxrt",
+                "ipex",
+            ],
             _convert_dynamo_backend,
-            default=DynamoBackend.INDUCTOR,
-            error_message="Please enter 0, 1, 2, 3, 4, 5, 6, 7, 8 or 9.",
+            default=2,
         )
     else:
         dynamo_backend = DynamoBackend.NO
@@ -139,22 +157,21 @@ def get_cluster_input():
                     default="none",
                 )
             else:
-                deepspeed_config["zero_stage"] = _ask_field(
-                    "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2, 3)? [2]: ",
+                deepspeed_config["zero_stage"] = _ask_options(
+                    "What should be your DeepSpeed's ZeRO optimization stage?",
+                    [0, 1, 2, 3],
                     lambda x: int(x),
                     default=2,
                 )
 
                 if deepspeed_config["zero_stage"] >= 2:
-                    deepspeed_config["offload_optimizer_device"] = _ask_field(
-                        "Where to offload optimizer states? [none/cpu/nvme]: ",
-                        lambda x: str(x),
-                        default="none",
+                    deepspeed_config["offload_optimizer_device"] = _ask_options(
+                        "Where to offload optimizer states?",
+                        ["none", "cpu", "nvme"],
                     )
-                    deepspeed_config["offload_param_device"] = _ask_field(
-                        "Where to offload parameters? [none/cpu/nvme]: ",
-                        lambda x: str(x),
-                        default="none",
+                    deepspeed_config["offload_param_device"] = _ask_options(
+                        "Where to offload parameters?",
+                        ["none", "cpu", "nvme"],
                     )
                 deepspeed_config["gradient_accumulation_steps"] = _ask_field(
                     "How many gradient accumulation steps you're passing in your script? [1]: ",
@@ -194,14 +211,11 @@ def get_cluster_input():
                     )
 
             if num_machines > 1:
-                launcher_query = "Which Type of launcher do you want to use "
-                for i, launcher in enumerate(DEEPSPEED_MULTINODE_LAUNCHERS):
-                    launcher_query += f"[{i}] {launcher}, "
-                launcher_query = launcher_query[:-2] + ")? [0]: "
-                deepspeed_config["deepspeed_multinode_launcher"] = _ask_field(
+                launcher_query = "Which Type of launcher do you want to use?"
+                deepspeed_config["deepspeed_multinode_launcher"] = _ask_options(
                     launcher_query,
+                    DEEPSPEED_MULTINODE_LAUNCHERS,
                     lambda x: DEEPSPEED_MULTINODE_LAUNCHERS[int(x)],
-                    default=DEEPSPEED_MULTINODE_LAUNCHERS[0],
                 )
 
                 if deepspeed_config["deepspeed_multinode_launcher"] != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
@@ -249,13 +263,11 @@ def get_cluster_input():
         if use_fsdp:
             distributed_type = DistributedType.FSDP
         if distributed_type == DistributedType.FSDP:
-            sharding_strategy_query = "What should be your sharding strategy ("
-            for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
-                sharding_strategy_query += f"[{i+1}] {strategy}, "
-            sharding_strategy_query = sharding_strategy_query[:-2] + ")? [1]: "
-            fsdp_config["fsdp_sharding_strategy"] = _ask_field(
+            sharding_strategy_query = "What should be your sharding strategy?"
+            fsdp_config["fsdp_sharding_strategy"] = _ask_options(
                 sharding_strategy_query,
-                lambda x: int(x),
+                FSDP_SHARDING_STRATEGY,
+                lambda x: int(x) + 1,
                 default=1,
             )
             fsdp_config["fsdp_offload_params"] = _ask_field(
@@ -264,14 +276,11 @@ def get_cluster_input():
                 default=False,
                 error_message="Please enter yes or no.",
             )
-            fsdp_wrap_query = "What should be your auto wrap policy ("
-            for i, wrap_policy in enumerate(FSDP_AUTO_WRAP_POLICY):
-                fsdp_wrap_query += f"[{i}] {wrap_policy}, "
-            fsdp_wrap_query = fsdp_wrap_query[:-2] + ")? [0]: "
-            fsdp_config["fsdp_auto_wrap_policy"] = _ask_field(
+            fsdp_wrap_query = "What should be your auto wrap policy?"
+            fsdp_config["fsdp_auto_wrap_policy"] = _ask_options(
                 fsdp_wrap_query,
+                FSDP_AUTO_WRAP_POLICY,
                 lambda x: FSDP_AUTO_WRAP_POLICY[int(x)],
-                default="TRANSFORMER_BASED_WRAP",
             )
             if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
                 fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
@@ -284,23 +293,18 @@ def get_cluster_input():
                     lambda x: int(x),
                     default=1e8,
                 )
-            fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy ("
-            for i, backward_prefetch_policy in enumerate(FSDP_BACKWARD_PREFETCH):
-                fsdp_backward_prefetch_query += f"[{i}] {backward_prefetch_policy}, "
+            fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
             fsdp_backward_prefetch_query = fsdp_backward_prefetch_query[:-2] + ")? [0]: "
-            fsdp_config["fsdp_backward_prefetch_policy"] = _ask_field(
+            fsdp_config["fsdp_backward_prefetch_policy"] = _ask_options(
                 fsdp_backward_prefetch_query,
+                FSDP_BACKWARD_PREFETCH,
                 lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
-                default="BACKWARD_PRE",
             )
-            fsdp_state_dict_type_query = "What should be your FSDP's state dict type ("
-            for i, state_dict_type in enumerate(FSDP_STATE_DICT_TYPE):
-                fsdp_state_dict_type_query += f"[{i}] {state_dict_type}, "
-            fsdp_state_dict_type_query = fsdp_state_dict_type_query[:-2] + ")? [0]: "
-            fsdp_config["fsdp_state_dict_type"] = _ask_field(
+            fsdp_state_dict_type_query = "What should be your FSDP's state dict type?"
+            fsdp_config["fsdp_state_dict_type"] = _ask_options(
                 fsdp_state_dict_type_query,
+                FSDP_STATE_DICT_TYPE,
                 lambda x: FSDP_STATE_DICT_TYPE[int(x)],
-                default="FULL_STATE_DICT",
             )
 
     megatron_lm_config = {}
@@ -460,10 +464,10 @@ def get_cluster_input():
         if distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config:
             mixed_precision = "no"
         else:
-            mixed_precision = _ask_field(
-                "Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: ",
-                lambda x: str(x).lower(),
-                default="no",
+            mixed_precision = _ask_options(
+                "Do you wish to use FP16 or BF16 (mixed precision)?",
+                ["no", "fp16", "bf16"],
+                _convert_mixed_precision,
             )
     else:
         mixed_precision = "no"
