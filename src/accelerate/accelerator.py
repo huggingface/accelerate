@@ -165,7 +165,7 @@ class Accelerator:
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
         dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
-            Set to one of the possible dynamo backends to optimizer your training with torch dynamo.
+            Set to one of the possible dynamo backends to optimize your training with torch dynamo.
 
     **Available attributes:**
 

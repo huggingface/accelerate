@@ -237,7 +237,7 @@ class AcceleratorState:
                     self.device = torch.device("cuda")
                 self.mixed_precision = mixed_precision
 
-            if self.dynamo_backend != DynamoBackend.NO and self.mixed_precision != "no" and self.device.type == "cuda":
+            if self.dynamo_backend != DynamoBackend.NO and self.mixed_precision == "no" and self.device.type == "cuda":
                 torch.backends.cuda.matmul.allow_tf32 = True
             self.initialized = True
 
