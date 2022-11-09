@@ -164,13 +164,11 @@ def get_sagemaker_input():
         _convert_sagemaker_distributed_mode,
     )
 
-    ec2_instance_query = "Which EC2 instance type you want to use for your training "
+    ec2_instance_query = "Which EC2 instance type you want to use for your training?"
     if distributed_type != SageMakerDistributedType.NO:
-        ec2_instance_query += "("
-        for i, instance_type in enumerate(SAGEMAKER_PARALLEL_EC2_INSTANCES):
-            ec2_instance_query += f"[{i}] {instance_type}, "
-        ec2_instance_query = ec2_instance_query[:-2] + ")? [0]: "
-        ec2_instance_type = _ask_field(ec2_instance_query, lambda x: SAGEMAKER_PARALLEL_EC2_INSTANCES[int(x)])
+        ec2_instance_type = _ask_options(
+            ec2_instance_query, SAGEMAKER_PARALLEL_EC2_INSTANCES, lambda x: SAGEMAKER_PARALLEL_EC2_INSTANCES[int(x)]
+        )
     else:
         ec2_instance_query += "? [ml.p3.2xlarge]:"
         ec2_instance_type = _ask_field(ec2_instance_query, lambda x: str(x).lower(), default="ml.p3.2xlarge")
@@ -186,11 +184,7 @@ def get_sagemaker_input():
             default=1,
         )
 
-    mixed_precision = _ask_field(
-        "Do you wish to use FP16 or BF16 (mixed precision)? [No/FP16/BF16]: ",
-        lambda x: str(x),
-        default="No",
-    )
+    mixed_precision = _ask_options("Do you wish to use FP16 or BF16 (mixed precision)?", ["no", "fp16", "bf16"])
 
     return SageMakerConfig(
         image_uri=docker_image,
