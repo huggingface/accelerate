@@ -14,7 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils.dataclasses import ComputeEnvironment, DistributedType, DynamoBackend, SageMakerDistributedType
+from ...utils.dataclasses import (
+    ComputeEnvironment,
+    DistributedType,
+    DynamoBackend,
+    PrecisionType,
+    SageMakerDistributedType,
+)
 from ..menu import BulletMenu
 
 
@@ -63,7 +69,12 @@ def _convert_distributed_mode(value):
 
 def _convert_dynamo_backend(value):
     value = int(value)
-    return DynamoBackend(DYNAMO_BACKENDS[value + 1])
+    return DynamoBackend(DYNAMO_BACKENDS[value])
+
+
+def _convert_mixed_precision(value):
+    value = int(value)
+    return PrecisionType(["no", "fp16", "bf16"][value])
 
 
 def _convert_sagemaker_distributed_mode(value):

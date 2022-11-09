@@ -36,6 +36,7 @@ from .config_utils import (
     _ask_options,
     _convert_distributed_mode,
     _convert_dynamo_backend,
+    _convert_mixed_precision,
     _convert_yes_no_to_bool,
 )
 
@@ -466,6 +467,7 @@ def get_cluster_input():
             mixed_precision = _ask_options(
                 "Do you wish to use FP16 or BF16 (mixed precision)?",
                 ["no", "fp16", "bf16"],
+                _convert_mixed_precision,
             )
     else:
         mixed_precision = "no"

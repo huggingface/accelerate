@@ -24,6 +24,7 @@ from .config_utils import (
     _ask_field,
     _ask_options,
     _convert_dynamo_backend,
+    _convert_mixed_precision,
     _convert_sagemaker_distributed_mode,
     _convert_yes_no_to_bool,
 )
@@ -215,7 +216,11 @@ def get_sagemaker_input():
             default=1,
         )
 
-    mixed_precision = _ask_options("Do you wish to use FP16 or BF16 (mixed precision)?", ["no", "fp16", "bf16"])
+    mixed_precision = _ask_options(
+        "Do you wish to use FP16 or BF16 (mixed precision)?",
+        ["no", "fp16", "bf16"],
+        _convert_mixed_precision,
+    )
 
     if use_dynamo and mixed_precision == "no":
         print(
