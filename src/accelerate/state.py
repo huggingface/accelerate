@@ -19,6 +19,7 @@ import torch
 
 from .utils import (
     DistributedType,
+    DynamoBackend,
     get_ccl_version,
     get_int_from_env,
     is_ccl_available,
@@ -57,6 +58,7 @@ class AcceleratorState:
         self,
         mixed_precision: str = None,
         cpu: bool = False,
+        dynamo_backend=None,
         deepspeed_plugin=None,
         fsdp_plugin=None,
         megatron_lm_plugin=None,
@@ -74,6 +76,10 @@ class AcceleratorState:
             mixed_precision = (
                 parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision.lower()
             )
+            dynamo_backend = (
+                parse_choice_from_env("DYNAMO_BACKEND", "no") if dynamo_backend is None else dynamo_backend
+            )
+            self.dynamo_backend = DynamoBackend(dynamo_backend.upper())
             if not _from_accelerator:
                 raise ValueError(
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
@@ -230,6 +236,9 @@ class AcceleratorState:
                 else:
                     self.device = torch.device("cuda")
                 self.mixed_precision = mixed_precision
+
+            if self.dynamo_backend != DynamoBackend.NO and self.mixed_precision == "no" and self.device.type == "cuda":
+                torch.backends.cuda.matmul.allow_tf32 = True
             self.initialized = True
 
     def __repr__(self):

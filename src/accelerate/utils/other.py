@@ -115,7 +115,7 @@ def get_pretty_name(obj):
     return str(obj)
 
 
-def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file):
+def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file, dynamo_backend="no"):
     """
     Creates and saves a basic cluster config to be used on a local machine with potentially multiple GPUs. Will also
     set CPU if it is a CPU-only machine.
@@ -138,7 +138,11 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
     mixed_precision = mixed_precision.lower()
     if mixed_precision not in ["no", "fp16", "bf16"]:
         raise ValueError(f"`mixed_precision` should be one of 'no', 'fp16', or 'bf16'. Received {mixed_precision}")
-    config = {"compute_environment": "LOCAL_MACHINE", "mixed_precision": mixed_precision}
+    config = {
+        "compute_environment": "LOCAL_MACHINE",
+        "mixed_precision": mixed_precision,
+        "dynamo_backend": dynamo_backend,
+    }
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()
         config["num_processes"] = num_gpus

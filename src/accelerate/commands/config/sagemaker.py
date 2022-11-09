@@ -17,10 +17,16 @@ import json
 import os
 
 from ...utils.constants import SAGEMAKER_PARALLEL_EC2_INSTANCES
-from ...utils.dataclasses import ComputeEnvironment, SageMakerDistributedType
+from ...utils.dataclasses import ComputeEnvironment, DynamoBackend, SageMakerDistributedType
 from ...utils.imports import is_boto3_available
 from .config_args import SageMakerConfig
-from .config_utils import _ask_field, _ask_options, _convert_sagemaker_distributed_mode, _convert_yes_no_to_bool
+from .config_utils import (
+    _ask_field,
+    _ask_options,
+    _convert_dynamo_backend,
+    _convert_sagemaker_distributed_mode,
+    _convert_yes_no_to_bool,
+)
 
 
 if is_boto3_available():
@@ -163,7 +169,21 @@ def get_sagemaker_input():
         ["No distributed training", "Data parallelism"],
         _convert_sagemaker_distributed_mode,
     )
-
+    use_dynamo = _ask_field(
+        "Do you wish to optimize your script with torch dynamo?[yes/NO]:",
+        _convert_yes_no_to_bool,
+        default=False,
+        error_message="Please enter yes or no.",
+    )
+    if use_dynamo:
+        dynamo_backend = _ask_options(
+            "Which dynamo backend would you like to use?",
+            ["eager", "aot_eager", "inductor", "nvfuser", "aot_nvfuser", "aot_cudagraphs", "ofi", "fx2trt", "onnxrt", "ipex"],
+            _convert_dynamo_backend,
+            default=2,
+        )
+    else:
+        dynamo_backend = DynamoBackend.NO
     ec2_instance_query = "Which EC2 instance type you want to use for your training?"
     if distributed_type != SageMakerDistributedType.NO:
         ec2_instance_type = _ask_options(
@@ -186,11 +206,17 @@ def get_sagemaker_input():
 
     mixed_precision = _ask_options("Do you wish to use FP16 or BF16 (mixed precision)?", ["no", "fp16", "bf16"])
 
+    if use_dynamo and mixed_precision == "no":
+        print(
+            "Torch dynamo used without mixed precision requires TF32 to be efficient. Accelerate will enable it by default when launching your scripts."
+        )
+
     return SageMakerConfig(
         image_uri=docker_image,
         compute_environment=ComputeEnvironment.AMAZON_SAGEMAKER,
         distributed_type=distributed_type,
         use_cpu=False,
+        dynamo_backend=dynamo_backend,
         ec2_instance_type=ec2_instance_type,
         profile=aws_profile,
         region=aws_region,

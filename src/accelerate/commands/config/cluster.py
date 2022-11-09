@@ -16,7 +16,13 @@
 
 import os
 
-from ...utils import ComputeEnvironment, DistributedType, is_deepspeed_available, is_transformers_available
+from ...utils import (
+    ComputeEnvironment,
+    DistributedType,
+    DynamoBackend,
+    is_deepspeed_available,
+    is_transformers_available,
+)
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
     FSDP_AUTO_WRAP_POLICY,
@@ -25,7 +31,7 @@ from ...utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from .config_args import ClusterConfig
-from .config_utils import _ask_field, _ask_options, _convert_distributed_mode, _convert_yes_no_to_bool
+from .config_utils import _ask_field, _ask_options, _convert_dynamo_backend, _convert_distributed_mode, _convert_yes_no_to_bool
 
 
 def get_cluster_input():
@@ -88,6 +94,22 @@ def get_cluster_input():
         use_cpu = True
     else:
         use_cpu = False
+
+    use_dynamo = _ask_field(
+        "Do you wish to optimize your script with torch dynamo?[yes/NO]:",
+        _convert_yes_no_to_bool,
+        default=False,
+        error_message="Please enter yes or no.",
+    )
+    if use_dynamo:
+        dynamo_backend = _ask_options(
+            "Which dynamo backend would you like to use?",
+            ["eager", "aot_eager", "inductor", "nvfuser", "aot_nvfuser", "aot_cudagraphs", "ofi", "fx2trt", "onnxrt", "ipex"],
+            _convert_dynamo_backend,
+            default=2,
+        )
+    else:
+        dynamo_backend = DynamoBackend.NO
 
     deepspeed_config = {}
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
@@ -431,6 +453,11 @@ def get_cluster_input():
     else:
         mixed_precision = "no"
 
+    if use_dynamo and mixed_precision == "no" and not use_cpu:
+        print(
+            "Torch dynamo used without mixed precision requires TF32 to be efficient. Accelerate will enable it by default when launching your scripts."
+        )
+
     downcast_bf16 = "no"
     if distributed_type == DistributedType.TPU and mixed_precision == "bf16":
         downcast_bf16 = _ask_field(
@@ -459,4 +486,5 @@ def get_cluster_input():
         tpu_zone=tpu_zone,
         commands=commands,
         command_file=command_file,
+        dynamo_backend=dynamo_backend,
     )
