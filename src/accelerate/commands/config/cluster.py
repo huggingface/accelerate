@@ -123,22 +123,15 @@ def get_cluster_input():
                     lambda x: int(x),
                     default=2,
                 )
-                deepspeed_config["zero_stage"] = _ask_field(
-                    "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2, 3)? [2]: ",
-                    lambda x: int(x),
-                    default=2,
-                )
 
                 if deepspeed_config["zero_stage"] >= 2:
-                    deepspeed_config["offload_optimizer_device"] = _ask_field(
-                        "Where to offload optimizer states? [none/cpu/nvme]: ",
-                        lambda x: str(x),
-                        default="none",
+                    deepspeed_config["offload_optimizer_device"] = _ask_options(
+                        "Where to offload optimizer states?",
+                        ["none", "cpu", "nvme"],
                     )
-                    deepspeed_config["offload_param_device"] = _ask_field(
-                        "Where to offload parameters? [none/cpu/nvme]: ",
-                        lambda x: str(x),
-                        default="none",
+                    deepspeed_config["offload_param_device"] = _ask_options(
+                        "Where to offload parameters?",
+                        ["none", "cpu", "nvme"],
                     )
                 deepspeed_config["gradient_accumulation_steps"] = _ask_field(
                     "How many gradient accumulation steps you're passing in your script? [1]: ",
@@ -179,7 +172,7 @@ def get_cluster_input():
 
             if num_machines > 1:
                 launcher_query = "Which Type of launcher do you want to use?"
-                deepspeed_config["deepspeed_multinode_launcher"] = _ask_field(
+                deepspeed_config["deepspeed_multinode_launcher"] = _ask_options(
                     launcher_query,
                     DEEPSPEED_MULTINODE_LAUNCHERS,
                     lambda x: DEEPSPEED_MULTINODE_LAUNCHERS[int(x)],
@@ -260,23 +253,18 @@ def get_cluster_input():
                     lambda x: int(x),
                     default=1e8,
                 )
-            fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy ("
-            for i, backward_prefetch_policy in enumerate(FSDP_BACKWARD_PREFETCH):
-                fsdp_backward_prefetch_query += f"[{i}] {backward_prefetch_policy}, "
+            fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
             fsdp_backward_prefetch_query = fsdp_backward_prefetch_query[:-2] + ")? [0]: "
-            fsdp_config["fsdp_backward_prefetch_policy"] = _ask_field(
+            fsdp_config["fsdp_backward_prefetch_policy"] = _ask_options(
                 fsdp_backward_prefetch_query,
+                FSDP_BACKWARD_PREFETCH,
                 lambda x: FSDP_BACKWARD_PREFETCH[int(x)],
-                default="BACKWARD_PRE",
             )
-            fsdp_state_dict_type_query = "What should be your FSDP's state dict type ("
-            for i, state_dict_type in enumerate(FSDP_STATE_DICT_TYPE):
-                fsdp_state_dict_type_query += f"[{i}] {state_dict_type}, "
-            fsdp_state_dict_type_query = fsdp_state_dict_type_query[:-2] + ")? [0]: "
-            fsdp_config["fsdp_state_dict_type"] = _ask_field(
+            fsdp_state_dict_type_query = "What should be your FSDP's state dict type?"
+            fsdp_config["fsdp_state_dict_type"] = _ask_options(
                 fsdp_state_dict_type_query,
+                FSDP_STATE_DICT_TYPE,
                 lambda x: FSDP_STATE_DICT_TYPE[int(x)],
-                default="FULL_STATE_DICT",
             )
 
     megatron_lm_config = {}
