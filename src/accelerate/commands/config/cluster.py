@@ -227,7 +227,7 @@ def get_cluster_input():
             fsdp_config["fsdp_sharding_strategy"] = _ask_options(
                 sharding_strategy_query,
                 FSDP_SHARDING_STRATEGY,
-                lambda x: int(x),
+                lambda x: int(x) + 1,
                 default=1,
             )
             fsdp_config["fsdp_offload_params"] = _ask_field(
