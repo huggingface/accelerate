@@ -21,15 +21,15 @@ from accelerate.utils import ComputeEnvironment
 
 from .cluster import get_cluster_input
 from .config_args import cache_dir, default_config_file, default_yaml_config_file, load_config_from_file  # noqa: F401
-from .config_utils import _ask_field, _convert_compute_environment
+from .config_utils import _ask_field, _ask_options, _convert_compute_environment  # noqa: F401
 from .sagemaker import get_sagemaker_input
 
 
 def get_user_input():
-    compute_environment = _ask_field(
-        "In which compute environment are you running? ([0] This machine, [1] AWS (Amazon SageMaker)): ",
+    compute_environment = _ask_options(
+        "In which compute environment are you running?",
+        ["This machine", "AWS (Amazon SageMaker)"],
         _convert_compute_environment,
-        error_message="Please enter 0 or 1",
     )
     if compute_environment == ComputeEnvironment.AMAZON_SAGEMAKER:
         config = get_sagemaker_input()

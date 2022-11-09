@@ -25,14 +25,14 @@ from ...utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from .config_args import ClusterConfig
-from .config_utils import _ask_field, _convert_distributed_mode, _convert_yes_no_to_bool
+from .config_utils import _ask_field, _ask_options, _convert_distributed_mode, _convert_yes_no_to_bool
 
 
 def get_cluster_input():
-    distributed_type = _ask_field(
-        "Which type of machine are you using? ([0] No distributed training, [1] multi-CPU, [2] multi-GPU, [3] TPU [4] MPS): ",
+    distributed_type = _ask_options(
+        "Which type of machine are you using?",
+        ["No distributed training", "multi-CPU", "multi-GPU", "TPU", "MPS"],
         _convert_distributed_mode,
-        error_message="Please enter 0, 1, 2, 3 or 4.",
     )
 
     machine_rank = 0
@@ -54,10 +54,10 @@ def get_cluster_input():
             default=1,
         )
         if num_machines > 1:
-            machine_rank = _ask_field(
-                "What is the rank of this machine (from 0 to the number of machines - 1 )? [0]: ",
+            machine_rank = _ask_options(
+                "What is the rank of this machine?",
+                list(range(num_machines)),
                 lambda x: int(x),
-                default=0,
             )
             main_process_ip = _ask_field(
                 "What is the IP address of the machine that will host the main process? ",
@@ -117,6 +117,12 @@ def get_cluster_input():
                     default="none",
                 )
             else:
+                deepspeed_config["zero_stage"] = _ask_options(
+                    "What should be your DeepSpeed's ZeRO optimization stage?",
+                    [0, 1, 2, 3],
+                    lambda x: int(x),
+                    default=2,
+                )
                 deepspeed_config["zero_stage"] = _ask_field(
                     "What should be your DeepSpeed's ZeRO optimization stage (0, 1, 2, 3)? [2]: ",
                     lambda x: int(x),
@@ -172,14 +178,11 @@ def get_cluster_input():
                     )
 
             if num_machines > 1:
-                launcher_query = "Which Type of launcher do you want to use "
-                for i, launcher in enumerate(DEEPSPEED_MULTINODE_LAUNCHERS):
-                    launcher_query += f"[{i}] {launcher}, "
-                launcher_query = launcher_query[:-2] + ")? [0]: "
+                launcher_query = "Which Type of launcher do you want to use?"
                 deepspeed_config["deepspeed_multinode_launcher"] = _ask_field(
                     launcher_query,
+                    DEEPSPEED_MULTINODE_LAUNCHERS,
                     lambda x: DEEPSPEED_MULTINODE_LAUNCHERS[int(x)],
-                    default=DEEPSPEED_MULTINODE_LAUNCHERS[0],
                 )
 
                 if deepspeed_config["deepspeed_multinode_launcher"] != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
@@ -227,12 +230,10 @@ def get_cluster_input():
         if use_fsdp:
             distributed_type = DistributedType.FSDP
         if distributed_type == DistributedType.FSDP:
-            sharding_strategy_query = "What should be your sharding strategy ("
-            for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
-                sharding_strategy_query += f"[{i+1}] {strategy}, "
-            sharding_strategy_query = sharding_strategy_query[:-2] + ")? [1]: "
-            fsdp_config["fsdp_sharding_strategy"] = _ask_field(
+            sharding_strategy_query = "What should be your sharding strategy?"
+            fsdp_config["fsdp_sharding_strategy"] = _ask_options(
                 sharding_strategy_query,
+                FSDP_SHARDING_STRATEGY,
                 lambda x: int(x),
                 default=1,
             )
@@ -242,14 +243,11 @@ def get_cluster_input():
                 default=False,
                 error_message="Please enter yes or no.",
             )
-            fsdp_wrap_query = "What should be your auto wrap policy ("
-            for i, wrap_policy in enumerate(FSDP_AUTO_WRAP_POLICY):
-                fsdp_wrap_query += f"[{i}] {wrap_policy}, "
-            fsdp_wrap_query = fsdp_wrap_query[:-2] + ")? [0]: "
-            fsdp_config["fsdp_auto_wrap_policy"] = _ask_field(
+            fsdp_wrap_query = "What should be your auto wrap policy?"
+            fsdp_config["fsdp_auto_wrap_policy"] = _ask_options(
                 fsdp_wrap_query,
+                FSDP_AUTO_WRAP_POLICY,
                 lambda x: FSDP_AUTO_WRAP_POLICY[int(x)],
-                default="TRANSFORMER_BASED_WRAP",
             )
             if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
                 fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
@@ -438,10 +436,9 @@ def get_cluster_input():
         if distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config:
             mixed_precision = "no"
         else:
-            mixed_precision = _ask_field(
-                "Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: ",
-                lambda x: str(x).lower(),
-                default="no",
+            mixed_precision = _ask_options(
+                "Do you wish to use FP16 or BF16 (mixed precision)?",
+                ["no", "fp16", "bf16"],
             )
     else:
         mixed_precision = "no"

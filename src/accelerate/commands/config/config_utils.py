@@ -15,6 +15,7 @@
 # limitations under the License.
 
 from ...utils.dataclasses import ComputeEnvironment, DistributedType, SageMakerDistributedType
+from ..utils import BulletMenu
 
 
 def _ask_field(input_text, convert_value=None, default=None, error_message=None):
@@ -28,6 +29,12 @@ def _ask_field(input_text, convert_value=None, default=None, error_message=None)
         except:
             if error_message is not None:
                 print(error_message)
+
+
+def _ask_options(input_text, options=[], convert_value=None, default=0):
+    menu = BulletMenu(input_text, options)
+    result = menu.run(default_choice=default)
+    return convert_value(result) if convert_value is not None else result
 
 
 def _convert_compute_environment(value):
