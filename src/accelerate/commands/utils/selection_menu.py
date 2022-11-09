@@ -89,5 +89,5 @@ class BulletMenu:
                     for _ in range(len(self.choices)):
                         move_cursor(1, "UP")
                         clear_line()
-                    forceWrite(f"* {self.choices[choice]}", "\n")
+                    forceWrite(f" * {self.choices[choice]}", "\n")
                     return choice
