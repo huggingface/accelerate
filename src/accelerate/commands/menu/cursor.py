@@ -26,13 +26,14 @@ if os.name == "nt":
     import ctypes
     import msvcrt  # noqa
 
-    class _CursorInfo(ctypes.Structure):
+    class CursorInfo(ctypes.Structure):
+        # _fields is a specific attr expected by ctypes
         _fields_ = [("size", ctypes.c_int), ("visible", ctypes.c_byte)]
 
 
-def _hide_cursor():
+def hide_cursor():
     if os.name == "nt":
-        ci = _CursorInfo()
+        ci = CursorInfo()
         handle = ctypes.windll.kernel32.GetStdHandle(-11)
         ctypes.windll.kernel32.GetConsoleCursorInfo(handle, ctypes.byref(ci))
         ci.visible = False
@@ -42,9 +43,9 @@ def _hide_cursor():
         sys.stdout.flush()
 
 
-def _show_cursor():
+def show_cursor():
     if os.name == "nt":
-        ci = _CursorInfo()
+        ci = CursorInfo()
         handle = ctypes.windll.kernel32.GetStdHandle(-11)
         ctypes.windll.kernel32.GetConsoleCursorInfo(handle, ctypes.byref(ci))
         ci.visible = True
@@ -58,7 +59,7 @@ def _show_cursor():
 def hide():
     "Context manager to hide the terminal cursor"
     try:
-        _hide_cursor()
+        hide_cursor()
         yield
     finally:
-        _show_cursor()
+        show_cursor()

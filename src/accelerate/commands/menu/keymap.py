@@ -52,11 +52,11 @@ def get_raw_chars():
 
 def get_character():
     "Gets a character from the keyboard and returns the key code"
-    c = get_raw_chars()
-    if ord(c) in [INTERRUPT_KEY, NEWLINE_KEY]:
-        return c
+    char = get_raw_chars()
+    if ord(char) in [INTERRUPT_KEY, NEWLINE_KEY]:
+        return char
 
-    elif ord(c) == ESC_KEY:
+    elif ord(char) == ESC_KEY:
         combo = get_raw_chars()
         if ord(combo) == MOD_KEY_INT:
             key = get_raw_chars()
@@ -68,7 +68,7 @@ def get_character():
             return get_raw_chars()
 
     else:
-        if c in string.printable:
-            return c
+        if char in string.printable:
+            return char
         else:
             return UNDEFINED_KEY

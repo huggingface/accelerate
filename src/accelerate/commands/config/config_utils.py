@@ -15,7 +15,7 @@
 # limitations under the License.
 
 from ...utils.dataclasses import ComputeEnvironment, DistributedType, SageMakerDistributedType
-from ..utils import BulletMenu
+from ..menu import BulletMenu
 
 
 def _ask_field(input_text, convert_value=None, default=None, error_message=None):

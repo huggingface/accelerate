@@ -26,29 +26,29 @@ def mark(key: str):
     """
 
     def decorator(func):
-        handle = getattr(func, "_handle_key", [])
+        handle = getattr(func, "handle_key", [])
         handle.append(key)
-        setattr(func, "_handle_key", handle)
+        setattr(func, "handle_key", handle)
         return func
 
     return decorator
 
 
-class _KeyHandler(type):
+class KeyHandler(type):
     """
     Metaclass that adds the key handlers to the class
     """
 
     def __new__(cls, name, bases, attrs):
         new_cls = super().__new__(cls, name, bases, attrs)
-        if not hasattr(new_cls, "_key_handler"):
-            setattr(new_cls, "_key_handler", {})
-        setattr(new_cls, "handle_input", _KeyHandler.handle_input)
+        if not hasattr(new_cls, "key_handler"):
+            setattr(new_cls, "key_handler", {})
+        setattr(new_cls, "handle_input", KeyHandler.handle_input)
 
         for value in attrs.values():
-            handled_keys = getattr(value, "_handle_key", [])
+            handled_keys = getattr(value, "handle_key", [])
             for key in handled_keys:
-                new_cls._key_handler[key] = value
+                new_cls.key_handler[key] = value
         return new_cls
 
     @staticmethod
@@ -57,7 +57,7 @@ class _KeyHandler(type):
         char = get_character()
         if char != UNDEFINED_KEY:
             char = ord(char)
-        handler = cls._key_handler.get(char)
+        handler = cls.key_handler.get(char)
         if handler:
             return handler(cls)
         else:
@@ -66,4 +66,4 @@ class _KeyHandler(type):
 
 def register(cls):
     """Adds KeyHandler metaclass to the class"""
-    return _KeyHandler(cls.__name__, cls.__bases__, cls.__dict__.copy())
+    return KeyHandler(cls.__name__, cls.__bases__, cls.__dict__.copy())
