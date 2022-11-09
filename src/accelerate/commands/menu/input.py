@@ -17,7 +17,9 @@ This file contains utilities for handling input from the user and registering sp
 based on https://github.com/bchao1/bullet
 """
 
-from .keymap import UNDEFINED_KEY, get_character
+from typing import List
+
+from .keymap import KEYMAP, get_character
 
 
 def mark(key: str):
@@ -27,7 +29,21 @@ def mark(key: str):
 
     def decorator(func):
         handle = getattr(func, "handle_key", [])
-        handle.append(key)
+        handle += [key]
+        setattr(func, "handle_key", handle)
+        return func
+
+    return decorator
+
+
+def mark_multiple(*keys: List[str]):
+    """
+    Mark the function with the key codes so it can be handled in the register
+    """
+
+    def decorator(func):
+        handle = getattr(func, "handle_key", [])
+        handle += keys
         setattr(func, "handle_key", handle)
         return func
 
@@ -55,10 +71,11 @@ class KeyHandler(type):
     def handle_input(cls):
         "Finds and returns the selected character if it exists in the handler"
         char = get_character()
-        if char != UNDEFINED_KEY:
+        if char != KEYMAP["undefined"]:
             char = ord(char)
         handler = cls.key_handler.get(char)
         if handler:
+            cls.current_selection = char
             return handler(cls)
         else:
             return None

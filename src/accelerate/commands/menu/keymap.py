@@ -23,19 +23,26 @@ import termios
 import tty
 
 
-TAB_KEY = ord("\t")
-NEWLINE_KEY = ord("\r")
-ESC_KEY = 27
 ARROW_KEY_FLAG = 1 << 8
-ARROW_UP_KEY = 65 + ARROW_KEY_FLAG
-ARROW_DOWN_KEY = 66 + ARROW_KEY_FLAG
-ARROW_RIGHT_KEY = 67 + ARROW_KEY_FLAG
-ARROW_LEFT_KEY = 68 + ARROW_KEY_FLAG
-ARROW_KEY_BEGIN = ARROW_UP_KEY
-ARROW_KEY_END = ARROW_LEFT_KEY
-MOD_KEY_INT = 91
-UNDEFINED_KEY = sys.maxsize
-INTERRUPT_KEY = 3
+
+KEYMAP = {
+    "tab": ord("\t"),
+    "newline": ord("\r"),
+    "esc": 27,
+    "up": 65 + ARROW_KEY_FLAG,
+    "down": 66 + ARROW_KEY_FLAG,
+    "right": 67 + ARROW_KEY_FLAG,
+    "left": 68 + ARROW_KEY_FLAG,
+    "mod_int": 91,
+    "undefined": sys.maxsize,
+    "interrupt": 3,
+}
+
+KEYMAP["arrow_begin"] = KEYMAP["up"]
+KEYMAP["arrow_end"] = KEYMAP["left"]
+
+for i in range(10):
+    KEYMAP[str(i)] = ord(str(i))
 
 
 def get_raw_chars():
@@ -53,17 +60,17 @@ def get_raw_chars():
 def get_character():
     "Gets a character from the keyboard and returns the key code"
     char = get_raw_chars()
-    if ord(char) in [INTERRUPT_KEY, NEWLINE_KEY]:
+    if ord(char) in [KEYMAP["interrupt"], KEYMAP["newline"]]:
         return char
 
-    elif ord(char) == ESC_KEY:
+    elif ord(char) == KEYMAP["esc"]:
         combo = get_raw_chars()
-        if ord(combo) == MOD_KEY_INT:
+        if ord(combo) == KEYMAP["mod_int"]:
             key = get_raw_chars()
-            if ord(key) >= ARROW_KEY_BEGIN - ARROW_KEY_FLAG and ord(key) <= ARROW_KEY_END - ARROW_KEY_FLAG:
+            if ord(key) >= KEYMAP["arrow_begin"] - ARROW_KEY_FLAG and ord(key) <= KEYMAP["arrow_end"] - ARROW_KEY_FLAG:
                 return chr(ord(key) + ARROW_KEY_FLAG)
             else:
-                return UNDEFINED_KEY
+                return KEYMAP["undefined"]
         else:
             return get_raw_chars()
 
@@ -71,4 +78,4 @@ def get_character():
         if char in string.printable:
             return char
         else:
-            return UNDEFINED_KEY
+            return KEYMAP["undefined"]
