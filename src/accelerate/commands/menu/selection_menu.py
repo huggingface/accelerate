@@ -16,7 +16,7 @@
 Main driver for the selection menu, based on https://github.com/bchao1/bullet
 """
 from . import cursor, input
-from .helpers import Direction, clear_line, forceWrite, move_cursor, reset_cursor
+from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, reset_cursor
 from .keymap import KEYMAP
 
 
@@ -92,6 +92,7 @@ class BulletMenu:
     def run(self, default_choice: int = 0):
         "Start the menu and return the selected choice"
         if self.prompt:
+            linebreak()
             forceWrite(self.prompt, "\n")
             forceWrite("Please select a choice using the arrow or number keys, and selecting with enter", "\n")
         self.position = default_choice

@@ -48,3 +48,8 @@ def move_cursor(num_lines: int, direction: str):
 def clear_line():
     forceWrite(" " * TERMINAL_WIDTH)
     reset_cursor()
+
+
+def linebreak():
+    reset_cursor()
+    forceWrite("-" * TERMINAL_WIDTH)
