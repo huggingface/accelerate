@@ -178,7 +178,18 @@ def get_sagemaker_input():
     if use_dynamo:
         dynamo_backend = _ask_options(
             "Which dynamo backend would you like to use?",
-            ["eager", "aot_eager", "inductor", "nvfuser", "aot_nvfuser", "aot_cudagraphs", "ofi", "fx2trt", "onnxrt", "ipex"],
+            [
+                "eager",
+                "aot_eager",
+                "inductor",
+                "nvfuser",
+                "aot_nvfuser",
+                "aot_cudagraphs",
+                "ofi",
+                "fx2trt",
+                "onnxrt",
+                "ipex",
+            ],
             _convert_dynamo_backend,
             default=2,
         )

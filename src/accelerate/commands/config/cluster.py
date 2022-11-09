@@ -31,7 +31,13 @@ from ...utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from .config_args import ClusterConfig
-from .config_utils import _ask_field, _ask_options, _convert_dynamo_backend, _convert_distributed_mode, _convert_yes_no_to_bool
+from .config_utils import (
+    _ask_field,
+    _ask_options,
+    _convert_distributed_mode,
+    _convert_dynamo_backend,
+    _convert_yes_no_to_bool,
+)
 
 
 def get_cluster_input():
@@ -104,7 +110,18 @@ def get_cluster_input():
     if use_dynamo:
         dynamo_backend = _ask_options(
             "Which dynamo backend would you like to use?",
-            ["eager", "aot_eager", "inductor", "nvfuser", "aot_nvfuser", "aot_cudagraphs", "ofi", "fx2trt", "onnxrt", "ipex"],
+            [
+                "eager",
+                "aot_eager",
+                "inductor",
+                "nvfuser",
+                "aot_nvfuser",
+                "aot_cudagraphs",
+                "ofi",
+                "fx2trt",
+                "onnxrt",
+                "ipex",
+            ],
             _convert_dynamo_backend,
             default=2,
         )
