@@ -37,6 +37,10 @@ def forceWrite(content, end=""):
     sys.stdout.flush()
 
 
+def writeColor(content, color, end=""):
+    forceWrite(f"\u001b[{color}m{content}\u001b[0m", end)
+
+
 def reset_cursor():
     forceWrite("\r")
 
