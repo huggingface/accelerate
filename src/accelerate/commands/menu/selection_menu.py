@@ -111,5 +111,4 @@ class BulletMenu:
                         clear_line()
                     forceWrite(" ➔  ")
                     writeColor(self.choices[choice], 32, "\n")
-                    # forceWrite(f" * {self.choices[choice]}", "\n")
                     return choice
