@@ -16,7 +16,7 @@
 Main driver for the selection menu, based on https://github.com/bchao1/bullet
 """
 from . import cursor, input
-from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, reset_cursor
+from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, reset_cursor, writeColor
 from .keymap import KEYMAP
 
 
@@ -34,7 +34,8 @@ class BulletMenu:
     def print_choice(self, index: int):
         "Prints the choice at the given index"
         if index == self.position:
-            forceWrite(f" ➔  {self.choices[index]}")
+            forceWrite(" ➔  ")
+            writeColor(self.choices[index], 32)
         else:
             forceWrite(f"    {self.choices[index]}")
         reset_cursor()
@@ -108,5 +109,6 @@ class BulletMenu:
                     for _ in range(len(self.choices) + 1):
                         move_cursor(1, "UP")
                         clear_line()
-                    forceWrite(f" * {self.choices[choice]}", "\n")
+                    forceWrite(" ➔  ")
+                    writeColor(self.choices[choice], 32, "\n")
                     return choice
