@@ -665,16 +665,18 @@ class Accelerator:
             dl_even_batches_values = []
 
             if even_batches is not None:
+                iterable_dl_seen = False
                 # override value in batch sampler for map-style datasets
                 for dl_idx, dl in enumerate(self._dataloaders):
                     if isinstance(dl, DataLoaderDispatcher):
+                        iterable_dl_seen = True
                         continue
                     dl_even_batches_values.append((dl_idx, dl.batch_sampler.even_batches))
                     dl.batch_sampler.even_batches = even_batches
 
-                if len(dl_even_batches_values) == 0:
+                if iterable_dl_seen:
                     warnings.warn(
-                        "Overridding even_batches is only supported for map-style datasets, yet all dataloaders given were iterable"
+                        "Overridding even_batches is only supported for map-style datasets, yet some dataloaders given were iterable"
                     )
             else:
                 even_batches = self.even_batches

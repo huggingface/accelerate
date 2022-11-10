@@ -23,6 +23,7 @@ import torch
 from torch.utils.data import DataLoader, IterableDataset, TensorDataset
 
 from accelerate.accelerator import Accelerator
+from accelerate.launchers import notebook_launcher
 from accelerate.utils.dataclasses import DistributedType
 
 
@@ -150,7 +151,7 @@ def test_join_raises_warning_for_non_ddp_distributed(accelerator):
             pass
 
         assert issubclass(w[-1].category, UserWarning)
-        assert "only supported for DistributedDataParallel" in str(w[-1].message)
+        assert "only supported for multi-GPU" in str(w[-1].message)
 
 
 def test_join_can_override_even_batches():
@@ -181,18 +182,20 @@ def test_join_can_override_for_mixed_type_dataloaders():
     create_dataloader(accelerator, dataset_size=3, batch_size=1, iterable=True)
     batch_dl = create_dataloader(accelerator, dataset_size=3, batch_size=1)
 
-    try:
-        with accelerator.join_uneven_inputs([ddp_model], even_batches=overridden_even_batches):
-            batch_dl_overridden_value = batch_dl.batch_sampler.even_batches
-    except AttributeError:
-        # ensure attribute error is not raised when processing iterable dl
-        raise AssertionError
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore")
+        try:
+            with accelerator.join_uneven_inputs([ddp_model], even_batches=overridden_even_batches):
+                batch_dl_overridden_value = batch_dl.batch_sampler.even_batches
+        except AttributeError:
+            # ensure attribute error is not raised when processing iterable dl
+            raise AssertionError
 
     assert batch_dl_overridden_value == overridden_even_batches
     assert batch_dl.batch_sampler.even_batches == default_even_batches
 
 
-def test_join_raises_warning_for_all_iterable_when_overriding_even_batches():
+def test_join_raises_warning_for_iterable_when_overriding_even_batches():
     accelerator = create_accelerator()
     model = torch.nn.Linear(1, 1)
     ddp_model = accelerator.prepare(model)
@@ -224,8 +227,8 @@ def main():
     accelerator.print("Test overriding even_batches for mixed dataloader types")
     test_join_can_override_for_mixed_type_dataloaders()
 
-    accelerator.print("Test overriding even_batches raises a warning for all iterable datasets")
-    test_join_raises_warning_for_all_iterable_when_overriding_even_batches()
+    accelerator.print("Test overriding even_batches raises a warning for iterable dataloaders")
+    test_join_raises_warning_for_iterable_when_overriding_even_batches()
 
     accelerator.print("Test join with non DDP distributed raises warning")
     original_state = accelerator.state.distributed_type
@@ -235,4 +238,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    notebook_launcher(main, num_processes=2)
+    # main()
