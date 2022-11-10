@@ -21,11 +21,14 @@ from accelerate.utils import write_basic_config
 from .config_utils import DYNAMO_BACKENDS
 
 
+description = "Create a default config file for Accelerate with only a few flags set."
+
+
 def default_command_parser(subparsers=None):
     if subparsers is not None:
-        parser = subparsers.add_parser("default-config")
+        parser = subparsers.add_parser("default-config", description=description)
     else:
-        parser = argparse.ArgumentParser("Accelerate default-config command")
+        parser = argparse.ArgumentParser("Accelerate default-config command", description=description)
 
     parser.add_argument(
         "--config_file",
