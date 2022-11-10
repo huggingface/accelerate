@@ -18,7 +18,7 @@ import argparse
 
 from accelerate.utils import write_basic_config
 
-from .config_utils import DYNAMO_BACKENDS
+from .config_args import default_json_config_file
 
 
 description = "Create a default config file for Accelerate with only a few flags set."
@@ -32,7 +32,7 @@ def default_command_parser(subparsers=None):
 
     parser.add_argument(
         "--config_file",
-        default=None,
+        default=default_json_config_file,
         help=(
             "The path to use to store the config file. Will default to a file named default_config.yaml in the cache "
             "location, which is the content of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have "
@@ -49,15 +49,6 @@ def default_command_parser(subparsers=None):
         help="Whether or not to use mixed precision training. "
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
-        default="no",
-    )
-
-    parser.add_argument(
-        "--dynamo_backend",
-        type=str,
-        choices=["no"] + [b.lower() for b in DYNAMO_BACKENDS],
-        help="Choose a backend to optimize your training with dynamo, see more at "
-        "https://github.com/pytorch/torchdynamo.",
         default="no",
     )
 

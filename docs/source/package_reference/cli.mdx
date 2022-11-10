@@ -56,7 +56,6 @@ accelerate default-config [arguments]
 
 * `-h`, `--help` (`bool`) -- Show a help message and exit
 * `--mixed_precision {no,fp16,bf16}` (`str`) -- Whether or not to use mixed precision training. Choose between FP16 and BF16 (bfloat16) training. BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.
-* `--dynamo_backend {no,eager,aot_eager,inductor,nvfuser,aot_nvfuser,aot_cudagraphs,ofi,fx2trt,onnxrt,ipex}` (`str`) -- Choose a backend to optimize your training with dynamo, see more at https://github.com/pytorch/torchdynamo.
 
 ## accelerate env
 
