@@ -23,7 +23,6 @@ import torch
 from torch.utils.data import DataLoader, IterableDataset, TensorDataset
 
 from accelerate.accelerator import Accelerator
-from accelerate.launchers import notebook_launcher
 from accelerate.utils.dataclasses import DistributedType
 
 
@@ -238,5 +237,4 @@ def main():
 
 
 if __name__ == "__main__":
-    notebook_launcher(main, num_processes=2)
-    # main()
+    main()
