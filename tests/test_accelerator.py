@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate.accelerator import Accelerator
+from accelerate.state import AcceleratorState
 
 
 def create_components():
@@ -34,6 +35,7 @@ class AcceleratorTester(unittest.TestCase):
         self.assertTrue(prepared_scheduler in accelerator._schedulers)
         self.assertTrue(prepared_train_dl in accelerator._dataloaders)
         self.assertTrue(prepared_valid_dl in accelerator._dataloaders)
+        AcceleratorState._reset_state()
 
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()
@@ -46,3 +48,4 @@ class AcceleratorTester(unittest.TestCase):
         self.assertTrue(len(accelerator._optimizers) == 0)
         self.assertTrue(len(accelerator._schedulers) == 0)
         self.assertTrue(len(accelerator._dataloaders) == 0)
+        AcceleratorState._reset_state()
