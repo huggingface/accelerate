@@ -164,14 +164,13 @@ def get_cluster_input():
                     default=2,
                 )
 
+                deepspeed_devices = ["none", "cpu", "nvme"]
                 if deepspeed_config["zero_stage"] >= 2:
                     deepspeed_config["offload_optimizer_device"] = _ask_options(
-                        "Where to offload optimizer states?",
-                        ["none", "cpu", "nvme"],
+                        "Where to offload optimizer states?", deepspeed_devices, lambda x: deepspeed_devices[int(x)]
                     )
                     deepspeed_config["offload_param_device"] = _ask_options(
-                        "Where to offload parameters?",
-                        ["none", "cpu", "nvme"],
+                        "Where to offload parameters?", deepspeed_devices, lambda x: deepspeed_devices[int(x)]
                     )
                 deepspeed_config["gradient_accumulation_steps"] = _ask_field(
                     "How many gradient accumulation steps you're passing in your script? [1]: ",
@@ -294,7 +293,6 @@ def get_cluster_input():
                     default=1e8,
                 )
             fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
-            fsdp_backward_prefetch_query = fsdp_backward_prefetch_query[:-2] + ")? [0]: "
             fsdp_config["fsdp_backward_prefetch_policy"] = _ask_options(
                 fsdp_backward_prefetch_query,
                 FSDP_BACKWARD_PREFETCH,
