@@ -21,4 +21,14 @@ To utilize this replace cases of `logging` with `accelerate.logging`:
 + logger = get_logger(__name__)
 ```
 
+## Setting the log level
+
+The log level can be set with the `LOG_LEVEL` environment variable or by passing 
+`log_level` to `get_logger`:
+```python
+from accelerate.logging import get_logger
+
+logger = get_logger(__name__, log_level="INFO")
+```
+
 [[autodoc]] logging.get_logger
