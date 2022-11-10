@@ -691,7 +691,7 @@ class Accelerator:
             # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
             if self.distributed_type != DistributedType.NO:
                 warnings.warn(
-                    "Joining uneven inputs is only supported for DistributedDataParallel training, join_unenven_inputs has no effect."
+                    "Joining uneven inputs is only supported for multi-GPU training, as a result `join_uneven_inputs` will have no effect."
                 )
 
             with contextlib.nullcontext(joinables):
