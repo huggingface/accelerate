@@ -48,6 +48,7 @@ setup(
             "accelerate=accelerate.commands.accelerate_cli:main",
             "accelerate-config=accelerate.commands.config:main",
             "accelerate-launch=accelerate.commands.launch:main",
+            "accelerate-default-config=accelerate.commands.config.default:main",
         ]
     },
     python_requires=">=3.7.0",
