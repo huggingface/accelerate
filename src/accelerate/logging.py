@@ -60,7 +60,8 @@ def get_logger(name: str, log_level: str = None):
         name (`str`):
             The name for the logger, such as `__file__`
         log_level (`str`, `optional`, defaults to `None`):
-            The log level to use. If not passed, will default to the `LOG_LEVEL` environment variable, or `INFO` if not
+            The log level to use. If not passed, will default to the `ACCELERATE_LOG_LEVEL` environment variable, or
+            `INFO` if not
 
     Example:
 
@@ -72,13 +73,13 @@ def get_logger(name: str, log_level: str = None):
     >>> logger.info("My log", main_process_only=False)
     >>> logger.debug("My log", main_process_only=True)
 
-    >>> logger = get_logger(__name__, log_level="DEBUG")
+    >>> logger = get_logger(__name__, accelerate_log_level="DEBUG")
     >>> logger.info("My log")
     >>> logger.debug("My second log")
     ```
     """
     if log_level is None:
-        log_level = os.environ.get("LOG_LEVEL", "INFO")
+        log_level = os.environ.get("ACCELERATE_LOG_LEVEL", "INFO")
     logger = logging.getLogger(name)
     logging.basicConfig(level=log_level.upper())
     return MultiProcessAdapter(logger, {})
