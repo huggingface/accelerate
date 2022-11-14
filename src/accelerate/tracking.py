@@ -577,7 +577,6 @@ def filter_trackers(
     if log_with is not None:
         if not isinstance(log_with, (list, tuple)):
             log_with = [log_with]
-            logger.debug(f"{log_with}")
         if "all" in log_with or LoggerType.ALL in log_with:
             loggers = [o for o in log_with if issubclass(type(o), GeneralTracker)] + get_available_trackers()
         else:
