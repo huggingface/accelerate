@@ -111,13 +111,3 @@ def default_config_command(args):
     args = vars(args)
     args.pop("func", None)
     write_basic_config(**args)
-
-
-def main():
-    parser = default_command_parser()
-    args = parser.parse_args()
-    default_config_command(args)
-
-
-if __name__ == "__main__":
-    main()

@@ -21,7 +21,13 @@ from accelerate.utils import ComputeEnvironment
 
 from .cluster import get_cluster_input
 from .config_args import cache_dir, default_config_file, default_yaml_config_file, load_config_from_file  # noqa: F401
-from .config_utils import GroupedAction, _ask_field, _ask_options, _convert_compute_environment  # noqa: F401
+from .config_utils import (  # noqa: F401
+    GroupedAction,
+    SubcommandHelpFormatter,
+    _ask_field,
+    _ask_options,
+    _convert_compute_environment,
+)
 from .sagemaker import get_sagemaker_input
 
 
@@ -39,23 +45,6 @@ def get_user_input():
     else:
         config = get_cluster_input()
     return config
-
-
-class SubcommandHelpFormatter(argparse.RawDescriptionHelpFormatter):
-    """
-    A custom formatter that will remove the usage line from the help message for subcommands.
-    """
-
-    def _format_action(self, action):
-        parts = super()._format_action(action)
-        if action.nargs == argparse.PARSER:
-            parts = "\n".join(parts.split("\n")[1:])
-        return parts
-
-    def _format_usage(self, usage, actions, groups, prefix):
-        usage = super()._format_usage(usage, actions, groups, prefix)
-        usage = usage.replace("<command> [<args>] ", "")
-        return usage
 
 
 def config_command_parser(subparsers=None):
