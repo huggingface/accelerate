@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
+
 from ...utils.dataclasses import (
     ComputeEnvironment,
     DistributedType,
@@ -84,3 +86,11 @@ def _convert_sagemaker_distributed_mode(value):
 
 def _convert_yes_no_to_bool(value):
     return {"yes": True, "no": False}[value.lower()]
+
+
+class GroupedAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        group, dest = self.dest.split(".", 2)
+        groupspace = getattr(namespace, group, argparse.Namespace())
+        setattr(groupspace, dest, values)
+        setattr(namespace, group, groupspace)
