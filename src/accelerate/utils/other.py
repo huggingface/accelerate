@@ -151,6 +151,7 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
             config["distributed_type"] = "MULTI_GPU"
         else:
             config["distributed_type"] = "NO"
+        config["gpu_ids"] = "all"
     else:
         num_gpus = 0
         config["use_cpu"] = True
