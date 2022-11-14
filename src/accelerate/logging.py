@@ -59,9 +59,8 @@ def get_logger(name: str, log_level: str = None):
     Args:
         name (`str`):
             The name for the logger, such as `__file__`
-        log_level (`str`, `optional`, defaults to `None`):
-            The log level to use. If not passed, will default to the `ACCELERATE_LOG_LEVEL` environment variable, or
-            `INFO` if not
+        log_level (`str`, *optional*):
+            The log level to use. If not passed, will default to the `LOG_LEVEL` environment variable, or `INFO` if not
 
     Example:
 
