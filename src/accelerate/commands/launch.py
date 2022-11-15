@@ -832,29 +832,39 @@ def tpu_pod_launcher(args):
 
     training_script = args.training_script
     training_script_args = args.training_script_args
-    args = _filter_args(
+    new_args = _filter_args(
         args, xla_dist.get_args_parser(), ["--tpu", args.tpu_name, "--positional", "", "--restart-tpuvm-pod-server"]
     )
-    args.positional = ["python3", training_script] + training_script_args
+
+    new_args.positional = [
+        "accelerate-launch",
+        "--tpu",
+        "--no_tpu_cluster",
+        "--num_processes",
+        str(args.num_processes),
+        training_script,
+    ] + training_script_args
     bad_flags = ""
-    for arg in vars(args):
+    for arg in vars(new_args):
         if arg.startswith("docker_"):
-            value = getattr(args, arg)
+            value = getattr(new_args, arg)
             if value != "" and value is not None:
                 bad_flags += f'{arg}="{value}"\n'
     if bad_flags != "":
         raise ValueError(
             f"Docker containers are not supported for TPU pod launcher currently, please remove the following flags:\n{bad_flags}"
         )
-
-    with patch_environment(**current_env):
-        try:
-            xla_dist.resolve_and_execute(args)
-        except:
-            if is_rich_available() and debug:
-                console = get_console()
-                console.print("\n[bold red]Using --debug, `torch_xla.xla_dist` Stack Trace:[/bold red]")
-                console.print_exception(suppress=[__file__], show_locals=False)
+    new_args.env = [f"{k}={v}" for k, v in current_env.items()]
+    new_args.env.append("ACCELERATE_IN_TPU_POD=1")
+    try:
+        xla_dist.resolve_and_execute(new_args)
+    except:
+        if is_rich_available() and debug:
+            console = get_console()
+            console.print("\n[bold red]Using --debug, `torch_xla.xla_dist` Stack Trace:[/bold red]")
+            console.print_exception(suppress=[__file__], show_locals=False)
+        else:
+            raise
 
 
 def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:

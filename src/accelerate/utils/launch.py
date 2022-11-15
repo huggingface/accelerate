@@ -59,10 +59,12 @@ def prepare_tpu(args, current_env, pod=False):
         else:
             current_env["XLA_USE_BF16"] = "1"
     if pod:
-        current_env["XRT_TPU_CONFIG"] = "localservice;0;localhost:51011"
         # Take explicit args and set them up for XLA
         args.vm = args.tpu_vm
         args.tpu = args.tpu_name
+    elif not os.environ.get("ACCELERATE_IN_TPU_POD", "0") == "1":
+        # `xla_dist` will take care of this on pods
+        current_env["XRT_TPU_CONFIG"] = "localservice;0;localhost:51011"
     return args, current_env
 
 
