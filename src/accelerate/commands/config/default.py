@@ -15,21 +15,69 @@
 # limitations under the License.
 
 import argparse
+from pathlib import Path
 
-from accelerate.utils import write_basic_config
+import torch
 
-from .config_args import default_json_config_file
+from .config_args import ClusterConfig, default_json_config_file
+from .config_utils import GroupedAction
+
+
+def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file, dynamo_backend="no"):
+    """
+    Creates and saves a basic cluster config to be used on a local machine with potentially multiple GPUs. Will also
+    set CPU if it is a CPU-only machine.
+
+    Args:
+        mixed_precision (`str`, *optional*, defaults to "no"):
+            Mixed Precision to use. Should be one of "no", "fp16", or "bf16"
+        save_location (`str`, *optional*, defaults to `default_json_config_file`):
+            Optional custom save location. Should be passed to `--config_file` when using `accelerate launch`. Default
+            location is inside the huggingface cache folder (`~/.cache/huggingface`) but can be overriden by setting
+            the `HF_HOME` environmental variable, followed by `accelerate/default_config.yaml`.
+    """
+    path = Path(save_location)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        print(
+            f"Configuration already exists at {save_location}, will not override. Run `accelerate config` manually or pass a different `save_location`."
+        )
+        return
+    mixed_precision = mixed_precision.lower()
+    if mixed_precision not in ["no", "fp16", "bf16"]:
+        raise ValueError(f"`mixed_precision` should be one of 'no', 'fp16', or 'bf16'. Received {mixed_precision}")
+    config = {
+        "compute_environment": "LOCAL_MACHINE",
+        "mixed_precision": mixed_precision,
+        "dynamo_backend": dynamo_backend,
+    }
+    if torch.cuda.is_available():
+        num_gpus = torch.cuda.device_count()
+        config["num_processes"] = num_gpus
+        config["use_cpu"] = False
+        if num_gpus > 1:
+            config["distributed_type"] = "MULTI_GPU"
+        else:
+            config["distributed_type"] = "NO"
+    else:
+        num_gpus = 0
+        config["use_cpu"] = True
+        config["num_processes"] = 1
+        config["distributed_type"] = "NO"
+    if not path.exists():
+        config = ClusterConfig(**config)
+        config.to_json_file(path)
 
 
 description = "Create a default config file for Accelerate with only a few flags set."
 
 
-def default_command_parser(subparsers=None):
-    if subparsers is not None:
-        parser = subparsers.add_parser("default-config", description=description)
+def default_command_parser(parser=None, parents=None):
+    if parser is None and parents is None:
+        parser = argparse.ArgumentParser(description=description)
     else:
-        parser = argparse.ArgumentParser("Accelerate default-config command", description=description)
-
+        default_parser = parser.add_subparsers(title="subcommand {default}", dest="default", description=description)
+        parser = default_parser.add_parser("default", parents=parents)
     parser.add_argument(
         "--config_file",
         default=default_json_config_file,
@@ -39,7 +87,9 @@ def default_command_parser(subparsers=None):
             "such an environment variable, your cache directory ('~/.cache' or the content of `XDG_CACHE_HOME`) suffixed "
             "with 'huggingface'."
         ),
-        dest="save_location",
+        dest="default_args.save_location",
+        metavar="CONFIG_FILE",
+        action=GroupedAction,
     )
 
     parser.add_argument(
@@ -50,24 +100,14 @@ def default_command_parser(subparsers=None):
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
         default="no",
+        dest="default_args.mixed_precision",
+        action=GroupedAction,
     )
-
-    if subparsers is not None:
-        parser.set_defaults(func=config_command)
+    parser.set_defaults(func=default_config_command)
     return parser
 
 
-def config_command(args):
+def default_config_command(args):
     args = vars(args)
     args.pop("func", None)
     write_basic_config(**args)
-
-
-def main():
-    parser = default_command_parser()
-    args = parser.parse_args()
-    config_command(args)
-
-
-if __name__ == "__main__":
-    main()
