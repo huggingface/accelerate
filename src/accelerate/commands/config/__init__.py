@@ -25,7 +25,6 @@ def filter_command_args(args: dict, args_prefix: str):
     "Filters args while only keeping ones that are prefixed with `{args_prefix}.`"
     new_args = argparse.Namespace()
     for key, value in vars(args).items():
-        print(key, value)
         if key.startswith(args_prefix):
             setattr(new_args, key.replace(f"{args_prefix}.", ""), value)
     return new_args
