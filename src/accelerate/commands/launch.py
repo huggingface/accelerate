@@ -306,7 +306,7 @@ def launch_command_parser(subparsers=None):
         "--no_tpu_cluster",
         action="store_false",
         dest="tpu_cluster",
-        help="Whether to use a GCP TPU pod for training.",
+        help="Should not be passed explicitly, this is for internal use only.",
     )
     tpu_args.add_argument(
         "--vm",
