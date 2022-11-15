@@ -23,10 +23,11 @@ from .config_utils import SubcommandHelpFormatter
 description = "Update an existing config file with the latest defaults while maintaining the old configuration."
 
 
-def update_config(config_file: str = None):
+def update_config(args):
     """
     Update an existing config file with the latest defaults while maintaining the old configuration.
     """
+    config_file = args.config_file
     if config_file is None and Path(default_config_file).exists():
         config_file = default_config_file
     elif not Path(config_file).exists():
@@ -58,7 +59,5 @@ def update_command_parser(parser, parents):
 
 
 def update_config_command(args):
-    delattr(args, "subcommand")
-    delattr(args, "func")
-    config_file = update_config(**vars(args))
+    config_file = update_config(args)
     print(f"Sucessfully updated the configuration file at {config_file}.")
