@@ -99,9 +99,6 @@ def default_command_parser(parser, parents):
 
 
 def default_config_command(args):
-    delattr(args, "func")
-    delattr(args, "config_file")
-    delattr(args, "subcommand")
-    config_file = write_basic_config(**vars(args))
+    config_file = write_basic_config(args.mixed_precision, args.save_location)
     if config_file:
         print(f"accelerate configuration saved at {config_file}")
