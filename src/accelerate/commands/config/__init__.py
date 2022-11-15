@@ -16,27 +16,22 @@
 
 import argparse
 
-from .config import config_command, config_command_parser
+from .config import config_command_parser
 from .config_args import default_config_file, load_config_from_file  # noqa: F401
-from .default import default_command_parser, default_config_command
-
-
-def filter_command_args(args: dict, args_prefix: str):
-    "Filters args while only keeping ones that are prefixed with `{args_prefix}.`"
-    new_args = argparse.Namespace()
-    for key, value in vars(args).items():
-        if key.startswith(args_prefix):
-            setattr(new_args, key.replace(f"{args_prefix}.", ""), value)
-    return new_args
+from .default import default_command_parser
+from .update import update_command_parser
 
 
 def get_config_parser(subparsers=None):
     parent_parser = argparse.ArgumentParser(add_help=False)
     # The main config parser
     config_parser = config_command_parser(subparsers)
+    # The subparser to add commands to
+    subcommands = config_parser.add_subparsers(title="subcommands", dest="subcommand")
 
     # Then add other parsers with the parent parser
-    default_parser = default_command_parser(config_parser, parents=[parent_parser])  # noqa: F841
+    default_command_parser(subcommands, parents=[parent_parser])
+    update_command_parser(subcommands, parents=[parent_parser])
 
     return config_parser
 
@@ -44,12 +39,13 @@ def get_config_parser(subparsers=None):
 def main():
     config_parser = get_config_parser()
     args = config_parser.parse_args()
-    if not args.default:
-        args = filter_command_args(args, "config_args")
-        config_command(args)
-    elif args.default:
-        args = filter_command_args(args, "default_args")
-        default_config_command(args)
+
+    if not hasattr(args, "func"):
+        config_parser.print_help()
+        exit(1)
+
+    # Run
+    args.func(args)
 
 
 if __name__ == "__main__":

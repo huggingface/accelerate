@@ -14,13 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 from pathlib import Path
 
 import torch
 
 from .config_args import ClusterConfig, default_json_config_file
-from .config_utils import GroupedAction
+from .config_utils import SubcommandHelpFormatter
+
+
+description = "Create a default config file for Accelerate with only a few flags set."
 
 
 def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file, dynamo_backend="no"):
@@ -42,7 +44,7 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         print(
             f"Configuration already exists at {save_location}, will not override. Run `accelerate config` manually or pass a different `save_location`."
         )
-        return
+        return False
     mixed_precision = mixed_precision.lower()
     if mixed_precision not in ["no", "fp16", "bf16"]:
         raise ValueError(f"`mixed_precision` should be one of 'no', 'fp16', or 'bf16'. Received {mixed_precision}")
@@ -64,20 +66,13 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         config["use_cpu"] = True
         config["num_processes"] = 1
         config["distributed_type"] = "NO"
-    if not path.exists():
-        config = ClusterConfig(**config)
-        config.to_json_file(path)
+    config = ClusterConfig(**config)
+    config.to_json_file(path)
+    return path
 
 
-description = "Create a default config file for Accelerate with only a few flags set."
-
-
-def default_command_parser(parser=None, parents=None):
-    if parser is None and parents is None:
-        parser = argparse.ArgumentParser(description=description)
-    else:
-        default_parser = parser.add_subparsers(title="subcommand {default}", dest="default", description=description)
-        parser = default_parser.add_parser("default", parents=parents)
+def default_command_parser(parser, parents):
+    parser = parser.add_parser("default", parents=parents, help=description, formatter_class=SubcommandHelpFormatter)
     parser.add_argument(
         "--config_file",
         default=default_json_config_file,
@@ -87,9 +82,7 @@ def default_command_parser(parser=None, parents=None):
             "such an environment variable, your cache directory ('~/.cache' or the content of `XDG_CACHE_HOME`) suffixed "
             "with 'huggingface'."
         ),
-        dest="default_args.save_location",
-        metavar="CONFIG_FILE",
-        action=GroupedAction,
+        dest="save_location",
     )
 
     parser.add_argument(
@@ -100,14 +93,12 @@ def default_command_parser(parser=None, parents=None):
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
         default="no",
-        dest="default_args.mixed_precision",
-        action=GroupedAction,
     )
     parser.set_defaults(func=default_config_command)
     return parser
 
 
 def default_config_command(args):
-    args = vars(args)
-    args.pop("func", None)
-    write_basic_config(**args)
+    config_file = write_basic_config(args.mixed_precision, args.save_location)
+    if config_file:
+        print(f"accelerate configuration saved at {config_file}")
