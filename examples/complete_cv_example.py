@@ -230,6 +230,7 @@ def training_function(config, args):
                     accelerator.save_state(output_dir)
         model.eval()
         accurate = 0
+        num_elems = 0
         for step, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
@@ -239,9 +240,10 @@ def training_function(config, args):
             predictions = outputs.argmax(dim=-1)
             predictions, references = accelerator.gather_for_metrics((predictions, batch["label"]))
             accurate_preds = predictions == references
+            num_elems += accurate_preds.shape[0]
             accurate += accurate_preds.long().sum()
 
-        eval_metric = accurate.item() / accelerator.gradient_state.samples_seen
+        eval_metric = accurate.item() / num_elems
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}: {100 * eval_metric:.2f}")
         if args.with_tracking:
