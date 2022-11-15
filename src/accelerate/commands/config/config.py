@@ -65,7 +65,7 @@ def config_command_parser(subparsers=None):
 
 def config_command(args):
     config = get_user_input()
-    if args.__dict__["config_args.config_file"] is not None:
+    if args.config_file is not None:
         config_file = args.config_file
     else:
         if not os.path.isdir(cache_dir):
