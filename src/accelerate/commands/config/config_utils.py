@@ -14,7 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils.dataclasses import ComputeEnvironment, DistributedType, SageMakerDistributedType
+import argparse
+
+from ...utils.dataclasses import (
+    ComputeEnvironment,
+    DistributedType,
+    DynamoBackend,
+    PrecisionType,
+    SageMakerDistributedType,
+)
+from ..menu import BulletMenu
+
+
+DYNAMO_BACKENDS = [
+    "EAGER",
+    "AOT_EAGER",
+    "INDUCTOR",
+    "NVFUSER",
+    "AOT_NVFUSER",
+    "AOT_CUDAGRAPHS",
+    "OFI",
+    "FX2TRT",
+    "ONNXRT",
+    "IPEX",
+]
 
 
 def _ask_field(input_text, convert_value=None, default=None, error_message=None):
@@ -30,6 +53,12 @@ def _ask_field(input_text, convert_value=None, default=None, error_message=None)
                 print(error_message)
 
 
+def _ask_options(input_text, options=[], convert_value=None, default=0):
+    menu = BulletMenu(input_text, options)
+    result = menu.run(default_choice=default)
+    return convert_value(result) if convert_value is not None else result
+
+
 def _convert_compute_environment(value):
     value = int(value)
     return ComputeEnvironment(["LOCAL_MACHINE", "AMAZON_SAGEMAKER"][value])
@@ -40,6 +69,16 @@ def _convert_distributed_mode(value):
     return DistributedType(["NO", "MULTI_CPU", "MULTI_GPU", "TPU", "MPS"][value])
 
 
+def _convert_dynamo_backend(value):
+    value = int(value)
+    return DynamoBackend(DYNAMO_BACKENDS[value])
+
+
+def _convert_mixed_precision(value):
+    value = int(value)
+    return PrecisionType(["no", "fp16", "bf16"][value])
+
+
 def _convert_sagemaker_distributed_mode(value):
     value = int(value)
     return SageMakerDistributedType(["NO", "DATA_PARALLEL", "MODEL_PARALLEL"][value])
@@ -47,3 +86,32 @@ def _convert_sagemaker_distributed_mode(value):
 
 def _convert_yes_no_to_bool(value):
     return {"yes": True, "no": False}[value.lower()]
+
+
+class GroupedAction(argparse.Action):
+    """
+    Filters arguments into seperate namespace groups based on the first part of the argument name.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        group, dest = self.dest.split(".", 2)
+        groupspace = getattr(namespace, group, argparse.Namespace())
+        setattr(groupspace, dest, values)
+        setattr(namespace, group, groupspace)
+
+
+class SubcommandHelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """
+    A custom formatter that will remove the usage line from the help message for subcommands.
+    """
+
+    def _format_action(self, action):
+        parts = super()._format_action(action)
+        if action.nargs == argparse.PARSER:
+            parts = "\n".join(parts.split("\n")[1:])
+        return parts
+
+    def _format_usage(self, usage, actions, groups, prefix):
+        usage = super()._format_usage(usage, actions, groups, prefix)
+        usage = usage.replace("<command> [<args>] ", "")
+        return usage

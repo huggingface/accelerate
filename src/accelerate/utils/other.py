@@ -14,12 +14,10 @@
 
 import os
 from contextlib import contextmanager
-from pathlib import Path
 
 import torch
 
-from ..commands.config.cluster import ClusterConfig
-from ..commands.config.config_args import default_json_config_file
+from ..commands.config.default import write_basic_config  # noqa: F401
 from ..state import AcceleratorState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
@@ -113,45 +111,3 @@ def get_pretty_name(obj):
     if hasattr(obj, "__name__"):
         return obj.__name__
     return str(obj)
-
-
-def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file):
-    """
-    Creates and saves a basic cluster config to be used on a local machine with potentially multiple GPUs. Will also
-    set CPU if it is a CPU-only machine.
-
-    Args:
-        mixed_precision (`str`, *optional*, defaults to "no"):
-            Mixed Precision to use. Should be one of "no", "fp16", or "bf16"
-        save_location (`str`, *optional*, defaults to `default_json_config_file`):
-            Optional custom save location. Should be passed to `--config_file` when using `accelerate launch`. Default
-            location is inside the huggingface cache folder (`~/.cache/huggingface`) but can be overriden by setting
-            the `HF_HOME` environmental variable, followed by `accelerate/default_config.yaml`.
-    """
-    path = Path(save_location)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        print(
-            f"Configuration already exists at {save_location}, will not override. Run `accelerate config` manually or pass a different `save_location`."
-        )
-        return
-    mixed_precision = mixed_precision.lower()
-    if mixed_precision not in ["no", "fp16", "bf16"]:
-        raise ValueError(f"`mixed_precision` should be one of 'no', 'fp16', or 'bf16'. Received {mixed_precision}")
-    config = {"compute_environment": "LOCAL_MACHINE", "mixed_precision": mixed_precision}
-    if torch.cuda.is_available():
-        num_gpus = torch.cuda.device_count()
-        config["num_processes"] = num_gpus
-        config["use_cpu"] = False
-        if num_gpus > 1:
-            config["distributed_type"] = "MULTI_GPU"
-        else:
-            config["distributed_type"] = "NO"
-    else:
-        num_gpus = 0
-        config["use_cpu"] = True
-        config["num_processes"] = 1
-        config["distributed_type"] = "NO"
-    if not path.exists():
-        config = ClusterConfig(**config)
-        config.to_json_file(path)

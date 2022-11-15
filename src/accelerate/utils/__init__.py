@@ -8,6 +8,7 @@ from .dataclasses import (
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
+    DynamoBackend,
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -109,6 +110,7 @@ from .megatron_lm import (
     MegatronLMSchedulerWrapper,
     T5TrainStep,
     avg_losses_across_data_parallel_group,
+    gather_across_data_parallel_groups,
 )
 from .megatron_lm import initialize as megatron_lm_initialize
 from .megatron_lm import prepare_data_loader as megatron_lm_prepare_data_loader

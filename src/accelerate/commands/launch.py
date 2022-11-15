@@ -30,10 +30,12 @@ import torch
 import psutil
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
+from accelerate.commands.config.config_utils import DYNAMO_BACKENDS
 from accelerate.state import get_int_from_env
 from accelerate.utils import (
     ComputeEnvironment,
     DistributedType,
+    DynamoBackend,
     PrecisionType,
     PrepareForLaunch,
     _filter_args,
@@ -56,9 +58,6 @@ if is_rich_available():
     FORMAT = "%(message)s"
     logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 
-
-if is_torch_version(">=", "1.9.0"):
-    import torch.distributed.run as distrib_run
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +170,13 @@ def launch_command_parser(subparsers=None):
     # Resource selection arguments
     resource_args = parser.add_argument_group(
         "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
+    )
+    resource_args.add_argument(
+        "--dynamo_backend",
+        type=str,
+        choices=["no"] + [b.lower() for b in DYNAMO_BACKENDS],
+        help="Choose a backend to optimize your training with dynamo, see more at "
+        "https://github.com/pytorch/torchdynamo.",
     )
     resource_args.add_argument(
         "--mixed_precision",
@@ -573,6 +579,13 @@ def simple_launcher(args):
         mixed_precision = "fp16"
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
+
+    try:
+        dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
+    except ValueError:
+        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+    current_env["DYNAMO_BACKEND"] = dynamo_backend.value
+
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
     process = subprocess.Popen(cmd, env=current_env)
@@ -582,6 +595,8 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
+    if is_torch_version(">=", "1.9.0"):
+        import torch.distributed.run as distrib_run
     num_processes = getattr(args, "num_processes")
     num_machines = getattr(args, "num_machines")
     main_process_ip = getattr(args, "main_process_ip")
@@ -625,6 +640,13 @@ def multi_gpu_launcher(args):
         mixed_precision = "fp16"
 
     current_env["MIXED_PRECISION"] = str(mixed_precision)
+
+    try:
+        dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
+    except ValueError:
+        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+    current_env["DYNAMO_BACKEND"] = dynamo_backend.value
+
     if args.use_fsdp:
         current_env["USE_FSDP"] = "true"
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
@@ -671,6 +693,8 @@ def multi_gpu_launcher(args):
 
 
 def deepspeed_launcher(args):
+    if is_torch_version(">=", "1.9.0"):
+        import torch.distributed.run as distrib_run
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
     num_processes = getattr(args, "num_processes")
@@ -958,10 +982,16 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', FutureWarning)
         mixed_precision = "fp16"
 
+    try:
+        dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
+    except ValueError:
+        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+
     # Environment variables to be set for use during training job
     environment = {
         "USE_SAGEMAKER": "true",
         "MIXED_PRECISION": str(mixed_precision),
+        "DYNAMO_BACKEND": dynamo_backend.value,
         "SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
     # configure distribution set up
@@ -1084,6 +1114,9 @@ def launch_command(args):
                 args.mixed_precision = "fp16"
             else:
                 args.mixed_precision = defaults.mixed_precision
+        if args.dynamo_backend is None:
+            warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
+            args.dynamo_backend = "no"
     else:
         if args.num_processes is None:
             args.num_processes = torch.cuda.device_count() if args.multi_gpu else 1
@@ -1096,6 +1129,9 @@ def launch_command(args):
             args.mixed_precision = "no"
         if not hasattr(args, "use_cpu"):
             args.use_cpu = args.cpu
+        if args.dynamo_backend is None:
+            warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
+            args.dynamo_backend = "no"
 
     if args.num_cpu_threads_per_process is None:
         args.num_cpu_threads_per_process = 1

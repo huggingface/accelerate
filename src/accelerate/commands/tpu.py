@@ -89,8 +89,8 @@ def tpu_command_launcher(args):
         defaults = load_config_from_file(args.config_file)
         if not args.command_file and defaults.command_file is not None and not args.command:
             args.command_file = defaults.command_file
-        if not args.command and defaults.command is not None:
-            args.command = defaults.command
+        if not args.command and defaults.commands is not None:
+            args.command = defaults.commands
         if not args.tpu_name:
             args.tpu_name = defaults.tpu_name
         if not args.tpu_zone:
@@ -110,7 +110,8 @@ def tpu_command_launcher(args):
             args.command = [f.read().splitlines()]
 
     # To turn list of lists into list of strings
-    args.command = [line for cmd in args.command for line in cmd]
+    if isinstance(args.command[0], list):
+        args.command = [line for cmd in args.command for line in cmd]
     # Default to the shared folder and install accelerate
     new_cmd = ["cd /usr/share"]
     if args.install_accelerate:

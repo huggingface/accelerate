@@ -164,6 +164,50 @@ class ComputeEnvironment(str, enum.Enum):
     AMAZON_SAGEMAKER = "AMAZON_SAGEMAKER"
 
 
+class DynamoBackend(str, enum.Enum):
+    """
+    Represents a dynamo backend (see https://github.com/pytorch/torchdynamo).
+
+    Values:
+
+        - **NO** -- Do not use torch dynamo.
+        - **EAGER** -- Uses PyTorch to run the extracted GraphModule. This is quite useful in debugging TorchDynamo
+          issues.
+        - **AOT_EAGER** -- Uses AotAutograd with no compiler, i.e, just using PyTorch eager for the AotAutograd's
+          extracted forward and backward graphs. This is useful for debugging, and unlikely to give speedups.
+        - **INDUCTOR** -- Uses TorchInductor backend with AotAutograd and cudagraphs by leveraging codegened Triton
+          kernels. [Read
+          more](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)
+        - **NVFUSER** -- nvFuser with TorchScript. [Read
+          more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
+        - **AOT_NVFUSER** -- nvFuser with AotAutograd. [Read
+          more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
+        - **AOT_CUDAGRAPHS** -- cudagraphs with AotAutograd. [Read
+          more](https://github.com/pytorch/torchdynamo/pull/757)
+        - **OFI** -- Uses Torchscript optimize_for_inference. Inference only. [Read
+          more](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
+        - **FX2TRT** -- Uses Nvidia TensorRT for inference optimizations. Inference only. [Read
+          more](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst)
+        - **ONNXRT** -- Uses ONNXRT for inference on CPU/GPU. Inference only. [Read more](https://onnxruntime.ai/)
+        - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
+          more](https://github.com/intel/intel-extension-for-pytorch).
+
+    """
+
+    # Subclassing str as well as Enum allows the `SageMakerDistributedType` to be JSON-serializable out of the box.
+    NO = "NO"
+    EAGER = "EAGER"
+    AOT_EAGER = "AOT_EAGER"
+    INDUCTOR = "INDUCTOR"
+    NVFUSER = "NVFUSER"
+    AOT_NVFUSER = "AOT_NVFUSER"
+    AOT_CUDAGRAPHS = "AOT_CUDAGRAPHS"
+    OFI = "OFI"
+    FX2TRT = "FX2TRT"
+    ONNXRT = "ONNXRT"
+    IPEX = "IPEX"
+
+
 class EnumWithContains(enum.EnumMeta):
     "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
 
@@ -772,6 +816,18 @@ class MegatronLMPlugin:
         default=False,
         metadata={"help": "Whether to set all logging options."},
     )
+    eval_iters: int = field(
+        default=100, metadata={"help": "Number of iterations to run for evaluation validation/test for."}
+    )
+    eval_interval: int = field(
+        default=1000, metadata={"help": "Interval between running evaluation on validation set."}
+    )
+    return_logits: bool = field(
+        default=False,
+        metadata={"help": "Whether to return logits from the model."},
+    )
+
+    # custom train step args
     custom_train_step_class: Optional[Any] = field(
         default=None,
         metadata={"help": "Custom train step class."},
@@ -780,11 +836,22 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Custom train step kwargs."},
     )
-    eval_iters: int = field(
-        default=100, metadata={"help": "Number of iterations to run for evaluation validation/test for."}
+
+    # custom model args
+    custom_model_provider_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom model provider function."},
     )
-    eval_interval: int = field(
-        default=1000, metadata={"help": "Interval between running evaluation on validation set."}
+    custom_prepare_model_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom prepare model function."},
+    )
+
+    # remaining args such as enabling Alibi/ROPE positional embeddings,
+    # wandb logging, Multi-Query Attention, etc.
+    other_megatron_args: Optional[Dict[str, Any]] = field(
+        default=None,
+        metadata={"help": "Other Megatron-LM arguments. Please refer Megatron-LM"},
     )
 
     def __post_init__(self):
@@ -841,6 +908,8 @@ class MegatronLMPlugin:
             self.megatron_lm_default_args["tensorboard_dir"] = self.tensorboard_dir
             if self.set_all_logging_options:
                 self.set_tensorboard_logging_options()
+        if self.other_megatron_args is not None:
+            self.megatron_lm_default_args.update(self.other_megatron_args)
 
     def set_network_size_args(self, model, batch_data=None):
         # Check if the model is either BERT, GPT or T5 else raise error
@@ -885,6 +954,8 @@ class MegatronLMPlugin:
             else:
                 self.seq_length = max_position_embeddings
             self.megatron_lm_default_args["seq_length"] = self.seq_length
+            self.megatron_lm_default_args["return_logits"] = self.return_logits
+            self.megatron_lm_default_args["tokenizer_type"] = "GPT2BPETokenizer"
         elif "t5" in model.config.model_type.lower():
             model_type_name = "t5"
             num_layers = model.config.num_layers

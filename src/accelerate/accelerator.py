@@ -25,7 +25,7 @@ from typing import List, Optional, Union
 import torch
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import prepare_data_loader
+from .data_loader import DataLoaderDispatcher, prepare_data_loader
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -36,6 +36,7 @@ from .utils import (
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
+    DynamoBackend,
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -86,6 +87,9 @@ if is_megatron_lm_available():
         megatron_lm_prepare_optimizer,
         megatron_lm_prepare_scheduler,
     )
+
+if is_torch_version(">", "1.10.0"):
+    from torch.distributed.algorithms.join import Join
 
 
 if is_tpu_available(check_device=False):
@@ -163,6 +167,8 @@ class Accelerator:
         kwargs_handlers (`List[KwargHandler]`, *optional*)
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
+        dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
+            Set to one of the possible dynamo backends to optimize your training with torch dynamo.
 
     **Available attributes:**
 
@@ -198,13 +204,9 @@ class Accelerator:
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
+        dynamo_backend: Union[DynamoBackend, str] = None,
     ):
         self.logging_dir = logging_dir
-        trackers = filter_trackers(log_with, self.logging_dir)
-        if len(trackers) < 1 and log_with is not None:
-            warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
-        self.log_with = trackers
-
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
@@ -218,6 +220,9 @@ class Accelerator:
                 FutureWarning,
             )
             mixed_precision = "fp16"
+
+        if dynamo_backend is not None:
+            dynamo_backend = DynamoBackend(dynamo_backend.upper())
 
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None
@@ -285,12 +290,18 @@ class Accelerator:
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
             cpu=cpu,
+            dynamo_backend=dynamo_backend,
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             _from_accelerator=True,
             **kwargs,
         )
+
+        trackers = filter_trackers(log_with, self.logging_dir)
+        if len(trackers) < 1 and log_with is not None:
+            warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
+        self.log_with = trackers
 
         if (
             (mixed_precision != "bf16")
@@ -353,6 +364,7 @@ class Accelerator:
         self._optimizers = []
         self._models = []
         self._schedulers = []
+        self._dataloaders = []
         self._custom_objects = []
 
         # RNG Types
@@ -608,6 +620,93 @@ class Accelerator:
         with context(model):
             yield
 
+    @contextmanager
+    def join_uneven_inputs(self, joinables, even_batches=None):
+        """
+        A context manager that facilitates distributed training or evaluation on uneven inputs, which acts as a wrapper
+        around `torch.distributed.algorithms.join`. This is useful when the total batch size does not evenly divide the
+        length of the dataset.
+
+        Args:
+            joinables (`List[torch.distributed.algorithms.Joinable]`):
+                A list of models or optimizers that subclass `torch.distributed.algorithms.Joinable`. Most commonly, a
+                PyTorch Module that was prepared with `Accelerator.prepare` for DistributedDataParallel training.
+            even_batches (`bool`, *optional*)
+                If set, this will override the value of `even_batches` set in the `Accelerator`. If it is not provided,
+                the default `Accelerator` value wil be used.
+
+        <Tip warning={true}>
+
+        `join_uneven_inputs` is only supported for Distributed Data Parallel training on multiple GPUs. For any other
+        configuration, this method will have no effect.
+
+        </Tip>
+
+        <Tip warning={true}>
+
+        Overidding `even_batches` will not affect iterable-style data loaders.
+
+        </Tip>
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(even_batches=True)
+        >>> ddp_model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+
+        >>> with accelerator.join_uneven_inputs([ddp_model], even_batches=False):
+        ...     for input, output in dataloader:
+        ...         outputs = model(input)
+        ...         loss = loss_func(outputs)
+        ...         loss.backward()
+        ...         optimizer.step()
+        ...         optimizer.zero_grad()
+        ```
+
+        """
+        if is_torch_version("<", "1.10.0"):
+            raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
+
+        if self.distributed_type == DistributedType.MULTI_GPU:
+            dl_even_batches_values = []
+
+            if even_batches is not None:
+                iterable_dl_seen = False
+                # override value in batch sampler for map-style datasets
+                for dl_idx, dl in enumerate(self._dataloaders):
+                    if isinstance(dl, DataLoaderDispatcher):
+                        iterable_dl_seen = True
+                        continue
+                    dl_even_batches_values.append((dl_idx, dl.batch_sampler.even_batches))
+                    dl.batch_sampler.even_batches = even_batches
+
+                if iterable_dl_seen:
+                    warnings.warn(
+                        "Overridding even_batches is only supported for map-style datasets, yet some dataloaders given were iterable"
+                    )
+            else:
+                even_batches = self.even_batches
+
+            enable_join = False if even_batches else True
+            try:
+                with Join(joinables, enable=enable_join, throw_on_early_termination=False):
+                    yield
+            finally:
+                # reset any batch samplers that have been modified
+                for dl_idx, even_batches_value in dl_even_batches_values:
+                    self._dataloaders[dl_idx].batch_sampler.even_batches = even_batches_value
+        else:
+            # Even when disabled, Join expects models to subclass Joinable, so skip entirely for single process runs
+            if self.distributed_type != DistributedType.NO:
+                warnings.warn(
+                    "Joining uneven inputs is only supported for multi-GPU training, as a result `join_uneven_inputs` will have no effect."
+                )
+
+            with contextlib.nullcontext(joinables):
+                yield
+
     def print(self, *args, **kwargs):
         """
         Use in replacement of `print()` to only print once per server.
@@ -793,6 +892,10 @@ class Accelerator:
         self._models.append(model)
         if device_placement:
             model = model.to(self.device)
+        if self.state.dynamo_backend != DynamoBackend.NO:
+            import torch._dynamo as dynamo
+
+            model = dynamo.optimize(self.state.dynamo_backend.value.lower())(model)
         if self.distributed_type == DistributedType.MULTI_GPU:
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
@@ -1117,7 +1220,7 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
-        return prepare_data_loader(
+        prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
             num_processes=self.num_processes,
@@ -1128,6 +1231,8 @@ class Accelerator:
             dispatch_batches=self.dispatch_batches,
             even_batches=self.even_batches,
         )
+        self._dataloaders.append(prepared_data_loader)
+        return prepared_data_loader
 
     def prepare_optimizer(self, optimizer: torch.optim.Optimizer, device_placement=None):
         """
@@ -1611,6 +1716,7 @@ class Accelerator:
         self._schedulers = []
         self._optimizers = []
         self._models = []
+        self._dataloaders = []
         self.deepspeed_engine_wrapped = None
         gc.collect()
         torch.cuda.empty_cache()

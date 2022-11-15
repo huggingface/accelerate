@@ -17,10 +17,17 @@ import json
 import os
 
 from ...utils.constants import SAGEMAKER_PARALLEL_EC2_INSTANCES
-from ...utils.dataclasses import ComputeEnvironment, SageMakerDistributedType
+from ...utils.dataclasses import ComputeEnvironment, DynamoBackend, SageMakerDistributedType
 from ...utils.imports import is_boto3_available
 from .config_args import SageMakerConfig
-from .config_utils import _ask_field, _convert_sagemaker_distributed_mode, _convert_yes_no_to_bool
+from .config_utils import (
+    _ask_field,
+    _ask_options,
+    _convert_dynamo_backend,
+    _convert_mixed_precision,
+    _convert_sagemaker_distributed_mode,
+    _convert_yes_no_to_bool,
+)
 
 
 if is_boto3_available():
@@ -87,8 +94,9 @@ def _get_iam_role_arn(role_name):
 
 
 def get_sagemaker_input():
-    credentials_configuration = _ask_field(
-        "How do you want to authorize? ([0] AWS Profile, [1] Credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)): ",
+    credentials_configuration = _ask_options(
+        "How do you want to authorize?",
+        ["AWS Profile", "Credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) "],
         lambda x: int(x),
     )
     aws_profile = None
@@ -109,8 +117,9 @@ def get_sagemaker_input():
     aws_region = _ask_field("Enter your AWS Region: [us-east-1]", default="us-east-1")
     os.environ["AWS_DEFAULT_REGION"] = aws_region
 
-    role_management = _ask_field(
-        "Do you already have an IAM Role for executing Amazon SageMaker Training Jobs? ([0] provide IAM Role name, [1] create new IAM role using credentials: ",
+    role_management = _ask_options(
+        "Do you already have an IAM Role for executing Amazon SageMaker Training Jobs?",
+        ["Provide IAM Role name", "Create new IAM role using credentials"],
         lambda x: int(x),
     )
     if role_management == 0:
@@ -156,19 +165,42 @@ def get_sagemaker_input():
             lambda x: str(x).lower(),
         )
 
-    distributed_type = _ask_field(
-        "What is the distributed mode? ([0] No distributed training, [1] data parallelism): ",
+    distributed_type = _ask_options(
+        "What is the distributed mode?",
+        ["No distributed training", "Data parallelism"],
         _convert_sagemaker_distributed_mode,
-        error_message="Please enter 0 or 1",
     )
-
-    ec2_instance_query = "Which EC2 instance type you want to use for your training "
+    use_dynamo = _ask_field(
+        "Do you wish to optimize your script with torch dynamo?[yes/NO]:",
+        _convert_yes_no_to_bool,
+        default=False,
+        error_message="Please enter yes or no.",
+    )
+    if use_dynamo:
+        dynamo_backend = _ask_options(
+            "Which dynamo backend would you like to use?",
+            [
+                "eager",
+                "aot_eager",
+                "inductor",
+                "nvfuser",
+                "aot_nvfuser",
+                "aot_cudagraphs",
+                "ofi",
+                "fx2trt",
+                "onnxrt",
+                "ipex",
+            ],
+            _convert_dynamo_backend,
+            default=2,
+        )
+    else:
+        dynamo_backend = DynamoBackend.NO
+    ec2_instance_query = "Which EC2 instance type you want to use for your training?"
     if distributed_type != SageMakerDistributedType.NO:
-        ec2_instance_query += "("
-        for i, instance_type in enumerate(SAGEMAKER_PARALLEL_EC2_INSTANCES):
-            ec2_instance_query += f"[{i}] {instance_type}, "
-        ec2_instance_query = ec2_instance_query[:-2] + ")? [0]: "
-        ec2_instance_type = _ask_field(ec2_instance_query, lambda x: SAGEMAKER_PARALLEL_EC2_INSTANCES[int(x)])
+        ec2_instance_type = _ask_options(
+            ec2_instance_query, SAGEMAKER_PARALLEL_EC2_INSTANCES, lambda x: SAGEMAKER_PARALLEL_EC2_INSTANCES[int(x)]
+        )
     else:
         ec2_instance_query += "? [ml.p3.2xlarge]:"
         ec2_instance_type = _ask_field(ec2_instance_query, lambda x: str(x).lower(), default="ml.p3.2xlarge")
@@ -184,17 +216,23 @@ def get_sagemaker_input():
             default=1,
         )
 
-    mixed_precision = _ask_field(
-        "Do you wish to use FP16 or BF16 (mixed precision)? [No/FP16/BF16]: ",
-        lambda x: str(x),
-        default="No",
+    mixed_precision = _ask_options(
+        "Do you wish to use FP16 or BF16 (mixed precision)?",
+        ["no", "fp16", "bf16"],
+        _convert_mixed_precision,
     )
+
+    if use_dynamo and mixed_precision == "no":
+        print(
+            "Torch dynamo used without mixed precision requires TF32 to be efficient. Accelerate will enable it by default when launching your scripts."
+        )
 
     return SageMakerConfig(
         image_uri=docker_image,
         compute_environment=ComputeEnvironment.AMAZON_SAGEMAKER,
         distributed_type=distributed_type,
         use_cpu=False,
+        dynamo_backend=dynamo_backend,
         ec2_instance_type=ec2_instance_type,
         profile=aws_profile,
         region=aws_region,
