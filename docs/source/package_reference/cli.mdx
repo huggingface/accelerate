@@ -46,7 +46,7 @@ Create a default config file for Accelerate with only a few flags set.
 **Usage**: 
 
 ```bash
-accelerate default-config [arguments]
+accelerate config default [arguments]
 ```
 
 **Optional Arguments**:
@@ -56,6 +56,28 @@ accelerate default-config [arguments]
 
 * `-h`, `--help` (`bool`) -- Show a help message and exit
 * `--mixed_precision {no,fp16,bf16}` (`str`) -- Whether or not to use mixed precision training. Choose between FP16 and BF16 (bfloat16) training. BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.
+
+## accelerate config update
+
+**Command**:
+
+`accelerate config update` or `accelerate-config update`
+
+Update an existing config file with the latest defaults while maintaining the old configuration.
+
+**Usage**: 
+
+```bash
+accelerate config update [arguments]
+```
+
+**Optional Arguments**:
+* `--config_file CONFIG_FILE` (`str`) -- The path to the config file to update. Will default to a file named default_config.yaml in the cache location, which is the content
+                        of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
+                        (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
+
+* `-h`, `--help` (`bool`) -- Show a help message and exit
+
 
 ## accelerate env
 

@@ -88,28 +88,10 @@ def _convert_yes_no_to_bool(value):
     return {"yes": True, "no": False}[value.lower()]
 
 
-class GroupedAction(argparse.Action):
-    """
-    Filters arguments into seperate namespace groups based on the first part of the argument name.
-    """
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        group, dest = self.dest.split(".", 2)
-        groupspace = getattr(namespace, group, argparse.Namespace())
-        setattr(groupspace, dest, values)
-        setattr(namespace, group, groupspace)
-
-
 class SubcommandHelpFormatter(argparse.RawDescriptionHelpFormatter):
     """
     A custom formatter that will remove the usage line from the help message for subcommands.
     """
-
-    def _format_action(self, action):
-        parts = super()._format_action(action)
-        if action.nargs == argparse.PARSER:
-            parts = "\n".join(parts.split("\n")[1:])
-        return parts
 
     def _format_usage(self, usage, actions, groups, prefix):
         usage = super()._format_usage(usage, actions, groups, prefix)
