@@ -375,12 +375,8 @@ def get_cluster_input():
     else:
         main_training_function = "main"
 
-    if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
-        machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
-        if machine_type == "TPU":
-            machine_type += " cores"
-        else:
-            machine_type += "(s)"
+    if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU]:
+        machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "") + "(s)"
         num_processes = _ask_field(
             f"How many {machine_type} should be used for distributed training? [1]:",
             lambda x: int(x),
@@ -392,6 +388,13 @@ def get_cluster_input():
             "How many GPU(s) should be used for distributed training? [1]:",
             lambda x: int(x),
             default=1,
+            error_message="Please enter an integer.",
+        )
+    elif distributed_type == DistributedType.TPU:
+        num_processes = _ask_field(
+            "How many TPU core(s) should be used for distributed training (if using pods, on each pod)? [8]:",
+            lambda x: int(x),
+            default=8,
             error_message="Please enter an integer.",
         )
     else:
@@ -421,6 +424,11 @@ def get_cluster_input():
         )
 
     downcast_bf16 = "no"
+    tpu_vm = None
+    tpu_env = []
+    tpu_name = None
+    use_cluster = False
+
     if distributed_type == DistributedType.TPU:
         if mixed_precision == "bf16":
             downcast_bf16 = _ask_field(
