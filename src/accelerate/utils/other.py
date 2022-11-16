@@ -21,6 +21,7 @@ from ..commands.config.default import write_basic_config  # noqa: F401
 from ..state import AcceleratorState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
+from .operations import ConvertOutputsToFp32
 
 
 if is_deepspeed_available():
@@ -30,12 +31,15 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
-def extract_model_from_parallel(model):
+def extract_model_from_parallel(model, remove_fp32_hook: bool = False):
     """
     Extract a model from its distributed containers.
 
     Args:
-        model (`torch.nn.Module`): The model to extract.
+        model (`torch.nn.Module`):
+            The model to extract.
+        remove_fp32_hook (`bool`, *optional*):
+            Whether to remove mixed precision hooks from the model.
 
     Returns:
         `torch.nn.Module`: The extracted model.
@@ -46,6 +50,11 @@ def extract_model_from_parallel(model):
 
     while isinstance(model, options):
         model = model.module
+
+    if remove_fp32_hook:
+        forward = getattr(model, "forward")
+        if isinstance(forward, ConvertOutputsToFp32):
+            setattr(model, "forward", forward.model_forward)
     return model
 
 

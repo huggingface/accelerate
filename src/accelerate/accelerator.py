@@ -1464,16 +1464,16 @@ class Accelerator:
         """
         return pad_across_processes(tensor, dim=dim, pad_index=pad_index, pad_first=pad_first)
 
-    def unwrap_model(self, model):
+    def unwrap_model(self, model, remove_fp32_hook: bool = False):
         """
         Unwraps the `model` from the additional layer possible added by [`~Accelerator.prepare`]. Useful before saving
-        the model.
+        the model. Will also optionally remove the mixed precision hook if it was added.
 
         Args:
             model (`torch.nn.Module`):
                 The model to unwrap.
         """
-        return extract_model_from_parallel(model)
+        return extract_model_from_parallel(model, remove_fp32_hook)
 
     def wait_for_everyone(self):
         """
