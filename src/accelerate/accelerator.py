@@ -1467,7 +1467,7 @@ class Accelerator:
     def unwrap_model(self, model, keep_fp32_wrapper: bool = False):
         """
         Unwraps the `model` from the additional layer possible added by [`~Accelerator.prepare`]. Useful before saving
-        the model. Will also remove the mixed precision hook if it was added by default.
+        the model.
 
         Args:
             model (`torch.nn.Module`):
