@@ -1464,7 +1464,7 @@ class Accelerator:
         """
         return pad_across_processes(tensor, dim=dim, pad_index=pad_index, pad_first=pad_first)
 
-    def unwrap_model(self, model):
+    def unwrap_model(self, model, keep_fp32_wrapper: bool = False):
         """
         Unwraps the `model` from the additional layer possible added by [`~Accelerator.prepare`]. Useful before saving
         the model.
@@ -1472,8 +1472,10 @@ class Accelerator:
         Args:
             model (`torch.nn.Module`):
                 The model to unwrap.
+            keep_fp32_wrapper (`bool`, *optional*, defaults to `False`):
+                Whether to not remove the mixed precision hook if it was added.
         """
-        return extract_model_from_parallel(model)
+        return extract_model_from_parallel(model, keep_fp32_wrapper)
 
     def wait_for_everyone(self):
         """
@@ -1760,7 +1762,7 @@ class Accelerator:
         Args:
             model (`torch.nn.Module`):
                 A PyTorch model sent through [`Accelerator.prepare`]
-            unwrap (`bool`, *optional*, defaults to True):
+            unwrap (`bool`, *optional*, defaults to `True`):
                 Whether to return the original underlying state_dict of `model` or to return the wrapped state_dict
         """
         is_zero_3 = False
