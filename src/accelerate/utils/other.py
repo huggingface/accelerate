@@ -31,14 +31,14 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
-def extract_model_from_parallel(model, remove_fp32_hook: bool = False):
+def extract_model_from_parallel(model, keep_fp32_wrapper: bool = False):
     """
     Extract a model from its distributed containers.
 
     Args:
         model (`torch.nn.Module`):
             The model to extract.
-        remove_fp32_hook (`bool`, *optional*):
+        keep_fp32_wrapper (`bool`, *optional*):
             Whether to remove mixed precision hooks from the model.
 
     Returns:
@@ -51,7 +51,7 @@ def extract_model_from_parallel(model, remove_fp32_hook: bool = False):
     while isinstance(model, options):
         model = model.module
 
-    if remove_fp32_hook:
+    if not keep_fp32_wrapper:
         forward = getattr(model, "forward")
         if isinstance(forward, ConvertOutputsToFp32):
             setattr(model, "forward", forward.model_forward)
