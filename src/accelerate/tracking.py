@@ -593,7 +593,7 @@ def filter_trackers(
                             if getattr(tracker_init, "requires_logging_directory"):
                                 if logging_dir is None:
                                     raise ValueError(
-                                        f"Logging with `{str(log_type)}` requires a `logging_dir` to be passed in."
+                                        f"Logging with `{log_type}` requires a `logging_dir` to be passed in."
                                     )
                             loggers.append(log_type)
                         else:
