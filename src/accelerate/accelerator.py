@@ -953,7 +953,9 @@ class Accelerator:
                 batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
             if len(batch_sizes) == 0:
                 raise ValueError(
-                    "You must specify a training or evaluation dataloader in `accelerate.prepare()` when using DeepSpeed."
+                    "When using DeepSpeed accelerate.prepare() requires you to pass at least one of training or evaluation dataloaders "
+                    "or alternatively set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file"
+                    "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                 )
 
             batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
