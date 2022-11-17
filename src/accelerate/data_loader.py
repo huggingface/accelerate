@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from contextlib import suppress
 from typing import List, Optional, Union
 
 import torch
@@ -164,9 +165,8 @@ class BatchSamplerShard(BatchSampler):
         elif self.even_batches:
             # When we even batches we always get +1
             return length + 1
-        else:
-            # Otherwise it depends on the process index.
-            return length + 1 if self.process_index < len(self.batch_sampler) % self.num_processes else length
+        # Otherwise it depends on the process index.
+        return length + 1 if self.process_index < len(self.batch_sampler) % self.num_processes else length
 
     def __iter__(self):
         return self._iter_with_split() if self.split_batches else self._iter_with_no_split()
@@ -364,12 +364,10 @@ class DataLoaderShard(DataLoader):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
         self.gradient_state._set_end_of_dataloader(False)
-        try:
+        # We can safely pass because the default is -1
+        with suppress(Exception):
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
             self.gradient_state._set_remainder(length % self.total_batch_size)
-        except Exception:
-            # We can safely pass because the default is -1
-            pass
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
@@ -402,8 +400,7 @@ class DataLoaderShard(DataLoader):
     def total_dataset_length(self):
         if hasattr("total_length", self.dataset):
             return self.dataset.total_length
-        else:
-            return len(self.dataset)
+        return len(self.dataset)
 
 
 class DataLoaderDispatcher(DataLoader):
@@ -448,12 +445,10 @@ class DataLoaderDispatcher(DataLoader):
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
         self._drop_last = _drop_last
-        try:
+        # We can safely pass because the default is -1
+        with suppress(Exception):
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
             self.gradient_state._set_remainder(length % self.total_batch_size)
-        except Exception:
-            # We can safely pass because the default is -1
-            pass
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
@@ -548,8 +543,7 @@ class DataLoaderDispatcher(DataLoader):
             return whole_length
         elif self._drop_last:
             return whole_length // self.state.num_processes
-        else:
-            return math.ceil(whole_length / self.state.num_processes)
+        return math.ceil(whole_length / self.state.num_processes)
 
     @property
     def total_batch_size(self):

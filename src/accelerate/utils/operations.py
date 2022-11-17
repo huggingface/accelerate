@@ -225,8 +225,7 @@ def gather(tensor):
         return _gpu_gather(tensor)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
         return _cpu_gather(tensor)
-    else:
-        return tensor
+    return tensor
 
 
 def _gpu_gather_object(object: Any):
@@ -297,8 +296,7 @@ def broadcast(tensor, from_process: int = 0):
         return _gpu_broadcast(tensor, src=from_process)
     elif AcceleratorState().distributed_type == DistributedType.MULTI_CPU:
         return _gpu_broadcast(tensor, src=from_process)
-    else:
-        return tensor
+    return tensor
 
 
 def broadcast_object_list(object_list, from_process: int = 0):
@@ -439,8 +437,7 @@ def reduce(tensor, reduction="mean"):
         else:
             if reduction == "sum":
                 return cloned_tensor.sum()
-            else:
-                return cloned_tensor.mean()
+            return cloned_tensor.mean()
 
     return recursively_apply(_reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction)
 

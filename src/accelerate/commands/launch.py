@@ -98,7 +98,7 @@ class _CustomHelpAction(argparse._HelpAction):
             "optional arguments",
         ]
         if len(args) > 1:
-            used_platforms = [arg for arg in args if arg in options_to_group.keys()]
+            used_platforms = [arg for arg in args if arg in options_to_group]
             args = list(map(clean_option, args))
             used_titles = [options_to_group[o] for o in used_platforms]
             for i, arg in enumerate(opts):
@@ -863,7 +863,7 @@ def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
                 parser.add_argument(argument, action=action)
 
     return {
-        key: (literal_eval(value) if value == "True" or value == "False" else value)
+        key: (literal_eval(value) if value in ("True", "False") else value)
         for key, value in parser.parse_args(nargs).__dict__.items()
     }
 

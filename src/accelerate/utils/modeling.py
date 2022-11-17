@@ -304,7 +304,7 @@ def clean_device_map(device_map: Dict[str, Union[int, str, torch.device]], modul
     values = [v for k, v in device_map.items() if k.startswith(prefix)]
     if len(set(values)) == 1 and len(values) > 1:
         for k in [k for k in device_map if k.startswith(prefix)]:
-            del device_map[k]
+            device_map.pop(k)
         device_map[module_name] = values[0]
 
     # Recurse over the children
