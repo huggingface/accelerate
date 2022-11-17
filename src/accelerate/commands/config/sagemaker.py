@@ -97,7 +97,7 @@ def get_sagemaker_input():
     credentials_configuration = _ask_options(
         "How do you want to authorize?",
         ["AWS Profile", "Credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) "],
-        lambda x: int(x),
+        int,
     )
     aws_profile = None
     if credentials_configuration == 0:
@@ -120,7 +120,7 @@ def get_sagemaker_input():
     role_management = _ask_options(
         "Do you already have an IAM Role for executing Amazon SageMaker Training Jobs?",
         ["Provide IAM Role name", "Create new IAM role using credentials"],
-        lambda x: int(x),
+        int,
     )
     if role_management == 0:
         iam_role_name = _ask_field("Enter your IAM role name: ")
@@ -206,13 +206,10 @@ def get_sagemaker_input():
         ec2_instance_type = _ask_field(ec2_instance_query, lambda x: str(x).lower(), default="ml.p3.2xlarge")
 
     num_machines = 1
-    if (
-        distributed_type == SageMakerDistributedType.DATA_PARALLEL
-        or distributed_type == SageMakerDistributedType.MODEL_PARALLEL
-    ):
+    if distributed_type in (SageMakerDistributedType.DATA_PARALLEL, SageMakerDistributedType.MODEL_PARALLEL):
         num_machines = _ask_field(
             "How many machines do you want use? [1]: ",
-            lambda x: int(x),
+            int,
             default=1,
         )
 

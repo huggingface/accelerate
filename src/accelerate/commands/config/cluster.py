@@ -63,21 +63,21 @@ def get_cluster_input():
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
-            lambda x: int(x),
+            int,
             default=1,
         )
         if num_machines > 1:
             machine_rank = _ask_options(
                 "What is the rank of this machine?",
                 list(range(num_machines)),
-                lambda x: int(x),
+                int,
             )
             main_process_ip = _ask_field(
                 "What is the IP address of the machine that will host the main process? ",
             )
             main_process_port = _ask_field(
                 "What is the port you will use to communicate with the main process? ",
-                lambda x: int(x),
+                int,
             )
             same_network = _ask_field(
                 "Are all the machines on the same local network? Answer `no` if nodes are on the cloud and/or on different network hosts [YES/no]: ",
@@ -153,14 +153,14 @@ def get_cluster_input():
             if use_deepspeed_config:
                 deepspeed_config["deepspeed_config_file"] = _ask_field(
                     "Please enter the path to the json DeepSpeed config file: ",
-                    lambda x: str(x),
+                    str,
                     default="none",
                 )
             else:
                 deepspeed_config["zero_stage"] = _ask_options(
                     "What should be your DeepSpeed's ZeRO optimization stage?",
                     [0, 1, 2, 3],
-                    lambda x: int(x),
+                    int,
                     default=2,
                 )
 
@@ -174,7 +174,7 @@ def get_cluster_input():
                     )
                 deepspeed_config["gradient_accumulation_steps"] = _ask_field(
                     "How many gradient accumulation steps you're passing in your script? [1]: ",
-                    lambda x: int(x),
+                    int,
                     default=1,
                 )
                 use_gradient_clipping = _ask_field(
@@ -186,7 +186,7 @@ def get_cluster_input():
                 if use_gradient_clipping:
                     deepspeed_config["gradient_clipping"] = _ask_field(
                         "What is the gradient clipping value? [1.0]: ",
-                        lambda x: float(x),
+                        float,
                         default=1.0,
                     )
                 if deepspeed_config["zero_stage"] == 3:
@@ -224,7 +224,7 @@ def get_cluster_input():
                         "for more information please refer official [documentation]"
                         "(https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node). "
                         "Please specify the location of hostfile: ",
-                        lambda x: str(x),
+                        str,
                     )
 
                     is_exclusion_filter = _ask_field(
@@ -236,7 +236,7 @@ def get_cluster_input():
                     if is_exclusion_filter:
                         deepspeed_config["deepspeed_exclusion_filter"] = _ask_field(
                             "DeepSpeed exclusion filter string: ",
-                            lambda x: str(x),
+                            str,
                         )
 
                     is_inclusion_filter = _ask_field(
@@ -248,7 +248,7 @@ def get_cluster_input():
                     if is_inclusion_filter:
                         deepspeed_config["deepspeed_inclusion_filter"] = _ask_field(
                             "DeepSpeed inclusion filter string: ",
-                            lambda x: str(x),
+                            str,
                         )
 
     fsdp_config = {}
@@ -284,12 +284,12 @@ def get_cluster_input():
             if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
                 fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
                     "What is the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ...? : ",
-                    lambda x: str(x),
+                    str,
                 )
             elif fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[1]:
                 fsdp_config["fsdp_min_num_params"] = _ask_field(
                     "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
-                    lambda x: int(x),
+                    int,
                     default=1e8,
                 )
             fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
@@ -319,7 +319,7 @@ def get_cluster_input():
             prefix = "megatron_lm_"
             megatron_lm_config[prefix + "tp_degree"] = _ask_field(
                 "What is the Tensor Parallelism degree/size? [1]:",
-                lambda x: int(x),
+                int,
                 default=1,
                 error_message="Please enter an integer.",
             )
@@ -333,14 +333,14 @@ def get_cluster_input():
 
             megatron_lm_config[prefix + "pp_degree"] = _ask_field(
                 "What is the Pipeline Parallelism degree/size? [1]:",
-                lambda x: int(x),
+                int,
                 default=1,
                 error_message="Please enter an integer.",
             )
             if megatron_lm_config[prefix + "pp_degree"] > 1:
                 megatron_lm_config[prefix + "num_micro_batches"] = _ask_field(
                     "What is the number of micro-batches? [1]:",
-                    lambda x: int(x),
+                    int,
                     default=1,
                     error_message="Please enter an integer.",
                 )
@@ -362,7 +362,7 @@ def get_cluster_input():
 
             megatron_lm_config[prefix + "gradient_clipping"] = _ask_field(
                 "What is the gradient clipping value based on global L2 Norm (0 to disable)? [1.0]: ",
-                lambda x: float(x),
+                float,
                 default=1.0,
             )
 
@@ -438,14 +438,14 @@ def get_cluster_input():
             machine_type += "(s)"
         num_processes = _ask_field(
             f"How many {machine_type} should be used for distributed training? [1]:",
-            lambda x: int(x),
+            int,
             default=1,
             error_message="Please enter an integer.",
         )
     elif distributed_type in [DistributedType.FSDP, DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
         num_processes = _ask_field(
             "How many GPU(s) should be used for distributed training? [1]:",
-            lambda x: int(x),
+            int,
             default=1,
             error_message="Please enter an integer.",
         )
