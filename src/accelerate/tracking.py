@@ -500,7 +500,7 @@ class MLflowTracker(GeneralTracker):
                     f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
                     f" log_param() only accepts values no longer than {mlflow.utils.validation.MAX_PARAM_VAL_LENGTH} characters so we dropped this attribute."
                 )
-                values.pop(name)
+                del values[name]
 
         values_list = list(values.items())
 
@@ -593,7 +593,7 @@ def filter_trackers(
                             if getattr(tracker_init, "requires_logging_directory"):
                                 if logging_dir is None:
                                     raise ValueError(
-                                        f"Logging with `{log_type}` requires a `logging_dir` to be passed in."
+                                        f"Logging with `{str(log_type)}` requires a `logging_dir` to be passed in."
                                     )
                             loggers.append(log_type)
                         else:

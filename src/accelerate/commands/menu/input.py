@@ -77,7 +77,8 @@ class KeyHandler(type):
         if handler:
             cls.current_selection = char
             return handler(cls)
-        return None
+        else:
+            return None
 
 
 def register(cls):

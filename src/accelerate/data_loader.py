@@ -165,8 +165,9 @@ class BatchSamplerShard(BatchSampler):
         elif self.even_batches:
             # When we even batches we always get +1
             return length + 1
-        # Otherwise it depends on the process index.
-        return length + 1 if self.process_index < len(self.batch_sampler) % self.num_processes else length
+        else:
+            # Otherwise it depends on the process index.
+            return length + 1 if self.process_index < len(self.batch_sampler) % self.num_processes else length
 
     def __iter__(self):
         return self._iter_with_split() if self.split_batches else self._iter_with_no_split()
@@ -400,7 +401,8 @@ class DataLoaderShard(DataLoader):
     def total_dataset_length(self):
         if hasattr("total_length", self.dataset):
             return self.dataset.total_length
-        return len(self.dataset)
+        else:
+            return len(self.dataset)
 
 
 class DataLoaderDispatcher(DataLoader):
@@ -543,7 +545,8 @@ class DataLoaderDispatcher(DataLoader):
             return whole_length
         elif self._drop_last:
             return whole_length // self.state.num_processes
-        return math.ceil(whole_length / self.state.num_processes)
+        else:
+            return math.ceil(whole_length / self.state.num_processes)
 
     @property
     def total_batch_size(self):

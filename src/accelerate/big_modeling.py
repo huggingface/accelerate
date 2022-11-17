@@ -245,7 +245,7 @@ def dispatch_model(
     check_device_map(model, device_map)
 
     if main_device is None:
-        if set(device_map.values()) in ({"cpu"}, {"cpu", "disk"}):
+        if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
             main_device = "cpu"
         else:
             main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]

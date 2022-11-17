@@ -538,7 +538,8 @@ class BertTrainStep(AbstractTrainStep):
 
         if megatron_dataset_flag:
             return get_batch_megatron
-        return get_batch_transformer
+        else:
+            return get_batch_transformer
 
     def get_loss_func(self, pretraining_flag, num_labels):
         def loss_func_pretrain(loss_mask, sentence_order, output_tensor):
@@ -576,7 +577,8 @@ class BertTrainStep(AbstractTrainStep):
 
         if pretraining_flag:
             return loss_func_pretrain
-        return loss_func_finetune
+        else:
+            return loss_func_finetune
 
     def get_forward_step_func(self, pretraining_flag, bert_binary_head):
         def forward_step(data_iterator, model):
@@ -664,7 +666,8 @@ class GPTTrainStep(AbstractTrainStep):
 
         if megatron_dataset_flag:
             return get_batch_megatron
-        return get_batch_transformer
+        else:
+            return get_batch_transformer
 
     def get_loss_func(self):
         args = get_args()
@@ -800,7 +803,8 @@ class T5TrainStep(AbstractTrainStep):
 
         if megatron_dataset_flag:
             return get_batch_megatron
-        return get_batch_transformer
+        else:
+            return get_batch_transformer
 
     def get_loss_func(self):
         def loss_func(loss_mask, output_tensor):
@@ -1114,7 +1118,8 @@ class MegatronEngine(torch.nn.Module):
                 else:
                     loss_reduced[key] = torch.concat(losses_reduced_for_key)
             return loss_reduced
-        return {}
+        else:
+            return {}
 
     def forward(self, **batch_data):
         # During training, we use train_step()

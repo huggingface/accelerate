@@ -40,7 +40,7 @@ def compare_versions(library_or_version: Union[str, Version], operation: str, re
         requirement_version (`str`):
             The version to compare the library version against
     """
-    if operation not in STR_OPERATION_TO_FUNC:
+    if operation not in STR_OPERATION_TO_FUNC.keys():
         raise ValueError(f"`operation` must be one of {list(STR_OPERATION_TO_FUNC.keys())}, received {operation}")
     operation = STR_OPERATION_TO_FUNC[operation]
     if isinstance(library_or_version, str):
