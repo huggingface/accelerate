@@ -376,9 +376,9 @@ def get_cluster_input():
         main_training_function = "main"
 
     if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU]:
-        machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "") + "(s)"
+        device_type = str(distributed_type).split(".")[1].replace("MULTI_", "") + "(s)"
         num_processes = _ask_field(
-            f"How many {machine_type} should be used for distributed training? [1]:",
+            f"How many {device_type} should be used for distributed training? [1]:",
             lambda x: int(x),
             default=1,
             error_message="Please enter an integer.",
