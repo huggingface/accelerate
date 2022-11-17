@@ -416,7 +416,11 @@ def get_cluster_input():
                 _convert_mixed_precision,
             )
     else:
-        mixed_precision = "no"
+        mixed_precision = _ask_options(
+            "Do you wish to use BF16 (mixed precision)?",
+            ["no", "bf16"],
+            _convert_mixed_precision,
+        )
 
     if use_dynamo and mixed_precision == "no" and not use_cpu:
         print(
@@ -426,7 +430,6 @@ def get_cluster_input():
     downcast_bf16 = "no"
     tpu_vm = None
     tpu_env = []
-    tpu_name = None
     use_cluster = False
 
     if distributed_type == DistributedType.TPU:
