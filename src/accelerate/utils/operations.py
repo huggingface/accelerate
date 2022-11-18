@@ -468,7 +468,7 @@ def convert_to_fp32(tensor):
     return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
 
 
-def convert_outputs_to_fp32(model_forward):
+def convert_outputs_to_fp32(model_forward, *args, **kwargs):
     """
     Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
     precision will be convert back to FP32.
@@ -481,12 +481,7 @@ def convert_outputs_to_fp32(model_forward):
         The same function as `model_forward` but with converted outputs.
     """
 
-    @wraps
-    def wrapped(*args, **kwargs):
-        outputs = model_forward(*args, **kwargs)
-        return convert_to_fp32(outputs)
-
-    return wrapped
+    return convert_to_fp32(model_forward(*args, **kwargs))
 
 
 def find_device(data):

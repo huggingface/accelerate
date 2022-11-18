@@ -19,7 +19,7 @@ import os
 import sys
 import warnings
 from contextlib import contextmanager
-from functools import wraps
+from functools import partial, wraps
 from typing import List, Optional, Union
 
 import torch
@@ -933,7 +933,7 @@ class Accelerator:
                 model.forward = torch.autocast(device_type=device_type, dtype=torch.bfloat16)(model.forward)
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
-            model.forward = convert_outputs_to_fp32(model.forward)
+            model.forward = partial(convert_outputs_to_fp32, model_forward=model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         return model
