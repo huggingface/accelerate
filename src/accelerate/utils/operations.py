@@ -17,7 +17,7 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
 
-from functools import update_wrapper
+from functools import update_wrapper, wraps
 from typing import Any, Mapping
 
 import torch
@@ -468,12 +468,10 @@ def convert_to_fp32(tensor):
     return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
 
 
-class ConvertOutputsToFp32:
+def convert_outputs_to_fp32(model_forward):
     """
     Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
     precision will be convert back to FP32.
-
-    Use a class instead of a decorator because otherwise, the prepared model can no longer be pickled (issue #273).
 
     Args:
         model_forward (`Callable`):
@@ -483,15 +481,12 @@ class ConvertOutputsToFp32:
         The same function as `model_forward` but with converted outputs.
     """
 
-    def __init__(self, model_forward):
-        self.model_forward = model_forward
-        update_wrapper(self, model_forward)
+    @wraps
+    def wrapped(*args, **kwargs):
+        outputs = model_forward(*args, **kwargs)
+        return convert_to_fp32(outputs)
 
-    def __call__(self, *args, **kwargs):
-        return convert_to_fp32(self.model_forward(*args, **kwargs))
-
-
-convert_outputs_to_fp32 = ConvertOutputsToFp32
+    return wrapped
 
 
 def find_device(data):
