@@ -53,8 +53,9 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = False):
 
     if not keep_fp32_wrapper:
         forward = getattr(model, "forward")
-        if isinstance(forward, convert_outputs_to_fp32):
-            setattr(model, "forward", forward.model_forward)
+        while hasattr(forward, "__wrapped__"):
+            forward = forward.__wrapped__
+        setattr(model, "forward", forward)
     return model
 
 
