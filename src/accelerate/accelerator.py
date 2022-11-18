@@ -221,7 +221,9 @@ class Accelerator:
             )
             mixed_precision = "fp16"
 
-        if dynamo_backend is not None:
+        if dynamo_backend is None:
+            dynamo_backend = DynamoBackend(os.environ.get("DYNAMO_BACKEND", DynamoBackend.NO))
+        else:
             dynamo_backend = DynamoBackend(dynamo_backend.upper())
 
         if deepspeed_plugin is None:  # init from env variables
