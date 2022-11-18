@@ -20,7 +20,7 @@ from collections import UserDict, namedtuple
 import torch
 
 from accelerate.test_utils.training import RegressionModel
-from accelerate.utils import convert_outputs_to_fp32, find_device, patch_environment, send_to_device
+from accelerate.utils import extract_model_from_parallel, convert_outputs_to_fp32, find_device, patch_environment, send_to_device
 
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
@@ -74,10 +74,13 @@ class UtilsTester(unittest.TestCase):
         self.assertNotIn("AA", os.environ)
         self.assertNotIn("BB", os.environ)
 
-    def test_convert_to_32_lets_model_pickle(self):
+    def test_can_undo_convert_outputs(self):
         model = RegressionModel()
+        model._original_forward = model.forward
         model.forward = convert_outputs_to_fp32(model.forward)
+        model = extract_model_from_parallel(model)
         _ = pickle.dumps(model)
+
 
     def test_find_device(self):
         self.assertEqual(find_device([1, "a", torch.tensor([1, 2, 3])]), torch.device("cpu"))
