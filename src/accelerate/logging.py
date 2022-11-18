@@ -78,7 +78,8 @@ def get_logger(name: str, log_level: str = None):
     ```
     """
     if log_level is None:
-        log_level = os.environ.get("ACCELERATE_LOG_LEVEL", "WARNING")
+        log_level = os.environ.get("ACCELERATE_LOG_LEVEL", None)
     logger = logging.getLogger(name)
-    logger.setLevel(log_level)
+    if log_level is not None:
+        logger.setLevel(log_level.upper())
     return MultiProcessAdapter(logger, {})
