@@ -21,7 +21,6 @@ from ..commands.config.default import write_basic_config  # noqa: F401
 from ..state import AcceleratorState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
-from .operations import convert_outputs_to_fp32
 
 
 if is_deepspeed_available():

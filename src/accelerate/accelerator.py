@@ -19,7 +19,7 @@ import os
 import sys
 import warnings
 from contextlib import contextmanager
-from functools import partial, wraps
+from functools import wraps
 from typing import List, Optional, Union
 
 import torch

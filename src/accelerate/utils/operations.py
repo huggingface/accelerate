@@ -17,7 +17,7 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
 
-from functools import update_wrapper, wraps
+from functools import wraps
 from typing import Any, Mapping
 
 import torch
@@ -480,10 +480,12 @@ def convert_outputs_to_fp32(model_forward):
     Returns:
         The same function as `model_forward` but with converted outputs.
     """
+
     @wraps(model_forward)
     def inner(*args, **kwargs):
         outputs = model_forward(*args, **kwargs)
         return convert_to_fp32(outputs)
+
     return inner
 
 
