@@ -926,6 +926,7 @@ class Accelerator:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
+            model._original_forward = model.forward
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
