@@ -490,7 +490,7 @@ class ConvertOutputsToFp32:
 
     def __getstate__(self):
         raise pickle.PicklingError(
-            "Cannot pickle a prepared model, please unwrap the model with `Accelerator.unwrap_model(model)` before pickling it."
+            "Cannot pickle a prepared model with automatic mixed precision, please unwrap the model with `Accelerator.unwrap_model(model)` before pickling it."
         )
 
 
