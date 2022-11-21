@@ -170,7 +170,7 @@ class OffloadedWeightsLoader(Mapping):
             if not is_safetensors_available():
                 raise ImportError("These offloaded weights require the use of safetensors: `pip install safetensors`.")
 
-            if not "SAFETENSORS_FAST_GPU" in os.environ:
+            if "SAFETENSORS_FAST_GPU" not in os.environ:
                 logger.info("Enabling fast loading with safetensors by setting `SAFETENSORS_FAST_GPU` to 1.")
                 os.environ["SAFETENSORS_FAST_GPU"] = "1"
 
