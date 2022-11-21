@@ -863,7 +863,7 @@ def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
                 parser.add_argument(argument, action=action)
 
     return {
-        key: (literal_eval(value) if value == "True" or value == "False" else value)
+        key: (literal_eval(value) if value in ("True", "False") else value)
         for key, value in parser.parse_args(nargs).__dict__.items()
     }
 

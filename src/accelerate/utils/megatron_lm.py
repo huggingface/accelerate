@@ -132,7 +132,7 @@ def prepare_model(accelerator):
         custom_model_provider_func = accelerator.state.megatron_lm_plugin.custom_model_provider_function
         model = accelerator.state.megatron_lm_plugin.custom_prepare_model_function(custom_model_provider_func)
     else:
-        if args.model_type_name == "bert" or args.model_type_name == "gpt":
+        if args.model_type_name in ("bert", "gpt"):
             model_type = ModelType.encoder_or_decoder
         elif args.model_type_name == "t5":
             model_type = ModelType.encoder_and_decoder
@@ -566,7 +566,7 @@ class BertTrainStep(AbstractTrainStep):
                 #  We are doing regression
                 loss_fct = MSELoss()
                 loss = loss_fct(logits.view(-1), labels.view(-1))
-            elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+            elif self.num_labels > 1 and (labels.dtype in (torch.long, torch.int)):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, num_labels), labels.view(-1))
             else:

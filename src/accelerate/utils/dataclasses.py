@@ -228,7 +228,7 @@ class BaseEnum(enum.Enum, metaclass=EnumWithContains):
     @classmethod
     def list(cls):
         "Method to list all the possible items in `cls`"
-        return list(map(lambda item: str(item), cls))
+        return list(map(str, cls))
 
 
 class LoggerType(BaseEnum):
