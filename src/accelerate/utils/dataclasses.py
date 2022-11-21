@@ -613,7 +613,7 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
-        if is_torch_version("<=", "1.13.0"):
+        if is_torch_version("<=", "1.13.5"):
             with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config):
                 state_dict = model.state_dict()
         else:
@@ -660,7 +660,12 @@ class FullyShardedDataParallelPlugin:
             print(f"Loading model from {input_model_file}")
             state_dict = torch.load(input_model_file)
             print(f"Model loaded from {input_model_file}")
-        with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config):
+
+        if is_torch_version("<=", "1.13.5"):
+            with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config):
+                model.load_state_dict(state_dict)
+        else:
+            FSDP.set_state_dict_type(model, self.state_dict_type, self.state_dict_config)
             model.load_state_dict(state_dict)
 
     def save_optimizer(self, accelerator, optimizer, model, output_dir, optimizer_index=0, optim_input=None):
