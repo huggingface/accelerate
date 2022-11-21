@@ -477,6 +477,7 @@ class ConvertOutputsToFp32:
     Args:
         model_forward (`Callable`):
             The function which outputs we want to treat.
+    
     Returns:
         The same function as `model_forward` but with converted outputs.
     """
