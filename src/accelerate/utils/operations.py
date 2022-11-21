@@ -17,7 +17,8 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
 
-from functools import wraps
+import pickle
+from functools import update_wrapper
 from typing import Any, Mapping
 
 import torch
@@ -468,25 +469,32 @@ def convert_to_fp32(tensor):
     return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
 
 
-def convert_outputs_to_fp32(model_forward):
+class ConvertOutputsToFp32:
     """
-    Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
-    precision will be convert back to FP32.
-
     Args:
+    Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
+    precision will be convert back to FP32. Use a class instead of a decorator because otherwise, the prepared model
+    can no longer be pickled (issue #273).
         model_forward (`Callable`):
             The function which outputs we want to treat.
-
     Returns:
         The same function as `model_forward` but with converted outputs.
     """
 
-    @wraps(model_forward)
-    def inner(*args, **kwargs):
-        outputs = model_forward(*args, **kwargs)
-        return convert_to_fp32(outputs)
+    def __init__(self, model_forward):
+        self.model_forward = model_forward
+        update_wrapper(self, model_forward)
 
-    return inner
+    def __call__(self, *args, **kwargs):
+        return convert_to_fp32(self.model_forward(*args, **kwargs))
+
+    def __getstate__(self):
+        raise pickle.PicklingError(
+            "Cannot pickle a prepared model, please unwrap the model with `Accelerator.unwrap_model(model)` before pickling it."
+        )
+
+
+convert_outputs_to_fp32 = ConvertOutputsToFp32
 
 
 def find_device(data):
