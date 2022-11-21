@@ -471,14 +471,8 @@ def convert_to_fp32(tensor):
 
 class ConvertOutputsToFp32:
     """
-    Args:
     Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
-    precision will be convert back to FP32. Use a class instead of a decorator because otherwise, the prepared model
-    can no longer be pickled (issue #273).
-        model_forward (`Callable`):
-            The function which outputs we want to treat.
-    Returns:
-        The same function as `model_forward` but with converted outputs.
+    precision will be convert back to FP32.
     """
 
     def __init__(self, model_forward):
