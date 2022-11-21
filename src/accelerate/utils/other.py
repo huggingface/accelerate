@@ -21,7 +21,6 @@ from ..commands.config.default import write_basic_config  # noqa: F401
 from ..state import AcceleratorState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
-from .operations import ConvertOutputsToFp32
 
 
 if is_deepspeed_available():
@@ -53,8 +52,13 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = False):
 
     if not keep_fp32_wrapper:
         forward = getattr(model, "forward")
-        if isinstance(forward, ConvertOutputsToFp32):
-            setattr(model, "forward", forward.model_forward)
+        original_forward = model.__dict__.pop("_original_forward", None)
+        if original_forward is not None:
+            while hasattr(forward, "__wrapped__"):
+                forward = forward.__wrapped__
+                if forward == original_forward:
+                    break
+            model.forward = forward
     return model
 
 

@@ -17,6 +17,7 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
 
+import pickle
 from functools import update_wrapper
 from typing import Any, Mapping
 
@@ -473,8 +474,6 @@ class ConvertOutputsToFp32:
     Decorator to apply to a function outputing tensors (like a model forward pass) that ensures the outputs in FP16
     precision will be convert back to FP32.
 
-    Use a class instead of a decorator because otherwise, the prepared model can no longer be pickled (issue #273).
-
     Args:
         model_forward (`Callable`):
             The function which outputs we want to treat.
@@ -489,6 +488,11 @@ class ConvertOutputsToFp32:
 
     def __call__(self, *args, **kwargs):
         return convert_to_fp32(self.model_forward(*args, **kwargs))
+
+    def __getstate__(self):
+        raise pickle.PicklingError(
+            "Cannot pickle a prepared model with automatic mixed precision, please unwrap the model with `Accelerator.unwrap_model(model)` before pickling it."
+        )
 
 
 convert_outputs_to_fp32 = ConvertOutputsToFp32
