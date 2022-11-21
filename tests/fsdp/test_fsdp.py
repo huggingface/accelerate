@@ -95,7 +95,7 @@ class FSDPPluginIntegration(unittest.TestCase):
                     self.assertEqual(fsdp_plugin.backward_prefetch, BackwardPrefetch(i + 1))
 
     def test_state_dict_type(self):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType, _state_dict_type_to_config
+        from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
         for i, state_dict_type in enumerate(FSDP_STATE_DICT_TYPE):
             env = self.dist_env.copy()
@@ -103,9 +103,6 @@ class FSDPPluginIntegration(unittest.TestCase):
             with mockenv_context(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 self.assertEqual(fsdp_plugin.state_dict_type, StateDictType(i + 1))
-                self.assertEqual(
-                    type(fsdp_plugin.state_dict_config), type(_state_dict_type_to_config[StateDictType(i + 1)]())
-                )
                 if state_dict_type == "FULL_STATE_DICT":
                     self.assertTrue(fsdp_plugin.state_dict_config.offload_to_cpu)
                     self.assertTrue(fsdp_plugin.state_dict_config.rank0_only)
