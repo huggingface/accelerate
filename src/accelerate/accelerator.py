@@ -95,6 +95,12 @@ if is_torch_version(">", "1.10.0"):
 if is_tpu_available(check_device=False):
     import torch_xla.distributed.xla_multiprocessing as xmp
 
+
+if is_torch_version("<=", "1.13.5"):
+    from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
+else:
+    from torch.optim.lr_scheduler import LRScheduler as LRScheduler
+
 logger = get_logger(__name__)
 
 
@@ -725,7 +731,7 @@ class Accelerator:
                 optimizer = self.prepare_optimizer(obj, device_placement=device_placement)
                 return optimizer
         # Second pass of preparation: LR scheduler (which need the full list of optimizers)
-        elif isinstance(obj, torch.optim.lr_scheduler._LRScheduler):
+        elif isinstance(obj, LRScheduler):
             scheduler = self.prepare_scheduler(obj)
             return scheduler
         # Return the unprocessed object if previous criteria was not met
