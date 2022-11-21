@@ -31,6 +31,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE, MODEL_NAME, OPTIMIZER_NAME
+from .versions import is_torch_version
 
 
 class KwargsHandler:
@@ -526,9 +527,9 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             BackwardPrefetch,
             CPUOffload,
+            FullStateDictConfig,
             ShardingStrategy,
             StateDictType,
-            _state_dict_type_to_config,
         )
 
         if self.sharding_strategy is None:
@@ -549,12 +550,8 @@ class FullyShardedDataParallelPlugin:
             state_dict_type_policy = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
             self.state_dict_type = StateDictType(FSDP_STATE_DICT_TYPE.index(state_dict_type_policy) + 1)
 
-            if self.state_dict_type == StateDictType.FULL_STATE_DICT:
-                self.state_dict_config = _state_dict_type_to_config[self.state_dict_type](
-                    offload_to_cpu=True, rank0_only=True
-                )
-            else:
-                self.state_dict_config = _state_dict_type_to_config[self.state_dict_type]()
+            if self.state_dict_type == StateDictType.FULL_STATE_DICT and self.state_dict_config is None:
+                self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
 
     @staticmethod
     def get_module_class_from_name(module, name):
@@ -616,9 +613,14 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
-        if self.state_dict_type == StateDictType.FULL_STATE_DICT:
+        if is_torch_version("<=", "1.13.0"):
             with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config):
                 state_dict = model.state_dict()
+        else:
+            FSDP.set_state_dict_type(model, self.state_dict_type, self.state_dict_config)
+            state_dict = model.state_dict()
+
+        if self.state_dict_type == StateDictType.FULL_STATE_DICT:
             weights_name = f"{MODEL_NAME}.bin" if model_index == 0 else f"{MODEL_NAME}_{model_index}.bin"
             output_model_file = os.path.join(output_dir, weights_name)
             if accelerator.process_index == 0:
@@ -626,8 +628,6 @@ class FullyShardedDataParallelPlugin:
                 torch.save(state_dict, output_model_file)
                 print(f"Model saved to {output_model_file}")
         else:
-            with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config):
-                state_dict = model.state_dict()
             weights_name = (
                 f"{MODEL_NAME}_rank{accelerator.process_index}.bin"
                 if model_index == 0
