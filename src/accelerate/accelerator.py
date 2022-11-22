@@ -751,7 +751,7 @@ class Accelerator:
         for obj in args:
             if isinstance(obj, torch.optim.Optimizer):
                 if len(obj.param_groups) > 1:
-                    logger.warn(
+                    logger.warning(
                         "FSDP Warning: When using FSDP, several parameter groups will be conflated into "
                         "a single one due to nested module wrapping and parameter flattening."
                     )
@@ -831,7 +831,7 @@ class Accelerator:
                     "Then pass the optimizers to the prepare call in the same order as corresponding models."
                 )
             elif model_count == 1 and optimizer_present:
-                logger.warn(
+                logger.warning(
                     "FSDP Warning: When using FSDP, "
                     "it is efficient and recommended to call prepare for the model before creating the optimizer"
                 )
@@ -1713,7 +1713,7 @@ class Accelerator:
             err = "Warning! Number of found checkpoints does not match the number of registered objects:"
             err += f"\n\tFound checkpoints: {len(custom_checkpoints)}"
             err += f"\n\tRegistered objects: {len(self._custom_objects)}\nSkipping."
-            logger.warn(err)
+            logger.warning(err)
         else:
             logger.info(f"Loading in {len(custom_checkpoints)} custom states")
             for index, obj in enumerate(self._custom_objects):
