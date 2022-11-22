@@ -1085,7 +1085,7 @@ def launch_command(args):
         message += (
             "\nTo avoid this warning pass in values for each of the problematic parameters or run `accelerate config`."
         )
-        logger.warn(message)
+        logger.warning(message)
 
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
