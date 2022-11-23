@@ -99,6 +99,7 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
+from .torch_xla import install_xla
 from .launch import PrepareForLaunch, _filter_args, get_launch_prefix
 from .megatron_lm import (
     AbstractTrainStep,
