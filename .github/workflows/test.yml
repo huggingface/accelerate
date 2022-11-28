@@ -9,6 +9,7 @@ on:
       - "examples/**"
       - "setup.py"
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 env:
   HF_HOME: ~/hf_cache
@@ -17,10 +18,11 @@ env:
 
 jobs:
   run-tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         pytorch-version: [
           latest,
           minimum
