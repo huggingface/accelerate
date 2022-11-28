@@ -66,18 +66,20 @@ class AcceleratorState:
         **kwargs,
     ):
         self.__dict__ = self._shared_state
-        if parse_flag_from_env("USE_CPU"):
+        if parse_flag_from_env("ACCELERATE_USE_CPU"):
             cpu = True
         self._check_initialized(mixed_precision, cpu)
-        self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
+        self.fork_launched = parse_flag_from_env("ACCELERATE_FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
             self.backend = None
             self.deepspeed_plugin = None
             mixed_precision = (
-                parse_choice_from_env("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision.lower()
+                parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
+                if mixed_precision is None
+                else mixed_precision.lower()
             )
             dynamo_backend = (
-                parse_choice_from_env("DYNAMO_BACKEND", "no") if dynamo_backend is None else dynamo_backend
+                parse_choice_from_env("ACCELERATE_DYNAMO_BACKEND", "no") if dynamo_backend is None else dynamo_backend
             )
             self.dynamo_backend = DynamoBackend(dynamo_backend.upper())
             if not _from_accelerator:
@@ -86,11 +88,11 @@ class AcceleratorState:
                     "before using any functionality from the `accelerate` library."
                 )
             if (
-                os.environ.get("USE_SAGEMAKER", "false") == "true"
-                and os.environ.get("SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
+                os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
+                and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
                 and not cpu
             ):
-                if os.environ.get("SAGEMAKER_DISTRIBUTED_TYPE") == SageMakerDistributedType.DATA_PARALLEL:
+                if os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") == SageMakerDistributedType.DATA_PARALLEL:
                     self.distributed_type = DistributedType.MULTI_GPU
                     import smdistributed.dataparallel.torch.torch_smddp  # noqa
 
@@ -110,7 +112,7 @@ class AcceleratorState:
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
                 if mixed_precision == "bf16":
-                    if os.environ.get("DOWNCAST_BF16"):
+                    if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
                         os.environ["XLA_USE_BF16"] = str(0)
                         os.environ["XLA_DOWNCAST_BF16"] = str(1)
                         self.downcast_bfloat = True
@@ -119,7 +121,7 @@ class AcceleratorState:
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
                 self.mixed_precision = mixed_precision
-            elif os.environ.get("USE_DEEPSPEED", "false") == "true" and not cpu:
+            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (
                     is_deepspeed_available()
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
@@ -153,12 +155,12 @@ class AcceleratorState:
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
                 self.mixed_precision = mixed_precision
-                if os.environ.get("USE_FSDP", "false") == "true":
+                if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP
                     if self.mixed_precision != "no":
                         fsdp_plugin.set_mixed_precision(self.mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
-                if os.environ.get("USE_MEGATRON_LM", "false") == "true":
+                if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true":
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self.mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
@@ -207,7 +209,7 @@ class AcceleratorState:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
-                if parse_flag_from_env("USE_MPS_DEVICE") and not cpu:
+                if parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE") and not cpu:
                     if not torch.backends.mps.is_available():
                         if not torch.backends.mps.is_built():
                             raise AssertionError(

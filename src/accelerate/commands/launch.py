@@ -518,14 +518,14 @@ def simple_launcher(args):
     cmd.extend(args.training_script_args)
 
     current_env = os.environ.copy()
-    current_env["USE_CPU"] = str(args.cpu or args.use_cpu)
+    current_env["ACCELERATE_USE_CPU"] = str(args.cpu or args.use_cpu)
     if args.use_mps_device:
         warnings.warn(
             '`use_mps_device` flag is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use "--mps" instead.',
             FutureWarning,
         )
         args.mps = True
-    current_env["USE_MPS_DEVICE"] = str(args.mps)
+    current_env["ACCELERATE_USE_MPS_DEVICE"] = str(args.mps)
     if args.mps:
         current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     elif args.gpu_ids != "all" and args.gpu_ids is not None:
@@ -551,13 +551,13 @@ def simple_launcher(args):
         )
         mixed_precision = "fp16"
 
-    current_env["MIXED_PRECISION"] = str(mixed_precision)
+    current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
 
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
         raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
-    current_env["DYNAMO_BACKEND"] = dynamo_backend.value
+    current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
@@ -612,16 +612,16 @@ def multi_gpu_launcher(args):
         )
         mixed_precision = "fp16"
 
-    current_env["MIXED_PRECISION"] = str(mixed_precision)
+    current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
 
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
         raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
-    current_env["DYNAMO_BACKEND"] = dynamo_backend.value
+    current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
 
     if args.use_fsdp:
-        current_env["USE_FSDP"] = "true"
+        current_env["ACCELERATE_USE_FSDP"] = "true"
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
@@ -636,7 +636,7 @@ def multi_gpu_launcher(args):
 
     if args.use_megatron_lm:
         prefix = "MEGATRON_LM_"
-        current_env["USE_MEGATRON_LM"] = "true"
+        current_env["ACCELERATE_USE_MEGATRON_LM"] = "true"
         current_env[prefix + "TP_DEGREE"] = str(args.megatron_lm_tp_degree)
         current_env[prefix + "PP_DEGREE"] = str(args.megatron_lm_pp_degree)
         current_env[prefix + "GRADIENT_CLIPPING"] = str(args.megatron_lm_gradient_clipping)
@@ -748,8 +748,8 @@ def deepspeed_launcher(args):
         mixed_precision = "fp16"
 
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
-    current_env["MIXED_PRECISION"] = str(mixed_precision)
-    current_env["USE_DEEPSPEED"] = "true"
+    current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
+    current_env["ACCELERATE_USE_DEEPSPEED"] = "true"
     current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
     current_env["GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
     current_env["GRADIENT_CLIPPING"] = str(args.gradient_clipping).lower()
@@ -924,10 +924,10 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
     # Environment variables to be set for use during training job
     environment = {
-        "USE_SAGEMAKER": "true",
-        "MIXED_PRECISION": str(mixed_precision),
-        "DYNAMO_BACKEND": dynamo_backend.value,
-        "SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
+        "ACCELERATE_USE_SAGEMAKER": "true",
+        "ACCELERATE_MIXED_PRECISION": str(mixed_precision),
+        "ACCELERATE_DYNAMO_BACKEND": dynamo_backend.value,
+        "ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
     # configure distribution set up
     distribution = None

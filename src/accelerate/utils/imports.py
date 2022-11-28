@@ -93,7 +93,7 @@ def is_bf16_available(ignore_tpu=False):
 
 
 def is_megatron_lm_available():
-    if strtobool(os.environ.get("USE_MEGATRON_LM", "False")) == 1:
+    if strtobool(os.environ.get("ACCELERATE_USE_MEGATRON_LM", "False")) == 1:
         package_exists = importlib.util.find_spec("megatron") is not None
         if package_exists:
             megatron_version = parse(importlib_metadata.version("megatron-lm"))
