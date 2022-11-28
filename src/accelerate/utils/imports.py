@@ -130,7 +130,7 @@ def is_boto3_available():
 
 
 def is_rich_available():
-    return (importlib.util.find_spec("rich") is not None) and (not parse_flag_from_env("DISABLE_RICH"))
+    return (importlib.util.find_spec("rich") is not None) and (not parse_flag_from_env("ACCELERATE_DISABLE_RICH"))
 
 
 def is_sagemaker_available():
