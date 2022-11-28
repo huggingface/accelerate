@@ -17,10 +17,11 @@ env:
 
 jobs:
   run-tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [windows-latest, ubuntu-latest]
         pytorch-version: [
           latest,
           minimum
@@ -53,6 +54,7 @@ jobs:
         key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
     
     - name: Install the library
+      shell: bash
       run: |
         pip install --upgrade pip
         if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
