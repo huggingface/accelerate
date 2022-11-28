@@ -17,15 +17,9 @@ Utilities relating to parsing raw characters from the keyboard, based on https:/
 """
 
 
+import os
 import string
 import sys
-import os
-
-if os.name == "nt":
-    import msvcrt
-else:
-    import termios
-    import tty
 
 
 ARROW_KEY_FLAG = 1 << 8
@@ -53,8 +47,13 @@ for i in range(10):
 def get_raw_chars():
     "Gets raw characters from inputs"
     if os.name == "nt":
+        import msvcrt
+
         return msvcrt.getch()
     else:
+        import termios
+        import tty
+
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         try:
