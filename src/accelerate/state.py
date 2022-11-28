@@ -69,7 +69,7 @@ class AcceleratorState:
         if parse_flag_from_env("ACCELERATE_USE_CPU"):
             cpu = True
         self._check_initialized(mixed_precision, cpu)
-        self.fork_launched = parse_flag_from_env("ACCELERATE_FORK_LAUNCHED", 0)
+        self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not getattr(self, "initialized", False):
             self.backend = None
             self.deepspeed_plugin = None
