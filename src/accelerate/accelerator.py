@@ -795,7 +795,7 @@ class Accelerator:
                 - `torch.utils.data.DataLoader`: PyTorch Dataloader
                 - `torch.nn.Module`: PyTorch Module
                 - `torch.optim.Optimizer`: PyTorch Optimizer
-                - `torch.optim.lr_scheduler._LRScheduler`: PyTorch LR Scheduler
+                - `torch.optim.lr_scheduler.LRScheduler`: PyTorch LR Scheduler
 
             device_placement (`List[bool]`, *optional*):
                 Used to customize whether automatic device placement should be performed for each object passed. Needs
@@ -998,7 +998,7 @@ class Accelerator:
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer, DummyOptim)):
                 optimizer = obj
-            elif (isinstance(obj, (torch.optim.lr_scheduler._LRScheduler, DummyScheduler))) or (
+            elif (isinstance(obj, (LRScheduler, DummyScheduler))) or (
                 type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
             ):
                 scheduler = obj
@@ -1097,7 +1097,7 @@ class Accelerator:
                     result[i] = engine
                 elif isinstance(result[i], (torch.optim.Optimizer, DummyOptim)):
                     result[i] = optimizer
-                elif (isinstance(result[i], (torch.optim.lr_scheduler._LRScheduler, DummyScheduler))) or (
+                elif (isinstance(result[i], (LRScheduler, DummyScheduler))) or (
                     type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
                 ):
                     result[i] = scheduler
@@ -1150,7 +1150,7 @@ class Accelerator:
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
-            elif isinstance(obj, (torch.optim.lr_scheduler._LRScheduler, MegatronLMDummyScheduler)):
+            elif isinstance(obj, (LRScheduler, MegatronLMDummyScheduler)):
                 scheduler = obj
 
         if model is not None:
@@ -1260,13 +1260,13 @@ class Accelerator:
         self._optimizers.append(optimizer)
         return optimizer
 
-    def prepare_scheduler(self, scheduler: torch.optim.lr_scheduler._LRScheduler):
+    def prepare_scheduler(self, scheduler: LRScheduler):
         """
         Prepares a PyTorch Scheduler for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
 
         Args:
-            scheduler (`torch.optim.lr_scheduler._LRScheduler`):
+            scheduler (`torch.optim.lr_scheduler.LRScheduler`):
                 A vanilla PyTorch scheduler to prepare
         """
         # We try to find the optimizer associated with `scheduler`, the default is the full list.
