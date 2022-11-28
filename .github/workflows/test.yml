@@ -55,6 +55,7 @@ jobs:
         key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
     
     - name: Install the library
+      shell: bash
       run: |
         pip install --upgrade pip
         if [[ "${{ matrix.test-kind }}" = "test_prod" ]]; then
