@@ -15,6 +15,7 @@
 import importlib
 import os
 import sys
+import warnings
 from distutils.util import strtobool
 from functools import lru_cache
 
@@ -130,7 +131,15 @@ def is_boto3_available():
 
 
 def is_rich_available():
-    return (importlib.util.find_spec("rich") is not None) and (not parse_flag_from_env("ACCELERATE_DISABLE_RICH"))
+    if importlib.util.find_spec("rich") is not None:
+        if parse_flag_from_env("DISABLE_RICH"):
+            warnings.warn(
+                "The `DISABLE_RICH` flag is deprecated and will be removed in version 0.17.0 of 🤗 Accelerate. Use `ACCELERATE_DISABLE_RICH` instead.",
+                FutureWarning,
+            )
+            return not parse_flag_from_env("DISABLE_RICH")
+        return not parse_flag_from_env("ACCELERATE_DISABLE_RICH")
+    return False
 
 
 def is_sagemaker_available():
