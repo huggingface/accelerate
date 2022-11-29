@@ -20,6 +20,12 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 import torch
 
+from ..logging import get_logger
+from .imports import is_safetensors_available
+
+
+logger = get_logger(__name__)
+
 
 def offload_weight(weight, weight_name, offload_folder, index=None):
     dtype = None
@@ -131,8 +137,8 @@ class OffloadedWeightsLoader(Mapping):
         save_folder (`str` or `os.PathLike`, *optional*):
             The directory in which the weights are stored (by `offload_state_dict` for instance).
         index (`Dict`, *optional*):
-            A dictionary from weight name to their information (`dtype` and `shape`). Will default to the index saved
-            in `save_folder`.
+            A dictionary from weight name to their information (`dtype`/ `shape` or safetensors filename). Will default
+            to the index saved in `save_folder`.
     """
 
     def __init__(
@@ -140,6 +146,7 @@ class OffloadedWeightsLoader(Mapping):
         state_dict: Dict[str, torch.Tensor] = None,
         save_folder: Optional[Union[str, os.PathLike]] = None,
         index: Mapping = None,
+        device=None,
     ):
         if state_dict is None and save_folder is None:
             raise ValueError("Need either a `state_dict` or a `save_folder` containing offloaded weights.")
@@ -152,12 +159,32 @@ class OffloadedWeightsLoader(Mapping):
         self.index = {} if index is None else index
         self.all_keys = list(self.state_dict.keys())
         self.all_keys.extend([key for key in self.index if key not in self.all_keys])
+        self.device = device
 
     def __getitem__(self, key: str):
         # State dict gets priority
         if key in self.state_dict:
             return self.state_dict[key]
         weight_info = self.index[key]
+        if weight_info.get("safetensors_file") is not None:
+            if not is_safetensors_available():
+                raise ImportError("These offloaded weights require the use of safetensors: `pip install safetensors`.")
+
+            if "SAFETENSORS_FAST_GPU" not in os.environ:
+                logger.info("Enabling fast loading with safetensors by setting `SAFETENSORS_FAST_GPU` to 1.")
+                os.environ["SAFETENSORS_FAST_GPU"] = "1"
+
+            from safetensors import safe_open
+
+            device = "cpu" if self.device is None else self.device
+            with safe_open(weight_info["safetensors_file"], framework="pt", device=device) as f:
+                tensor = f.get_tensor(weight_info.get("weight_name", key))
+
+            if "dtype" in weight_info:
+                return tensor.to(getattr(torch, weight_info["dtype"]))
+            else:
+                return tensor
+
         weight_file = os.path.join(self.save_folder, f"{key}.dat")
         return load_offloaded_weight(weight_file, weight_info)
 

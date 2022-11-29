@@ -17,10 +17,9 @@ Utilities relating to parsing raw characters from the keyboard, based on https:/
 """
 
 
+import os
 import string
 import sys
-import termios
-import tty
 
 
 ARROW_KEY_FLAG = 1 << 8
@@ -36,10 +35,27 @@ KEYMAP = {
     "mod_int": 91,
     "undefined": sys.maxsize,
     "interrupt": 3,
+    "insert": 50,
+    "delete": 51,
+    "pg_up": 53,
+    "pg_down": 54,
 }
 
 KEYMAP["arrow_begin"] = KEYMAP["up"]
 KEYMAP["arrow_end"] = KEYMAP["left"]
+
+if sys.platform == "win32":
+    WIN_CH_BUFFER = []
+    WIN_KEYMAP = {
+        b"\xe0H": KEYMAP["up"] - ARROW_KEY_FLAG,
+        b"\x00H": KEYMAP["up"] - ARROW_KEY_FLAG,
+        b"\xe0P": KEYMAP["down"] - ARROW_KEY_FLAG,
+        b"\x00P": KEYMAP["down"] - ARROW_KEY_FLAG,
+        b"\xe0M": KEYMAP["right"] - ARROW_KEY_FLAG,
+        b"\x00M": KEYMAP["right"] - ARROW_KEY_FLAG,
+        b"\xe0K": KEYMAP["left"] - ARROW_KEY_FLAG,
+        b"\x00K": KEYMAP["left"] - ARROW_KEY_FLAG,
+    }
 
 for i in range(10):
     KEYMAP[str(i)] = ord(str(i))
@@ -47,13 +63,49 @@ for i in range(10):
 
 def get_raw_chars():
     "Gets raw characters from inputs"
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        ch = sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    if os.name == "nt":
+        import msvcrt
+
+        encoding = "mbcs"
+        # Flush the keyboard buffer
+        while msvcrt.kbhit():
+            msvcrt.getwch()
+        if len(WIN_CH_BUFFER) == 0:
+            # Read the keystroke
+            ch = msvcrt.getwch()
+            # If it is a prefix char, get second part
+            if ch.encode(encoding) in (b"\x00", b"\xe0"):
+                ch2 = ch + msvcrt.getwch()
+                # Translate actual Win chars to bullet char types
+                try:
+                    chx = chr(WIN_KEYMAP[ch2.encode(encoding)])
+                    WIN_CH_BUFFER.append(chr(KEYMAP["mod_int"]))
+                    WIN_CH_BUFFER.append(chx)
+                    if ord(chx) in (
+                        KEYMAP["insert"] - 1 << 9,
+                        KEYMAP["delete"] - 1 << 9,
+                        KEYMAP["pg_up"] - 1 << 9,
+                        KEYMAP["pg_down"] - 1 << 9,
+                    ):
+                        WIN_CH_BUFFER.append(chr(126))
+                    ch = chr(KEYMAP["esc"])
+                except KeyError:
+                    ch = ch2[1]
+            else:
+                pass
+        else:
+            ch = WIN_CH_BUFFER.pop(0)
+    elif os.name == "posix":
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
     return ch
 
 

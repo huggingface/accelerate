@@ -15,6 +15,8 @@
 """
 Main driver for the selection menu, based on https://github.com/bchao1/bullet
 """
+import sys
+
 from . import cursor, input
 from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, reset_cursor, writeColor
 from .keymap import KEYMAP
@@ -30,12 +32,22 @@ class BulletMenu:
         self.position = 0
         self.choices = choices
         self.prompt = prompt
+        if sys.platform == "win32":
+            self.arrow_char = "*"
+        else:
+            self.arrow_char = "➔ "
+
+    def write_choice(self, index, end: str = ""):
+        if sys.platform != "win32":
+            writeColor(self.choices[index], 32, end)
+        else:
+            forceWrite(self.choices[index], end)
 
     def print_choice(self, index: int):
         "Prints the choice at the given index"
         if index == self.position:
-            forceWrite(" ➔  ")
-            writeColor(self.choices[index], 32)
+            forceWrite(f" {self.arrow_char} ")
+            self.write_choice(index)
         else:
             forceWrite(f"    {self.choices[index]}")
         reset_cursor()
@@ -109,6 +121,5 @@ class BulletMenu:
                     for _ in range(len(self.choices) + 1):
                         move_cursor(1, "UP")
                         clear_line()
-                    forceWrite(" ➔  ")
-                    writeColor(self.choices[choice], 32, "\n")
+                    self.write_choice(choice, "\n")
                     return choice

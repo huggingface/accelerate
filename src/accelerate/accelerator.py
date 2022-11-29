@@ -119,9 +119,9 @@ class Accelerator:
             in your script multiplied by the number of processes.
         mixed_precision (`str`, *optional*):
             Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'. Will
-            default to the value in the environment variable `MIXED_PRECISION`, which will use the default value in the
-            accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
-            requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+            default to the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default
+            value in the accelerate config of the current system or the flag passed with the `accelerate.launch`
+            command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
         gradient_accumulation_steps (`int`, *optional*, default to 1):
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
             `Accelerator.accumulate`.
@@ -231,39 +231,49 @@ class Accelerator:
             dynamo_backend = DynamoBackend(dynamo_backend.upper())
 
         if deepspeed_plugin is None:  # init from env variables
-            deepspeed_plugin = DeepSpeedPlugin() if os.environ.get("USE_DEEPSPEED", "false") == "true" else None
+            deepspeed_plugin = (
+                DeepSpeedPlugin() if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" else None
+            )
         else:
             assert isinstance(
                 deepspeed_plugin, DeepSpeedPlugin
-            ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
-            os.environ["USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
+            ), "`deepspeed_plugin` must be an `accelerate.utils.DeepSpeedPlugin` object."
+            os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
         if deepspeed_plugin:
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
             if compare_versions("deepspeed", "<", "0.6.5"):
                 raise ImportError("DeepSpeed version must be >= 0.6.5. Please update DeepSpeed.")
 
-            mixed_precision = os.environ.get("MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+            mixed_precision = (
+                os.environ.get("ACCELERATE_MIXED_PRECISION", "no") if mixed_precision is None else mixed_precision
+            )
             deepspeed_plugin.set_mixed_precision(mixed_precision)
             deepspeed_plugin.set_deepspeed_weakref()
 
-        if os.environ.get("USE_FSDP", "false") == "true" or isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
+        if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
+            fsdp_plugin, FullyShardedDataParallelPlugin
+        ):
             if is_torch_version("<", "1.12.0"):
                 raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
         if fsdp_plugin is None:  # init from env variables
-            fsdp_plugin = FullyShardedDataParallelPlugin() if os.environ.get("USE_FSDP", "false") == "true" else None
+            fsdp_plugin = (
+                FullyShardedDataParallelPlugin() if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" else None
+            )
         else:
             if not isinstance(fsdp_plugin, FullyShardedDataParallelPlugin):
                 raise TypeError("`fsdp_plugin` must be a FullyShardedDataParallelPlugin object.")
-            os.environ["USE_FSDP"] = "true"  # use FSDP if plugin is provided
+            os.environ["ACCELERATE_USE_FSDP"] = "true"  # use FSDP if plugin is provided
 
         if megatron_lm_plugin is None:  # init from env variables
-            megatron_lm_plugin = MegatronLMPlugin() if os.environ.get("USE_MEGATRON_LM", "false") == "true" else None
+            megatron_lm_plugin = (
+                MegatronLMPlugin() if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" else None
+            )
         else:
             if not isinstance(megatron_lm_plugin, MegatronLMPlugin):
                 raise TypeError("`megatron_lm_plugin` must be a MegatronLMPlugin object.")
-            os.environ["USE_MEGATRON_LM"] = "true"  # use MegatronLM if plugin is provided
+            os.environ["ACCELERATE_USE_MEGATRON_LM"] = "true"  # use MegatronLM if plugin is provided
 
         if megatron_lm_plugin:
             if not is_megatron_lm_available():
@@ -275,7 +285,9 @@ class Accelerator:
         self.init_handler = None
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(handler, KwargsHandler), f"Unsupported kwargs handler passed: {handler}."
+                assert isinstance(
+                    handler, KwargsHandler
+                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
                 if isinstance(handler, DistributedDataParallelKwargs):
                     if self.ddp_handler is not None:
                         raise ValueError("You can only pass one `DistributedDataParallelKwargs` in `kwargs_handler`.")
@@ -339,7 +351,7 @@ class Accelerator:
         err = "{mode} mixed precision requires {requirement}"
         if self.state.mixed_precision == "fp16" and self.distributed_type != DistributedType.MEGATRON_LM:
             self.native_amp = True
-            if not torch.cuda.is_available() and not parse_flag_from_env("USE_MPS_DEVICE"):
+            if not torch.cuda.is_available() and not parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE"):
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
@@ -795,7 +807,7 @@ class Accelerator:
                 - `torch.utils.data.DataLoader`: PyTorch Dataloader
                 - `torch.nn.Module`: PyTorch Module
                 - `torch.optim.Optimizer`: PyTorch Optimizer
-                - `torch.optim.lr_scheduler._LRScheduler`: PyTorch LR Scheduler
+                - `torch.optim.lr_scheduler.LRScheduler`: PyTorch LR Scheduler
 
             device_placement (`List[bool]`, *optional*):
                 Used to customize whether automatic device placement should be performed for each object passed. Needs
@@ -998,7 +1010,7 @@ class Accelerator:
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer, DummyOptim)):
                 optimizer = obj
-            elif (isinstance(obj, (torch.optim.lr_scheduler._LRScheduler, DummyScheduler))) or (
+            elif (isinstance(obj, (LRScheduler, DummyScheduler))) or (
                 type(obj).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
             ):
                 scheduler = obj
@@ -1097,7 +1109,7 @@ class Accelerator:
                     result[i] = engine
                 elif isinstance(result[i], (torch.optim.Optimizer, DummyOptim)):
                     result[i] = optimizer
-                elif (isinstance(result[i], (torch.optim.lr_scheduler._LRScheduler, DummyScheduler))) or (
+                elif (isinstance(result[i], (LRScheduler, DummyScheduler))) or (
                     type(result[i]).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
                 ):
                     result[i] = scheduler
@@ -1150,7 +1162,7 @@ class Accelerator:
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
-            elif isinstance(obj, (torch.optim.lr_scheduler._LRScheduler, MegatronLMDummyScheduler)):
+            elif isinstance(obj, (LRScheduler, MegatronLMDummyScheduler)):
                 scheduler = obj
 
         if model is not None:
@@ -1260,13 +1272,13 @@ class Accelerator:
         self._optimizers.append(optimizer)
         return optimizer
 
-    def prepare_scheduler(self, scheduler: torch.optim.lr_scheduler._LRScheduler):
+    def prepare_scheduler(self, scheduler: LRScheduler):
         """
         Prepares a PyTorch Scheduler for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
 
         Args:
-            scheduler (`torch.optim.lr_scheduler._LRScheduler`):
+            scheduler (`torch.optim.lr_scheduler.LRScheduler`):
                 A vanilla PyTorch scheduler to prepare
         """
         # We try to find the optimizer associated with `scheduler`, the default is the full list.

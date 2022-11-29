@@ -163,9 +163,9 @@ def debug_launcher(function, args=(), num_processes=2):
             world_size=num_processes,
             master_addr="127.0.01",
             master_port="29500",
-            mixed_precision="no",
+            accelerate_mixed_precision="no",
             accelerate_debug_rdv_file=tmp_file.name,
-            use_cpu="yes",
+            accelerate_use_cpu="yes",
         ):
             launcher = PrepareForLaunch(function, debug=True)
             start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
