@@ -21,7 +21,6 @@ import tempfile
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn as nn
 
