@@ -147,7 +147,7 @@ class FSDPPluginIntegration(unittest.TestCase):
 
         for mp_dtype in dtypes:
             env = self.dist_env.copy()
-            env["MIXED_PRECISION"] = mp_dtype
+            env["ACCELERATE_MIXED_PRECISION"] = mp_dtype
             with mockenv_context(**env):
                 accelerator = Accelerator()
                 if mp_dtype == "fp16":
