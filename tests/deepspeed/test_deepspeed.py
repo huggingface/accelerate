@@ -119,7 +119,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
         self.ds_config_dict = dict(zero2=config_zero2, zero3=config_zero3)
 
         self.dist_env = dict(
-            USE_DEEPSPEED="true",
+            ACCELERATE_USE_DEEPSPEED="true",
             MASTER_ADDR="localhost",
             MASTER_PORT="10999",
             RANK="0",
