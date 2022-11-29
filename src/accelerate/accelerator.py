@@ -237,7 +237,7 @@ class Accelerator:
         else:
             assert isinstance(
                 deepspeed_plugin, DeepSpeedPlugin
-            ), "`deepspeed_plugin` must be a DeepSpeedPlugin object."
+            ), "`deepspeed_plugin` must be a `accelerate.utils.DeepSpeedPlugin` object."
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
         if deepspeed_plugin:
             if not is_deepspeed_available():
@@ -285,7 +285,9 @@ class Accelerator:
         self.init_handler = None
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
-                assert isinstance(handler, KwargsHandler), f"Unsupported kwargs handler passed: {handler}."
+                assert isinstance(
+                    handler, KwargsHandler
+                ), f"Unsupported kwargs handler passed: {handler}, must be one that inherits `accelerate.utils.KwargsHandler`."
                 if isinstance(handler, DistributedDataParallelKwargs):
                     if self.ddp_handler is not None:
                         raise ValueError("You can only pass one `DistributedDataParallelKwargs` in `kwargs_handler`.")
