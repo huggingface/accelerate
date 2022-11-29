@@ -25,7 +25,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .offload import offload_weight, save_offload_index
+from .offload import load_offloaded_weight, offload_weight, save_offload_index
 
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
@@ -324,9 +324,8 @@ def load_offloaded_weights(model, index, offload_folder):
 
     for param_name, metadata in index.items():
         tensor_file = os.path.join(offload_folder, f"{param_name}.dat")
-        shape = tuple(metadata["shape"])
-        weight = np.memmap(tensor_file, dtype=metadata["dtype"], mode="r", shape=shape)
-        set_module_tensor_to_device(model, param_name, "cpu", value=torch.tensor(weight))
+        weight = load_offloaded_weight(tensor_file, metadata)
+        set_module_tensor_to_device(model, param_name, "cpu", value=weight)
 
 
 def get_balanced_memory(
