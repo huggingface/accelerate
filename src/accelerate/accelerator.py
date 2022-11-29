@@ -237,7 +237,7 @@ class Accelerator:
         else:
             assert isinstance(
                 deepspeed_plugin, DeepSpeedPlugin
-            ), "`deepspeed_plugin` must be a `accelerate.utils.DeepSpeedPlugin` object."
+            ), "`deepspeed_plugin` must be an `accelerate.utils.DeepSpeedPlugin` object."
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"  # use DeepSpeed if plugin is provided
         if deepspeed_plugin:
             if not is_deepspeed_available():
