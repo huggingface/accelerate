@@ -34,7 +34,9 @@ class BulletMenu:
     def print_choice(self, index: int):
         "Prints the choice at the given index"
         if index == self.position:
-            forceWrite(" ➔  ")
+            forceWrite(" ")
+            forceWrite(u"\u2794")
+            forceWrite("  ")
             writeColor(self.choices[index], 32)
         else:
             forceWrite(f"    {self.choices[index]}")
