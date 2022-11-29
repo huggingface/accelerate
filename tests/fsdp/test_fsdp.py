@@ -58,7 +58,7 @@ class FSDPPluginIntegration(unittest.TestCase):
         super().setUp()
 
         self.dist_env = dict(
-            USE_FSDP="true",
+            ACCELERATE_USE_FSDP="true",
             MASTER_ADDR="localhost",
             MASTER_PORT="10999",
             RANK="0",
