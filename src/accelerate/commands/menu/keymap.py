@@ -39,8 +39,6 @@ KEYMAP = {
     "delete": 51,
     "pg_up": 53,
     "pg_down": 54,
-    "home": 72,
-    "end": 70,
 }
 
 KEYMAP["arrow_begin"] = KEYMAP["up"]
@@ -122,14 +120,7 @@ def get_character():
         if ord(combo) == KEYMAP["mod_int"]:
             key = get_raw_chars()
             if ord(key) >= KEYMAP["arrow_begin"] - ARROW_KEY_FLAG and ord(key) <= KEYMAP["arrow_end"] - ARROW_KEY_FLAG:
-                if ord(key) in (KEYMAP["home"] - ARROW_KEY_FLAG, KEYMAP["end"] - ARROW_KEY_FLAG):
-                    return chr(ord(key) + ARROW_KEY_FLAG)
-                else:
-                    trail = get_raw_chars()
-                    if ord(trail) == 126:
-                        return chr(ord(key) + ARROW_KEY_FLAG)
-                    else:
-                        return KEYMAP["undefined"]
+                return chr(ord(key) + ARROW_KEY_FLAG)
             else:
                 return KEYMAP["undefined"]
         else:
