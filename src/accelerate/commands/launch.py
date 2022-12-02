@@ -138,7 +138,10 @@ def launch_command_parser(subparsers=None):
         "--config_file", default=None, help="The config file to use for the default values in the launching script."
     )
     parser.add_argument(
-        "--quiet", "-q", action="store_true", help="Don't print an error message if an error return code is returned from launch."
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Don't print an error message if an error return code is returned from launch.",
     )
     # Hardware selection arguments
     hardware_args = parser.add_argument_group(
@@ -777,7 +780,9 @@ def deepspeed_launcher(args):
         process.wait()
         if process.returncode != 0:
             if not args.quiet:
-                raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+                raise subprocess.CalledProcessError(
+                    returncode=process.returncode, cmd=cmd
+                )
             else:
                 sys.exit(1)
     else:
