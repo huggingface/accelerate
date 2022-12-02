@@ -137,6 +137,9 @@ def launch_command_parser(subparsers=None):
     parser.add_argument(
         "--config_file", default=None, help="The config file to use for the default values in the launching script."
     )
+    parser.add_argument(
+        "--quiet", "-q", action="store_true", help="Don't print an error message if an error return code is returned from launch."
+    )
     # Hardware selection arguments
     hardware_args = parser.add_argument_group(
         "Hardware Selection Arguments", "Arguments for selecting the hardware to be used."
@@ -564,7 +567,10 @@ def simple_launcher(args):
     process = subprocess.Popen(cmd, env=current_env)
     process.wait()
     if process.returncode != 0:
-        raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+        if not args.quiet:
+            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+        else:
+            sys.exit(1)
 
 
 def multi_gpu_launcher(args):
@@ -770,7 +776,10 @@ def deepspeed_launcher(args):
         process = subprocess.Popen(cmd, env=current_env)
         process.wait()
         if process.returncode != 0:
-            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+            if not args.quiet:
+                raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+            else:
+                sys.exit(1)
     else:
         if is_torch_version("<", "1.9.0"):
             raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
