@@ -780,9 +780,7 @@ def deepspeed_launcher(args):
         process.wait()
         if process.returncode != 0:
             if not args.quiet:
-                raise subprocess.CalledProcessError(
-                    returncode=process.returncode, cmd=cmd
-                )
+                raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
             else:
                 sys.exit(1)
     else:
