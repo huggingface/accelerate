@@ -141,7 +141,7 @@ def launch_command_parser(subparsers=None):
         "--quiet",
         "-q",
         action="store_true",
-        help="Don't print an error message if an error return code is returned from launch.",
+        help="Silence subprocess errors from the launch stack trace and only show the relevant tracebacks. (Only applicable to DeepSpeed and single-process configurations)",
     )
     # Hardware selection arguments
     hardware_args = parser.add_argument_group(
