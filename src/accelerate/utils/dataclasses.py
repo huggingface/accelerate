@@ -65,7 +65,18 @@ class DistributedDataParallelKwargs(KwargsHandler):
 
     `static_graph` is only available in PyTorch 1.11.0 and later versions.
 
-    </Tip>"""
+    </Tip>
+
+    Example:
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import DistributedDataParallelKwargs
+
+    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    accelerator = Accelerator(kwargs_handlers=[kwargs])
+    ```
+    """
 
     dim: int = 0
     broadcast_buffers: bool = True
@@ -87,7 +98,18 @@ class GradScalerKwargs(KwargsHandler):
 
     `GradScaler` is only available in PyTorch 1.5.0 and later versions.
 
-    </Tip>"""
+    </Tip>
+
+    Example:
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import GradScalerKwargs
+
+    kwargs = GradScalerKwargs(backoff_filter=0.25)
+    accelerator = Accelerator(kwargs_handlers=[kwargs])
+    ```
+    """
 
     init_scale: float = 65536.0
     growth_factor: float = 2.0
@@ -103,6 +125,15 @@ class InitProcessGroupKwargs(KwargsHandler):
     to the documentation of this
     [method](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
     information on each argument.
+
+    ```python
+    from datetime import timedelta
+    from accelerate import Accelerator
+    from accelerate.utils import InitProcessGroupKwargs
+
+    kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=800))
+    accelerator = Accelerator(kwargs_handlers=[kwargs])
+    ```
     """
 
     init_method: Optional[str] = None
