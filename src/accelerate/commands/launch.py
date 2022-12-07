@@ -1006,7 +1006,7 @@ def launch_command(args):
         raise ValueError(
             "You can only use one of `--cpu`, `--multi_gpu`, `--mps`, `--tpu`, `--use_deepspeed`, `--use_fsdp` at a time."
         )
-    if args.multi_gpu and args.num_processes < 2:
+    if args.multi_gpu and (args.num_processes is not None) and (args.num_processes < 2):
         raise ValueError("You need to use at least 2 processes to use `--multi_gpu`.")
 
     defaults = None
