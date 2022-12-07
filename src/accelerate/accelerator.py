@@ -49,12 +49,15 @@ from .utils import (
     ProjectConfiguration,
     RNGType,
     compare_versions,
+    convert_model,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
     get_pretty_name,
+    has_transformer_engine_layers,
     is_bf16_available,
     is_deepspeed_available,
+    is_fp8_available,
     is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
@@ -78,6 +81,9 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
     )
+
+if is_fp8_available():
+    from transformer_engine.pytorch import fp8_autocast
 
 if is_megatron_lm_available():
     from .utils import (
@@ -123,10 +129,11 @@ class Accelerator:
             round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
             in your script multiplied by the number of processes.
         mixed_precision (`str`, *optional*):
-            Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'. Will
-            default to the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default
-            value in the accelerate config of the current system or the flag passed with the `accelerate.launch`
-            command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+            Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16 or 'fp8'.
+            Will default to the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the
+            default value in the accelerate config of the current system or the flag passed with the
+            `accelerate.launch` command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+            'fp8' requires the installation of transformers-engine.
         gradient_accumulation_steps (`int`, *optional*, default to 1):
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
             `Accelerator.accumulate`. If not passed, will default to the value in the environment variable
@@ -1097,6 +1104,7 @@ class Accelerator:
         >>> model = accelerator.prepare_model(model)
         ```
         """
+        print(self.mixed_precision)
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
@@ -1144,6 +1152,13 @@ class Accelerator:
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
+        elif self.mixed_precision == "fp8":
+            if not has_transformer_engine_layers(model):
+                model = convert_model(model)
+                model._converted_to_transformer_engine = True
+            model._original_forward = model.forward
+            model.forward = fp8_autocast(enabled=True)(model.forward)
+            print("autocast to FP8")
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         return model

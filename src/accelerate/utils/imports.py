@@ -56,6 +56,10 @@ def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
+def is_fp8_available():
+    return importlib.util.find_spec("transformer_engine") is not None
+
+
 @lru_cache()
 def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"

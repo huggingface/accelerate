@@ -21,6 +21,7 @@ from ..commands.config.default import write_basic_config  # noqa: F401
 from ..state import PartialState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
+from .transformer_engine import convert_model
 
 
 if is_deepspeed_available():
@@ -59,6 +60,8 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
                 if forward == original_forward:
                     break
             model.forward = forward
+    if getattr(model, "_converted_to_transformer_engine", False):
+        model = convert_model(model, to_transformer_engine=False)
     return model
 
 

@@ -96,7 +96,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
 def training_function(config, args):
     # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    accelerator = Accelerator(cpu=args.cpu, mixed_precision=None)
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])

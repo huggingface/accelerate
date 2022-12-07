@@ -28,6 +28,7 @@ from .imports import (
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_fp8_available,
     is_megatron_lm_available,
     is_mlflow_available,
     is_mps_available,
@@ -130,3 +131,4 @@ from .other import (
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
 from .torch_xla import install_xla
 from .tqdm import tqdm
+from .transformer_engine import convert_model, has_transformer_engine_layers
