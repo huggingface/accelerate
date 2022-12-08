@@ -365,7 +365,10 @@ class Accelerator:
             and self.distributed_type != DistributedType.FSDP
             and self.distributed_type != DistributedType.MEGATRON_LM
         ):
-            self.native_amp = is_bf16_available(True)
+            if self.device.type == "cpu":
+                self.native_amp = is_torch_version(">=", "1.10")
+            else:
+                self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
@@ -948,8 +951,7 @@ class Accelerator:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
-                device_type = "cuda" if torch.cuda.is_available() else "cpu"
-                model.forward = torch.autocast(device_type=device_type, dtype=torch.bfloat16)(model.forward)
+                model.forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward)
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
@@ -1847,8 +1849,7 @@ class Accelerator:
                 autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
             elif self.mixed_precision == "bf16" and is_bf16_available():
                 if self.distributed_type in [DistributedType.NO, DistributedType.MULTI_CPU, DistributedType.MULTI_GPU]:
-                    device_type = "cpu" if not torch.cuda.is_available() else "cuda"
-                    autocast_context = torch.autocast(dtype=torch.bfloat16, device_type=device_type)
+                    autocast_context = torch.autocast(dtype=torch.bfloat16, device_type=self.device.type)
             else:
                 autocast_context = torch.cuda.amp.autocast()
 
