@@ -39,6 +39,7 @@ from .utils import (
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
+    FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -83,7 +84,9 @@ if is_deepspeed_available():
     )
 
 if is_fp8_available():
+    import transformer_engine.common.recipe as fp8_recipe
     from transformer_engine.pytorch import fp8_autocast
+
 
 if is_megatron_lm_available():
     from .utils import (
@@ -305,6 +308,7 @@ class Accelerator:
         self.ddp_handler = None
         self.scaler_handler = None
         self.init_handler = None
+        self.fp8_recipe_handler = None
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
                 assert isinstance(
@@ -325,6 +329,11 @@ class Accelerator:
                         raise ValueError("You can only pass one `InitProcessGroupKwargs` in `kwargs_handler`.")
                     else:
                         self.init_handler = handler
+                elif isinstance(handler, FP8RecipeKwargs):
+                    if self.fp8_recipe_handler is not None:
+                        raise ValueError("You can only pass one `FP8RecipeKwargs` in `kwargs_handler`.")
+                    else:
+                        self.fp8_recipe_handler = handler
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -1156,8 +1165,12 @@ class Accelerator:
                 convert_model(model)
                 model._converted_to_transformer_engine = True
             model._original_forward = model.forward
-            model.forward = fp8_autocast(enabled=True)(model.forward)
-            print("autocast to FP8")
+
+            kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
+            if "fp8_format" in kwargs:
+                kwargs["fp8_format"] = getattr(fp8_recipe.Format, kwargs["fp8_format"])
+            recipe = fp8_recipe.DelayedScaling(**kwargs)
+            model.forward = fp8_autocast(enabled=True, recipe=recipe)(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         return model
