@@ -36,8 +36,8 @@ def convert_model(model, to_transformer_engine=True):
             setattr(model, name, te_module)
         elif isinstance(module, nn.LayerNorm) and to_transformer_engine:
             te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps)
-            te_module.weight.data = module.weight.data.clone()
-            te_module.bias.data = module.bias.data.clone()
+            te_module.layer_norm_weight.data = module.weight.data.clone()
+            te_module.layer_norm_bias.data = module.bias.data.clone()
 
             setattr(model, name, te_module)
         elif isinstance(module, te.Linear) and not to_transformer_engine:
@@ -50,8 +50,8 @@ def convert_model(model, to_transformer_engine=True):
             setattr(model, name, new_module)
         elif isinstance(module, te.LayerNorm) and not to_transformer_engine:
             new_module = nn.LayerNorm(module.normalized_shape[0], eps=module.eps)
-            new_module.weight.data = module.weight.data.clone()
-            new_module.bias.data = module.bias.data.clone()
+            new_module.weight.data = module.layer_norm_weight.data.clone()
+            new_module.bias.data = module.layer_norm_bias.data.clone()
 
             setattr(model, name, new_module)
         else:
