@@ -939,9 +939,9 @@ class Accelerator:
                     backward_prefetch=fsdp_plugin.backward_prefetch,
                     mixed_precision=fsdp_plugin.mixed_precision_policy,
                     ignored_modules=fsdp_plugin.ignored_modules,
+                    device_id=self.device,
+                    limit_all_gathers=fsdp_plugin.limit_all_gathers,
                 )
-                if not fsdp_plugin.cpu_offload.offload_params:
-                    model.to(self.device)
             self._models[-1] = model
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
