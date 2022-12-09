@@ -349,7 +349,11 @@ class Accelerator:
         self.scaler = None
         self.native_amp = False
         err = "{mode} mixed precision requires {requirement}"
-        if self.state.mixed_precision == "fp16" and self.distributed_type != DistributedType.MEGATRON_LM:
+        if (
+            self.state.mixed_precision == "fp16"
+            and self.device.type != "cpu"
+            and self.distributed_type != DistributedType.MEGATRON_LM
+        ):
             self.native_amp = True
             if not torch.cuda.is_available() and not parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE"):
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
@@ -1847,7 +1851,7 @@ class Accelerator:
         if self.native_amp:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
-            elif self.mixed_precision == "bf16" and is_bf16_available():
+            elif self.mixed_precision == "bf16":
                 if self.distributed_type in [DistributedType.NO, DistributedType.MULTI_CPU, DistributedType.MULTI_GPU]:
                     autocast_context = torch.autocast(dtype=torch.bfloat16, device_type=self.device.type)
             else:
