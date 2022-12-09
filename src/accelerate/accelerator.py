@@ -1154,7 +1154,7 @@ class Accelerator:
             model.forward = convert_outputs_to_fp32(model.forward)
         elif self.mixed_precision == "fp8":
             if not has_transformer_engine_layers(model):
-                model = convert_model(model)
+                convert_model(model)
                 model._converted_to_transformer_engine = True
             model._original_forward = model.forward
             model.forward = fp8_autocast(enabled=True)(model.forward)
