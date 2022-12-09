@@ -1104,7 +1104,6 @@ class Accelerator:
         >>> model = accelerator.prepare_model(model)
         ```
         """
-        print(self.mixed_precision)
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
