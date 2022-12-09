@@ -554,6 +554,16 @@ class FullyShardedDataParallelPlugin:
         },
     )
 
+    limit_all_gathers: bool = field(
+        default=False,
+        metadata={
+            "help": "If False, then FSDP allows the CPU thread to schedule all-gathers "
+            "without any extra synchronization. If True, then FSDP explicitly synchronizes the CPU thread to prevent "
+            "too many in-flight all-gathers. This bool only affects the sharded strategies that schedule all-gathers. "
+            "Enabling this can help lower the number of CUDA malloc retries."
+        },
+    )
+
     def __post_init__(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             BackwardPrefetch,
