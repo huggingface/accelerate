@@ -939,7 +939,7 @@ class Accelerator:
                     backward_prefetch=fsdp_plugin.backward_prefetch,
                     mixed_precision=fsdp_plugin.mixed_precision_policy,
                     ignored_modules=fsdp_plugin.ignored_modules,
-                    device_id=self.device if not fsdp_plugin.cpu_offload.offload_params else None,
+                    device_id=self.device,
                     limit_all_gathers=fsdp_plugin.limit_all_gathers,
                 )
             self._models[-1] = model
