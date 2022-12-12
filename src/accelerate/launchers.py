@@ -15,7 +15,6 @@
 import os
 import sys
 import tempfile
-import warnings
 
 import torch
 
@@ -23,7 +22,7 @@ from .state import AcceleratorState
 from .utils import PrecisionType, PrepareForLaunch, patch_environment
 
 
-def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mixed_precision="no", use_port="29500"):
+def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no", use_port="29500"):
     """
     Launches a training function, using several processes if it's possible in the current environment (TPU with
     multiple cores for instance).
@@ -103,13 +102,6 @@ def notebook_launcher(function, args=(), num_processes=None, use_fp16=False, mix
                     "using `torch.cuda` in any cell. Restart your notebook and make sure no cells use any CUDA "
                     "function."
                 )
-
-            if use_fp16:
-                warnings.warn(
-                    "`fp16=True` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `mixed_precision='fp16'` instead.",
-                    FutureWarning,
-                )
-                mixed_precision = "fp16"
 
             # torch.distributed will expect a few environment variable to be here. We set the ones common to each
             # process here (the other ones will be set be the launcher).

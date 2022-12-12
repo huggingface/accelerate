@@ -196,7 +196,6 @@ class Accelerator:
         self,
         device_placement: bool = True,
         split_batches: bool = False,
-        fp16: bool = None,
         mixed_precision: Union[PrecisionType, str] = None,
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
@@ -219,13 +218,6 @@ class Accelerator:
                 raise ValueError(
                     f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
                 )
-
-        if fp16:
-            warnings.warn(
-                "`fp16=True` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `mixed_precision='fp16'` instead.",
-                FutureWarning,
-            )
-            mixed_precision = "fp16"
 
         if dynamo_backend is not None:
             dynamo_backend = DynamoBackend(dynamo_backend.upper())

@@ -20,7 +20,6 @@ import logging
 import os
 import subprocess
 import sys
-import warnings
 from ast import literal_eval
 from pathlib import Path
 from typing import Dict, List
@@ -64,7 +63,6 @@ options_to_group = {
     "--multi-gpu": "Distributed GPUs",
     "--tpu": "TPU",
     "--mps": "MPS",
-    "--use_mps_device": "MPS",
     "--use_deepspeed": "DeepSpeed Arguments",
     "--use_fsdp": "FSDP Arguments",
     "--use_megatron_lm": "Megatron-LM Arguments",
@@ -165,12 +163,6 @@ def launch_command_parser(subparsers=None):
     hardware_args.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
-    hardware_args.add_argument(
-        "--use_mps_device",
-        default=False,
-        action="store_true",
-        help="This argument is deprecated, use `--mps` instead.",
-    )
 
     # Resource selection arguments
     resource_args = parser.add_argument_group(
@@ -190,12 +182,6 @@ def launch_command_parser(subparsers=None):
         help="Whether or not to use mixed precision training. "
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
-    )
-    resource_args.add_argument(
-        "--fp16",
-        default=False,
-        action="store_true",
-        help="This argument is deprecated, use `--mixed_precision fp16` instead.",
     )
     resource_args.add_argument(
         "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
@@ -525,12 +511,6 @@ def simple_launcher(args):
 
     current_env = os.environ.copy()
     current_env["ACCELERATE_USE_CPU"] = str(args.cpu or args.use_cpu)
-    if args.use_mps_device:
-        warnings.warn(
-            '`use_mps_device` flag is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use "--mps" instead.',
-            FutureWarning,
-        )
-        args.mps = True
     current_env["ACCELERATE_USE_MPS_DEVICE"] = str(args.mps)
     if args.mps:
         current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
@@ -549,13 +529,6 @@ def simple_launcher(args):
         raise ValueError(
             f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
         )
-
-    if args.fp16:
-        warnings.warn(
-            "`fp16` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `mixed_precision fp16` instead.",
-            FutureWarning,
-        )
-        mixed_precision = "fp16"
 
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
 
@@ -613,13 +586,6 @@ def multi_gpu_launcher(args):
         mixed_precision = PrecisionType(mixed_precision)
     except ValueError:
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}.")
-
-    if args.fp16:
-        warnings.warn(
-            "`fp16` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `mixed_precision fp16` instead.",
-            FutureWarning,
-        )
-        mixed_precision = "fp16"
 
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
 
@@ -748,13 +714,6 @@ def deepspeed_launcher(args):
         raise ValueError(
             f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
         )
-
-    if args.fp16:
-        warnings.warn(
-            '--fp16 flag is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use "--mixed_precision fp16" instead.',
-            FutureWarning,
-        )
-        mixed_precision = "fp16"
 
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
@@ -925,10 +884,6 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
             f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
         )
 
-    if args.fp16:
-        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', FutureWarning)
-        mixed_precision = "fp16"
-
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
@@ -1054,15 +1009,12 @@ def launch_command(args):
 
                 # Those args are handled separately
                 if (
-                    name not in ["compute_environment", "fp16", "mixed_precision", "distributed_type"]
+                    name not in ["compute_environment", "mixed_precision", "distributed_type"]
                     and getattr(args, name, None) is None
                 ):
                     setattr(args, name, attr)
         if not args.mixed_precision:
-            if args.fp16:
-                args.mixed_precision = "fp16"
-            else:
-                args.mixed_precision = defaults.mixed_precision
+            args.mixed_precision = defaults.mixed_precision
         if args.dynamo_backend is None:
             warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
             args.dynamo_backend = "no"
