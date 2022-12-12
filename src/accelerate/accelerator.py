@@ -222,7 +222,7 @@ class Accelerator:
         if project_config is not None:
             self.project_configuration = project_config
         else:
-            self.project_configuration = ProjectConfiguration()
+            self.project_configuration = ProjectConfiguration(project_dir=project_dir)
 
         if logging_dir is not None:
             warnings.warn(
