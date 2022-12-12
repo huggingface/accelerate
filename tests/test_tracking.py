@@ -49,7 +49,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
     def test_init_trackers(self):
         project_name = "test_project_with_config"
         with tempfile.TemporaryDirectory() as dirpath:
-            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
+            accelerator = Accelerator(log_with="tensorboard", project_dir=dirpath)
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
             accelerator.init_trackers(project_name, config)
             accelerator.end_training()
@@ -60,7 +60,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
     def test_log(self):
         project_name = "test_project_with_log"
         with tempfile.TemporaryDirectory() as dirpath:
-            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
+            accelerator = Accelerator(log_with="tensorboard", project_dir=dirpath)
             accelerator.init_trackers(project_name)
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
             accelerator.log(values, step=0)
@@ -70,11 +70,11 @@ class TensorBoardTrackingTest(unittest.TestCase):
             log = list(filter(lambda x: x.is_file(), Path(f"{dirpath}/{project_name}").iterdir()))[0]
             self.assertNotEqual(str(log), "")
 
-    def test_logging_dir(self):
-        with self.assertRaisesRegex(ValueError, "Logging with `tensorboard` requires a `logging_dir`"):
+    def test_project_dir(self):
+        with self.assertRaisesRegex(ValueError, "Logging with `tensorboard` requires a `project_dir`"):
             _ = Accelerator(log_with="tensorboard")
         with tempfile.TemporaryDirectory() as dirpath:
-            _ = Accelerator(log_with="tensorboard", logging_dir=dirpath)
+            _ = Accelerator(log_with="tensorboard", project_dir=dirpath)
 
 
 @require_wandb

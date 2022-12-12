@@ -82,14 +82,16 @@ class CheckpointTest(unittest.TestCase):
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator(save_total_limit=1, save_dir=os.path.join(tmpdir, "checkpoints"))
+            accelerator = Accelerator(save_total_limit=1, project_dir=tmpdir)
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
             # Save initial
+            print("Saving first time")
             accelerator.save_state()
 
             # Save second state
+            print("Saving second time")
             accelerator.save_state()
             self.assertEqual(len(os.listdir(accelerator.save_dir)), 1)
 
@@ -100,7 +102,7 @@ class CheckpointTest(unittest.TestCase):
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator(save_dir=os.path.join(tmpdir, "checkpoints"))
+            accelerator = Accelerator(save_dir=tmpdir)
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
@@ -117,7 +119,8 @@ class CheckpointTest(unittest.TestCase):
             model = DummyModel()
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
-            accelerator = Accelerator()
+            accelerator = Accelerator(project_dir=tmpdir)
+            accelerator.save_iteration = 1
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
@@ -133,7 +136,7 @@ class CheckpointTest(unittest.TestCase):
             accelerator.save_state()
 
             # Load everything back in and make sure all states work
-            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_1"))
             test_rands += train(1, model, train_dataloader, optimizer, accelerator)
             (a3, b3) = model.a.item(), model.b.item()
             opt_state3 = optimizer.state_dict()
@@ -164,7 +167,7 @@ class CheckpointTest(unittest.TestCase):
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.99)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator(save_dir=os.path.join(tmpdir, "checkpoints"))
+            accelerator = Accelerator(project_dir=tmpdir)
             model, optimizer, train_dataloader, valid_dataloader, scheduler = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader, scheduler
             )

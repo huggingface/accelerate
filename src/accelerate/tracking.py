@@ -13,11 +13,12 @@
 # limitations under the License.
 
 # Expectation:
-# Provide a project dir name, then each type of logger gets stored in project/{`logging_dir`}
+# Provide a project dir name, then each type of logger gets stored in project/{`project_dir`}
 
 import json
 import os
 import time
+import warnings
 from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Any, Dict, List, Optional, Union
 
@@ -83,7 +84,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
         pass
 
     @abstractproperty
-    def requires_logging_directory(self):
+    def requires_project_directory(self):
         """
         Whether the logger requires a directory to store their logs. Should either return `True` or `False`.
         """
@@ -138,20 +139,26 @@ class TensorBoardTracker(GeneralTracker):
     Args:
         run_name (`str`):
             The name of the experiment run
-        logging_dir (`str`, `os.PathLike`):
+        project_dir (`str`, `os.PathLike`):
             Location for TensorBoard logs to be stored.
         kwargs:
             Additional key word arguments passed along to the `tensorboard.SummaryWriter.__init__` method.
     """
 
     name = "tensorboard"
-    requires_logging_directory = True
+    requires_project_directory = True
 
-    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]], **kwargs):
+    def __init__(self, run_name: str, project_dir: Optional[Union[str, os.PathLike]] = None, **kwargs):
+        if "logging_dir" in kwargs.keys():
+            project_dir = kwargs.pop("logging_dir")
+            warnings.warn(
+                f"`logging_dir='{project_dir}'` is deprecated and will be removed in version 0.17.0 of 🤗 Accelerate. Please use `project_dir={project_dir}` instead.",
+                FutureWarning,
+            )
         self.run_name = run_name
-        self.logging_dir = os.path.join(logging_dir, run_name)
-        self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
-        logger.debug(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
+        self.project_dir = os.path.join(project_dir, run_name)
+        self.writer = tensorboard.SummaryWriter(self.project_dir, **kwargs)
+        logger.debug(f"Initialized TensorBoard project {self.run_name} logging to {self.project_dir}")
         logger.debug(
             "Make sure to log any initial configurations with `self.store_init_configuration` before training!"
         )
@@ -173,7 +180,7 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.add_hparams(values, metric_dict={})
         self.writer.flush()
         project_run_name = time.time()
-        dir_name = os.path.join(self.logging_dir, str(project_run_name))
+        dir_name = os.path.join(self.project_dir, str(project_run_name))
         os.makedirs(dir_name, exist_ok=True)
         with open(os.path.join(dir_name, "hparams.yml"), "w") as outfile:
             try:
@@ -227,7 +234,7 @@ class WandBTracker(GeneralTracker):
     """
 
     name = "wandb"
-    requires_logging_directory = False
+    requires_project_directory = False
 
     def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
@@ -291,7 +298,7 @@ class CometMLTracker(GeneralTracker):
     """
 
     name = "comet_ml"
-    requires_logging_directory = False
+    requires_project_directory = False
 
     def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
@@ -362,11 +369,17 @@ class AimTracker(GeneralTracker):
     """
 
     name = "aim"
-    requires_logging_directory = True
+    requires_project_directory = True
 
-    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
+    def __init__(self, run_name: str, project_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
+        if "logging_dir" in kwargs.keys():
+            project_dir = kwargs.pop("logging_dir")
+            warnings.warn(
+                f"`logging_dir='{project_dir}'` is deprecated and will be removed in version 0.17.0 of 🤗 Accelerate. Please use `project_dir={project_dir}` instead.",
+                FutureWarning,
+            )
         self.run_name = run_name
-        self.writer = Run(repo=logging_dir, **kwargs)
+        self.writer = Run(repo=project_dir, **kwargs)
         self.writer.name = self.run_name
         logger.debug(f"Initialized Aim project {self.run_name}")
         logger.debug(
@@ -417,7 +430,7 @@ class MLflowTracker(GeneralTracker):
     Args:
         experiment_name (`str`, *optional*):
             Name of the experiment. Environment variable MLFLOW_EXPERIMENT_NAME has priority over this argument.
-        logging_dir (`str` or `os.PathLike`, defaults to `"."`):
+        project_dir (`str` or `os.PathLike`, defaults to `"."`):
             Location for mlflow logs to be stored.
         run_id (`str`, *optional*):
             If specified, get the run with the specified UUID and log parameters and metrics under that run. The run’s
@@ -439,19 +452,25 @@ class MLflowTracker(GeneralTracker):
     """
 
     name = "mlflow"
-    requires_logging_directory = True
+    requires_project_directory = True
 
     def __init__(
         self,
         experiment_name: str = None,
-        logging_dir: Optional[Union[str, os.PathLike]] = ".",
+        project_dir: Optional[Union[str, os.PathLike]] = ".",
         run_id: Optional[str] = None,
         tags: Optional[Union[Dict[str, Any], str]] = None,
         nested_run: Optional[bool] = False,
         run_name: Optional[str] = None,
         description: Optional[str] = None,
+        logging_dir: Optional[Union[str, os.PathLike]] = None,
     ):
-
+        if logging_dir is not None:
+            project_dir = logging_dir
+            warnings.warn(
+                f"`logging_dir='{project_dir}'` is deprecated and will be removed in version 0.17.0 of 🤗 Accelerate. Please use `project_dir={project_dir}` instead.",
+                FutureWarning,
+            )
         experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", experiment_name)
         run_id = os.getenv("MLFLOW_RUN_ID", run_id)
         tags = os.getenv("MLFLOW_TAGS", tags)
@@ -462,7 +481,7 @@ class MLflowTracker(GeneralTracker):
 
         experiment_id = mlflow.create_experiment(
             name=experiment_name,
-            artifact_location=logging_dir,
+            artifact_location=project_dir,
             tags=tags,
         )
 
@@ -550,14 +569,14 @@ LOGGER_TYPE_TO_CLASS = {
 
 
 def filter_trackers(
-    log_with: List[Union[str, LoggerType, GeneralTracker]], logging_dir: Union[str, os.PathLike] = None
+    log_with: List[Union[str, LoggerType, GeneralTracker]], project_dir: Union[str, os.PathLike] = None
 ):
     """
     Takes in a list of potential tracker types and checks that:
         - The tracker wanted is available in that environment
         - Filters out repeats of tracker types
         - If `all` is in `log_with`, will return all trackers in the environment
-        - If a tracker requires a `logging_dir`, ensures that `logging_dir` is not `None`
+        - If a tracker requires a `project_dir`, ensures that `project_dir` is not `None`
 
     Args:
         log_with (list of `str`, [`~utils.LoggerType`] or [`~tracking.GeneralTracker`], *optional*):
@@ -570,7 +589,7 @@ def filter_trackers(
             - `"mlflow"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
-        logging_dir (`str`, `os.PathLike`, *optional*):
+        project_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
     """
     loggers = []
@@ -590,10 +609,10 @@ def filter_trackers(
                     if log_type not in loggers:
                         if log_type in get_available_trackers():
                             tracker_init = LOGGER_TYPE_TO_CLASS[str(log_type)]
-                            if getattr(tracker_init, "requires_logging_directory"):
-                                if logging_dir is None:
+                            if getattr(tracker_init, "requires_project_directory"):
+                                if project_dir is None:
                                     raise ValueError(
-                                        f"Logging with `{log_type}` requires a `logging_dir` to be passed in."
+                                        f"Logging with `{log_type}` requires a `project_dir` to be passed in."
                                     )
                             loggers.append(log_type)
                         else:
