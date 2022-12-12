@@ -64,7 +64,6 @@ options_to_group = {
     "--multi-gpu": "Distributed GPUs",
     "--tpu": "TPU",
     "--mps": "MPS",
-    "--use_mps_device": "MPS",
     "--use_deepspeed": "DeepSpeed Arguments",
     "--use_fsdp": "FSDP Arguments",
     "--use_megatron_lm": "Megatron-LM Arguments",
@@ -164,12 +163,6 @@ def launch_command_parser(subparsers=None):
     )
     hardware_args.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
-    )
-    hardware_args.add_argument(
-        "--use_mps_device",
-        default=False,
-        action="store_true",
-        help="This argument is deprecated, use `--mps` instead.",
     )
 
     # Resource selection arguments
@@ -525,12 +518,6 @@ def simple_launcher(args):
 
     current_env = os.environ.copy()
     current_env["ACCELERATE_USE_CPU"] = str(args.cpu or args.use_cpu)
-    if args.use_mps_device:
-        warnings.warn(
-            '`use_mps_device` flag is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use "--mps" instead.',
-            FutureWarning,
-        )
-        args.mps = True
     current_env["ACCELERATE_USE_MPS_DEVICE"] = str(args.mps)
     if args.mps:
         current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"

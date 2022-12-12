@@ -161,7 +161,7 @@ class FeatureExamplesTests(TempDirTestCase):
     def test_load_states_by_epoch(self):
         testargs = f"""
         examples/by_feature/checkpointing.py
-        --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_0")}
+        --resume_from_checkpoint {os.path.join(self.tmpdir, "checkpoints", "checkpoint_0")}
         """.split()
         output = run_command(self._launch_args + testargs, return_stdout=True)
         self.assertNotIn("epoch 0:", output)
