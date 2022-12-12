@@ -84,7 +84,7 @@ if is_deepspeed_available():
     )
 
 if is_fp8_available():
-    import transformer_engine.common.recipe as fp8_recipe
+    import transformer_engine.common.recipe as te_recipe
     from transformer_engine.pytorch import fp8_autocast
 
 
@@ -1168,14 +1168,16 @@ class Accelerator:
 
             kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
             if "fp8_format" in kwargs:
-                kwargs["fp8_format"] = getattr(fp8_recipe.Format, kwargs["fp8_format"])
-            recipe = fp8_recipe.DelayedScaling(**kwargs)
+                kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
+            fp8_recipe = te_recipe.DelayedScaling(**kwargs)
             fp8_enabled = torch.cuda.get_device_capability()[0] >= 9
             if not fp8_enabled:
                 logger.warn(
-                    f"The current device has compute capability of {torch.cuda.get_device_capability()} which is insufficient for FP8 mixed precision training (requires a GPU Hopper or higher, compute capability of 9 or higher). Will using FP16 instead."
+                    f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
+                    "insufficient for FP8 mixed precision training (requires a GPU Hopper or higher, compute "
+                    "capability of 9 or higher). Will using FP16 instead."
                 )
-            model.forward = fp8_autocast(enabled=fp8_enabled, recipe=recipe)(model.forward)
+            model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         return model
