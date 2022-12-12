@@ -84,7 +84,7 @@ accelerator.end_training()
 ```
 
 If a tracker requires a directory to save data to such as `TensorBoard` then a `logging_dir` or `project_dir` can be passed in. `project_dir` is useful 
-for if there are other further configurations such as those which can be combined with the [`~utils.SaveConfiguration`] dataclass.
+for if there are other further configurations such as those which can be combined with the [`~utils.ProjectConfiguration`] dataclass.
 
 ```python
 accelerator = Accelerator(log_with="tensorboard", logging_dir=".")
