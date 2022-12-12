@@ -1632,8 +1632,10 @@ class Accelerator:
                 f"`output_dir='{output_dir}'` is deprecated and will be removed in version 0.17.0 of 🤗 Accelerate. Please use `Accelerator(project_dir=output_dir)` instead.",
                 FutureWarning,
             )
+            old_version = True
         else:
             output_dir = os.path.join(self.project_dir, "checkpoints")
+            old_version = False
         os.makedirs(output_dir, exist_ok=True)
         folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
         if self.save_total_limit is not None and (len(folders) + 1 > self.save_total_limit):
@@ -1643,13 +1645,14 @@ class Accelerator:
             )
             for folder in folders[: len(folders) + 1 - self.save_total_limit]:
                 shutil.rmtree(folder)
-        output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
-        if os.path.exists(output_dir):
-            raise ValueError(
-                f"Checkpoint directory {output_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
-            )
-        os.makedirs(output_dir, exist_ok=True)
-        logger.info(f"Saving current state to {output_dir}")
+        if not old_version:
+            save_location = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
+            if os.path.exists(output_dir):
+                raise ValueError(
+                    f"Checkpoint directory {output_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
+                )
+        os.makedirs(save_location, exist_ok=True)
+        logger.info(f"Saving current state to {save_location}")
 
         # Save the models taking care of FSDP and DeepSpeed nuances
         weights = []
