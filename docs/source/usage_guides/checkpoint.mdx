@@ -14,8 +14,11 @@ specific language governing permissions and limitations under the License.
 
 When training a PyTorch model with 🤗 Accelerate, you may often want to save and continue a state of training. Doing so requires
 saving and loading the model, optimizer, RNG generators, and the GradScaler. Inside 🤗 Accelerate are two convenience functions to achieve this quickly:
-- Use [`~Accelerator.save_state`] for saving everything mentioned above to a folder location passed to [`~Accelerator.init`]
+- Use [`~Accelerator.save_state`] for saving everything mentioned above to a folder location
 - Use [`~Accelerator.load_state`] for loading everything stored from an earlier `save_state`
+
+To further customize where and how states saved through [`~Accelerator.save_state`] the [`~utils.SaveConfiguration`] class can be used. For example 
+if `automatic_checkpoint_naming` is enabled each saved checkpoint will be located then at `Accelerator.project_dir/checkpoints/checkpoint_{checkpoint_number}`.
 
 It should be noted that the expectation is that those states come from the same training script, they should not be from two separate scripts.
 
