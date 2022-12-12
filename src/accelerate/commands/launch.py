@@ -20,7 +20,6 @@ import logging
 import os
 import subprocess
 import sys
-import warnings
 from ast import literal_eval
 from pathlib import Path
 from typing import Dict, List
@@ -531,13 +530,6 @@ def simple_launcher(args):
             f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
         )
 
-    if args.fp16:
-        warnings.warn(
-            "`fp16` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `mixed_precision fp16` instead.",
-            FutureWarning,
-        )
-        mixed_precision = "fp16"
-
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
 
     try:
@@ -594,13 +586,6 @@ def multi_gpu_launcher(args):
         mixed_precision = PrecisionType(mixed_precision)
     except ValueError:
         raise ValueError(f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}.")
-
-    if args.fp16:
-        warnings.warn(
-            "`fp16` is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use `mixed_precision fp16` instead.",
-            FutureWarning,
-        )
-        mixed_precision = "fp16"
 
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
 
@@ -1024,15 +1009,12 @@ def launch_command(args):
 
                 # Those args are handled separately
                 if (
-                    name not in ["compute_environment", "fp16", "mixed_precision", "distributed_type"]
+                    name not in ["compute_environment", "mixed_precision", "distributed_type"]
                     and getattr(args, name, None) is None
                 ):
                     setattr(args, name, attr)
         if not args.mixed_precision:
-            if args.fp16:
-                args.mixed_precision = "fp16"
-            else:
-                args.mixed_precision = defaults.mixed_precision
+            args.mixed_precision = defaults.mixed_precision
         if args.dynamo_backend is None:
             warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
             args.dynamo_backend = "no"

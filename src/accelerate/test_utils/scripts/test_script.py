@@ -275,29 +275,6 @@ def training_check():
         assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
-        # TEST that previous fp16 flag still works
-        print("Legacy FP16 training check.")
-        AcceleratorState._reset_state()
-        accelerator = Accelerator(fp16=True)
-        train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
-        model = RegressionModel()
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-
-        train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
-        set_seed(42)
-        generator.manual_seed(42)
-        for _ in range(3):
-            for batch in train_dl:
-                model.zero_grad()
-                output = model(batch["x"])
-                loss = torch.nn.functional.mse_loss(output, batch["y"])
-                accelerator.backward(loss)
-                optimizer.step()
-
-        model = accelerator.unwrap_model(model).cpu()
-        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
-        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
-
     # BF16 support is only for CPU + TPU, and some GPU
     if is_bf16_available():
         # Mostly a test that BF16 doesn't crash as the operation inside the model is not converted to BF16
