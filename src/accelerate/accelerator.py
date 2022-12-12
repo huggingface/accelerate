@@ -158,10 +158,17 @@ class Accelerator:
             - `"comet_ml"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
+        logging_dir (`str`, `os.PathLike`, *optional*):
+            A path to a directory for storing logs of locally-compatible loggers. If not passed will save in
+            `project_dir` by default.
         project_dir (`str`, `os.PathLike`, *optional*):
-            A path to a directory for storing data such as logs of locally-compatible loggers and saved checkpoints.
-        save_total_limit(`int`, *optional*):
-            The maximum number of checkpoints to keep, will default to all of them.
+            A path to a directory for storing data such as logs of locally-compatible loggers and potentially saved
+            checkpoints.
+        automatic_checkpoint_naming (`bool`, *optional*, defaults to `False`):
+            Whether saved states should be stored in `project_location` and be automatically iteratively named.
+        save_total_limit (`int`, *optional*):
+            The maximum number of checkpoints to keep if performing `automatic_checkpoint_naming`, will default to all
+            of them.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
@@ -209,6 +216,7 @@ class Accelerator:
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         project_dir: Optional[Union[str, os.PathLike]] = None,
+        automatic_checkpoint_naming: Optional[bool] = False,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         dispatch_batches: Optional[bool] = None,
         even_batches: bool = True,
@@ -217,16 +225,13 @@ class Accelerator:
         dynamo_backend: Union[DynamoBackend, str] = None,
         save_total_limit: Optional[int] = None,
     ):
-        if logging_dir is not None:
-            warnings.warn(
-                f"`logging_dir='{logging_dir}'` is deprecated and will be removed in version 0.17.0 of 🤗 Accelerate. Use `working_dir='{logging_dir}'` instead.",
-                FutureWarning,
-            )
-            if project_dir is None:
-                project_dir = logging_dir
+        if project_dir is not None and logging_dir is None:
+            logging_dir = project_dir
         self.save_total_limit = save_total_limit
+        self.automatic_checkpoint_naming = automatic_checkpoint_naming
         self.save_iteration = 0
         self.project_dir = project_dir
+        self.logging_dir = logging_dir
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
@@ -330,7 +335,7 @@ class Accelerator:
             **kwargs,
         )
 
-        trackers = filter_trackers(log_with, self.project_dir)
+        trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
             warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
         self.log_with = trackers
@@ -1545,10 +1550,10 @@ class Accelerator:
                 self.trackers.append(tracker)
             else:
                 tracker_init = LOGGER_TYPE_TO_CLASS[str(tracker)]
-                if getattr(tracker_init, "requires_project_directory"):
+                if getattr(tracker_init, "requires_logger_directory"):
                     # We can skip this check since it was done in `__init__`
                     self.trackers.append(
-                        tracker_init(project_name, self.project_dir, **init_kwargs.get(str(tracker), {}))
+                        tracker_init(project_name, self.logging_dir, **init_kwargs.get(str(tracker), {}))
                     )
                 else:
                     self.trackers.append(tracker_init(project_name, **init_kwargs.get(str(tracker), {})))
@@ -1612,9 +1617,13 @@ class Accelerator:
 
     def save_state(self, output_dir: str = None):
         """
-        Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to
+        Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
+
+        If `automatic_checkpoint_naming` was passed to the `Accelerator` object then checkpoints will be saved to
         `self.project_dir/checkpoints`. If the number of current saves is greater than `self.save_total_limit` then the
         oldest save is deleted. Each checkpoint is saved in seperate folders named `checkpoint_<save_iteration>`.
+
+        Otherwise they are just saved to `output_dir`.
 
         <Tip>
 
@@ -1627,32 +1636,25 @@ class Accelerator:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
         """
-        if output_dir is not None:
-            warnings.warn(
-                f"`output_dir='{output_dir}'` is deprecated and will be removed in version 0.17.0 of 🤗 Accelerate. Please use `Accelerator(project_dir=output_dir)` instead.",
-                FutureWarning,
-            )
-            old_version = True
-        else:
+        if self.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
-            old_version = False
         os.makedirs(output_dir, exist_ok=True)
-        folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
-        if self.save_total_limit is not None and (len(folders) + 1 > self.save_total_limit):
-            folders.sort()
-            logger.warning(
-                f"Deleting {len(folders) + 1 - self.save_total_limit} checkpoints to make room for new checkpoint."
-            )
-            for folder in folders[: len(folders) + 1 - self.save_total_limit]:
-                shutil.rmtree(folder)
-        if not old_version:
-            save_location = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
+        if self.automatic_checkpoint_naming:
+            folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
+            if self.save_total_limit is not None and (len(folders) + 1 > self.save_total_limit):
+                folders.sort()
+                logger.warning(
+                    f"Deleting {len(folders) + 1 - self.save_total_limit} checkpoints to make room for new checkpoint."
+                )
+                for folder in folders[: len(folders) + 1 - self.save_total_limit]:
+                    shutil.rmtree(folder)
+            output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
             if os.path.exists(output_dir):
                 raise ValueError(
                     f"Checkpoint directory {output_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
                 )
-        os.makedirs(save_location, exist_ok=True)
-        logger.info(f"Saving current state to {save_location}")
+        os.makedirs(output_dir, exist_ok=True)
+        logger.info(f"Saving current state to {output_dir}")
 
         # Save the models taking care of FSDP and DeepSpeed nuances
         weights = []
