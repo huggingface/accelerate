@@ -217,7 +217,7 @@ class CheckpointTest(unittest.TestCase):
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.99)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator(project_dir=tmpdir)
+            accelerator = Accelerator(project_dir=tmpdir, automatic_checkpoint_naming=True)
             model, optimizer, train_dataloader, valid_dataloader, scheduler = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader, scheduler
             )
