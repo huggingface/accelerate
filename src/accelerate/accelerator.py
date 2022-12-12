@@ -45,8 +45,8 @@ from .utils import (
     LoggerType,
     MegatronLMPlugin,
     PrecisionType,
+    ProjectConfiguration,
     RNGType,
-    SaveConfiguration,
     compare_versions,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
@@ -159,7 +159,7 @@ class Accelerator:
             - `"comet_ml"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
-        save_config (`SaveConfiguration`, *optional*):
+        project_config (`ProjectConfiguration`, *optional*):
             A configuration for how saving the state can be handled.
         project_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing data such as logs of locally-compatible loggers and potentially saved
@@ -211,7 +211,7 @@ class Accelerator:
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         project_dir: Optional[Union[str, os.PathLike]] = None,
-        save_config: Optional[SaveConfiguration] = None,
+        project_config: Optional[ProjectConfiguration] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         dispatch_batches: Optional[bool] = None,
         even_batches: bool = True,
@@ -219,19 +219,19 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
         dynamo_backend: Union[DynamoBackend, str] = None,
     ):
-        if save_config is not None:
-            self.save_configuration = save_config
+        if project_config is not None:
+            self.project_configuration = project_config
         else:
-            self.save_configuration = SaveConfiguration()
+            self.project_configuration = ProjectConfiguration()
 
         if logging_dir is not None:
             warnings.warn(
                 "`logging_dir` is deprecated and will be removed in version 0.18.0 of 🤗 Accelerate. Use `project_dir` instead.",
                 FutureWarning,
             )
-            self.save_configuration.logging_dir = logging_dir
+            self.project_configuration.logging_dir = logging_dir
         if project_dir is not None and self.project_dir is None:
-            self.save_configuration.project_dir = project_dir
+            self.project_configuration.project_dir = project_dir
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
@@ -441,15 +441,15 @@ class Accelerator:
 
     @property
     def project_dir(self):
-        return self.save_configuration.project_dir
+        return self.project_configuration.project_dir
 
     @property
     def logging_dir(self):
-        return self.save_configuration.logging_dir
+        return self.project_configuration.logging_dir
 
     @property
     def save_iteration(self):
-        return self.save_configuration.iteration
+        return self.project_configuration.iteration
 
     @property
     def is_main_process(self):
@@ -1649,19 +1649,19 @@ class Accelerator:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
         """
-        if self.save_configuration.automatic_checkpoint_naming:
+        if self.project_configuration.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
         os.makedirs(output_dir, exist_ok=True)
-        if self.save_configuration.automatic_checkpoint_naming:
+        if self.project_configuration.automatic_checkpoint_naming:
             folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
-            if self.save_configuration.total_limit is not None and (
-                len(folders) + 1 > self.save_configuration.total_limit
+            if self.project_configuration.total_limit is not None and (
+                len(folders) + 1 > self.project_configuration.total_limit
             ):
                 folders.sort()
                 logger.warning(
-                    f"Deleting {len(folders) + 1 - self.save_configuration.total_limit} checkpoints to make room for new checkpoint."
+                    f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} checkpoints to make room for new checkpoint."
                 )
-                for folder in folders[: len(folders) + 1 - self.save_configuration.total_limit]:
+                for folder in folders[: len(folders) + 1 - self.project_configuration.total_limit]:
                     shutil.rmtree(folder)
             output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
             if os.path.exists(output_dir):
@@ -1715,7 +1715,7 @@ class Accelerator:
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)
-        self.save_configuration.iteration += 1
+        self.project_configuration.iteration += 1
         return save_location
 
     def load_state(self, input_dir: str):
