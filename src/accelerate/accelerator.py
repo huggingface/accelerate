@@ -1631,9 +1631,9 @@ class Accelerator:
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
 
-        If a `ProjectConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled then
-        checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater than
-        `total_limit` then the oldest save is deleted. Each checkpoint is saved in seperate folders named
+        If a `ProjectConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled
+        then checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater
+        than `total_limit` then the oldest save is deleted. Each checkpoint is saved in seperate folders named
         `checkpoint_<iteration>`.
 
         Otherwise they are just saved to `output_dir`.
