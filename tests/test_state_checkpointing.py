@@ -93,7 +93,7 @@ class CheckpointTest(unittest.TestCase):
             # Save second state
             print("Saving second time")
             accelerator.save_state()
-            self.assertEqual(len(os.listdir(accelerator.save_dir)), 1)
+            self.assertEqual(len(os.listdir(accelerator.project_dir)), 1)
 
     def test_can_resume_training(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -102,7 +102,7 @@ class CheckpointTest(unittest.TestCase):
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator(save_dir=tmpdir)
+            accelerator = Accelerator(project_dir=tmpdir)
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )

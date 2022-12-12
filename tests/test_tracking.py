@@ -220,7 +220,7 @@ class MyCustomTracker(GeneralTracker):
     ]
 
     name = "my_custom_tracker"
-    requires_logging_directory = False
+    requires_project_directory = False
 
     def __init__(self, dir: str):
         self.f = open(f"{dir}/log.csv", "w+")
