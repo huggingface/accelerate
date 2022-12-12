@@ -96,7 +96,7 @@ To implement a new tracker to be used in `Accelerator`, a new one can be made th
 Every tracker must implement three functions and have three properties:
   - `__init__`: 
     - Should store a `run_name` and initialize the tracker API of the integrated library. 
-    - If a tracker stores their data locally (such as TensorBoard), a `project_dir` parameter can be added.
+    - If a tracker stores their data locally (such as TensorBoard), a `logging_dir` parameter can be added.
   - `store_init_configuration`: 
     - Should take in a `values` dictionary and store them as a one-time experiment configuration
   - `log`: 
