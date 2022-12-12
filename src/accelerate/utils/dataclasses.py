@@ -314,12 +314,18 @@ class TensorInformation:
 
 
 @dataclass
-class SaveConfiguration:
+class ProjectConfiguration:
     """
     Configuration for the Accelerator object based on inner-project needs.
     """
 
     project_dir: str = field(default=None, metadata={"help": "A path to a directory for storing data."})
+    logging_dir: str = field(
+        default=None,
+        metadata={
+            "help": "A path to a directory for storing logs of locally-compatible loggers. If None, defaults to `project_dir`."
+        },
+    )
     automatic_checkpoint_naming: bool = field(
         default=False,
         metadata={"help": "Whether saved states should be automatically iteratively named."},
@@ -334,6 +340,10 @@ class SaveConfiguration:
         default=0,
         metadata={"help": "The current save iteration."},
     )
+
+    def __post_init__(self):
+        if self.logging_dir is None:
+            self.logging_dir = self.project_dir
 
 
 @dataclass

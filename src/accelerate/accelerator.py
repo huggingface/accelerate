@@ -159,9 +159,6 @@ class Accelerator:
             - `"comet_ml"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
-        logging_dir (`str`, `os.PathLike`, *optional*):
-            A path to a directory for storing logs of locally-compatible loggers. If not passed will save in
-            `project_dir` by default.
         save_config (`SaveConfiguration`, *optional*):
             A configuration for how saving the state can be handled.
         project_dir (`str`, `os.PathLike`, *optional*):
@@ -226,11 +223,15 @@ class Accelerator:
             self.save_configuration = save_config
         else:
             self.save_configuration = SaveConfiguration()
+
+        if logging_dir is not None:
+            warnings.warn(
+                "`logging_dir` is deprecated and will be removed in version 0.18.0 of 🤗 Accelerate. Use `project_dir` instead.",
+                FutureWarning,
+            )
+            self.save_configuration.logging_dir = logging_dir
         if project_dir is not None and self.project_dir is None:
             self.save_configuration.project_dir = project_dir
-        if self.project_dir is not None and logging_dir is None:
-            logging_dir = self.project_dir
-        self.logging_dir = logging_dir
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
@@ -441,6 +442,10 @@ class Accelerator:
     @property
     def project_dir(self):
         return self.save_configuration.project_dir
+
+    @property
+    def logging_dir(self):
+        return self.save_configuration.logging_dir
 
     @property
     def save_iteration(self):
