@@ -214,7 +214,7 @@ class Accelerator:
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         project_dir: Optional[Union[str, os.PathLike]] = None,
-        save_configuration: Optional[SaveConfiguration] = None,
+        save_config: Optional[SaveConfiguration] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         dispatch_batches: Optional[bool] = None,
         even_batches: bool = True,
@@ -222,8 +222,8 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
         dynamo_backend: Union[DynamoBackend, str] = None,
     ):
-        if save_configuration is not None:
-            self.save_configuration = save_configuration
+        if save_config is not None:
+            self.save_configuration = save_config
         else:
             self.save_configuration = SaveConfiguration(project_dir=project_dir)
         if self.project_dir is not None and logging_dir is None:
