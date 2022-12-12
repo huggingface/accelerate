@@ -15,7 +15,6 @@
 import os
 import sys
 import tempfile
-import warnings
 
 import torch
 

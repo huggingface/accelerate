@@ -185,12 +185,6 @@ def launch_command_parser(subparsers=None):
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
     )
     resource_args.add_argument(
-        "--fp16",
-        default=False,
-        action="store_true",
-        help="This argument is deprecated, use `--mixed_precision fp16` instead.",
-    )
-    resource_args.add_argument(
         "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
     )
     resource_args.add_argument(
@@ -736,13 +730,6 @@ def deepspeed_launcher(args):
             f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
         )
 
-    if args.fp16:
-        warnings.warn(
-            '--fp16 flag is deprecated and will be removed in version 0.15.0 of 🤗 Accelerate. Use "--mixed_precision fp16" instead.',
-            FutureWarning,
-        )
-        mixed_precision = "fp16"
-
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
     current_env["ACCELERATE_USE_DEEPSPEED"] = "true"
@@ -911,10 +898,6 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         raise ValueError(
             f"Unknown mixed_precision mode: {args.mixed_precision.lower()}. Choose between {PrecisionType.list()}."
         )
-
-    if args.fp16:
-        warnings.warn('--fp16 flag is deprecated. Use "--mixed_precision fp16" instead.', FutureWarning)
-        mixed_precision = "fp16"
 
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
