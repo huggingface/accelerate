@@ -75,6 +75,24 @@ class DummyModel(nn.Module):
 
 
 class CheckpointTest(unittest.TestCase):
+    def test_with_save_limit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            # Train baseline
+            accelerator = Accelerator(save_total_limit=1, save_dir=os.path.join(tmpdir, "checkpoints"))
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
+            # Save initial
+            accelerator.save_state()
+
+            # Save second state
+            accelerator.save_state()
+            self.assertEqual(len(os.listdir(accelerator.save_dir)), 1)
+
     def test_can_resume_training(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
@@ -82,13 +100,12 @@ class CheckpointTest(unittest.TestCase):
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator()
+            accelerator = Accelerator(save_dir=os.path.join(tmpdir, "checkpoints"))
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
             # Save initial
-            initial = os.path.join(tmpdir, "initial")
-            accelerator.save_state(initial)
+            accelerator.save_state()
             (a, b) = model.a.item(), model.b.item()
             opt_state = optimizer.state_dict()
             ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
@@ -104,7 +121,7 @@ class CheckpointTest(unittest.TestCase):
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
-            accelerator.load_state(initial)
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
             (a2, b2) = model.a.item(), model.b.item()
             opt_state2 = optimizer.state_dict()
             self.assertEqual(a, a2)
@@ -113,11 +130,10 @@ class CheckpointTest(unittest.TestCase):
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
-            checkpoint = os.path.join(tmpdir, "checkpoint")
-            accelerator.save_state(checkpoint)
+            accelerator.save_state()
 
             # Load everything back in and make sure all states work
-            accelerator.load_state(checkpoint)
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
             test_rands += train(1, model, train_dataloader, optimizer, accelerator)
             (a3, b3) = model.a.item(), model.b.item()
             opt_state3 = optimizer.state_dict()
@@ -148,18 +164,16 @@ class CheckpointTest(unittest.TestCase):
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.99)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator()
-            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
-                model, optimizer, train_dataloader, valid_dataloader
+            accelerator = Accelerator(save_dir=os.path.join(tmpdir, "checkpoints"))
+            model, optimizer, train_dataloader, valid_dataloader, scheduler = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader, scheduler
             )
-            accelerator.register_for_checkpointing(scheduler)
             # Save initial
-            initial = os.path.join(tmpdir, "initial")
-            accelerator.save_state(initial)
+            accelerator.save_state()
             scheduler_state = scheduler.state_dict()
             train(3, model, train_dataloader, optimizer, accelerator, scheduler)
             self.assertNotEqual(scheduler_state, scheduler.state_dict())
 
             # Load everything back in and make sure all states work
-            accelerator.load_state(initial)
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
             self.assertEqual(scheduler_state, scheduler.state_dict())

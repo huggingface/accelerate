@@ -16,6 +16,7 @@ import contextlib
 import gc
 import math
 import os
+import shutil
 import sys
 import warnings
 from contextlib import contextmanager
@@ -159,6 +160,9 @@ class Accelerator:
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers.
+        save_dir (`str`, `os.PathLike`, *optional*):
+            A path to a directory for storing checkpoints. Each checkpoint will be saved in a subdirectory named
+            `checkpoint_<save_iteration>`.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
@@ -175,6 +179,8 @@ class Accelerator:
             are created. See [kwargs](kwargs) for more information.
         dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
+        save_total_limit(`int`, *optional*):
+            The maximum number of checkpoints to keep, will default to all of them.
 
     **Available attributes:**
 
@@ -206,12 +212,17 @@ class Accelerator:
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
+        save_dir: Optional[Union[str, os.PathLike]] = None,
         dispatch_batches: Optional[bool] = None,
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
         dynamo_backend: Union[DynamoBackend, str] = None,
+        save_total_limit: Optional[int] = None,
     ):
+        self.save_total_limit = save_total_limit
+        self.save_iteration = 0
+        self.save_dir = save_dir
         self.logging_dir = logging_dir
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
@@ -1596,9 +1607,11 @@ class Accelerator:
         """
         save(obj, f)
 
-    def save_state(self, output_dir: str):
+    def save_state(self, output_dir: str = None):
         """
-        Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects.
+        Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to
+        `self.save_dir`. If the number of current saves is greater than `self.save_total_limit` then the oldest save is
+        deleted. Each checkpoint is saved in seperate folders named `checkpoint_<save_iteration>`.
 
         <Tip>
 
@@ -1611,8 +1624,29 @@ class Accelerator:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
         """
-        # Check if folder exists
-        output_dir = os.path.expanduser(output_dir)
+        if output_dir is None:
+            warnings.warn(
+                "The output directory should be specified during `Accelerator()` initialization. Please use `Accelerator(save_dir=output_dir)`."
+            )
+        else:
+            output_dir = self.save_dir
+        folders = [
+            folder for folder in os.listdir(output_dir) if os.isdir(folder) and folder.startswith("checkpoint_")
+        ]
+        if len(folders) > self.save_total_limit:
+            folders.sort()
+            logger.warning(
+                f"Deleting {len(folders) - self.save_total_limit} checkpoints to make room for new checkpoint."
+            )
+            for folder in folders[: len(folders) - self.save_total_limit]:
+                shutil.rmtree(folder)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
+        if os.path.exists(output_dir):
+            raise ValueError(
+                f"Checkpoint directory {output_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
+            )
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
 
@@ -1660,6 +1694,7 @@ class Accelerator:
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)
+        self.save_iteration += 1
         return save_location
 
     def load_state(self, input_dir: str):
