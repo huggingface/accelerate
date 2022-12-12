@@ -83,7 +83,7 @@ class GeneralTracker(object, metaclass=ABCMeta):
         pass
 
     @abstractproperty
-    def requires_logging_directory(self):
+    def requires_logger_directory(self):
         """
         Whether the logger requires a directory to store their logs. Should either return `True` or `False`.
         """
@@ -145,7 +145,7 @@ class TensorBoardTracker(GeneralTracker):
     """
 
     name = "tensorboard"
-    requires_logging_directory = True
+    requires_logger_directory = True
 
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = None, **kwargs):
         self.run_name = run_name
@@ -227,7 +227,7 @@ class WandBTracker(GeneralTracker):
     """
 
     name = "wandb"
-    requires_logging_directory = False
+    requires_logger_directory = False
 
     def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
@@ -291,7 +291,7 @@ class CometMLTracker(GeneralTracker):
     """
 
     name = "comet_ml"
-    requires_logging_directory = False
+    requires_logger_directory = False
 
     def __init__(self, run_name: str, **kwargs):
         self.run_name = run_name
@@ -362,7 +362,7 @@ class AimTracker(GeneralTracker):
     """
 
     name = "aim"
-    requires_logging_directory = True
+    requires_logger_directory = True
 
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
         self.run_name = run_name
@@ -439,7 +439,7 @@ class MLflowTracker(GeneralTracker):
     """
 
     name = "mlflow"
-    requires_logging_directory = True
+    requires_logger_directory = True
 
     def __init__(
         self,
@@ -589,7 +589,7 @@ def filter_trackers(
                     if log_type not in loggers:
                         if log_type in get_available_trackers():
                             tracker_init = LOGGER_TYPE_TO_CLASS[str(log_type)]
-                            if getattr(tracker_init, "requires_logging_directory"):
+                            if getattr(tracker_init, "requires_logger_directory"):
                                 if logging_dir is None:
                                     raise ValueError(
                                         f"Logging with `{log_type}` requires a `logging_dir` to be passed in."
