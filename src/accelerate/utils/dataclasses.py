@@ -325,12 +325,12 @@ class SaveConfiguration:
         metadata={"help": "Whether saved states should be automatically iteratively named."},
     )
 
-    save_total_limit: int = field(
+    total_limit: int = field(
         default=None,
         metadata={"help": "The maximum number of total saved states to keep."},
     )
 
-    save_iteration: int = field(
+    iteration: int = field(
         default=0,
         metadata={"help": "The current save iteration."},
     )

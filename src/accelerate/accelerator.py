@@ -225,7 +225,9 @@ class Accelerator:
         if save_config is not None:
             self.save_configuration = save_config
         else:
-            self.save_configuration = SaveConfiguration(project_dir=project_dir)
+            self.save_configuration = SaveConfiguration()
+        if project_dir is not None and self.project_dir is None:
+            self.save_configuration.project_dir = project_dir
         if self.project_dir is not None and logging_dir is None:
             logging_dir = self.project_dir
         self.logging_dir = logging_dir
@@ -442,7 +444,7 @@ class Accelerator:
 
     @property
     def save_iteration(self):
-        return self.save_configuration.save_iteration
+        return self.save_configuration.iteration
 
     @property
     def is_main_process(self):
@@ -1626,8 +1628,8 @@ class Accelerator:
 
         If a `SaveConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled then
         checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater than
-        `save_total_limit` then the oldest save is deleted. Each checkpoint is saved in seperate folders named
-        `checkpoint_<save_iteration>`.
+        `total_limit` then the oldest save is deleted. Each checkpoint is saved in seperate folders named
+        `checkpoint_<iteration>`.
 
         Otherwise they are just saved to `output_dir`.
 
@@ -1647,14 +1649,14 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         if self.save_configuration.automatic_checkpoint_naming:
             folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
-            if self.save_configuration.save_total_limit is not None and (
-                len(folders) + 1 > self.save_configuration.save_total_limit
+            if self.save_configuration.total_limit is not None and (
+                len(folders) + 1 > self.save_configuration.total_limit
             ):
                 folders.sort()
                 logger.warning(
-                    f"Deleting {len(folders) + 1 - self.save_configuration.save_total_limit} checkpoints to make room for new checkpoint."
+                    f"Deleting {len(folders) + 1 - self.save_configuration.total_limit} checkpoints to make room for new checkpoint."
                 )
-                for folder in folders[: len(folders) + 1 - self.save_configuration.save_total_limit]:
+                for folder in folders[: len(folders) + 1 - self.save_configuration.total_limit]:
                     shutil.rmtree(folder)
             output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
             if os.path.exists(output_dir):
@@ -1708,7 +1710,7 @@ class Accelerator:
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)
-        self.save_iteration += 1
+        self.save_configuration.iteration += 1
         return save_location
 
     def load_state(self, input_dir: str):
