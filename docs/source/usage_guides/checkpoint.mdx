@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 When training a PyTorch model with 🤗 Accelerate, you may often want to save and continue a state of training. Doing so requires
 saving and loading the model, optimizer, RNG generators, and the GradScaler. Inside 🤗 Accelerate are two convenience functions to achieve this quickly:
-- Use [`~Accelerator.save_state`] for saving everything mentioned above to a folder location
+- Use [`~Accelerator.save_state`] for saving everything mentioned above to a folder location passed to [`~Accelerator.init`]
 - Use [`~Accelerator.load_state`] for loading everything stored from an earlier `save_state`
 
 It should be noted that the expectation is that those states come from the same training script, they should not be from two separate scripts.
@@ -28,7 +28,7 @@ Below is a brief example using checkpointing to save and reload a state during t
 from accelerate import Accelerator
 import torch
 
-accelerator = Accelerator()
+accelerator = Accelerator(project_dir="my/save/path")
 
 my_scheduler = torch.optim.lr_scheduler.StepLR(my_optimizer, step_size=1, gamma=0.99)
 my_model, my_optimizer, my_training_dataloader = accelerator.prepare(my_model, my_optimizer, my_training_dataloader)
@@ -37,7 +37,7 @@ my_model, my_optimizer, my_training_dataloader = accelerator.prepare(my_model, m
 accelerator.register_for_checkpointing(my_scheduler)
 
 # Save the starting state
-accelerator.save_state("my/save/path")
+accelerator.save_state()
 
 device = accelerator.device
 my_model.to(device)
@@ -56,5 +56,5 @@ for epoch in range(num_epochs):
     my_scheduler.step()
 
 # Restore previous state
-accelerator.load_state("my/save/path")
+accelerator.load_state("my/save/path/checkpointing/checkpoint_0")
 ```

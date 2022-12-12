@@ -370,7 +370,8 @@ Note that since all the model parameters are references to tensors, this will lo
 ## Saving/loading entire states
 
 When training your model, you may want to save the current state of the model, optimizer, random generators, and potentially LR schedulers to be restored in the _same script_.
-You can use [`~Accelerator.save_state`] and [`~Accelerator.load_state`] respectively to do so, just by simply passing in a save location. 
+You can use [`~Accelerator.save_state`] and [`~Accelerator.load_state`] respectively to do so, just by simply passing in a project directory to [`Accelerator.init`]. Each saved 
+checkpoints will be located then at `Accelerator.project_dir/checkpoints/checkpoint_{checkpoint_number}`
 If you have registered any other stateful items to be stored through [`~Accelerator.register_for_checkpointing`] they will also be saved and/or loaded.
 
 <Tip>
