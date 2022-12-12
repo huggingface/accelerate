@@ -9,11 +9,11 @@ model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased").to
 tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
 
-inputs = tokenizer("Hello, my name is.", return_tensors="pt").to(0).train()
+inputs = tokenizer("Hello, my name is.", return_tensors="pt").to(0)
 outputs = model(**inputs, labels=torch.tensor([0]).to(0))
 
 set_seed(42)
-new_model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased").to(0)
+new_model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased").to(0).train()
 with torch.no_grad():
     convert_model(new_model)
 # new_model.forward = fp8_autocast(enabled=False, fp8_recipe=DelayedScaling())(new_model.forward)
