@@ -82,16 +82,14 @@ class CheckpointTest(unittest.TestCase):
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator(save_total_limit=1, project_dir=tmpdir)
+            accelerator = Accelerator(save_total_limit=1, project_dir=tmpdir, automatic_checkpoint_naming=True)
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
             # Save initial
-            print("Saving first time")
             accelerator.save_state()
 
             # Save second state
-            print("Saving second time")
             accelerator.save_state()
             self.assertEqual(len(os.listdir(accelerator.project_dir)), 1)
 
@@ -154,7 +152,7 @@ class CheckpointTest(unittest.TestCase):
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
             # Train baseline
-            accelerator = Accelerator(project_dir=tmpdir)
+            accelerator = Accelerator(project_dir=tmpdir, automatic_checkpoint_naming=True)
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
@@ -171,7 +169,7 @@ class CheckpointTest(unittest.TestCase):
             model = DummyModel()
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
-            accelerator = Accelerator(project_dir=tmpdir)
+            accelerator = Accelerator(project_dir=tmpdir, automatic_checkpoint_naming=True)
             accelerator.save_iteration = 1
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
