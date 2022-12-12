@@ -46,6 +46,7 @@ from .utils import (
     MegatronLMPlugin,
     PrecisionType,
     RNGType,
+    SaveConfiguration,
     compare_versions,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
@@ -161,14 +162,11 @@ class Accelerator:
         logging_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing logs of locally-compatible loggers. If not passed will save in
             `project_dir` by default.
+        save_config (`SaveConfiguration`, *optional*):
+            A configuration for how saving the state can be handled.
         project_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing data such as logs of locally-compatible loggers and potentially saved
             checkpoints.
-        automatic_checkpoint_naming (`bool`, *optional*, defaults to `False`):
-            Whether saved states should be stored in `project_location` and be automatically iteratively named.
-        save_total_limit (`int`, *optional*):
-            The maximum number of checkpoints to keep if performing `automatic_checkpoint_naming`, will default to all
-            of them.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
@@ -216,21 +214,20 @@ class Accelerator:
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         project_dir: Optional[Union[str, os.PathLike]] = None,
-        automatic_checkpoint_naming: Optional[bool] = False,
+        save_configuration: Optional[SaveConfiguration] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         dispatch_batches: Optional[bool] = None,
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
         dynamo_backend: Union[DynamoBackend, str] = None,
-        save_total_limit: Optional[int] = None,
     ):
-        if project_dir is not None and logging_dir is None:
-            logging_dir = project_dir
-        self.save_total_limit = save_total_limit
-        self.automatic_checkpoint_naming = automatic_checkpoint_naming
-        self.save_iteration = 0
-        self.project_dir = project_dir
+        if save_configuration is not None:
+            self.save_configuration = save_configuration
+        else:
+            self.save_configuration = SaveConfiguration(project_dir=project_dir)
+        if self.project_dir is not None and logging_dir is None:
+            logging_dir = self.project_dir
         self.logging_dir = logging_dir
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
@@ -438,6 +435,14 @@ class Accelerator:
     @property
     def device(self):
         return self.state.device
+
+    @property
+    def project_dir(self):
+        return self.save_configuration.project_dir
+
+    @property
+    def save_iteration(self):
+        return self.save_configuration.save_iteration
 
     @property
     def is_main_process(self):
@@ -1619,9 +1624,10 @@ class Accelerator:
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
 
-        If `automatic_checkpoint_naming` was passed to the `Accelerator` object then checkpoints will be saved to
-        `self.project_dir/checkpoints`. If the number of current saves is greater than `self.save_total_limit` then the
-        oldest save is deleted. Each checkpoint is saved in seperate folders named `checkpoint_<save_iteration>`.
+        If a `SaveConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled then
+        checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater than
+        `save_total_limit` then the oldest save is deleted. Each checkpoint is saved in seperate folders named
+        `checkpoint_<save_iteration>`.
 
         Otherwise they are just saved to `output_dir`.
 
@@ -1636,17 +1642,19 @@ class Accelerator:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
         """
-        if self.automatic_checkpoint_naming:
+        if self.save_configuration.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
         os.makedirs(output_dir, exist_ok=True)
-        if self.automatic_checkpoint_naming:
+        if self.save_configuration.automatic_checkpoint_naming:
             folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
-            if self.save_total_limit is not None and (len(folders) + 1 > self.save_total_limit):
+            if self.save_configuration.save_total_limit is not None and (
+                len(folders) + 1 > self.save_configuration.save_total_limit
+            ):
                 folders.sort()
                 logger.warning(
-                    f"Deleting {len(folders) + 1 - self.save_total_limit} checkpoints to make room for new checkpoint."
+                    f"Deleting {len(folders) + 1 - self.save_configuration.save_total_limit} checkpoints to make room for new checkpoint."
                 )
-                for folder in folders[: len(folders) + 1 - self.save_total_limit]:
+                for folder in folders[: len(folders) + 1 - self.save_configuration.save_total_limit]:
                     shutil.rmtree(folder)
             output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
             if os.path.exists(output_dir):

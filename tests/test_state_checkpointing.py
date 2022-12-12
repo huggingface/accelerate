@@ -23,7 +23,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.utils import set_seed
+from accelerate.utils import SaveConfiguration, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -81,8 +81,9 @@ class CheckpointTest(unittest.TestCase):
             model = DummyModel()
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
+            save_config = SaveConfiguration(save_total_limit=1, project_dir=tmpdir, automatic_checkpoint_naming=True)
             # Train baseline
-            accelerator = Accelerator(save_total_limit=1, project_dir=tmpdir, automatic_checkpoint_naming=True)
+            accelerator = Accelerator(save_config=save_config)
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
@@ -151,8 +152,10 @@ class CheckpointTest(unittest.TestCase):
             model = DummyModel()
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             train_dataloader, valid_dataloader = dummy_dataloaders()
+            save_config = SaveConfiguration(automatic_checkpoint_naming=True)
+
             # Train baseline
-            accelerator = Accelerator(project_dir=tmpdir, automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, save_config=save_config)
             model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader
             )
@@ -216,8 +219,9 @@ class CheckpointTest(unittest.TestCase):
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.99)
             train_dataloader, valid_dataloader = dummy_dataloaders()
+            save_config = SaveConfiguration(automatic_checkpoint_naming=True)
             # Train baseline
-            accelerator = Accelerator(project_dir=tmpdir, automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, save_config=save_config)
             model, optimizer, train_dataloader, valid_dataloader, scheduler = accelerator.prepare(
                 model, optimizer, train_dataloader, valid_dataloader, scheduler
             )
