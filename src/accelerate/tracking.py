@@ -147,7 +147,7 @@ class TensorBoardTracker(GeneralTracker):
     name = "tensorboard"
     requires_logging_directory = True
 
-    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]], **kwargs):
+    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = None, **kwargs):
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
         self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
@@ -451,7 +451,6 @@ class MLflowTracker(GeneralTracker):
         run_name: Optional[str] = None,
         description: Optional[str] = None,
     ):
-
         experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", experiment_name)
         run_id = os.getenv("MLFLOW_RUN_ID", run_id)
         tags = os.getenv("MLFLOW_TAGS", tags)

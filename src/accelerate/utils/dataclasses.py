@@ -314,6 +314,39 @@ class TensorInformation:
 
 
 @dataclass
+class ProjectConfiguration:
+    """
+    Configuration for the Accelerator object based on inner-project needs.
+    """
+
+    project_dir: str = field(default=None, metadata={"help": "A path to a directory for storing data."})
+    logging_dir: str = field(
+        default=None,
+        metadata={
+            "help": "A path to a directory for storing logs of locally-compatible loggers. If None, defaults to `project_dir`."
+        },
+    )
+    automatic_checkpoint_naming: bool = field(
+        default=False,
+        metadata={"help": "Whether saved states should be automatically iteratively named."},
+    )
+
+    total_limit: int = field(
+        default=None,
+        metadata={"help": "The maximum number of total saved states to keep."},
+    )
+
+    iteration: int = field(
+        default=0,
+        metadata={"help": "The current save iteration."},
+    )
+
+    def __post_init__(self):
+        if self.logging_dir is None:
+            self.logging_dir = self.project_dir
+
+
+@dataclass
 class DeepSpeedPlugin:
     """
     This plugin is used to integrate DeepSpeed.

@@ -16,6 +16,7 @@ import contextlib
 import gc
 import math
 import os
+import shutil
 import sys
 import warnings
 from contextlib import contextmanager
@@ -44,6 +45,7 @@ from .utils import (
     LoggerType,
     MegatronLMPlugin,
     PrecisionType,
+    ProjectConfiguration,
     RNGType,
     compare_versions,
     convert_outputs_to_fp32,
@@ -157,8 +159,11 @@ class Accelerator:
             - `"comet_ml"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
-        logging_dir (`str`, `os.PathLike`, *optional*):
-            A path to a directory for storing logs of locally-compatible loggers.
+        project_config (`ProjectConfiguration`, *optional*):
+            A configuration for how saving the state can be handled.
+        project_dir (`str`, `os.PathLike`, *optional*):
+            A path to a directory for storing data such as logs of locally-compatible loggers and potentially saved
+            checkpoints.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
@@ -204,6 +209,8 @@ class Accelerator:
         megatron_lm_plugin: MegatronLMPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
+        project_dir: Optional[Union[str, os.PathLike]] = None,
+        project_config: Optional[ProjectConfiguration] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
         dispatch_batches: Optional[bool] = None,
         even_batches: bool = True,
@@ -211,7 +218,19 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
         dynamo_backend: Union[DynamoBackend, str] = None,
     ):
-        self.logging_dir = logging_dir
+        if project_config is not None:
+            self.project_configuration = project_config
+        else:
+            self.project_configuration = ProjectConfiguration(project_dir=project_dir)
+
+        if logging_dir is not None:
+            warnings.warn(
+                "`logging_dir` is deprecated and will be removed in version 0.18.0 of 🤗 Accelerate. Use `project_dir` instead.",
+                FutureWarning,
+            )
+            self.project_configuration.logging_dir = logging_dir
+        if project_dir is not None and self.project_dir is None:
+            self.project_configuration.project_dir = project_dir
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
@@ -415,6 +434,18 @@ class Accelerator:
     @property
     def device(self):
         return self.state.device
+
+    @property
+    def project_dir(self):
+        return self.project_configuration.project_dir
+
+    @property
+    def logging_dir(self):
+        return self.project_configuration.logging_dir
+
+    @property
+    def save_iteration(self):
+        return self.project_configuration.iteration
 
     @property
     def is_main_process(self):
@@ -1592,9 +1623,16 @@ class Accelerator:
         """
         save(obj, f)
 
-    def save_state(self, output_dir: str):
+    def save_state(self, output_dir: str = None):
         """
-        Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects.
+        Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
+
+        If a `ProjectConfiguration` was passed to the `Accelerator` object with `automatic_checkpoint_naming` enabled
+        then checkpoints will be saved to `self.project_dir/checkpoints`. If the number of current saves is greater
+        than `total_limit` then the oldest save is deleted. Each checkpoint is saved in seperate folders named
+        `checkpoint_<iteration>`.
+
+        Otherwise they are just saved to `output_dir`.
 
         <Tip>
 
@@ -1607,8 +1645,25 @@ class Accelerator:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
         """
-        # Check if folder exists
-        output_dir = os.path.expanduser(output_dir)
+        if self.project_configuration.automatic_checkpoint_naming:
+            output_dir = os.path.join(self.project_dir, "checkpoints")
+        os.makedirs(output_dir, exist_ok=True)
+        if self.project_configuration.automatic_checkpoint_naming:
+            folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
+            if self.project_configuration.total_limit is not None and (
+                len(folders) + 1 > self.project_configuration.total_limit
+            ):
+                folders.sort()
+                logger.warning(
+                    f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} checkpoints to make room for new checkpoint."
+                )
+                for folder in folders[: len(folders) + 1 - self.project_configuration.total_limit]:
+                    shutil.rmtree(folder)
+            output_dir = os.path.join(output_dir, f"checkpoint_{self.save_iteration}")
+            if os.path.exists(output_dir):
+                raise ValueError(
+                    f"Checkpoint directory {output_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
+                )
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
 
@@ -1656,6 +1711,7 @@ class Accelerator:
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)
+        self.project_configuration.iteration += 1
         return save_location
 
     def load_state(self, input_dir: str):

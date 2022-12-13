@@ -16,6 +16,7 @@ from .dataclasses import (
     LoggerType,
     MegatronLMPlugin,
     PrecisionType,
+    ProjectConfiguration,
     RNGType,
     SageMakerDistributedType,
     TensorInformation,

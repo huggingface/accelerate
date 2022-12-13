@@ -23,7 +23,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.utils import set_seed
+from accelerate.utils import ProjectConfiguration, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,26 @@ class DummyModel(nn.Module):
 
 
 class CheckpointTest(unittest.TestCase):
-    def test_can_resume_training(self):
+    def test_with_save_limit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            project_config = ProjectConfiguration(total_limit=1, project_dir=tmpdir, automatic_checkpoint_naming=True)
+            # Train baseline
+            accelerator = Accelerator(project_config=project_config)
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
+            # Save initial
+            accelerator.save_state()
+
+            # Save second state
+            accelerator.save_state()
+            self.assertEqual(len(os.listdir(accelerator.project_dir)), 1)
+
+    def test_can_resume_training_with_folder(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
             model = DummyModel()
@@ -126,6 +145,58 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(opt_state1, opt_state3)
             self.assertEqual(ground_truth_rands, test_rands)
 
+    def test_can_resume_training(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
+
+            # Train baseline
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
+            # Save initial
+            accelerator.save_state()
+            (a, b) = model.a.item(), model.b.item()
+            opt_state = optimizer.state_dict()
+            ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
+            (a1, b1) = model.a.item(), model.b.item()
+            opt_state1 = optimizer.state_dict()
+
+            # Train partially
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            project_config = ProjectConfiguration(iteration=1, automatic_checkpoint_naming=True)
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
+            (a2, b2) = model.a.item(), model.b.item()
+            opt_state2 = optimizer.state_dict()
+            self.assertEqual(a, a2)
+            self.assertEqual(b, b2)
+            self.assertEqual(opt_state, opt_state2)
+
+            test_rands = train(2, model, train_dataloader, optimizer, accelerator)
+            # Save everything
+            accelerator.save_state()
+
+            # Load everything back in and make sure all states work
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_1"))
+            test_rands += train(1, model, train_dataloader, optimizer, accelerator)
+            (a3, b3) = model.a.item(), model.b.item()
+            opt_state3 = optimizer.state_dict()
+            self.assertEqual(a1, a3)
+            self.assertEqual(b1, b3)
+            self.assertEqual(opt_state1, opt_state3)
+            self.assertEqual(ground_truth_rands, test_rands)
+
     def test_invalid_registration(self):
         t = torch.tensor([1, 2, 3])
         t1 = torch.tensor([2, 3, 4])
@@ -147,19 +218,18 @@ class CheckpointTest(unittest.TestCase):
             optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.99)
             train_dataloader, valid_dataloader = dummy_dataloaders()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
             # Train baseline
-            accelerator = Accelerator()
-            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
-                model, optimizer, train_dataloader, valid_dataloader
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, train_dataloader, valid_dataloader, scheduler = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader, scheduler
             )
-            accelerator.register_for_checkpointing(scheduler)
             # Save initial
-            initial = os.path.join(tmpdir, "initial")
-            accelerator.save_state(initial)
+            accelerator.save_state()
             scheduler_state = scheduler.state_dict()
             train(3, model, train_dataloader, optimizer, accelerator, scheduler)
             self.assertNotEqual(scheduler_state, scheduler.state_dict())
 
             # Load everything back in and make sure all states work
-            accelerator.load_state(initial)
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
             self.assertEqual(scheduler_state, scheduler.state_dict())

@@ -70,9 +70,11 @@ class TensorBoardTrackingTest(unittest.TestCase):
             log = list(filter(lambda x: x.is_file(), Path(f"{dirpath}/{project_name}").iterdir()))[0]
             self.assertNotEqual(str(log), "")
 
-    def test_logging_dir(self):
+    def test_project_dir(self):
         with self.assertRaisesRegex(ValueError, "Logging with `tensorboard` requires a `logging_dir`"):
             _ = Accelerator(log_with="tensorboard")
+        with tempfile.TemporaryDirectory() as dirpath:
+            _ = Accelerator(log_with="tensorboard", project_dir=dirpath)
         with tempfile.TemporaryDirectory() as dirpath:
             _ = Accelerator(log_with="tensorboard", logging_dir=dirpath)
 
