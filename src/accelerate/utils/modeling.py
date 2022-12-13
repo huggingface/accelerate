@@ -680,8 +680,23 @@ def load_checkpoint_in_model(
         else:
             for param_name, param in checkpoint.items():
                 module_name = param_name
+
                 if dtype is not None and not str(param.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
                     param = param.to(dtype)
+
+                # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in
+                # model
+                if dtype is None:
+                    old_param = model
+                    splits = param_name.split(".")
+                    for split in splits:
+                        old_param = getattr(old_param, split)
+                        if old_param is None:
+                            break
+
+                    if old_param is not None:
+                        param = param.to(old_param.dtype)
+
                 while len(module_name) > 0 and module_name not in device_map:
                     module_name = ".".join(module_name.split(".")[:-1])
                 if module_name == "" and "" not in device_map:
