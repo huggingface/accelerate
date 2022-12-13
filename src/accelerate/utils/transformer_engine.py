@@ -55,7 +55,12 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
 
             setattr(model, name, new_module)
         else:
-            convert_model(module, to_transformer_engine=to_transformer_engine, _convert_linear=_convert_linear, _convert_ln=_convert_ln)
+            convert_model(
+                module,
+                to_transformer_engine=to_transformer_engine,
+                _convert_linear=_convert_linear,
+                _convert_ln=_convert_ln,
+            )
 
 
 def has_transformer_engine_layers(model):
