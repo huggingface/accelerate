@@ -21,11 +21,11 @@ if is_fp8_available():
     import transformer_engine.pytorch as te
 
 
-def convert_model(model, to_transformer_engine=True):
+def convert_model(model, to_transformer_engine=True, _convert_linear=True, _convert_ln=True):
     """
     Recursively converts the linear and layernorm layers of a model to their `transformers_engine` counterpart.
     """
-    for name, module in model.named_children():
+    for name, module in model.named_children() and _convert_linear:
         if isinstance(module, nn.Linear) and to_transformer_engine:
             has_bias = module.bias is not None
             te_module = te.Linear(module.in_features, module.out_features, bias=has_bias)
@@ -34,13 +34,13 @@ def convert_model(model, to_transformer_engine=True):
                 te_module.bias.data = module.bias.data.clone()
 
             setattr(model, name, te_module)
-        elif isinstance(module, nn.LayerNorm) and to_transformer_engine:
+        elif isinstance(module, nn.LayerNorm) and to_transformer_engine and _convert_ln:
             te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps)
             te_module.layer_norm_weight.data = module.weight.data.clone()
             te_module.layer_norm_bias.data = module.bias.data.clone()
 
             setattr(model, name, te_module)
-        elif isinstance(module, te.Linear) and not to_transformer_engine:
+        elif isinstance(module, te.Linear) and not to_transformer_engine and _convert_linear:
             has_bias = module.bias is not None
             new_module = nn.Linear(module.in_features, module.out_features, bias=has_bias)
             new_module.weight.data = module.weight.data.clone()
@@ -48,7 +48,7 @@ def convert_model(model, to_transformer_engine=True):
                 new_module.bias.data = module.bias.data.clone()
 
             setattr(model, name, new_module)
-        elif isinstance(module, te.LayerNorm) and not to_transformer_engine:
+        elif isinstance(module, te.LayerNorm) and not to_transformer_engine and _convert_ln:
             new_module = nn.LayerNorm(module.normalized_shape[0], eps=module.eps)
             new_module.weight.data = module.layer_norm_weight.data.clone()
             new_module.bias.data = module.layer_norm_bias.data.clone()
