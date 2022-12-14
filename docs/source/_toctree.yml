@@ -28,7 +28,7 @@
   - local: usage_guides/tracking
     title: Using experiment trackers
   - local: usage_guides/big_modeling
-    title: How to use large models with small resources
+    title: How perform inference on large models with small resources
   - local: usage_guides/memory
     title: How to avoid CUDA Out-of-Memory
   - local: usage_guides/sagemaker
