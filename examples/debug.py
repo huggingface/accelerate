@@ -23,6 +23,7 @@ tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
 
 inputs = tokenizer("Hello, my name is.", return_tensors="pt").to(0)
+set_seed(0)
 outputs = model(**inputs, labels=torch.tensor([0]).to(0))
 
 state_dict = model.state_dict()
@@ -30,7 +31,7 @@ state_dict = model.state_dict()
 if args.convert:
     new_model = BertForSequenceClassification.from_pretrained("bert-base-cased").to(0).train()
     with torch.no_grad():
-        convert_model(new_model)
+        convert_model(new_model, _convert_linear=not args.no_linear, _convert_ln=not args.no_ln)
 else:
     if args.no_linear and args.no_ln:
         model_cls = BertForSequenceClassification
@@ -48,6 +49,7 @@ if not args.no_ln:
 new_model.load_state_dict(state_dict, strict=False)
 
 # new_model.forward = fp8_autocast(enabled=False, fp8_recipe=DelayedScaling())(new_model.forward)
+set_seed(0)
 new_outputs = new_model(**inputs, labels=torch.tensor([0]).to(0))
 
 print("Outputs comparison at 1e-6/1e-5/1e-4")
@@ -73,7 +75,10 @@ print(torch.allclose(grad1, grad2, atol=1e-5))
 print(torch.allclose(grad1, grad2, atol=1e-4))
 
 grad1 = getattr(model.bert.encoder.layer, "0").attention.output.LayerNorm.weight.grad
-grad2 = getattr(new_model.bert.encoder.layer, "0").attention.output.LayerNorm.layer_norm_weight.grad
+if not args.no_ln:
+    grad2 = getattr(new_model.bert.encoder.layer, "0").attention.output.LayerNorm.layer_norm_weight.grad
+else:
+    grad2 = getattr(new_model.bert.encoder.layer, "0").attention.output.LayerNorm.weight.grad
 print("Layer norm gradients at 1e-6/1e-5/1e-4")
 print(torch.allclose(grad1, grad2, atol=1e-6))
 print(torch.allclose(grad1, grad2, atol=1e-5))
