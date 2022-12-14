@@ -28,9 +28,9 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 import transformer_engine.pytorch as te
-from transforners import BertConfig
-from transforners.activations import ACT2FN
-from transforners.modeling_outputs import (
+from transformers import BertConfig
+from transformers.activations import ACT2FN
+from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -41,9 +41,9 @@ from transforners.modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from transforners.modeling_utils import PreTrainedModel
-from transforners.pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from transforners.utils import (
+from transformers.modeling_utils import PreTrainedModel
+from transformers.pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from transformers.utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
