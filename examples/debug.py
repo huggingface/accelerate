@@ -32,7 +32,9 @@ if args.convert:
     with torch.no_grad():
         convert_model(new_model)
 else:
-    if args.no_linear:
+    if args.no_linear and args.no_ln:
+        model_cls = BertForSequenceClassification
+    elif args.no_linear:
         model_cls = TEBertForSequenceClassificationNoLinear
     elif args.no_ln:
         model_cls = TEBertForSequenceClassificationNoLN
