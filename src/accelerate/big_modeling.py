@@ -81,9 +81,8 @@ def init_on_device(device: torch.device, include_buffers: bool = False):
 
     ```python
     import torch.nn as nn
-    from accelerate import init_empty_weights
+    from accelerate import init_on_device
 
-    # Initialize a model with 100 billions parameters in no time and without using any RAM.
     with init_on_device(device=torch.device("cuda")):
         tst = nn.Liner(100, 100)  # on `cuda` device
     ```
