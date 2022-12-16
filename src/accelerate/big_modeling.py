@@ -65,28 +65,29 @@ def init_empty_weights(include_buffers: bool = False):
     with init_on_device(torch.device("meta"), include_buffers=include_buffers) as f:
         yield f
 
+
 @contextmanager
 def init_on_device(device: torch.device, include_buffers: bool = False):
     """
-        A context manager under which models are initialized with all parameters on the specified device.
+    A context manager under which models are initialized with all parameters on the specified device.
 
-        Args:
-            device (`torch.device`):
-                Device to initialize all parameters on.
-            include_buffers (`bool`, *optional*, defaults to `False`):
-                Whether or not to also put all buffers on the meta device while initializing.
+    Args:
+        device (`torch.device`):
+            Device to initialize all parameters on.
+        include_buffers (`bool`, *optional*, defaults to `False`):
+            Whether or not to also put all buffers on the meta device while initializing.
 
-        Example:
+    Example:
 
-        ```python
-        import torch.nn as nn
-        from accelerate import init_empty_weights
+    ```python
+    import torch.nn as nn
+    from accelerate import init_empty_weights
 
-        # Initialize a model with 100 billions parameters in no time and without using any RAM.
-        with init_on_device(device=torch.device("cuda")):
-            tst = nn.Liner(100, 100) # on `cuda` device
-        ```
-        """
+    # Initialize a model with 100 billions parameters in no time and without using any RAM.
+    with init_on_device(device=torch.device("cuda")):
+        tst = nn.Liner(100, 100)  # on `cuda` device
+    ```
+    """
     old_register_parameter = nn.Module.register_parameter
     if include_buffers:
         old_register_buffer = nn.Module.register_buffer

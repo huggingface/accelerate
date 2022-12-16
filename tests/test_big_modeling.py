@@ -24,7 +24,8 @@ from accelerate.big_modeling import (
     disk_offload,
     dispatch_model,
     init_empty_weights,
-    load_checkpoint_and_dispatch, init_on_device,
+    init_on_device,
+    load_checkpoint_and_dispatch,
 )
 from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import require_cuda, require_multi_gpu, require_torch_min_version, slow
