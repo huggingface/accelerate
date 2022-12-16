@@ -115,16 +115,16 @@ class BigModelingTester(unittest.TestCase):
         device = torch.device("cuda:0")
         with init_on_device(device):
             model = nn.Linear(10, 10)
-        self.assertTrue(model.weight.device == device)
-        self.assertTrue(model.weight.device == device)
+        self.assertEqual(model.weight.device, device)
+        self.assertEqual(model.weight.device, device)
 
     @require_mps
     def test_init_on_device_mps(self):
         device = torch.device("mps:0")
         with init_on_device(device):
             model = nn.Linear(10, 10)
-        self.assertTrue(model.weight.device == device)
-        self.assertTrue(model.weight.device == device)
+        self.assertEqual(model.weight.device, device)
+        self.assertEqual(model.weight.device, device)
 
     def test_cpu_offload(self):
         model = ModelForTest()
