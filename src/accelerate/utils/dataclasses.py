@@ -361,7 +361,7 @@ class DeepSpeedPlugin:
         from .deepspeed import HfDeepSpeedConfig
 
         if self.hf_ds_config is None:
-            self.hf_ds_config = os.environ.get("DEEPSPEED_CONFIG_FILE", "none")
+            self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
         if (
             isinstance(self.hf_ds_config, dict)
             or (isinstance(self.hf_ds_config, str) and self.hf_ds_config != "none")
@@ -377,24 +377,24 @@ class DeepSpeedPlugin:
                 raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config.")
         else:
             if self.gradient_accumulation_steps is None:
-                self.gradient_accumulation_steps = int(os.environ.get("GRADIENT_ACCUMULATION_STEPS", 1))
+                self.gradient_accumulation_steps = int(os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", 1))
 
             if self.gradient_clipping is None:
-                gradient_clipping = os.environ.get("GRADIENT_CLIPPING", "none")
+                gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", "none")
                 if gradient_clipping != "none":
                     self.gradient_clipping = float(gradient_clipping)
 
             if self.zero_stage is None:
-                self.zero_stage = int(os.environ.get("DEEPSPEED_ZERO_STAGE", 2))
+                self.zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", 2))
 
             if self.offload_optimizer_device is None:
-                self.offload_optimizer_device = os.environ.get("DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
+                self.offload_optimizer_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
 
             if self.offload_param_device is None:
-                self.offload_param_device = os.environ.get("DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
+                self.offload_param_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
 
             if self.zero3_save_16bit_model is None:
-                self.zero3_save_16bit_model = os.environ.get("DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+                self.zero3_save_16bit_model = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
 
             config = {
                 "train_batch_size": "auto",
@@ -417,7 +417,7 @@ class DeepSpeedPlugin:
         self.deepspeed_config = self.hf_ds_config.config
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
-            self.zero3_init_flag = os.environ.get("DEEPSPEED_ZERO3_INIT", "false") == "true"
+            self.zero3_init_flag = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", "false") == "true"
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
