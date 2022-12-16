@@ -87,6 +87,15 @@ def require_cuda(test_case):
     return unittest.skipUnless(torch.cuda.is_available(), "test requires a GPU")(test_case)
 
 
+def require_mps(test_case):
+    """
+    Decorator marking a test that requires MPS backend. These tests are skipped when torch doesn't support `mps`
+    backend.
+    """
+    is_mps_supported = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    return unittest.skipUnless(is_mps_supported, "test requires a `mps` backend support in `torch`")(test_case)
+
+
 def require_huggingface_suite(test_case):
     """
     Decorator marking a test that requires transformers and datasets. These tests are skipped when they are not.

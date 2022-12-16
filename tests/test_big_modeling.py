@@ -24,10 +24,11 @@ from accelerate.big_modeling import (
     disk_offload,
     dispatch_model,
     init_empty_weights,
+    init_on_device,
     load_checkpoint_and_dispatch,
 )
 from accelerate.hooks import remove_hook_from_submodules
-from accelerate.test_utils import require_cuda, require_multi_gpu, require_torch_min_version, slow
+from accelerate.test_utils import require_cuda, require_mps, require_multi_gpu, require_torch_min_version, slow
 from accelerate.utils import offload_state_dict
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -108,6 +109,22 @@ class BigModelingTester(unittest.TestCase):
         # This is a 100 billion parameters model.
         with init_empty_weights():
             _ = nn.Sequential(*[nn.Linear(10000, 10000) for _ in range(1000)])
+
+    @require_cuda
+    def test_init_on_device_cuda(self):
+        device = torch.device("cuda:0")
+        with init_on_device(device):
+            model = nn.Linear(10, 10)
+        self.assertEqual(model.weight.device, device)
+        self.assertEqual(model.weight.device, device)
+
+    @require_mps
+    def test_init_on_device_mps(self):
+        device = torch.device("mps:0")
+        with init_on_device(device):
+            model = nn.Linear(10, 10)
+        self.assertEqual(model.weight.device, device)
+        self.assertEqual(model.weight.device, device)
 
     def test_cpu_offload(self):
         model = ModelForTest()

@@ -8,6 +8,7 @@ from .testing import (
     require_cpu,
     require_cuda,
     require_huggingface_suite,
+    require_mps,
     require_multi_gpu,
     require_single_gpu,
     require_torch_min_version,
