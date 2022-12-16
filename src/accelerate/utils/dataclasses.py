@@ -394,7 +394,9 @@ class DeepSpeedPlugin:
                 self.offload_param_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
 
             if self.zero3_save_16bit_model is None:
-                self.zero3_save_16bit_model = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+                self.zero3_save_16bit_model = (
+                    os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+                )
 
             config = {
                 "train_batch_size": "auto",
