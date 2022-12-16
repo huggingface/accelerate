@@ -92,7 +92,8 @@ def require_mps(test_case):
     Decorator marking a test that requires MPS backend. These tests are skipped when torch doesn't support `mps`
     backend.
     """
-    return unittest.skipUnless(torch.backends.mps.is_available(), "test requires a `mps` backend support in `torch`")(
+    is_mps_supported = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    return unittest.skipUnless(is_mps_supported, "test requires a `mps` backend support in `torch`")(
         test_case
     )
 
