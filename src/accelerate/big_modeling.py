@@ -62,6 +62,31 @@ def init_empty_weights(include_buffers: bool = False):
     """
     if not is_torch_version(">=", "1.9.0"):
         raise NotImplementedError("Initializing empty weights to a meta device requires torch >= 1.9.0")
+    with init_on_device(torch.device("meta"), include_buffers=include_buffers) as f:
+        yield f
+
+@contextmanager
+def init_on_device(device: torch.device, include_buffers: bool = False):
+    """
+        A context manager under which models are initialized with all parameters on the specified device.
+
+        Args:
+            device (`torch.device`):
+                Device to initialize all parameters on.
+            include_buffers (`bool`, *optional*, defaults to `False`):
+                Whether or not to also put all buffers on the meta device while initializing.
+
+        Example:
+
+        ```python
+        import torch.nn as nn
+        from accelerate import init_empty_weights
+
+        # Initialize a model with 100 billions parameters in no time and without using any RAM.
+        with init_on_device(device=torch.device("cuda")):
+            tst = nn.Liner(100, 100) # on `cuda` device
+        ```
+        """
     old_register_parameter = nn.Module.register_parameter
     if include_buffers:
         old_register_buffer = nn.Module.register_buffer
@@ -71,12 +96,12 @@ def init_empty_weights(include_buffers: bool = False):
         if param is not None:
             param_cls = type(module._parameters[name])
             kwargs = module._parameters[name].__dict__
-            module._parameters[name] = param_cls(module._parameters[name].to(torch.device("meta")), **kwargs)
+            module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
 
     def register_empty_buffer(module, name, buffer):
         old_register_buffer(module, name, buffer)
         if buffer is not None:
-            module._buffers[name] = module._buffers[name].to(torch.device("meta"))
+            module._buffers[name] = module._buffers[name].to(device)
 
     # Patch tensor creation
     if include_buffers:
@@ -89,7 +114,7 @@ def init_empty_weights(include_buffers: bool = False):
 
     def patch_tensor_constructor(fn):
         def wrapper(*args, **kwargs):
-            kwargs["device"] = torch.device("meta")
+            kwargs["device"] = device
             return fn(*args, **kwargs)
 
         return wrapper
