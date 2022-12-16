@@ -329,14 +329,14 @@ def launch_command_parser(subparsers=None):
     )
     deepspeed_args.add_argument(
         "--zero3_init_flag",
-        default=None,
+        default="true",
         type=str,
         help="Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models. "
         "Only applicable with DeepSpeed ZeRO Stage-3.",
     )
     deepspeed_args.add_argument(
         "--zero3_save_16bit_model",
-        default=None,
+        default="false",
         type=str,
         help="Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3. "
         "Only applicable with DeepSpeed ZeRO Stage-3.",
@@ -718,15 +718,15 @@ def deepspeed_launcher(args):
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
     current_env["ACCELERATE_USE_DEEPSPEED"] = "true"
-    current_env["DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
-    current_env["GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
-    current_env["GRADIENT_CLIPPING"] = str(args.gradient_clipping).lower()
-    current_env["DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
-    current_env["DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
-    current_env["DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
-    current_env["DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
+    current_env["ACCELERATE_DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
+    current_env["ACCELERATE_GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
+    current_env["ACCELERATE_GRADIENT_CLIPPING"] = str(args.gradient_clipping).lower()
+    current_env["ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
+    current_env["ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
+    current_env["ACCELERATE_DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
+    current_env["ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
     if args.deepspeed_config_file is not None:
-        current_env["DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file)
+        current_env["ACCELERATE_DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         with open(".deepspeed_env", "a") as f:
@@ -996,8 +996,7 @@ def launch_command(args):
             for name, attr in defaults.__dict__.items():
                 if isinstance(attr, dict):
                     for k in defaults.deepspeed_config:
-                        if getattr(args, k) is None:
-                            setattr(args, k, defaults.deepspeed_config[k])
+                        setattr(args, k, defaults.deepspeed_config[k])
                     for k in defaults.fsdp_config:
                         arg_to_set = k
                         if "fsdp" not in arg_to_set:
