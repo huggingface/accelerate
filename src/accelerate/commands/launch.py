@@ -867,6 +867,8 @@ def tpu_pod_launcher(args):
         "--no_tpu_cluster",
         "--num_processes",
         str(args.num_processes),
+        "--main_training_function",
+        str(args.main_training_function),
         training_script,
     ] + training_script_args
     bad_flags = ""
