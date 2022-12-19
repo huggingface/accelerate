@@ -162,6 +162,7 @@ class ClusterConfig(BaseConfig):
     tpu_name: str = None
     tpu_zone: str = None
     tpu_cluster: bool = False
+    tpu_use_sudo: bool = False
     command_file: str = None
     commands: List[str] = None
     tpu_vm: List[str] = None

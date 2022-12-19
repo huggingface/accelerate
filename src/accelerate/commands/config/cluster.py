@@ -493,6 +493,11 @@ def get_cluster_input():
                             default=False,
                             error_message="Please enter yes or no.",
                         )
+            tpu_use_sudo = _ask_field(
+                "To run a python script in your TPU environment should `sudo` be used? [yes/NO]: ",
+                default=None,
+                error_message="Please enter yes or no.",
+            )
             tpu_vm = _ask_field(
                 "If not using an instance group, what are the names of the Compute VM instances to be used, seperated by a comma: ",
                 default="",
@@ -523,6 +528,7 @@ def get_cluster_input():
         same_network=same_network,
         tpu_name=tpu_name,
         tpu_zone=tpu_zone,
+        tpu_use_sudo=tpu_use_sudo,
         tpu_vm=tpu_vm,
         tpu_env=tpu_env,
         tpu_cluster=use_cluster,

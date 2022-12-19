@@ -309,6 +309,11 @@ def launch_command_parser(subparsers=None):
         help="Should not be passed explicitly, this is for internal use only.",
     )
     tpu_args.add_argument(
+        "--tpu_use_sudo",
+        action="store_true",
+        help="Whether to use sudo when running the TPU training script.",
+    )
+    tpu_args.add_argument(
         "--vm",
         type=str,
         action="append",
@@ -860,8 +865,12 @@ def tpu_pod_launcher(args):
         args, xla_dist.get_args_parser(), ["--tpu", args.tpu_name, "--positional", "", "--restart-tpuvm-pod-server"]
     )
 
-    new_args.positional = [
-        "sudo",
+    if args.tpu_use_sudo:
+        new_args = ["sudo"]
+    else:
+        new_args = []
+
+    new_args += [
         "accelerate-launch",
         "--tpu",
         "--no_tpu_cluster",
@@ -871,6 +880,8 @@ def tpu_pod_launcher(args):
         str(args.main_training_function),
         training_script,
     ] + training_script_args
+
+    new_args.positional = new_args
     bad_flags = ""
     for arg in vars(new_args):
         if arg.startswith("docker_"):
