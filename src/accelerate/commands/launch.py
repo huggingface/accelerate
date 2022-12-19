@@ -866,11 +866,11 @@ def tpu_pod_launcher(args):
     )
 
     if args.tpu_use_sudo:
-        new_args = ["sudo"]
+        new_cmd = ["sudo"]
     else:
-        new_args = []
+        new_cmd = []
 
-    new_args += [
+    new_cmd += [
         "accelerate-launch",
         "--tpu",
         "--no_tpu_cluster",
@@ -881,7 +881,7 @@ def tpu_pod_launcher(args):
         training_script,
     ] + training_script_args
 
-    new_args.positional = new_args
+    new_args.positional = new_cmd
     bad_flags = ""
     for arg in vars(new_args):
         if arg.startswith("docker_"):
