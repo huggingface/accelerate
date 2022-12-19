@@ -861,6 +861,7 @@ def tpu_pod_launcher(args):
     )
 
     new_args.positional = [
+        "sudo",
         "accelerate-launch",
         "--tpu",
         "--no_tpu_cluster",
