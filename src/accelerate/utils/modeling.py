@@ -85,7 +85,11 @@ def dtype_byte_size(dtype: torch.dtype):
 
 
 def set_module_tensor_to_device(
-    module: nn.Module, tensor_name: str, device: Union[int, str, torch.device], value: Optional[torch.Tensor] = None
+    module: nn.Module,
+    tensor_name: str,
+    device: Union[int, str, torch.device],
+    value: Optional[torch.Tensor] = None,
+    dtype: Optional[Union[str, torch.dtype]] = None,
 ):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
@@ -97,6 +101,9 @@ def set_module_tensor_to_device(
         device (`int`, `str` or `torch.device`): The device on which to set the tensor.
         value (`torch.Tensor`, *optional*): The value of the tensor (useful when going from the meta device to any
             other device).
+        dtype (`torch.dtype`, *optional*):
+            If passed along the value of the parameter will be cast to this `dtype`. Otherwise, `value` will be cast to
+            the dtype of the existing parameter in the model.
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -115,6 +122,13 @@ def set_module_tensor_to_device(
 
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
+
+    if value is not None:
+        if dtype is None:
+            # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
+            value = value.to(old_value.dtype)
+        elif str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
+            value = value.to(dtype)
 
     with torch.no_grad():
         if value is None:
@@ -681,22 +695,6 @@ def load_checkpoint_in_model(
             for param_name, param in checkpoint.items():
                 module_name = param_name
 
-                if dtype is not None and not str(param.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
-                    param = param.to(dtype)
-
-                # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in
-                # model
-                if dtype is None:
-                    old_param = model
-                    splits = param_name.split(".")
-                    for split in splits:
-                        old_param = getattr(old_param, split)
-                        if old_param is None:
-                            break
-
-                    if old_param is not None:
-                        param = param.to(old_param.dtype)
-
                 while len(module_name) > 0 and module_name not in device_map:
                     module_name = ".".join(module_name.split(".")[:-1])
                 if module_name == "" and "" not in device_map:
@@ -711,7 +709,7 @@ def load_checkpoint_in_model(
                     set_module_tensor_to_device(model, param_name, "meta")
                     offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
                 else:
-                    set_module_tensor_to_device(model, param_name, param_device, value=param)
+                    set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=dtype)
 
         # Force Python to clean up.
         del checkpoint
