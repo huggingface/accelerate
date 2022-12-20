@@ -538,14 +538,14 @@ class DeepSpeedPlugin:
         old = self.zero3_init_flag
         if old == enable:
             yield
-            return
-        self.zero3_init_flag = enable
-        self.dschf = None
-        self.set_deepspeed_weakref()
-        yield
-        self.zero3_init_flag = old
-        self.dschf = None
-        self.set_deepspeed_weakref()
+        else:
+            self.zero3_init_flag = enable
+            self.dschf = None
+            self.set_deepspeed_weakref()
+            yield
+            self.zero3_init_flag = old
+            self.dschf = None
+            self.set_deepspeed_weakref()
 
 
 @dataclass
