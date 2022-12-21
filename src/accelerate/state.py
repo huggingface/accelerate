@@ -264,6 +264,20 @@ class AcceleratorState:
     def use_fp16(self):
         return self.mixed_precision != "no"
 
+    @property
+    def mixed_precision_type(self):
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            config = self.deepspeed_plugin.deepspeed_config
+            if config.get("fp16", {}).get("enabled", False):
+                mixed_precision = "fp16"
+            elif config.get("bf16", {}).get("enabled", False):
+                mixed_precision = "bf16"
+            else:
+                mixed_precision = "no"
+        else:
+            mixed_precision = self.mixed_precision
+        return mixed_precision
+
     @staticmethod
     def _reset_state():
         "Resets `_shared_state`, is used internally and should not be called"
