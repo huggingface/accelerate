@@ -23,6 +23,7 @@ import functools
 import os
 import typing
 import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from distutils.util import strtobool
@@ -530,6 +531,23 @@ class DeepSpeedPlugin:
             from transformers.deepspeed import HfDeepSpeedConfig
 
             self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
+
+    def is_zero3_init_enabled(self):
+        return self.zero3_init_flag
+
+    @contextmanager
+    def zero3_init_context_manager(self, enable=False):
+        old = self.zero3_init_flag
+        if old == enable:
+            yield
+        else:
+            self.zero3_init_flag = enable
+            self.dschf = None
+            self.set_deepspeed_weakref()
+            yield
+            self.zero3_init_flag = old
+            self.dschf = None
+            self.set_deepspeed_weakref()
 
 
 @dataclass
