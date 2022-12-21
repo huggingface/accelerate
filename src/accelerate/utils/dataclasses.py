@@ -534,7 +534,7 @@ class DeepSpeedPlugin:
         return self.zero3_init_flag
 
     @contextmanager
-    def set_zero3_init(self, enable=False):
+    def zero3_init_context_manager(self, enable=False):
         old = self.zero3_init_flag
         if old == enable:
             yield
