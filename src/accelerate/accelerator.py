@@ -473,7 +473,7 @@ class Accelerator:
 
     @property
     def mixed_precision(self):
-        return self.state.mixed_precision_type
+        return self.state.mixed_precision
 
     def on_main_process(func):
         """
