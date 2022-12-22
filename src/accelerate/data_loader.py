@@ -711,7 +711,7 @@ def prepare_data_loader(
     # Need to provide batch_size as batch_sampler is None for Iterable dataset
     if new_batch_sampler is None:
         kwargs["drop_last"] = dataloader.drop_last
-        kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches else dataloader.batch_size
+        kwargs["batch_size"] = dataloader.batch_size // num_processes if split_batches and not dispatch_batches else dataloader.batch_size
 
     if dispatch_batches:
         kwargs.pop("generator")
