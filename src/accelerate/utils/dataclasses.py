@@ -409,6 +409,7 @@ class DeepSpeedPlugin:
                 raise ValueError("gradient_accumulation_steps cannot be set to 'auto' in the DeepSpeed config.")
             if "zero_optimization" not in self.hf_ds_config.config:
                 raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config.")
+            self._deepspeed_config_checks()
         else:
             if self.gradient_accumulation_steps is None:
                 self.gradient_accumulation_steps = int(os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", 1))
@@ -548,6 +549,68 @@ class DeepSpeedPlugin:
             self.zero3_init_flag = old
             self.dschf = None
             self.set_deepspeed_weakref()
+
+    def _deepspeed_config_checks(self):
+        ds_config = self.hf_ds_config.config
+        mismatches = []
+        if os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", None) is not None:
+            if ds_config["gradient_accumulation_steps"] != int(os.environ["ACCELERATE_GRADIENT_ACCUMULATION_STEPS"]):
+                mismatches.append(
+                    f"- ds config gradient_accumulation_steps={ds_config['gradient_accumulation_steps']} vs "
+                    f"accelerate config gradient_accumulation_steps={os.environ['ACCELERATE_GRADIENT_ACCUMULATION_STEPS']}"
+                )
+
+        if os.environ.get("ACCELERATE_GRADIENT_CLIPPING", None) is not None:
+            if ds_config["gradient_clipping"] != float(os.environ["ACCELERATE_GRADIENT_CLIPPING"]):
+                mismatches.append(
+                    f"- ds config gradient_clipping={ds_config['gradient_clipping']} vs "
+                    f"accelerate config gradient_clipping={os.environ['ACCELERATE_GRADIENT_CLIPPING']}"
+                )
+
+        if os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", None) is not None:
+            if ds_config["zero_optimization"]["stage"] != int(os.environ["ACCELERATE_DEEPSPEED_ZERO_STAGE"]):
+                mismatches.append(
+                    f"- ds config zero_optimization.stage={ds_config['zero_optimization']['stage']} vs "
+                    f"accelerate config zero_stage={os.environ['ACCELERATE_DEEPSPEED_ZERO_STAGE']}"
+                )
+
+        if os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", None) is not None:
+            if (
+                ds_config["zero_optimization"].get("offload_optimizer", {}).get("device", None)
+                != os.environ["ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"]
+            ):
+                mismatches.append(
+                    f"- ds config zero_optimization.offload_optimizer.device={ds_config['zero_optimization'].get('offload_optimizer', {}).get('device', None)} vs "
+                    f"accelerate config offload_optimizer_device={os.environ['ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE']}"
+                )
+
+        if os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", None) is not None:
+            if (
+                ds_config["zero_optimization"].get("offload_param", {}).get("device", None)
+                != os.environ["ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE"]
+            ):
+                mismatches.append(
+                    f"- ds config zero_optimization.offload_param.device={ds_config['zero_optimization'].get('offload_param', {}).get('device', None)} vs "
+                    f"accelerate config offload_param_device={os.environ['ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE']}"
+                )
+
+        if os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", None) is not None:
+            if ds_config["zero_optimization"].get("stage3_gather_16bit_weights_on_model_save", None) != (
+                os.environ["ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] == "true"
+            ):
+                mismatches.append(
+                    f"- ds config zero_optimization.stage3_gather_16bit_weights_on_model_save="
+                    f"{ds_config['zero_optimization'].get('stage3_gather_16bit_weights_on_model_save', None)} vs "
+                    f"accelerate config zero3_save_16bit_model={(os.environ['ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL']=='true')}"
+                )
+
+        if len(mismatches) > 0:
+            mismatches_msg = "\n".join(mismatches)
+            raise ValueError(
+                "Please correct the following DeepSpeed config values that mismatch accelerate config "
+                f" values:\n{mismatches_msg}\nThe easiest method is to create new config following the questionnaire via "
+                f" `accelerate config`."
+            )
 
 
 @dataclass
