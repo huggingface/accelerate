@@ -104,7 +104,7 @@ class AcceleratorState:
                     self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                     self.device = torch.device("cuda", self.local_process_index)
                     torch.cuda.set_device(self.device)
-                    self.mixed_precision = mixed_precision
+                    self._mixed_precision = mixed_precision
             elif is_tpu_available() and not cpu:
                 self.distributed_type = DistributedType.TPU
                 self.num_processes = xm.xrt_world_size()
@@ -120,7 +120,7 @@ class AcceleratorState:
                         os.environ["XLA_USE_BF16"] = str(1)
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
-                self.mixed_precision = mixed_precision
+                self._mixed_precision = mixed_precision
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
                 assert (
                     is_deepspeed_available()
@@ -142,7 +142,7 @@ class AcceleratorState:
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-                self.mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
+                self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
                 self.deepspeed_plugin = deepspeed_plugin
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
@@ -154,15 +154,15 @@ class AcceleratorState:
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-                self.mixed_precision = mixed_precision
+                self._mixed_precision = mixed_precision
                 if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP
-                    if self.mixed_precision != "no":
-                        fsdp_plugin.set_mixed_precision(self.mixed_precision)
+                    if self._mixed_precision != "no":
+                        fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
                 if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true":
                     self.distributed_type = DistributedType.MEGATRON_LM
-                    megatron_lm_plugin.set_mixed_precision(self.mixed_precision)
+                    megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
@@ -204,7 +204,7 @@ class AcceleratorState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
                 self.device = torch.device("cpu")
-                self.mixed_precision = mixed_precision
+                self._mixed_precision = mixed_precision
             else:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
@@ -237,9 +237,13 @@ class AcceleratorState:
                     self.device = torch.device("cpu")
                 else:
                     self.device = torch.device("cuda")
-                self.mixed_precision = mixed_precision
+                self._mixed_precision = mixed_precision
 
-            if self.dynamo_backend != DynamoBackend.NO and self.mixed_precision == "no" and self.device.type == "cuda":
+            if (
+                self.dynamo_backend != DynamoBackend.NO
+                and self._mixed_precision == "no"
+                and self.device.type == "cuda"
+            ):
                 torch.backends.cuda.matmul.allow_tf32 = True
             self.initialized = True
 
@@ -252,17 +256,30 @@ class AcceleratorState:
             f"Process index: {self.process_index}\n"
             f"Local process index: {self.local_process_index}\n"
             f"Device: {self.device}\n"
+            f"Mixed precision type: {mixed_precision}\n"
         )
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
-        else:
-            repr += f"Mixed precision type: {mixed_precision}\n"
         return repr
 
     # For backward compatibility
     @property
     def use_fp16(self):
-        return self.mixed_precision != "no"
+        return self._mixed_precision != "no"
+
+    @property
+    def mixed_precision(self):
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            config = self.deepspeed_plugin.deepspeed_config
+            if config.get("fp16", {}).get("enabled", False):
+                mixed_precision = "fp16"
+            elif config.get("bf16", {}).get("enabled", False):
+                mixed_precision = "bf16"
+            else:
+                mixed_precision = "no"
+        else:
+            mixed_precision = self._mixed_precision
+        return mixed_precision
 
     @staticmethod
     def _reset_state():
@@ -275,7 +292,7 @@ class AcceleratorState:
             err = "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `Accelerate()`."
             if cpu and self.device.type != "cpu":
                 raise ValueError(err.format(flag="cpu=True"))
-            if mixed_precision is not None and mixed_precision != self.mixed_precision:
+            if mixed_precision is not None and mixed_precision != self._mixed_precision:
                 raise ValueError(err.format(flag=f"mixed_precision='{mixed_precision}'"))
 
 
