@@ -563,9 +563,9 @@ class DeepSpeedPlugin:
         ]
         duplicate_values_flag = False
         for name in env_variable_names_to_ignore:
-            if name == "ACCELERATE_MIXED_PRECISION" and os.environ.get(name, "no") != "no":
+            if name != "ACCELERATE_MIXED_PRECISION" and os.environ.get(name, None) is not None:
                 duplicate_values_flag = True
-            elif os.environ.get(name, None) is not None:
+            elif name == "ACCELERATE_MIXED_PRECISION" and os.environ.get(name, "no") != "no":
                 duplicate_values_flag = True
             if duplicate_values_flag:
                 break
@@ -574,10 +574,11 @@ class DeepSpeedPlugin:
             env_variable_names_to_ignore = [
                 name.replace("ACCELERATE_", "").lower() for name in env_variable_names_to_ignore
             ]
-            warnings.warn(
-                f"When using `deepspeed_config_file`, the following accelerate config variables will be ignored: {env_variable_names_to_ignore}. "
-                "Please specify them appropriately in the DeepSpeed config file. In accelerate config file, set `mixed_precision=no` and remove others config variables. "
-                "The easiest method is to create new config following the questionnaire via  `accelerate config`. "
+            raise ValueError(
+                f"When using `deepspeed_config_file`, the following accelerate config variables will be ignored: {env_variable_names_to_ignore}.\n"
+                "Please specify them appropriately in the DeepSpeed config file. In accelerate config file, set `mixed_precision=no` "
+                "and remove others config variables mentioned in the above specified list.\n"
+                "The easiest method is to create new config following the questionnaire via  `accelerate config`.\n"
                 "It will only ask for the necessary config variables when using `deepspeed_config_file`."
             )
 
