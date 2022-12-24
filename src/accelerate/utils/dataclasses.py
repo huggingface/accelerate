@@ -572,7 +572,8 @@ class DeepSpeedPlugin:
 
         if duplicate_values_flag:
             env_variable_names_to_ignore = [
-                name.replace("ACCELERATE_", "").lower() for name in env_variable_names_to_ignore
+                name.replace("ACCELERATE_", "").replace("DEEPSPEED_", "").lower()
+                for name in env_variable_names_to_ignore
             ]
             raise ValueError(
                 f"When using `deepspeed_config_file`, the following accelerate config variables will be ignored: {env_variable_names_to_ignore}.\n"
