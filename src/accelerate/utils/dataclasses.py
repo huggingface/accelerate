@@ -615,7 +615,7 @@ class DeepSpeedPlugin:
         if accelerate_mixed_precision != "no":
             if accelerate_mixed_precision not in ds_config:
                 mismatches.append(f"- ds config does not have mixed precision config for {accelerate_mixed_precision}")
-            elif ds_config[accelerate_mixed_precision].get("enabled", None) is None:
+            elif ds_config[accelerate_mixed_precision].get("enabled", None) != "true":
                 mismatches.append(
                     f"- ds config mixed precision config for {accelerate_mixed_precision} is not enabled"
                 )
