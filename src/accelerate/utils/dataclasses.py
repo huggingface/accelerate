@@ -579,7 +579,7 @@ class DeepSpeedPlugin:
                 f"When using `deepspeed_config_file`, the following accelerate config variables will be ignored: {env_variable_names_to_ignore}.\n"
                 "Please specify them appropriately in the DeepSpeed config file.\n"
                 "If you are using accelerate config file, set `mixed_precision=no` "
-                "and remove others config variables mentioned in the above specified list;"
+                "and remove others config variables mentioned in the above specified list; "
                 "else don't specify these config variables in `accelerate launch` command. \n"
                 "The easiest method is to create new config following the questionnaire via  `accelerate config`.\n"
                 "It will only ask for the necessary config variables when using `deepspeed_config_file`."
