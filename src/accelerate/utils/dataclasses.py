@@ -574,7 +574,7 @@ class DeepSpeedPlugin:
             env_variable_names_to_ignore = [
                 name.replace("ACCELERATE_", "").lower() for name in env_variable_names_to_ignore
             ]
-            raise warnings.warn(
+            warnings.warn(
                 f"When using `deepspeed_config_file`, the following accelerate config variables will be ignored: {env_variable_names_to_ignore}. "
                 "Please specify them appropriately in the DeepSpeed config file. In accelerate config file, set `mixed_precision=no` and remove others config variables. "
                 "The easiest method is to create new config following the questionnaire via  `accelerate config`. "
