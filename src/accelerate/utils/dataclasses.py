@@ -410,24 +410,7 @@ class DeepSpeedPlugin:
             if "zero_optimization" not in self.hf_ds_config.config:
                 raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config.")
 
-            env_variable_names_to_ignore = [
-                "ACCELERATE_GRADIENT_ACCUMULATION_STEPS",
-                "ACCELERATE_GRADIENT_CLIPPING",
-                "ACCELERATE_DEEPSPEED_ZERO_STAGE",
-                "ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE",
-                "ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE",
-                "ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL",
-                "ACCELERATE_MIXED_PRECISION",
-            ]
-            env_variable_names_to_ignore = [
-                name.replace("ACCELERATE_", "").lower() for name in env_variable_names_to_ignore
-            ]
-            raise warnings.warn(
-                f"When using `deepspeed_config_file`, the following accelerate config variables will be ignored: {env_variable_names_to_ignore}. "
-                "Please specify them appropriately in the DeepSpeed config file. In accelerate config file, set `mixed_precision=no` and remove others config variables. "
-                "The easiest method is to create new config following the questionnaire via  `accelerate config`. "
-                "It will only ask for the necessary config variables when using `deepspeed_config_file`."
-            )
+            self._deepspeed_config_checks()
         else:
             if self.gradient_accumulation_steps is None:
                 self.gradient_accumulation_steps = int(os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", 1))
@@ -472,7 +455,7 @@ class DeepSpeedPlugin:
         self.deepspeed_config = self.hf_ds_config.config
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
-            self.zero3_init_flag = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", "false") == "true"
+            self.zero3_init_flag = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", "true") == "true"
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
@@ -567,6 +550,36 @@ class DeepSpeedPlugin:
             self.zero3_init_flag = old
             self.dschf = None
             self.set_deepspeed_weakref()
+
+    def _deepspeed_config_checks(self):
+        env_variable_names_to_ignore = [
+            "ACCELERATE_GRADIENT_ACCUMULATION_STEPS",
+            "ACCELERATE_GRADIENT_CLIPPING",
+            "ACCELERATE_DEEPSPEED_ZERO_STAGE",
+            "ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE",
+            "ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE",
+            "ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL",
+            "ACCELERATE_MIXED_PRECISION",
+        ]
+        duplicate_values_flag = False
+        for name in env_variable_names_to_ignore:
+            if name == "ACCELERATE_MIXED_PRECISION" and os.environ.get(name, "no") != "no":
+                duplicate_values_flag = True
+            elif os.environ.get(name, None) is not None:
+                duplicate_values_flag = True
+            if duplicate_values_flag:
+                break
+
+        if duplicate_values_flag:
+            env_variable_names_to_ignore = [
+                name.replace("ACCELERATE_", "").lower() for name in env_variable_names_to_ignore
+            ]
+            raise warnings.warn(
+                f"When using `deepspeed_config_file`, the following accelerate config variables will be ignored: {env_variable_names_to_ignore}. "
+                "Please specify them appropriately in the DeepSpeed config file. In accelerate config file, set `mixed_precision=no` and remove others config variables. "
+                "The easiest method is to create new config following the questionnaire via  `accelerate config`. "
+                "It will only ask for the necessary config variables when using `deepspeed_config_file`."
+            )
 
 
 @dataclass
