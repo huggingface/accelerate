@@ -553,55 +553,71 @@ class DeepSpeedPlugin:
     def _deepspeed_config_checks(self):
         ds_config = self.hf_ds_config.config
         mismatches = []
-        if os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", None) is not None:
-            if ds_config["gradient_accumulation_steps"] != int(os.environ["ACCELERATE_GRADIENT_ACCUMULATION_STEPS"]):
+
+        accelerate_gradient_accumulation_steps = os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", None)
+        ds_gradient_accumulation_steps = ds_config["gradient_accumulation_steps"]
+        if accelerate_gradient_accumulation_steps is not None:
+            if ds_gradient_accumulation_steps != int(accelerate_gradient_accumulation_steps):
                 mismatches.append(
-                    f"- ds config gradient_accumulation_steps={ds_config['gradient_accumulation_steps']} vs "
-                    f"accelerate config gradient_accumulation_steps={os.environ['ACCELERATE_GRADIENT_ACCUMULATION_STEPS']}"
+                    f"- ds config gradient_accumulation_steps={ds_gradient_accumulation_steps} vs "
+                    f"accelerate config gradient_accumulation_steps={accelerate_gradient_accumulation_steps}"
                 )
 
-        if os.environ.get("ACCELERATE_GRADIENT_CLIPPING", None) is not None:
-            if ds_config["gradient_clipping"] != float(os.environ["ACCELERATE_GRADIENT_CLIPPING"]):
+        accelerate_gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", None)
+        ds_gradient_clipping = ds_config["gradient_clipping"]
+        if accelerate_gradient_clipping is not None:
+            if ds_gradient_clipping != float(accelerate_gradient_clipping):
                 mismatches.append(
-                    f"- ds config gradient_clipping={ds_config['gradient_clipping']} vs "
-                    f"accelerate config gradient_clipping={os.environ['ACCELERATE_GRADIENT_CLIPPING']}"
+                    f"- ds config gradient_clipping={ds_gradient_clipping} vs "
+                    f"accelerate config gradient_clipping={accelerate_gradient_clipping}"
                 )
 
-        if os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", None) is not None:
-            if ds_config["zero_optimization"]["stage"] != int(os.environ["ACCELERATE_DEEPSPEED_ZERO_STAGE"]):
+        accelerate_zero_stage = os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", None)
+        ds_zero_stage = ds_config["zero_optimization"]["stage"]
+        if accelerate_zero_stage is not None:
+            if ds_zero_stage != int(accelerate_zero_stage):
                 mismatches.append(
-                    f"- ds config zero_optimization.stage={ds_config['zero_optimization']['stage']} vs "
-                    f"accelerate config zero_stage={os.environ['ACCELERATE_DEEPSPEED_ZERO_STAGE']}"
+                    f"- ds config zero_optimization.stage={ds_zero_stage} vs "
+                    f"accelerate config zero_stage={accelerate_zero_stage}"
                 )
 
-        if os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", None) is not None:
-            if (
-                ds_config["zero_optimization"].get("offload_optimizer", {}).get("device", None)
-                != os.environ["ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"]
-            ):
+        accelerate_offload_optimizer = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", None)
+        ds_offload_optimizer = ds_config["zero_optimization"].get("offload_optimizer", {}).get("device", None)
+        if accelerate_offload_optimizer is not None:
+            if ds_offload_optimizer != accelerate_offload_optimizer:
                 mismatches.append(
-                    f"- ds config zero_optimization.offload_optimizer.device={ds_config['zero_optimization'].get('offload_optimizer', {}).get('device', None)} vs "
-                    f"accelerate config offload_optimizer_device={os.environ['ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE']}"
+                    f"- ds config zero_optimization.offload_optimizer.device={ds_offload_optimizer} vs "
+                    f"accelerate config offload_optimizer_device={accelerate_offload_optimizer}"
                 )
 
-        if os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", None) is not None:
-            if (
-                ds_config["zero_optimization"].get("offload_param", {}).get("device", None)
-                != os.environ["ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE"]
-            ):
+        accelerate_offload_param = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", None)
+        ds_offload_param = ds_config["zero_optimization"].get("offload_param", {}).get("device", None)
+        if accelerate_offload_param is not None:
+            if ds_offload_param != accelerate_offload_param:
                 mismatches.append(
-                    f"- ds config zero_optimization.offload_param.device={ds_config['zero_optimization'].get('offload_param', {}).get('device', None)} vs "
-                    f"accelerate config offload_param_device={os.environ['ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE']}"
+                    f"- ds config zero_optimization.offload_param.device={ds_offload_param} vs "
+                    f"accelerate config offload_param_device={accelerate_offload_param}"
                 )
 
-        if os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", None) is not None:
-            if ds_config["zero_optimization"].get("stage3_gather_16bit_weights_on_model_save", None) != (
-                os.environ["ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] == "true"
-            ):
+        accelerate_zero3_save_16bit_model = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", None)
+        ds_zero3_save_16bit_model = ds_config["zero_optimization"].get(
+            "stage3_gather_16bit_weights_on_model_save", None
+        )
+        if accelerate_zero3_save_16bit_model is not None:
+            accelerate_zero3_save_16bit_model = accelerate_zero3_save_16bit_model == "true"
+            if ds_zero3_save_16bit_model != accelerate_zero3_save_16bit_model:
                 mismatches.append(
-                    f"- ds config zero_optimization.stage3_gather_16bit_weights_on_model_save="
-                    f"{ds_config['zero_optimization'].get('stage3_gather_16bit_weights_on_model_save', None)} vs "
-                    f"accelerate config zero3_save_16bit_model={(os.environ['ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL']=='true')}"
+                    f"- ds config zero_optimization.stage3_gather_16bit_weights_on_model_save={ds_zero3_save_16bit_model} vs "
+                    f"accelerate config zero3_save_16bit_model={accelerate_zero3_save_16bit_model}"
+                )
+
+        accelerate_mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+        if accelerate_mixed_precision != "no":
+            if accelerate_mixed_precision not in ds_config:
+                mismatches.append(f"- ds config does not have mixed precision config for {accelerate_mixed_precision}")
+            elif ds_config[accelerate_mixed_precision].get("enabled", None) is None:
+                mismatches.append(
+                    f"- ds config mixed precision config for {accelerate_mixed_precision} is not enabled"
                 )
 
         if len(mismatches) > 0:
