@@ -78,6 +78,9 @@ class BaseConfig:
         for key, value in result.items():
             if isinstance(value, Enum):
                 result[key] = value.value
+            elif value is None:
+                # remove key
+                del result[key]
         return result
 
     @classmethod
