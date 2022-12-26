@@ -580,7 +580,7 @@ class DeepSpeedPlugin:
                 "Please specify them appropriately in the DeepSpeed config file.\n"
                 "If you are using an accelerate config file, remove others config variables mentioned in the above specified list; "
                 "and make sure to not specify these config variables in `accelerate launch` command. \n"
-                "The easiest method is to create new config following the questionnaire via `accelerate config`.\n"
+                "The easiest method is to create a new config following the questionnaire via `accelerate config`.\n"
                 "It will only ask for the necessary config variables when using `deepspeed_config_file`."
             )
 
