@@ -309,14 +309,14 @@ def launch_command_parser(subparsers=None):
         default=None,
         type=str,
         help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed). "
-        "If unspecified, will default to `none`.",
+        "If unspecified, will default to 'none'.",
     )
     deepspeed_args.add_argument(
         "--offload_param_device",
         default=None,
         type=str,
         help="Decides where (none|cpu|nvme) to offload parameters (useful only when `use_deepspeed` flag is passed). "
-        "If unspecified, will default to `none`.",
+        "If unspecified, will default to 'none'.",
     )
     deepspeed_args.add_argument(
         "--gradient_accumulation_steps",
