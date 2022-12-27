@@ -522,22 +522,20 @@ class DeepSpeedPlugin:
         }
         if mixed_precision == "fp16":
             if "fp16" not in ds_config:
-                ds_config.update({"fp16": {"enabled": True, "auto_cast": True}})
-            if "bf16" in ds_config and strtobool(str(ds_config["bf16"].get("enabled", "False"))) == 1:
-                raise ValueError(
-                    "`--mixed_precision` arg cannot be set to `fp16` when `bf16` is set in the DeepSpeed config file."
-                )
+                ds_config["fp16"] = {"enabled": True, "auto_cast": True}
         elif mixed_precision == "bf16":
             if "bf16" not in ds_config:
-                ds_config.update({"bf16": {"enabled": True}})
-            if "fp16" in ds_config and strtobool(str(ds_config["fp16"].get("enabled", "False"))) == 1:
+                ds_config["bf16"] = {"enabled": True}
+
+        if mixed_precision != "no":
+            diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
+            if strtobool(str(ds_config.get(diff_dtype, {}).get("enabled", "False"))) == 1:
                 raise ValueError(
-                    "`--mixed_precision` arg cannot be set to `bf16` when `fp16` is set in the DeepSpeed config file."
+                    f"`--mixed_precision` arg cannot be set to `{mixed_precision}` when `{diff_dtype}` is set in the DeepSpeed config file."
                 )
-        if "fp16" not in ds_config:
-            ds_config.update({"fp16": {"enabled": False}})
-        if "bf16" not in ds_config:
-            ds_config.update({"bf16": {"enabled": False}})
+        for dtype in ["fp16", "bf16"]:
+            if dtype not in ds_config:
+                ds_config[dtype] = {"enabled": False}
         self.fill_match("fp16.enabled", must_match=False, **kwargs)
         self.fill_match("bf16.enabled", must_match=False, **kwargs)
 
