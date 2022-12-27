@@ -523,14 +523,14 @@ class DeepSpeedPlugin:
         if mixed_precision == "fp16":
             if "fp16" not in ds_config:
                 ds_config.update({"fp16": {"enabled": True, "auto_cast": True}})
-            elif "bf16" in ds_config and strtobool(str(ds_config["bf16"].get("enabled", "False"))) == 1:
+            if "bf16" in ds_config and strtobool(str(ds_config["bf16"].get("enabled", "False"))) == 1:
                 raise ValueError(
                     "`--mixed_precision` arg cannot be set to `fp16` when `bf16` is set in the DeepSpeed config file."
                 )
         elif mixed_precision == "bf16":
             if "bf16" not in ds_config:
                 ds_config.update({"bf16": {"enabled": True}})
-            elif "fp16" in ds_config and strtobool(str(ds_config["fp16"].get("enabled", "False"))) == 1:
+            if "fp16" in ds_config and strtobool(str(ds_config["fp16"].get("enabled", "False"))) == 1:
                 raise ValueError(
                     "`--mixed_precision` arg cannot be set to `bf16` when `fp16` is set in the DeepSpeed config file."
                 )
