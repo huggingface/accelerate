@@ -979,6 +979,7 @@ def launch_command(args):
 
     defaults = None
     warned = []
+    mp_from_config_flag = False
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
@@ -1028,7 +1029,6 @@ def launch_command(args):
         if not args.mixed_precision:
             if defaults.mixed_precision is None:
                 args.mixed_precision = "no"
-                mp_from_config_flag = False
             else:
                 args.mixed_precision = defaults.mixed_precision
                 mp_from_config_flag = True
@@ -1075,7 +1075,7 @@ def launch_command(args):
 
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
-        args.deepspeed_fields_from_accelerate_config = list(defaults.deepspeed_config.keys())
+        args.deepspeed_fields_from_accelerate_config = list(defaults.deepspeed_config.keys()) if defaults else []
         if mp_from_config_flag:
             args.deepspeed_fields_from_accelerate_config.append("mixed_precision")
         args.deepspeed_fields_from_accelerate_config = ",".join(args.deepspeed_fields_from_accelerate_config)

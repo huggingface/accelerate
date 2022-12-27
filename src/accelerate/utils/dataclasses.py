@@ -433,14 +433,14 @@ class DeepSpeedPlugin:
             self._deepspeed_config_checks()
             kwargs = {
                 "gradient_accumulation_steps": self.gradient_accumulation_steps,
-                "gradient_clipping": self.gradient_clipping,
+                "gradient_clipping": self.gradient_clipping if self.gradient_clipping else 1.0,
                 "zero_optimization.stage": self.zero_stage,
                 "zero_optimization.offload_optimizer.device": self.offload_optimizer_device,
                 "zero_optimization.offload_param.device": self.offload_param_device,
                 "zero_optimization.stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
             }
             for key in kwargs.keys():
-                self.fill_match(key, kwargs, must_match=False)
+                self.fill_match(key, **kwargs, must_match=False)
         else:
             config = {
                 "train_batch_size": "auto",
@@ -469,7 +469,8 @@ class DeepSpeedPlugin:
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
 
-    def fill_match(self, ds_key_long, mismatches, must_match=True, **kwargs):
+    def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
+        mismatches = [] if mismatches is None else mismatches
         config, ds_key = self.hf_ds_config.find_config_node(ds_key_long)
         if config is None:
             return
@@ -514,10 +515,26 @@ class DeepSpeedPlugin:
 
     def set_mixed_precision(self, mixed_precision):
         ds_config = self.deepspeed_config
-        if mixed_precision == "fp16" and "fp16" not in ds_config and "bf16" not in ds_config:
-            ds_config.update({"fp16": {"enabled": True, "auto_cast": True}})
-        elif mixed_precision == "bf16" and "fp16" not in ds_config and "bf16" not in ds_config:
-            ds_config.update({"bf16": {"enabled": True}})
+        if mixed_precision == "fp16":
+            if "fp16" not in ds_config and "bf16" not in ds_config:
+                ds_config.update({"fp16": {"enabled": True, "auto_cast": True}})
+            elif "bf16" in ds_config:
+                raise ValueError(
+                    "`mixed_precision` cannot be set to `fp16` when `bf16` is set in the DeepSpeed config."
+                )
+            elif "fp16" in ds_config:
+                if ds_config["fp16"]["enabled"] == "auto":
+                    ds_config["fp16"]["enabled"] = True
+        elif mixed_precision == "bf16":
+            if "fp16" not in ds_config and "bf16" not in ds_config:
+                ds_config.update({"bf16": {"enabled": True}})
+            elif "fp16" in ds_config:
+                raise ValueError(
+                    "`mixed_precision` cannot be set to `bf16` when `fp16` is set in the DeepSpeed config."
+                )
+            elif "bf16" in ds_config:
+                if ds_config["bf16"]["enabled"] == "auto":
+                    ds_config["bf16"]["enabled"] = True
 
     def set_deepspeed_weakref(self):
         from .imports import is_transformers_available
