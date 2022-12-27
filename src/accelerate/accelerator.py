@@ -363,7 +363,7 @@ class Accelerator:
         if (
             self.state.mixed_precision == "fp16"
             and self.device.type != "cpu"
-            and self.distributed_type != DistributedType.MEGATRON_LM
+            and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
             if not torch.cuda.is_available() and not parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE"):
@@ -375,10 +375,10 @@ class Accelerator:
                 self.scaler = ShardedGradScaler(**kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
-        elif (
-            self.state.mixed_precision == "bf16"
-            and self.distributed_type != DistributedType.FSDP
-            and self.distributed_type != DistributedType.MEGATRON_LM
+        elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
+            DistributedType.DEEPSPEED,
+            DistributedType.FSDP,
+            DistributedType.MEGATRON_LM,
         ):
             if self.device.type == "cpu":
                 self.native_amp = is_torch_version(">=", "1.10")
@@ -473,17 +473,7 @@ class Accelerator:
 
     @property
     def mixed_precision(self):
-        if self.distributed_type == DistributedType.DEEPSPEED:
-            config = self.state.deepspeed_plugin.deepspeed_config
-            if config.get("fp16", {}).get("enabled", False):
-                mixed_precision = "fp16"
-            elif config.get("bf16", {}).get("enabled", False):
-                mixed_precision = "bf16"
-            else:
-                mixed_precision = "no"
-        else:
-            mixed_precision = self.state.mixed_precision
-        return mixed_precision
+        return self.state.mixed_precision
 
     def on_main_process(func):
         """
