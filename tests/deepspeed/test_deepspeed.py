@@ -285,8 +285,6 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
         from deepspeed.runtime.engine import DeepSpeedEngine
 
         kwargs = {
-            "fp16.enabled": True,
-            "bf16.enabled": False,
             "optimizer.params.lr": 5e-5,
             "optimizer.params.weight_decay": 0.0,
             "scheduler.params.warmup_min_lr": 0.0,
@@ -370,7 +368,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             # Test DeepSpeed optimizer + DeepSpeed scheduler
             deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
             with mockenv_context(**self.dist_env):
-                accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+                accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision="fp16")
                 train_set = RegressionDataset(length=80)
                 eval_set = RegressionDataset(length=20)
                 train_dataloader = DataLoader(train_set, batch_size=10, shuffle=True)
@@ -430,7 +428,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             # Test custom optimizer + DeepSpeed scheduler
             deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
             with mockenv_context(**self.dist_env):
-                accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+                accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision="fp16")
                 train_set = RegressionDataset(length=80)
                 eval_set = RegressionDataset(length=20)
                 train_dataloader = DataLoader(train_set, batch_size=10, shuffle=True)
@@ -463,7 +461,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             # Test deepspeed optimizer + custom scheduler
             deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
             with mockenv_context(**self.dist_env):
-                accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+                accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision="fp16")
                 train_set = RegressionDataset(length=80)
                 eval_set = RegressionDataset(length=20)
                 train_dataloader = DataLoader(train_set, batch_size=10, shuffle=True)
@@ -501,8 +499,6 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
         )
         del deepspeed_plugin.deepspeed_config["bf16"]
         kwargs = {
-            "fp16.enabled": True,
-            "bf16.enabled": False,
             "optimizer.params.lr": 5e-5,
             "optimizer.params.weight_decay": 0.0,
             "scheduler.params.warmup_min_lr": 0.0,
@@ -518,7 +514,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
         }
 
         with mockenv_context(**self.dist_env):
-            accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+            accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision="fp16")
             kwargs["train_batch_size"] = (
                 kwargs["train_micro_batch_size_per_gpu"]
                 * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
@@ -592,6 +588,81 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             )
             self.assertFalse(
                 accelerator.deepspeed_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
+            )
+
+    @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
+    def test_autofill_dsconfig_from_ds_plugin(self, dtype):
+        ds_config = self.ds_config_dict["zero3"]
+        if dtype == BF16:
+            del ds_config["fp16"]
+        else:
+            del ds_config["bf16"]
+        ds_config[dtype]["enabled"] = "auto"
+        ds_config["zero_optimization"]["stage"] = "auto"
+        ds_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = "auto"
+        ds_config["zero_optimization"]["offload_optimizer"]["device"] = "auto"
+        ds_config["zero_optimization"]["offload_param"]["device"] = "auto"
+        ds_config["gradient_accumulation_steps"] = "auto"
+        ds_config["gradient_clipping"] = "auto"
+
+        deepspeed_plugin = DeepSpeedPlugin(
+            hf_ds_config=ds_config,
+            zero3_init_flag=True,
+            gradient_accumulation_steps=1,
+            gradient_clipping=1.0,
+            zero_stage=2,
+            offload_optimizer_device="cpu",
+            offload_param_device="cpu",
+            zero3_save_16bit_model=True,
+        )
+
+        with mockenv_context(**self.dist_env):
+            accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=dtype)
+            deepspeed_plugin = accelerator.state.deepspeed_plugin
+            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_clipping"], 1.0)
+            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 1)
+            self.assertEqual(deepspeed_plugin.deepspeed_config["zero_optimization"]["stage"], 2)
+            self.assertEqual(
+                deepspeed_plugin.deepspeed_config["zero_optimization"]["offload_optimizer"]["device"], "cpu"
+            )
+            self.assertEqual(deepspeed_plugin.deepspeed_config["zero_optimization"]["offload_param"]["device"], "cpu")
+            self.assertTrue(
+                deepspeed_plugin.deepspeed_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
+            )
+            self.assertTrue(deepspeed_plugin.deepspeed_config[dtype]["enabled"])
+
+        AcceleratorState._reset_state()
+        diff_dtype = "bf16" if dtype == "fp16" else "fp16"
+        with mockenv_context(**self.dist_env):
+            with self.assertRaises(ValueError) as cm:
+                accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=diff_dtype)
+            self.assertTrue(
+                f"`--mixed_precision` arg cannot be set to `{diff_dtype}` when `{dtype}` is set in the DeepSpeed config file."
+                in str(cm.exception)
+            )
+
+    def test_ds_config_assertions(self):
+        ambiguous_env = self.dist_env.copy()
+        ambiguous_env[
+            "ACCELERATE_CONFIG_DS_FIELDS"
+        ] = "gradient_accumulation_steps,gradient_clipping,zero_stage,offload_optimizer_device,offload_param_device,zero3_save_16bit_model,mixed_precision"
+
+        with mockenv_context(**ambiguous_env):
+            with self.assertRaises(ValueError) as cm:
+                deepspeed_plugin = DeepSpeedPlugin(
+                    hf_ds_config=self.ds_config_file[ZERO3],
+                    zero3_init_flag=True,
+                    gradient_accumulation_steps=1,
+                    gradient_clipping=1.0,
+                    zero_stage=ZERO2,
+                    offload_optimizer_device="cpu",
+                    offload_param_device="cpu",
+                    zero3_save_16bit_model=True,
+                )
+                _ = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=FP16)
+            self.assertTrue(
+                "If you are using an accelerate config file, remove others config variables mentioned in the above specified list."
+                in str(cm.exception)
             )
 
     def test_basic_run(self):

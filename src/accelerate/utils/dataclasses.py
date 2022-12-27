@@ -441,6 +441,7 @@ class DeepSpeedPlugin:
             }
             for key in kwargs.keys():
                 self.fill_match(key, **kwargs, must_match=False)
+            self.hf_ds_config.set_stage_and_offload()
         else:
             config = {
                 "train_batch_size": "auto",
@@ -515,26 +516,30 @@ class DeepSpeedPlugin:
 
     def set_mixed_precision(self, mixed_precision):
         ds_config = self.deepspeed_config
+        kwargs = {
+            "fp16.enabled": mixed_precision == "fp16",
+            "bf16.enabled": mixed_precision == "bf16",
+        }
         if mixed_precision == "fp16":
-            if "fp16" not in ds_config and "bf16" not in ds_config:
+            if "fp16" not in ds_config:
                 ds_config.update({"fp16": {"enabled": True, "auto_cast": True}})
-            elif "bf16" in ds_config:
+            elif "bf16" in ds_config and ds_config["bf16"].get("enabled", False) == True:
                 raise ValueError(
-                    "`mixed_precision` cannot be set to `fp16` when `bf16` is set in the DeepSpeed config."
+                    "`--mixed_precision` arg cannot be set to `fp16` when `bf16` is set in the DeepSpeed config file."
                 )
-            elif "fp16" in ds_config:
-                if ds_config["fp16"]["enabled"] == "auto":
-                    ds_config["fp16"]["enabled"] = True
         elif mixed_precision == "bf16":
-            if "fp16" not in ds_config and "bf16" not in ds_config:
+            if "bf16" not in ds_config:
                 ds_config.update({"bf16": {"enabled": True}})
-            elif "fp16" in ds_config:
+            elif "fp16" in ds_config and ds_config["fp16"].get("enabled", False) == True:
                 raise ValueError(
-                    "`mixed_precision` cannot be set to `bf16` when `fp16` is set in the DeepSpeed config."
+                    "`--mixed_precision` arg cannot be set to `bf16` when `fp16` is set in the DeepSpeed config file."
                 )
-            elif "bf16" in ds_config:
-                if ds_config["bf16"]["enabled"] == "auto":
-                    ds_config["bf16"]["enabled"] = True
+        if "fp16" not in ds_config:
+            ds_config.update({"fp16": {"enabled": False}})
+        if "bf16" not in ds_config:
+            ds_config.update({"bf16": {"enabled": False}})
+        self.fill_match("fp16.enabled", must_match=False, **kwargs)
+        self.fill_match("bf16.enabled", must_match=False, **kwargs)
 
     def set_deepspeed_weakref(self):
         from .imports import is_transformers_available
