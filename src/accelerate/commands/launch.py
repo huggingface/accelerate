@@ -722,6 +722,7 @@ def deepspeed_launcher(args):
 
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
+    current_env["ACCELERATE_CONFIG_DS_FIELDS"] = str(args.deepspeed_fields_from_accelerate_config).lower()
     current_env["ACCELERATE_USE_DEEPSPEED"] = "true"
     if args.zero_stage is not None:
         current_env["ACCELERATE_DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
@@ -1025,7 +1026,13 @@ def launch_command(args):
                 ):
                     setattr(args, name, attr)
         if not args.mixed_precision:
-            args.mixed_precision = defaults.mixed_precision
+            if defaults.mixed_precision is None:
+                args.mixed_precision = "no"
+                mp_from_config_flag = False
+            else:
+                args.mixed_precision = defaults.mixed_precision
+                mp_from_config_flag = True
+
         if args.dynamo_backend is None:
             warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
             args.dynamo_backend = "no"
@@ -1068,6 +1075,10 @@ def launch_command(args):
 
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
+        args.deepspeed_fields_from_accelerate_config = list(defaults.deepspeed_config.keys())
+        if mp_from_config_flag:
+            args.deepspeed_fields_from_accelerate_config.append("mixed_precision")
+        args.deepspeed_fields_from_accelerate_config = ",".join(args.deepspeed_fields_from_accelerate_config)
         deepspeed_launcher(args)
     elif args.use_fsdp and not args.cpu:
         multi_gpu_launcher(args)
