@@ -529,7 +529,7 @@ class DeepSpeedPlugin:
 
         if mixed_precision != "no":
             diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
-            if strtobool(str(ds_config.get(diff_dtype, {}).get("enabled", "False"))) == 1:
+            if str(ds_config.get(diff_dtype, {}).get("enabled", "False")).lower() == "true":
                 raise ValueError(
                     f"`--mixed_precision` arg cannot be set to `{mixed_precision}` when `{diff_dtype}` is set in the DeepSpeed config file."
                 )
