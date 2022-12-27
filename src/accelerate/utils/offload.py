@@ -34,7 +34,7 @@ def offload_weight(weight, weight_name, offload_folder, index=None):
         # Need to reinterpret the underlined data as int16 since NumPy does not handle bfloat16s.
         weight = weight.view(torch.int16)
         dtype = "bfloat16"
-    array = weight.numpy()
+    array = weight.cpu().numpy()
     tensor_file = os.path.join(offload_folder, f"{weight_name}.dat")
     if index is not None:
         if dtype is None:
