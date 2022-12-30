@@ -397,7 +397,7 @@ Only the `auto` fields specified in above examples are handled by `prepare` meth
 
 **Things to note when using DeepSpeed Config File**
 
-Below is a smaple script using `deepspeed_config_file` in different scenarios.
+Below is a sample script using `deepspeed_config_file` in different scenarios.
 
 Code `test.py`:
 
@@ -417,7 +417,7 @@ if __name__ == "__main__":
 
 **Scenario 1**: Manually tampered accelerate config file having `deepspeed_config_file` along with other entries.
 
-1. `accelerate config`:
+1. Content of the `accelerate` config:
 
 ```yaml
 command_file: null
@@ -508,7 +508,7 @@ How many GPU(s) should be used for distributed training? [1]:4
 accelerate configuration saved at ds_config_sample.yaml
 ```
 
-2. `accelerate config`:
+2. Content of the `accelerate` config:
 
 ```yaml
 compute_environment: LOCAL_MACHINE
@@ -541,9 +541,9 @@ Mixed precision type: bf16
 ds_config: {'bf16': {'enabled': True}, 'zero_optimization': {'stage': 3, 'stage3_gather_16bit_weights_on_model_save': False, 'offload_optimizer': {'device': 'none'}, 'offload_param': {'device': 'none'}}, 'gradient_clipping': 1.0, 'train_batch_size': 'auto', 'train_micro_batch_size_per_gpu': 'auto', 'gradient_accumulation_steps': 10, 'steps_per_print': inf, 'fp16': {'enabled': False}}
 ```
 
-**Scenario 3**: Setting the `accelerate launch` cmd args related to deepspeed as `auto` in  `deepspeed_config_file` and check that things work as expected.
+**Scenario 3**: Setting the `accelerate launch` command arguments related to DeepSpeed as `"auto"` in the DeepSpeed` configuration file and check that things work as expected.
 
-1. New `ds_config.json` with `auto` for the `accelerate launch` deepspeed cmd args:
+1. New `ds_config.json` with `"auto"` for the `accelerate launch` DeepSpeed command arguments:
 
 ```json
 {
@@ -580,7 +580,7 @@ Mixed precision type: fp16
 ds_config: {'bf16': {'enabled': False}, 'zero_optimization': {'stage': 3, 'stage3_gather_16bit_weights_on_model_save': True, 'offload_optimizer': {'device': 'nvme'}, 'offload_param': {'device': 'cpu'}}, 'gradient_clipping': 1.0, 'train_batch_size': 'auto', 'train_micro_batch_size_per_gpu': 'auto', 'gradient_accumulation_steps': 5, 'steps_per_print': inf, 'fp16': {'enabled': True, 'auto_cast': True}}
 ```
 
-**Note**: Remaining `auto` values are handled in `accelerator.prepare()` call as explained in point 2 of 
+**Note**: Remaining `"auto"` values are handled in `accelerator.prepare()` call as explained in point 2 of 
 `Important code changes when using DeepSpeed Config File`.
 
 ## Saving and loading
