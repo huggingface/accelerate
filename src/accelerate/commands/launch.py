@@ -301,45 +301,50 @@ def launch_command_parser(subparsers=None):
         "--zero_stage",
         default=None,
         type=int,
-        help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed).",
+        help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed). "
+        "If unspecified, will default to `2`.",
     )
     deepspeed_args.add_argument(
         "--offload_optimizer_device",
         default=None,
         type=str,
-        help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed).",
+        help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed). "
+        "If unspecified, will default to 'none'.",
     )
     deepspeed_args.add_argument(
         "--offload_param_device",
         default=None,
         type=str,
-        help="Decides where (none|cpu|nvme) to offload parameters (useful only when `use_deepspeed` flag is passed).",
+        help="Decides where (none|cpu|nvme) to offload parameters (useful only when `use_deepspeed` flag is passed). "
+        "If unspecified, will default to 'none'.",
     )
     deepspeed_args.add_argument(
         "--gradient_accumulation_steps",
         default=None,
         type=int,
-        help="No of gradient_accumulation_steps used in your training script (useful only when `use_deepspeed` flag is passed).",
+        help="No of gradient_accumulation_steps used in your training script (useful only when `use_deepspeed` flag is passed). "
+        "If unspecified, will default to `1`.",
     )
     deepspeed_args.add_argument(
         "--gradient_clipping",
         default=None,
         type=float,
-        help="gradient clipping value used in your training script (useful only when `use_deepspeed` flag is passed).",
+        help="gradient clipping value used in your training script (useful only when `use_deepspeed` flag is passed). "
+        "If unspecified, will default to `1.0`.",
     )
     deepspeed_args.add_argument(
         "--zero3_init_flag",
-        default="true",
+        default=None,
         type=str,
         help="Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models. "
-        "Only applicable with DeepSpeed ZeRO Stage-3.",
+        "Only applicable with DeepSpeed ZeRO Stage-3. If unspecified, will default to `true`.",
     )
     deepspeed_args.add_argument(
         "--zero3_save_16bit_model",
-        default="false",
+        default=None,
         type=str,
         help="Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3. "
-        "Only applicable with DeepSpeed ZeRO Stage-3.",
+        "Only applicable with DeepSpeed ZeRO Stage-3. If unspecified, will default to `false`.",
     )
     deepspeed_args.add_argument(
         "--deepspeed_hostfile",
@@ -363,7 +368,7 @@ def launch_command_parser(subparsers=None):
         "--deepspeed_multinode_launcher",
         default=None,
         type=str,
-        help="DeepSpeed multi-node launcher to use.",
+        help="DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.",
     )
 
     # fsdp arguments
@@ -717,14 +722,22 @@ def deepspeed_launcher(args):
 
     current_env["PYTHONPATH"] = env_var_path_add("PYTHONPATH", os.path.abspath("."))
     current_env["ACCELERATE_MIXED_PRECISION"] = str(mixed_precision)
+    current_env["ACCELERATE_CONFIG_DS_FIELDS"] = str(args.deepspeed_fields_from_accelerate_config).lower()
     current_env["ACCELERATE_USE_DEEPSPEED"] = "true"
-    current_env["ACCELERATE_DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
-    current_env["ACCELERATE_GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
-    current_env["ACCELERATE_GRADIENT_CLIPPING"] = str(args.gradient_clipping).lower()
-    current_env["ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
-    current_env["ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
-    current_env["ACCELERATE_DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
-    current_env["ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
+    if args.zero_stage is not None:
+        current_env["ACCELERATE_DEEPSPEED_ZERO_STAGE"] = str(args.zero_stage)
+    if args.gradient_accumulation_steps is not None:
+        current_env["ACCELERATE_GRADIENT_ACCUMULATION_STEPS"] = str(args.gradient_accumulation_steps)
+    if args.gradient_clipping is not None:
+        current_env["ACCELERATE_GRADIENT_CLIPPING"] = str(args.gradient_clipping).lower()
+    if args.offload_optimizer_device is not None:
+        current_env["ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE"] = str(args.offload_optimizer_device).lower()
+    if args.offload_param_device is not None:
+        current_env["ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE"] = str(args.offload_param_device).lower()
+    if args.zero3_init_flag is not None:
+        current_env["ACCELERATE_DEEPSPEED_ZERO3_INIT"] = str(args.zero3_init_flag).lower()
+    if args.zero3_save_16bit_model is not None:
+        current_env["ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
     if args.deepspeed_config_file is not None:
         current_env["ACCELERATE_DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file)
 
@@ -966,6 +979,7 @@ def launch_command(args):
 
     defaults = None
     warned = []
+    mp_from_config_flag = False
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file) and not args.cpu:
         defaults = load_config_from_file(args.config_file)
@@ -1013,7 +1027,12 @@ def launch_command(args):
                 ):
                     setattr(args, name, attr)
         if not args.mixed_precision:
-            args.mixed_precision = defaults.mixed_precision
+            if defaults.mixed_precision is None:
+                args.mixed_precision = "no"
+            else:
+                args.mixed_precision = defaults.mixed_precision
+                mp_from_config_flag = True
+
         if args.dynamo_backend is None:
             warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
             args.dynamo_backend = "no"
@@ -1056,6 +1075,10 @@ def launch_command(args):
 
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
+        args.deepspeed_fields_from_accelerate_config = list(defaults.deepspeed_config.keys()) if defaults else []
+        if mp_from_config_flag:
+            args.deepspeed_fields_from_accelerate_config.append("mixed_precision")
+        args.deepspeed_fields_from_accelerate_config = ",".join(args.deepspeed_fields_from_accelerate_config)
         deepspeed_launcher(args)
     elif args.use_fsdp and not args.cpu:
         multi_gpu_launcher(args)

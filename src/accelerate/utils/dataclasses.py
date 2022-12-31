@@ -394,6 +394,28 @@ class DeepSpeedPlugin:
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
 
+        if self.gradient_accumulation_steps is None:
+            self.gradient_accumulation_steps = int(os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", 1))
+
+        if self.gradient_clipping is None:
+            gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", "none")
+            if gradient_clipping != "none":
+                self.gradient_clipping = float(gradient_clipping)
+
+        if self.zero_stage is None:
+            self.zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", 2))
+
+        if self.offload_optimizer_device is None:
+            self.offload_optimizer_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
+
+        if self.offload_param_device is None:
+            self.offload_param_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
+
+        if self.zero3_save_16bit_model is None:
+            self.zero3_save_16bit_model = (
+                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+            )
+
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
         if (
@@ -405,33 +427,22 @@ class DeepSpeedPlugin:
                 self.hf_ds_config = HfDeepSpeedConfig(self.hf_ds_config)
             if "gradient_accumulation_steps" not in self.hf_ds_config.config:
                 self.hf_ds_config.config["gradient_accumulation_steps"] = 1
-            elif self.hf_ds_config.config["gradient_accumulation_steps"] == "auto":
-                raise ValueError("gradient_accumulation_steps cannot be set to 'auto' in the DeepSpeed config.")
             if "zero_optimization" not in self.hf_ds_config.config:
                 raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config.")
+
+            self._deepspeed_config_checks()
+            kwargs = {
+                "gradient_accumulation_steps": self.gradient_accumulation_steps,
+                "gradient_clipping": self.gradient_clipping if self.gradient_clipping else 1.0,
+                "zero_optimization.stage": self.zero_stage,
+                "zero_optimization.offload_optimizer.device": self.offload_optimizer_device,
+                "zero_optimization.offload_param.device": self.offload_param_device,
+                "zero_optimization.stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
+            }
+            for key in kwargs.keys():
+                self.fill_match(key, **kwargs, must_match=False)
+            self.hf_ds_config.set_stage_and_offload()
         else:
-            if self.gradient_accumulation_steps is None:
-                self.gradient_accumulation_steps = int(os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", 1))
-
-            if self.gradient_clipping is None:
-                gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", "none")
-                if gradient_clipping != "none":
-                    self.gradient_clipping = float(gradient_clipping)
-
-            if self.zero_stage is None:
-                self.zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", 2))
-
-            if self.offload_optimizer_device is None:
-                self.offload_optimizer_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE", "none")
-
-            if self.offload_param_device is None:
-                self.offload_param_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
-
-            if self.zero3_save_16bit_model is None:
-                self.zero3_save_16bit_model = (
-                    os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
-                )
-
             config = {
                 "train_batch_size": "auto",
                 "train_micro_batch_size_per_gpu": "auto",
@@ -450,15 +461,19 @@ class DeepSpeedPlugin:
             if self.gradient_clipping:
                 config["gradient_clipping"] = self.gradient_clipping
             self.hf_ds_config = HfDeepSpeedConfig(config)
+
         self.deepspeed_config = self.hf_ds_config.config
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
-            self.zero3_init_flag = os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", "false") == "true"
+            self.zero3_init_flag = (
+                strtobool(os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
+            )
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
             self.zero3_init_flag = False
 
-    def fill_match(self, ds_key_long, mismatches, must_match=True, **kwargs):
+    def fill_match(self, ds_key_long, mismatches=None, must_match=True, **kwargs):
+        mismatches = [] if mismatches is None else mismatches
         config, ds_key = self.hf_ds_config.find_config_node(ds_key_long)
         if config is None:
             return
@@ -503,10 +518,28 @@ class DeepSpeedPlugin:
 
     def set_mixed_precision(self, mixed_precision):
         ds_config = self.deepspeed_config
-        if mixed_precision == "fp16" and "fp16" not in ds_config and "bf16" not in ds_config:
-            ds_config.update({"fp16": {"enabled": True, "auto_cast": True}})
-        elif mixed_precision == "bf16" and "fp16" not in ds_config and "bf16" not in ds_config:
-            ds_config.update({"bf16": {"enabled": True}})
+        kwargs = {
+            "fp16.enabled": mixed_precision == "fp16",
+            "bf16.enabled": mixed_precision == "bf16",
+        }
+        if mixed_precision == "fp16":
+            if "fp16" not in ds_config:
+                ds_config["fp16"] = {"enabled": True, "auto_cast": True}
+        elif mixed_precision == "bf16":
+            if "bf16" not in ds_config:
+                ds_config["bf16"] = {"enabled": True}
+
+        if mixed_precision != "no":
+            diff_dtype = "bf16" if mixed_precision == "fp16" else "fp16"
+            if str(ds_config.get(diff_dtype, {}).get("enabled", "False")).lower() == "true":
+                raise ValueError(
+                    f"`--mixed_precision` arg cannot be set to `{mixed_precision}` when `{diff_dtype}` is set in the DeepSpeed config file."
+                )
+        for dtype in ["fp16", "bf16"]:
+            if dtype not in ds_config:
+                ds_config[dtype] = {"enabled": False}
+        self.fill_match("fp16.enabled", must_match=False, **kwargs)
+        self.fill_match("bf16.enabled", must_match=False, **kwargs)
 
     def set_deepspeed_weakref(self):
         from .imports import is_transformers_available
@@ -548,6 +581,31 @@ class DeepSpeedPlugin:
             self.zero3_init_flag = old
             self.dschf = None
             self.set_deepspeed_weakref()
+
+    def _deepspeed_config_checks(self):
+        env_variable_names_to_ignore = [
+            "ACCELERATE_GRADIENT_ACCUMULATION_STEPS",
+            "ACCELERATE_GRADIENT_CLIPPING",
+            "ACCELERATE_DEEPSPEED_ZERO_STAGE",
+            "ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE",
+            "ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE",
+            "ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL",
+            "ACCELERATE_MIXED_PRECISION",
+        ]
+        env_variable_names_to_ignore = [
+            name.replace("ACCELERATE_", "").replace("DEEPSPEED_", "").lower() for name in env_variable_names_to_ignore
+        ]
+
+        deepspeed_fields_from_accelerate_config = os.environ.get("ACCELERATE_CONFIG_DS_FIELDS", "").split(",")
+
+        if any(name in env_variable_names_to_ignore for name in deepspeed_fields_from_accelerate_config):
+            raise ValueError(
+                f"When using `deepspeed_config_file`, the following accelerate config variables will be ignored: {env_variable_names_to_ignore}.\n"
+                "Please specify them appropriately in the DeepSpeed config file.\n"
+                "If you are using an accelerate config file, remove others config variables mentioned in the above specified list.\n"
+                "The easiest method is to create a new config following the questionnaire via `accelerate config`.\n"
+                "It will only ask for the necessary config variables when using `deepspeed_config_file`."
+            )
 
 
 @dataclass

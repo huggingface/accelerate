@@ -50,6 +50,9 @@ class HfDeepSpeedConfig:
             raise ValueError("expecting either a path to a DeepSpeed config file or a pre-populated dict")
         self.config = config
 
+        self.set_stage_and_offload()
+
+    def set_stage_and_offload(self):
         # zero stage - this is done as early as possible, before model is created, to allow
         # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
         # during ``zero.Init()`` which needs to know the dtype, and some other hparams.

@@ -460,7 +460,7 @@ def get_cluster_input():
 
     if distributed_type != DistributedType.TPU:
         if distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config:
-            mixed_precision = "no"
+            mixed_precision = None
         else:
             mixed_precision = _ask_options(
                 "Do you wish to use FP16 or BF16 (mixed precision)?",
