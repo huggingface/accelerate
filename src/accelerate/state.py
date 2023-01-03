@@ -78,7 +78,6 @@ class AcceleratorState:
         if parse_flag_from_env("ACCELERATE_USE_CPU"):
             cpu = True
         self._check_initialized(mixed_precision, cpu)
-        self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
         if not self.initialized:
             self.backend = None
             self.deepspeed_plugin = None
@@ -255,6 +254,8 @@ class AcceleratorState:
             ):
                 torch.backends.cuda.matmul.allow_tf32 = True
 
+        self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
+
     def __repr__(self):
         repr = (
             f"Distributed environment: {self.distributed_type}{('  Backend: ' + self.backend) if self.backend else ''}\n"
@@ -295,11 +296,11 @@ class AcceleratorState:
     @property
     def initialized(self) -> bool:
         "Returns whether the `AcceleratorState` has been initialized"
-        return AcceleratorState._shared_state != {}
+        return self._shared_state != {}
 
     def _check_initialized(self, mixed_precision=None, cpu=None):
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
-        if self.initialized:
+        if not self.initialized:
             err = "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `Accelerate()`."
             if cpu and self.device.type != "cpu":
                 raise ValueError(err.format(flag="cpu=True"))
