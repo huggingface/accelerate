@@ -35,6 +35,14 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
+def is_initialized() -> bool:
+    """
+    Checks if the `AcceleratorState` has been initialized from `Accelerator`. Same as `AcceleratorState.initialized`,
+    but works as a module method.
+    """
+    return AcceleratorState._shared_state != {}
+
+
 # Inspired by Alex Martelli's 'Borg'.
 class AcceleratorState:
     """
@@ -51,11 +59,6 @@ class AcceleratorState:
           of mixed precision being performed.
         - **num_processes** (`int`) -- The number of processes currently launched in parallel.
         - **process_index** (`int`) -- The index of the current process.
-
-    **Available methods:**
-
-        - **is_initialized** -- Whether or not the `AcceleratorState` has been initialized from `Accelerator` as a
-          staticmethod.
     """
 
     _shared_state = {}
@@ -292,11 +295,6 @@ class AcceleratorState:
     @property
     def initialized(self) -> bool:
         "Returns whether the `AcceleratorState` has been initialized"
-        return AcceleratorState._shared_state != {}
-
-    @staticmethod
-    def is_initialized() -> bool:
-        "Same as `AcceleratorState.initialized`, but works as a static method"
         return AcceleratorState._shared_state != {}
 
     def _check_initialized(self, mixed_precision=None, cpu=None):
