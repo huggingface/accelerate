@@ -79,7 +79,7 @@ class AcceleratorState:
             cpu = True
         self._check_initialized(mixed_precision, cpu)
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
-        if not getattr(self, "initialized", False):
+        if not self.initialized:
             self.backend = None
             self.deepspeed_plugin = None
             mixed_precision = (
@@ -322,11 +322,15 @@ class GradientState:
 
     def __init__(self):
         self.__dict__ = self._shared_state
-        if not getattr(self, "initialized", False):
+        if not self.initialized:
             self.sync_gradients = True
             self.end_of_dataloader = False
             self.remainder = -1
-        self.initialized = True
+
+    @property
+    def initialized(self) -> bool:
+        "Returns whether the `GradientState` has been initialized"
+        return GradientState._shared_state != {}
 
     def __repr__(self):
         return (
