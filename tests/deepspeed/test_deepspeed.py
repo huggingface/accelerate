@@ -243,8 +243,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
     def test_accelerate_state_deepspeed(self, dtype):
-        if AcceleratorState().initialized:
-            AcceleratorState._reset_state()
+        AcceleratorState._reset_state()
         deepspeed_plugin = DeepSpeedPlugin(
             gradient_accumulation_steps=1,
             gradient_clipping=1.0,
