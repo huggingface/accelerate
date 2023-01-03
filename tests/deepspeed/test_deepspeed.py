@@ -243,10 +243,6 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
     def test_accelerate_state_deepspeed(self, dtype):
-        state = AcceleratorState(_from_accelerator=True)
-        if state.initialized:
-            state.initialized = False
-
         deepspeed_plugin = DeepSpeedPlugin(
             gradient_accumulation_steps=1,
             gradient_clipping=1.0,
@@ -259,7 +255,6 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
         with mockenv_context(**self.dist_env):
             state = Accelerator(mixed_precision=dtype, deepspeed_plugin=deepspeed_plugin).state
             self.assertTrue(state.deepspeed_plugin.deepspeed_config[dtype]["enabled"])
-            state.initialized = False
 
     def test_init_zero3(self):
         deepspeed_plugin = DeepSpeedPlugin(
