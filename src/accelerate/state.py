@@ -45,11 +45,17 @@ class AcceleratorState:
         - **device** (`torch.device`) -- The device to use.
         - **distributed_type** ([`~accelerate.state.DistributedType`]) -- The type of distributed environment currently
           in use.
+        - **initialized** (`bool`) -- Whether or not the `AcceleratorState` has been initialized from `Accelerator`.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
         - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision, and if so the type
           of mixed precision being performed.
         - **num_processes** (`int`) -- The number of processes currently launched in parallel.
         - **process_index** (`int`) -- The index of the current process.
+
+    **Available methods:**
+
+        - **is_initialized** -- Whether or not the `AcceleratorState` has been initialized from `Accelerator` as a
+          staticmethod.
     """
 
     _shared_state = {}
@@ -245,18 +251,15 @@ class AcceleratorState:
                 and self.device.type == "cuda"
             ):
                 torch.backends.cuda.matmul.allow_tf32 = True
-            self.initialized = True
 
     def __repr__(self):
-        mixed_precision = self.mixed_precision
-
         repr = (
             f"Distributed environment: {self.distributed_type}{('  Backend: ' + self.backend) if self.backend else ''}\n"
             f"Num processes: {self.num_processes}\n"
             f"Process index: {self.process_index}\n"
             f"Local process index: {self.local_process_index}\n"
             f"Device: {self.device}\n"
-            f"Mixed precision type: {mixed_precision}\n"
+            f"Mixed precision type: {self.mixed_precision}\n"
         )
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
@@ -286,9 +289,19 @@ class AcceleratorState:
         "Resets `_shared_state`, is used internally and should not be called"
         AcceleratorState._shared_state = {}
 
+    @property
+    def initialized(self) -> bool:
+        "Returns whether the `AcceleratorState` has been initialized"
+        return AcceleratorState._shared_state != {}
+
+    @staticmethod
+    def is_initialized() -> bool:
+        "Same as `AcceleratorState.initialized`, but works as a static method"
+        return AcceleratorState._shared_state != {}
+
     def _check_initialized(self, mixed_precision=None, cpu=None):
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
-        if getattr(self, "initialized", False):
+        if self.initialized:
             err = "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `Accelerate()`."
             if cpu and self.device.type != "cpu":
                 raise ValueError(err.format(flag="cpu=True"))
