@@ -300,7 +300,7 @@ class AcceleratorState:
 
     def _check_initialized(self, mixed_precision=None, cpu=None):
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
-        if not self.initialized:
+        if self.initialized:
             err = "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `Accelerate()`."
             if cpu and self.device.type != "cpu":
                 raise ValueError(err.format(flag="cpu=True"))
