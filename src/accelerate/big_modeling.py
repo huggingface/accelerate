@@ -404,6 +404,7 @@ def load_checkpoint_and_dispatch(
         offload_folder=offload_folder,
         dtype=dtype,
         offload_state_dict=offload_state_dict,
+        offload_buffers=offload_buffers,
     )
     if device_map is None:
         return model

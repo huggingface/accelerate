@@ -275,6 +275,31 @@ class ModelingUtilsTester(unittest.TestCase):
         self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
         self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
 
+    @require_cuda
+    def test_load_checkpoint_in_model_disk_offload(self):
+        device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": "cpu"}
+
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), fname)
+            load_checkpoint_in_model(model, fname, device_map=device_map, offload_folder=tmp_dir)
+        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
+        self.assertEqual(model.batchnorm.weight.device, torch.device("meta"))
+        # Buffers are not offloaded by default
+        self.assertEqual(model.batchnorm.running_mean.device, torch.device("cpu"))
+        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fname = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), fname)
+            load_checkpoint_in_model(model, fname, device_map=device_map, offload_folder=tmp_dir, offload_buffers=True)
+        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
+        self.assertEqual(model.batchnorm.weight.device, torch.device("meta"))
+        self.assertEqual(model.batchnorm.running_mean.device, torch.device("meta"))
+        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+
     @require_multi_gpu
     def test_load_checkpoint_in_model_two_gpu(self):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
