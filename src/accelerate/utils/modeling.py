@@ -666,7 +666,7 @@ def load_checkpoint_in_model(
         elif len(potential_index) == 1:
             index_filename = os.path.join(checkpoint, potential_index[0])
         else:
-            raise ValueError(f"{checkpoint} containing mote than one `.index.json` file, delete the irrelevant ones.")
+            raise ValueError(f"{checkpoint} containing more than one `.index.json` file, delete the irrelevant ones.")
     else:
         raise ValueError(
             "`checkpoint` should be the path to a file containing a whole state dict, or the index of a sharded "
