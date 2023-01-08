@@ -679,7 +679,7 @@ def deepspeed_launcher(args):
             )
         else:
             cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
-
+        cmd.extend("--master_port", str(main_process_port))
         if args.module and args.no_python:
             raise ValueError("--module and --no_python cannot be used together")
         elif args.module:
