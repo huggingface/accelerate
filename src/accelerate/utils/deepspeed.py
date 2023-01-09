@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import io
 import json
-from copy import deepcopy
-import base64
 import os
+from copy import deepcopy
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
@@ -50,7 +50,7 @@ class HfDeepSpeedConfig:
                 config = json.load(f)
         else:
             try:
-                config_decoded = base64.urlsafe_b64decode(config_file_or_dict).decode('utf-8')
+                config_decoded = base64.urlsafe_b64decode(config_file_or_dict).decode("utf-8")
                 config = json.loads(config_decoded)
             except (UnicodeDecodeError, AttributeError):
                 raise ValueError(
