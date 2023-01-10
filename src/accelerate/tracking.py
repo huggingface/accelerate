@@ -346,6 +346,25 @@ class WandBTracker(GeneralTracker):
         values = {table_name: wandb.Table(columns=columns, data=data, dataframe=dataframe)}
         self.log(values, step=step, **kwargs)
 
+    def log_artifact(self, name: str, artifact_type: str, metadata: dict = None, **kwargs):
+        """
+        Logs an artifact to the current run.
+
+        Args:
+            name (`str`):
+                The name of the artifact.
+            artifact_type (`str`):
+                The type of the artifact.
+            metadata (`dict`, *optional*):
+                The metadata of the artifact.
+            kwargs:
+                Additional key word arguments passed along to the `wandb.Artifact` method.
+        """
+        artifact = wandb.Artifact(name, artifact_type, metadata=metadata, **kwargs)
+        self.run.log_artifact(artifact)
+        logger.debug("Successfully logged artifact to WandB")
+        
+
     def finish(self):
         """
         Closes `wandb` writer
