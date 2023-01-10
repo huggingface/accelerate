@@ -119,6 +119,19 @@ class GeneralTracker(object, metaclass=ABCMeta):
         """
         pass
 
+    def log_images(self, values: dict, step: Optional[int], **kwargs):
+        """
+        Logs `images` to the current run. Should be implemented if the tracking API supports image logging.
+
+        Args:
+            values (Dictionary `str` to `List` of `np.ndarray` or `PIL.Image`):
+                Values to be logged as key-value pairs. The values need to have type `List` of `np.ndarray` or
+                `PIL.Image`.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+        """
+        pass
+
     def finish(self):
         """
         Should run any finalizing functions within the tracking API. If the API should not have one, just don't
@@ -210,6 +223,23 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.flush()
         logger.debug("Successfully logged to TensorBoard")
 
+    def log_images(self, values: dict, step: Optional[int], **kwargs):
+        """
+        Logs `images` to the current run.
+
+        Args:
+            values (Dictionary `str` to `List` of `np.ndarray` or `PIL.Image`):
+                Values to be logged as key-value pairs. The values need to have type `List` of `np.ndarray` or
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `SummaryWriter.add_image` method.
+        """
+        for k, v in values.items():
+            self.writer.add_images(k, v, global_step=step, **kwargs)
+        logger.debug("Successfully logged images to TensorBoard")
+        
+
     def finish(self):
         """
         Closes `TensorBoard` writer
@@ -272,6 +302,27 @@ class WandBTracker(GeneralTracker):
         self.run.log(values, step=step, **kwargs)
         logger.debug("Successfully logged to WandB")
 
+    def log_images(
+        self,
+        values: dict,
+        step: Optional[int] = None,
+        **kwargs,
+    )
+        """
+        Logs `images` to the current run.
+
+        Args:
+            values (Dictionary `str` to `List` of `np.ndarray` or `PIL.Image`):
+                Values to be logged as key-value pairs. The values need to have type `List` of `np.ndarray` or
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `wandb.log` method.
+        """
+        for k, v in values.items():
+            self.log({k: [wandb.Image(image) for image in v]}, step=step, **kwargs)
+        logger.debug("Successfully logged images to WandB")
+    
     def finish(self):
         """
         Closes `wandb` writer
