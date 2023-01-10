@@ -323,6 +323,29 @@ class WandBTracker(GeneralTracker):
             self.log({k: [wandb.Image(image) for image in v]}, step=step, **kwargs)
         logger.debug("Successfully logged images to WandB")
     
+    def log_table(
+        self,
+        table_name: str,
+        columns: List[str] = None,
+        data: List[List[Any]] = None,
+        dataframe: Any = None,
+        step: Optional[int] = None,
+        **kwargs,
+    ):
+        """Log a Table containing any object type (text, image, audio, video, molecule, html, etc).
+        Can be defined either with `columns` and `data` or with `dataframe`.
+        
+        Args:
+            table_name (`str`): 
+                The name to give to the logged table on the wandb workspace
+            columns (List of `str`'s *optional*):
+                The name of the columns on the table
+            data (List of List of Any data
+        """
+
+        values = {table_name: wandb.Table(columns=columns, data=data, dataframe=dataframe)}
+        self.log(values, step=step, **kwargs)
+
     def finish(self):
         """
         Closes `wandb` writer
