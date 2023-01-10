@@ -238,7 +238,6 @@ class TensorBoardTracker(GeneralTracker):
         for k, v in values.items():
             self.writer.add_images(k, v, global_step=step, **kwargs)
         logger.debug("Successfully logged images to TensorBoard")
-        
 
     def finish(self):
         """
@@ -302,12 +301,8 @@ class WandBTracker(GeneralTracker):
         self.run.log(values, step=step, **kwargs)
         logger.debug("Successfully logged to WandB")
 
-    def log_images(
-        self,
-        values: dict,
-        step: Optional[int] = None,
-        **kwargs,
-    )
+    def log_images(self, values: dict, step: Optional[int] = None, **kwargs):
+
         """
         Logs `images` to the current run.
 
@@ -322,7 +317,7 @@ class WandBTracker(GeneralTracker):
         for k, v in values.items():
             self.log({k: [wandb.Image(image) for image in v]}, step=step, **kwargs)
         logger.debug("Successfully logged images to WandB")
-    
+
     def log_table(
         self,
         table_name: str,
@@ -334,9 +329,9 @@ class WandBTracker(GeneralTracker):
     ):
         """Log a Table containing any object type (text, image, audio, video, molecule, html, etc).
         Can be defined either with `columns` and `data` or with `dataframe`.
-        
+
         Args:
-            table_name (`str`): 
+            table_name (`str`):
                 The name to give to the logged table on the wandb workspace
             columns (List of `str`'s *optional*):
                 The name of the columns on the table
@@ -363,7 +358,6 @@ class WandBTracker(GeneralTracker):
         artifact = wandb.Artifact(name, artifact_type, metadata=metadata, **kwargs)
         self.run.log_artifact(artifact)
         logger.debug("Successfully logged artifact to WandB")
-        
 
     def finish(self):
         """
