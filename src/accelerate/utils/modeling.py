@@ -605,6 +605,7 @@ def load_checkpoint_in_model(
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: bool = False,
+    offload_buffers: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -634,6 +635,8 @@ def load_checkpoint_in_model(
         offload_state_dict (`bool`, *optional*, defaults to `False`):
             If `True`, will temporarily offload the CPU state dict on the hard drive to avoid getting out of CPU RAM if
             the weight of the CPU state dict + the biggest shard does not fit.
+        offload_buffers (`bool`, *optional*, defaults to `False):
+            Whether or not to include the buffers in the weights offloaded to disk.
     """
     if offload_folder is None and device_map is not None and "disk" in device_map.values():
         raise ValueError(
@@ -661,7 +664,7 @@ def load_checkpoint_in_model(
         elif len(potential_index) == 1:
             index_filename = os.path.join(checkpoint, potential_index[0])
         else:
-            raise ValueError(f"{checkpoint} containing mote than one `.index.json` file, delete the irrelevant ones.")
+            raise ValueError(f"{checkpoint} containing more than one `.index.json` file, delete the irrelevant ones.")
     else:
         raise ValueError(
             "`checkpoint` should be the path to a file containing a whole state dict, or the index of a sharded "
@@ -685,6 +688,8 @@ def load_checkpoint_in_model(
         state_dict_folder = tempfile.mkdtemp()
         state_dict_index = {}
 
+    buffer_names = [name for name, _ in model.named_buffers()]
+
     for checkpoint_file in checkpoint_files:
         checkpoint = torch.load(checkpoint_file)
         if device_map is None:
@@ -701,7 +706,8 @@ def load_checkpoint_in_model(
                 param_device = device_map[module_name]
 
                 if param_device == "disk":
-                    set_module_tensor_to_device(model, param_name, "meta")
+                    if offload_buffers or param_name not in buffer_names:
+                        set_module_tensor_to_device(model, param_name, "meta")
                     offload_weight(param, param_name, offload_folder, index=offload_index)
                 elif param_device == "cpu" and offload_state_dict:
                     set_module_tensor_to_device(model, param_name, "meta")

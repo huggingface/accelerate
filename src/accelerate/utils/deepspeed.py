@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import io
 import json
+import os
 from copy import deepcopy
 
 from ..optimizer import AcceleratedOptimizer
@@ -43,13 +45,23 @@ class HfDeepSpeedConfig:
             # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
             # modified it, it will not be accepted here again, since `auto` values would have been overridden
             config = deepcopy(config_file_or_dict)
-        elif isinstance(config_file_or_dict, str):
+        elif os.path.exists(config_file_or_dict):
             with io.open(config_file_or_dict, "r", encoding="utf-8") as f:
                 config = json.load(f)
         else:
-            raise ValueError("expecting either a path to a DeepSpeed config file or a pre-populated dict")
+            try:
+                config_decoded = base64.urlsafe_b64decode(config_file_or_dict).decode("utf-8")
+                config = json.loads(config_decoded)
+            except (UnicodeDecodeError, AttributeError):
+                raise ValueError(
+                    f"Expected a string path to an existing deepspeed config, or a dictionary, or a base64 encoded string. Received: {config}"
+                )
+
         self.config = config
 
+        self.set_stage_and_offload()
+
+    def set_stage_and_offload(self):
         # zero stage - this is done as early as possible, before model is created, to allow
         # ``is_deepspeed_zero3_enabled`` query and getting to the early deepspeed config object
         # during ``zero.Init()`` which needs to know the dtype, and some other hparams.

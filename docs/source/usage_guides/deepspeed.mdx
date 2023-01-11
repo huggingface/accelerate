@@ -395,6 +395,196 @@ We will look at the changes needed in the code when using these.
 based on model, dataloaders, dummy optimizer and dummy schedulers provided to `prepare` method. 
 Only the `auto` fields specified in above examples are handled by `prepare` method and the rest have to be explicitly specified by the user.
 
+**Things to note when using DeepSpeed Config File**
+
+Below is a sample script using `deepspeed_config_file` in different scenarios.
+
+Code `test.py`:
+
+```python
+from accelerate import Accelerator
+from accelerate.state import AcceleratorState
+
+
+def main():
+    accelerator = Accelerator()
+    accelerator.print(f"{AcceleratorState()}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+**Scenario 1**: Manually tampered accelerate config file having `deepspeed_config_file` along with other entries.
+
+1. Content of the `accelerate` config:
+
+```yaml
+command_file: null
+commands: null
+compute_environment: LOCAL_MACHINE
+deepspeed_config:
+  gradient_accumulation_steps: 1
+  gradient_clipping: 1.0
+  offload_optimizer_device: 'cpu'
+  offload_param_device: 'cpu'
+  zero3_init_flag: true
+  zero3_save_16bit_model: true
+  zero_stage: 3
+  deepspeed_config_file: 'ds_config.json'
+distributed_type: DEEPSPEED
+downcast_bf16: 'no'
+dynamo_backend: 'NO'
+fsdp_config: {}
+gpu_ids: null
+machine_rank: 0
+main_process_ip: null
+main_process_port: null
+main_training_function: main
+megatron_lm_config: {}
+num_machines: 1
+num_processes: 2
+rdzv_backend: static
+same_network: true
+tpu_name: null
+tpu_zone: null
+use_cpu: false
+```
+
+2. `ds_config.json`:
+
+```json
+{
+    "bf16": {
+        "enabled": true
+    },
+    "zero_optimization": {
+        "stage": 3,
+        "stage3_gather_16bit_weights_on_model_save": false,
+        "offload_optimizer": {
+            "device": "none"
+        },
+        "offload_param": {
+            "device": "none"
+        }
+    },
+    "gradient_clipping": 1.0,
+    "train_batch_size": "auto",
+    "train_micro_batch_size_per_gpu": "auto",
+    "gradient_accumulation_steps": 10,
+    "steps_per_print": 2000000
+}
+```
+
+3. Output of `accelerate launch test.py`:
+
+```bash
+ValueError: When using `deepspeed_config_file`, the following accelerate config variables will be ignored: 
+['gradient_accumulation_steps', 'gradient_clipping', 'zero_stage', 'offload_optimizer_device', 'offload_param_device', 
+'zero3_save_16bit_model', 'mixed_precision'].
+Please specify them appropriately in the DeepSpeed config file.
+If you are using an accelerate config file, remove others config variables mentioned in the above specified list.
+The easiest method is to create a new config following the questionnaire via `accelerate config`.
+It will only ask for the necessary config variables when using `deepspeed_config_file`.
+```
+
+**Scenario 2**: Use the solution of the error to create new accelerate config and check that no ambiguity error is now thrown.
+
+1. Run `accelerate config`:
+
+```bash
+$ accelerate config
+-------------------------------------------------------------------------------------------------------------------------------
+In which compute environment are you running?
+This machine                                                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------
+Which type of machine are you using?                                                                                           
+multi-GPU                                                                                                                      
+How many different machines will you use (use more than 1 for multi-node training)? [1]:                                       
+Do you wish to optimize your script with torch dynamo?[yes/NO]:                                                                
+Do you want to use DeepSpeed? [yes/NO]: yes                                                                                    
+Do you want to specify a json file to a DeepSpeed config? [yes/NO]: yes                                                        
+Please enter the path to the json DeepSpeed config file: ds_config.json                                                        
+Do you want to enable `deepspeed.zero.Init` when using ZeRO Stage-3 for constructing massive models? [yes/NO]: yes
+How many GPU(s) should be used for distributed training? [1]:4
+accelerate configuration saved at ds_config_sample.yaml
+```
+
+2. Content of the `accelerate` config:
+
+```yaml
+compute_environment: LOCAL_MACHINE
+deepspeed_config:
+  deepspeed_config_file: ds_config.json
+  zero3_init_flag: true
+distributed_type: DEEPSPEED
+downcast_bf16: 'no'
+dynamo_backend: 'NO'
+fsdp_config: {}
+machine_rank: 0
+main_training_function: main
+megatron_lm_config: {}
+num_machines: 1
+num_processes: 4
+rdzv_backend: static
+same_network: true
+use_cpu: false
+```
+
+3. Output of `accelerate launch test.py`:
+
+```bash
+Distributed environment: DEEPSPEED  Backend: nccl
+Num processes: 4
+Process index: 0
+Local process index: 0
+Device: cuda:0
+Mixed precision type: bf16
+ds_config: {'bf16': {'enabled': True}, 'zero_optimization': {'stage': 3, 'stage3_gather_16bit_weights_on_model_save': False, 'offload_optimizer': {'device': 'none'}, 'offload_param': {'device': 'none'}}, 'gradient_clipping': 1.0, 'train_batch_size': 'auto', 'train_micro_batch_size_per_gpu': 'auto', 'gradient_accumulation_steps': 10, 'steps_per_print': inf, 'fp16': {'enabled': False}}
+```
+
+**Scenario 3**: Setting the `accelerate launch` command arguments related to DeepSpeed as `"auto"` in the DeepSpeed` configuration file and check that things work as expected.
+
+1. New `ds_config.json` with `"auto"` for the `accelerate launch` DeepSpeed command arguments:
+
+```json
+{
+    "bf16": {
+        "enabled": "auto"
+    },
+    "zero_optimization": {
+        "stage": "auto",
+        "stage3_gather_16bit_weights_on_model_save": "auto",
+        "offload_optimizer": {
+            "device": "auto"
+        },
+        "offload_param": {
+            "device": "auto"
+        }
+    },
+    "gradient_clipping": "auto",
+    "train_batch_size": "auto",
+    "train_micro_batch_size_per_gpu": "auto",
+    "gradient_accumulation_steps": "auto",
+    "steps_per_print": 2000000
+}
+```
+
+2. Output of `accelerate launch --mixed_precision="fp16" --zero_stage=3 --gradient_accumulation_steps=5 --gradient_clipping=1.0 --offload_param_device="cpu" --offload_optimizer_device="nvme" --zero3_save_16bit_model="true" test.py`:
+
+```bash
+Distributed environment: DEEPSPEED  Backend: nccl
+Num processes: 4
+Process index: 0
+Local process index: 0
+Device: cuda:0
+Mixed precision type: fp16
+ds_config: {'bf16': {'enabled': False}, 'zero_optimization': {'stage': 3, 'stage3_gather_16bit_weights_on_model_save': True, 'offload_optimizer': {'device': 'nvme'}, 'offload_param': {'device': 'cpu'}}, 'gradient_clipping': 1.0, 'train_batch_size': 'auto', 'train_micro_batch_size_per_gpu': 'auto', 'gradient_accumulation_steps': 5, 'steps_per_print': inf, 'fp16': {'enabled': True, 'auto_cast': True}}
+```
+
+**Note**: Remaining `"auto"` values are handled in `accelerator.prepare()` call as explained in point 2 of 
+`Important code changes when using DeepSpeed Config File`.
+
 ## Saving and loading
 
 1. Saving and loading of models is unchanged for ZeRO Stage-1 and Stage-2.

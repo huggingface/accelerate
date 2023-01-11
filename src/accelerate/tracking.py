@@ -37,7 +37,10 @@ from .utils import (
 _available_trackers = []
 
 if is_tensorboard_available():
-    from torch.utils import tensorboard
+    try:
+        from torch.utils import tensorboard
+    except ModuleNotFoundError:
+        import tensorboardX as tensorboard
 
     _available_trackers.append(LoggerType.TENSORBOARD)
 

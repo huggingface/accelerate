@@ -78,6 +78,7 @@ class BaseConfig:
         for key, value in result.items():
             if isinstance(value, Enum):
                 result[key] = value.value
+        result = {k: v for k, v in result.items() if v is not None}
         return result
 
     @classmethod
@@ -88,7 +89,7 @@ class BaseConfig:
         if "compute_environment" not in config_dict:
             config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE
         if "mixed_precision" not in config_dict:
-            config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else "no"
+            config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
         if "use_cpu" not in config_dict:
@@ -111,7 +112,7 @@ class BaseConfig:
             config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE
 
         if "mixed_precision" not in config_dict:
-            config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else "no"
+            config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
         if "use_cpu" not in config_dict:
