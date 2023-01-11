@@ -126,17 +126,15 @@ def set_module_tensor_to_device(
     if value is not None:
         if dtype is None:
             # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
-            value = value.to(old_value.dtype)
-        elif str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
-            value = value.to(dtype)
+            dtype = old_value.dtype
 
     with torch.no_grad():
         if value is None:
-            new_value = old_value.to(device)
+            new_value = old_value.to(device, dtype=dtype)
         elif isinstance(value, torch.Tensor):
-            new_value = value.to(device)
+            new_value = value.to(device, dtype=dtype)
         else:
-            new_value = torch.tensor(value, device=device)
+            new_value = torch.tensor(value, device=device, dtype=dtype)
 
         if is_buffer:
             module._buffers[tensor_name] = new_value
