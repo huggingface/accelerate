@@ -555,8 +555,10 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
-    if is_torch_version(">=", "1.9.0"):
+    if is_torch_version(">=", "1.9.1"):
         import torch.distributed.run as distrib_run
+    else:
+        raise NotImplementedError("Native multi-GPU training requires pytorch>=1.9.1")
     num_processes = getattr(args, "num_processes")
     num_machines = getattr(args, "num_machines")
     main_process_ip = getattr(args, "main_process_ip")
@@ -630,8 +632,6 @@ def multi_gpu_launcher(args):
             current_env[prefix + "USE_DISTRIBUTED_OPTIMIZER"] = str(args.megatron_lm_use_distributed_optimizer)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
-    if is_torch_version("<", "1.9.0"):
-        raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
 
     debug = getattr(args, "debug", False)
     args = _filter_args(args)
@@ -646,7 +646,7 @@ def multi_gpu_launcher(args):
 
 
 def deepspeed_launcher(args):
-    if is_torch_version(">=", "1.9.0"):
+    if is_torch_version(">=", "1.9.1"):
         import torch.distributed.run as distrib_run
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
@@ -756,8 +756,8 @@ def deepspeed_launcher(args):
             else:
                 sys.exit(1)
     else:
-        if is_torch_version("<", "1.9.0"):
-            raise NotImplementedError("Multi-node training requires pytorch>=1.9.0")
+        if is_torch_version("<", "1.9.1"):
+            raise NotImplementedError("Multi-node training requires pytorch>=1.9.1")
 
         debug = getattr(args, "debug", False)
         args = _filter_args(args)
