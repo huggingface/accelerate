@@ -509,7 +509,9 @@ def infer_auto_device_map(
             )
         # Assess size needed
         module_size = module_sizes[name]
-        tied_params = [v for k, v in tied_parameters.items() if name in k]
+        # We keep relevant tied parameters only: once of the tied parameters is inside the current module and the other
+        # is not.
+        tied_params = [v for k, v in tied_parameters.items() if name in k and name not in v]
         # We ignore parameters that are tied when they're tied to > 1 one
         tied_param = tied_params[0] if len(tied_params) == 1 else None
 
