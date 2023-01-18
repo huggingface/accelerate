@@ -28,13 +28,13 @@ from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 
-def get_basic_setup(accelerator, num_samples=82):
+def get_basic_setup(accelerator, num_samples=82, batch_size=16):
     "Returns everything needed to perform basic training"
     set_seed(42)
     model = RegressionModel()
     ddp_model = deepcopy(model)
     dset = RegressionDataset(length=num_samples)
-    dataloader = DataLoader(dset, batch_size=16)
+    dataloader = DataLoader(dset, batch_size=batch_size)
     model.to(accelerator.device)
     ddp_model, dataloader = accelerator.prepare(ddp_model, dataloader)
     return model, ddp_model, dataloader
@@ -91,8 +91,8 @@ def generate_predictions(model, dataloader, accelerator):
     return logits, targs
 
 
-def test_torch_metrics(accelerator: Accelerator, num_samples=82, dispatch_batches=False, split_batches=False):
-    model, ddp_model, dataloader = get_basic_setup(accelerator, num_samples)
+def test_torch_metrics(accelerator: Accelerator, num_samples=82, dispatch_batches=False, split_batches=False, batch_size=16):
+    model, ddp_model, dataloader = get_basic_setup(accelerator, num_samples, batch_size)
     logits, targs = generate_predictions(ddp_model, dataloader, accelerator)
     assert (
         len(logits) == num_samples
@@ -131,7 +131,6 @@ def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
             baseline[key], distributed[key]
         ), f"Baseline and Distributed are not the same for key {key}:\n\tBaseline: {baseline[key]}\n\tDistributed: {distributed[key]}\n"
 
-
 def main():
     accelerator = Accelerator(split_batches=False, dispatch_batches=False)
     if accelerator.is_local_main_process:
@@ -159,6 +158,11 @@ def main():
                 print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`, length=99")
             test_torch_metrics(accelerator, 99)
             accelerator.state._reset_state()
+    if accelerator.is_local_main_process:
+        print("**Test last batch is not dropped when perfectly divisible**")
+    accelerator = Accelerator()
+    test_torch_metrics(accelerator, 512)
+    accelerator.state._reset_state()
 
 
 def _mp_fn(index):
