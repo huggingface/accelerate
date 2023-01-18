@@ -126,6 +126,11 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest().to(0)
         self.check_set_module_tensor_for_device(model, 0, 1)
 
+    def test_set_module_tensor_sets_dtype(self):
+        model = ModelForTest()
+        set_module_tensor_to_device(model, "linear1.weight", "cpu", value=model.linear1.weight, dtype=torch.float16)
+        self.assertEqual(model.linear1.weight.dtype, torch.float16)
+
     def test_named_tensors(self):
         model = nn.BatchNorm1d(4)
         named_tensors = named_module_tensors(model)
