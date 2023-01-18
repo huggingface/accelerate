@@ -33,7 +33,7 @@ class Direction(enum.Enum):
 
 
 def forceWrite(content, end=""):
-    sys.stdout.write(content + end)
+    sys.stdout.write(str(content) + end)
     sys.stdout.flush()
 
 
