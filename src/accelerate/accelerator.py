@@ -1455,7 +1455,7 @@ class Accelerator:
                 return tensor
             try:
                 # Then see if we're on the last batch of our eval dataloader
-                if self.gradient_state.end_of_dataloader:
+                if self.gradient_state.end_of_dataloader and self.gradient_state.remainder > 0:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
