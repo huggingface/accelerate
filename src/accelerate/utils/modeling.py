@@ -127,7 +127,7 @@ def set_module_tensor_to_device(
         if dtype is None:
             # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
             value = value.to(old_value.dtype)
-        elif str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
+        elif not str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
             value = value.to(dtype)
 
     with torch.no_grad():
