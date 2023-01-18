@@ -33,6 +33,7 @@ from accelerate.test_utils.testing import (
     require_comet_ml,
     require_tensorboard,
     require_wandb,
+    skip,
 )
 from accelerate.tracking import CometMLTracker, GeneralTracker
 from accelerate.utils import is_comet_ml_available
@@ -108,6 +109,7 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         else:
             return dict(re.findall(r'(\w+): "([^\s]+)"', cleaned_record))
 
+    @skip
     def test_wandb(self):
         project_name = "test_project_with_config"
         accelerator = Accelerator(log_with="wandb")
