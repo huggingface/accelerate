@@ -91,7 +91,9 @@ def generate_predictions(model, dataloader, accelerator):
     return logits, targs
 
 
-def test_torch_metrics(accelerator: Accelerator, num_samples=82, dispatch_batches=False, split_batches=False, batch_size=16):
+def test_torch_metrics(
+    accelerator: Accelerator, num_samples=82, dispatch_batches=False, split_batches=False, batch_size=16
+):
     model, ddp_model, dataloader = get_basic_setup(accelerator, num_samples, batch_size)
     logits, targs = generate_predictions(ddp_model, dataloader, accelerator)
     assert (
@@ -130,6 +132,7 @@ def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
         assert math.isclose(
             baseline[key], distributed[key]
         ), f"Baseline and Distributed are not the same for key {key}:\n\tBaseline: {baseline[key]}\n\tDistributed: {distributed[key]}\n"
+
 
 def main():
     accelerator = Accelerator(split_batches=False, dispatch_batches=False)
