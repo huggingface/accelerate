@@ -24,6 +24,37 @@ import inspect
 import torch
 
 
+def release_memory(*objects):
+    """
+    Releases memory from `objects` by setting them to `None` and calls `gc.collect()` and `torch.cuda.empty_cache()`.
+    Returned objects should be reassigned to the same variables.
+
+    Args:
+        objects (`Iterable`):
+            An iterable of objects
+    Returns:
+        A list of `None` objects to replace `objects`
+
+    Example:
+
+        ```python
+        >>> import torch
+        >>> from accelerate.utils import release_memory
+
+        >>> a = torch.ones(1000, 1000).cuda()
+        >>> b = torch.ones(1000, 1000).cuda()
+        >>> a, b = release_memory(a, b)
+        ```
+    """
+    if not isinstance(objects, list):
+        objects = list(objects)
+    for i in range(len(objects)):
+        objects[i] = None
+    gc.collect()
+    torch.cuda.empty_cache()
+    return objects
+
+
 def should_reduce_batch_size(exception: Exception) -> bool:
     """
     Checks if `exception` relates to CUDA out-of-memory, CUDNN not supported, or CPU out-of-memory

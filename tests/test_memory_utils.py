@@ -14,11 +14,25 @@
 
 import unittest
 
-from accelerate.utils.memory import find_executable_batch_size
+import torch
+from torch import nn
+
+from accelerate.utils.memory import find_executable_batch_size, release_memory
 
 
 def raise_fake_out_of_memory():
     raise RuntimeError("CUDA out of memory.")
+
+
+class ModelForTest(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = nn.Linear(3, 4)
+        self.batchnorm = nn.BatchNorm1d(4)
+        self.linear2 = nn.Linear(4, 5)
+
+    def forward(self, x):
+        return self.linear2(self.batchnorm(self.linear1(x)))
 
 
 class MemoryTest(unittest.TestCase):
@@ -89,3 +103,11 @@ class MemoryTest(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             mock_training_loop_function()
             self.assertIn("Oops, we had an error!", cm.exception.args[0])
+
+    def test_release_memory(self):
+        self.assertEqual(torch.cuda.memory_allocated(), 0)
+        model = ModelForTest()
+        model.cuda()
+        self.assertGreater(torch.cuda.memory_allocated(), 0)
+        model = release_memory(model)
+        self.assertEqual(torch.cuda.memory_allocated(), 0)
