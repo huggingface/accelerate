@@ -109,7 +109,7 @@ def save_accelerator_state(
     return output_dir
 
 
-def load_accelerator_state(input_dir, models, optimizers, schedulers, process_index, scaler=None):
+def load_accelerator_state(input_dir, models, optimizers, schedulers, process_index, scaler=None, **model_load_kwargs):
     """
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
 
@@ -126,12 +126,13 @@ def load_accelerator_state(input_dir, models, optimizers, schedulers, process_in
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
             An optional *GradScaler* instance to load
+        model_load_kwargs (`dict`): Additional arguments to pass to the model's `load_state_dict` method.
     """
     # Model states
     for i, model in enumerate(models):
         weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
         input_model_file = os.path.join(input_dir, weights_name)
-        models[i].load_state_dict(torch.load(input_model_file, map_location="cpu"))
+        models[i].load_state_dict(torch.load(input_model_file, map_location="cpu"), **model_load_kwargs)
     logger.info("All model weights loaded successfully")
 
     # Optimizer states

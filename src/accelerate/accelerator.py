@@ -1704,7 +1704,7 @@ class Accelerator:
         self.project_configuration.iteration += 1
         return save_location
 
-    def load_state(self, input_dir: str):
+    def load_state(self, input_dir: str, **model_load_kwargs):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
@@ -1717,6 +1717,8 @@ class Accelerator:
         Args:
             input_dir (`str` or `os.PathLike`):
                 The name of the folder all relevant weights and states were saved in.
+            model_load_kwargs (`dict`): Additional keyword arguments required for loading model, e.g.,
+            deepspeed's optional args for `load_checkpoint`.
         """
         # Check if folder exists
         input_dir = os.path.expanduser(input_dir)
@@ -1729,16 +1731,16 @@ class Accelerator:
         for i, model in enumerate(self._models):
             if self.distributed_type == DistributedType.FSDP:
                 logger.info("Loading FSDP model")
-                self.state.fsdp_plugin.load_model(self, model, input_dir, i)
+                self.state.fsdp_plugin.load_model(self, model, input_dir, i, **model_load_kwargs)
                 logger.info(f"FSDP Model loaded from input dir {input_dir}")
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Loading DeepSpeed Model and Optimizer")
                 ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
-                model.load_checkpoint(input_dir, ckpt_id)
+                model.load_checkpoint(input_dir, ckpt_id, **model_load_kwargs)
                 logger.info(f"DeepSpeed Model and Optimizer loaded from input dir {os.path.join(input_dir, ckpt_id)}")
             elif self.distributed_type == DistributedType.MEGATRON_LM:
                 logger.info("Loading Megatron-LM Model, Optimizer and Scheduler")
-                model.load_checkpoint(input_dir)
+                model.load_checkpoint(input_dir, **model_load_kwargs)
                 logger.info(f"Megatron-LM Model , Optimizer and Scheduler loaded from input dir {input_dir}")
             else:
                 models.append(model)
@@ -1763,7 +1765,9 @@ class Accelerator:
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
 
-        load_accelerator_state(input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler)
+        load_accelerator_state(
+            input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler, **model_load_kwargs
+        )
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
             err = "Warning! Number of found checkpoints does not match the number of registered objects:"
