@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import contextlib
-import gc
 import math
 import os
 import shutil
@@ -60,6 +59,7 @@ from .utils import (
     pad_across_processes,
     recursively_apply,
     reduce,
+    release_memory,
     save,
     wait_for_everyone,
 )
@@ -1785,8 +1785,7 @@ class Accelerator:
         self._models = []
         self._dataloaders = []
         self.deepspeed_engine_wrapped = None
-        gc.collect()
-        torch.cuda.empty_cache()
+        release_memory()
 
     def clear(self):
         """

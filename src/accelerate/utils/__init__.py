@@ -119,7 +119,7 @@ from .megatron_lm import prepare_data_loader as megatron_lm_prepare_data_loader
 from .megatron_lm import prepare_model as megatron_lm_prepare_model
 from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
 from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
-from .memory import find_executable_batch_size
+from .memory import find_executable_batch_size, release_memory
 from .other import (
     extract_model_from_parallel,
     get_pretty_name,
