@@ -1718,7 +1718,8 @@ class Accelerator:
             input_dir (`str` or `os.PathLike`):
                 The name of the folder all relevant weights and states were saved in.
             model_load_kwargs (`dict`):
-                Additional keyword arguments required for loading model, e.g., deepspeed's optional args for `load_checkpoint`.
+                Additional keyword arguments required for loading model, e.g., deepspeed's optional args for
+                `load_checkpoint`.
         """
         # Check if folder exists
         input_dir = os.path.expanduser(input_dir)
