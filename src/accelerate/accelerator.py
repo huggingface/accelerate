@@ -25,7 +25,6 @@ from typing import List, Optional, Union, Callable
 
 import torch
 import torch.utils.hooks as hooks
-from ...utils.hooks import RemovableHandle
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader
@@ -1620,7 +1619,7 @@ class Accelerator:
         """
         save(obj, f)
 
-    def register_save_state_pre_hook(self, hook: Callable[..., None]) -> RemovableHandle:
+    def register_save_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
         handle = hooks.RemovableHandle(self._save_model_state_pre_hook)
         self._save_model_state_pre_hook[handle.id] = hook
         return handle
@@ -1721,7 +1720,7 @@ class Accelerator:
         self.project_configuration.iteration += 1
         return save_location
 
-    def register_load_state_pre_hook(self, hook: Callable[..., None]) -> RemovableHandle:
+    def register_load_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
         handle = hooks.RemovableHandle(self._load_model_state_pre_hook)
         self._load_model_state_pre_hook[handle.id] = hook
         return handle
