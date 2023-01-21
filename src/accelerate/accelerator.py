@@ -1636,7 +1636,7 @@ class Accelerator:
                 The name of the folder to save all relevant weights and states.
             save_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for saving model which can be passed to the underlying save function, such
-                as optional arguments for `DeepSpeed`'s `save_checkpoint` function.
+                as optional arguments for DeepSpeed's `save_checkpoint` function.
         """
         if self.project_configuration.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
@@ -1722,7 +1722,7 @@ class Accelerator:
                 The name of the folder all relevant weights and states were saved in.
             load_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for loading model which can be passed to the underlying load function,
-                such as optional arguments for `DeepSpeed`'s `load_checkpoint` function.
+                such as optional arguments for DeepSpeed's `load_checkpoint` function.
         """
         # Check if folder exists
         input_dir = os.path.expanduser(input_dir)
