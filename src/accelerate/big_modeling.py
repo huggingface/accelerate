@@ -24,10 +24,12 @@ from .utils import (
     OffloadedWeightsLoader,
     check_device_map,
     extract_submodules_state_dict,
+    find_tied_parameters,
     get_balanced_memory,
     infer_auto_device_map,
     load_checkpoint_in_model,
     offload_state_dict,
+    retie_parameters,
 )
 from .utils.versions import is_torch_version
 
@@ -312,6 +314,7 @@ def dispatch_model(
     else:
         weights_map = None
 
+    tied_params = find_tied_parameters(model)
     attach_align_device_hook_on_blocks(
         model,
         execution_device=execution_device,
@@ -320,6 +323,8 @@ def dispatch_model(
         weights_map=weights_map,
         preload_module_classes=preload_module_classes,
     )
+    # Attaching the hook may break tied weights, so we retie them
+    retie_parameters(model, tied_params)
     model.hf_device_map = device_map
     return model
 
