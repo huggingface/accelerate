@@ -1691,15 +1691,15 @@ class Accelerator:
         Example:
 
         ```python
-        # Assuming two GPU processes
-        from torch.nn.parallel import DistributedDataParallel
-        from accelerate import Accelerator
+        >>> # Assuming two GPU processes
+        >>> from torch.nn.parallel import DistributedDataParallel
+        >>> from accelerate import Accelerator
 
-        accelerator = Accelerator()
-        model = accelerator.prepare(MyModel())
-        assert isinstance(model, DistributedDataParallel)
-        model = accelerator.unwrap_model(model)
-        assert not isinstance(model, DistributedDataParallel)
+        >>> accelerator = Accelerator()
+        >>> model = accelerator.prepare(MyModel())
+        >>> assert isinstance(model, DistributedDataParallel)
+        >>> model = accelerator.unwrap_model(model)
+        >>> assert not isinstance(model, DistributedDataParallel)
         ```
         """
         return extract_model_from_parallel(model, keep_fp32_wrapper)
@@ -1712,18 +1712,18 @@ class Accelerator:
         Example:
 
         ```python
-        # Assuming two GPU processes
-        import time
-        from accelerate import Accelerator
+        >>> # Assuming two GPU processes
+        >>> import time
+        >>> from accelerate import Accelerator
 
-        accelerator = Accelerator()
-        if accelerator.is_main_process:
-            time.sleep(2)
-        else:
-            print("I'm waiting for the main process to finish its sleep...")
-        accelerator.wait_for_everyone()
-        # Should print on every process at the same time
-        print("Everyone is here")
+        >>> accelerator = Accelerator()
+        >>> if accelerator.is_main_process:
+        ...     time.sleep(2)
+        >>> else:
+        ...     print("I'm waiting for the main process to finish its sleep...")
+        >>> accelerator.wait_for_everyone()
+        >>> # Should print on every process at the same time
+        >>> print("Everyone is here")
         ```
         """
         wait_for_everyone()
