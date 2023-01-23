@@ -55,6 +55,7 @@ from .modeling import (
     load_checkpoint_in_model,
     load_offloaded_weights,
     named_module_tensors,
+    retie_parameters,
     set_module_tensor_to_device,
 )
 from .offload import (
