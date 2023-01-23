@@ -1613,7 +1613,7 @@ class Accelerator:
         """
         save(obj, f)
 
-    def save_state(self, output_dir: str = None):
+    def save_state(self, output_dir: str = None, **save_model_func_kwargs):
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
 
@@ -1634,6 +1634,9 @@ class Accelerator:
         Args:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
+            save_model_func_kwargs (`dict`, *optional*):
+                Additional keyword arguments for saving model which can be passed to the underlying save function, such
+                as optional arguments for DeepSpeed's `save_checkpoint` function.
         """
         if self.project_configuration.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
@@ -1667,7 +1670,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Saving DeepSpeed Model and Optimizer")
                 ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
-                model.save_checkpoint(output_dir, ckpt_id)
+                model.save_checkpoint(output_dir, ckpt_id, **save_model_func_kwargs)
                 logger.info(f"DeepSpeed Model and Optimizer saved to output dir {os.path.join(output_dir, ckpt_id)}")
             elif self.distributed_type == DistributedType.MEGATRON_LM:
                 logger.info("Saving Megatron-LM Model, Optimizer and Scheduler")
@@ -1704,7 +1707,7 @@ class Accelerator:
         self.project_configuration.iteration += 1
         return save_location
 
-    def load_state(self, input_dir: str):
+    def load_state(self, input_dir: str, **load_model_func_kwargs):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
@@ -1717,6 +1720,9 @@ class Accelerator:
         Args:
             input_dir (`str` or `os.PathLike`):
                 The name of the folder all relevant weights and states were saved in.
+            load_model_func_kwargs (`dict`, *optional*):
+                Additional keyword arguments for loading model which can be passed to the underlying load function,
+                such as optional arguments for DeepSpeed's `load_checkpoint` function.
         """
         # Check if folder exists
         input_dir = os.path.expanduser(input_dir)
@@ -1734,7 +1740,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Loading DeepSpeed Model and Optimizer")
                 ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
-                model.load_checkpoint(input_dir, ckpt_id)
+                model.load_checkpoint(input_dir, ckpt_id, **load_model_func_kwargs)
                 logger.info(f"DeepSpeed Model and Optimizer loaded from input dir {os.path.join(input_dir, ckpt_id)}")
             elif self.distributed_type == DistributedType.MEGATRON_LM:
                 logger.info("Loading Megatron-LM Model, Optimizer and Scheduler")
@@ -1763,7 +1769,9 @@ class Accelerator:
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
 
-        load_accelerator_state(input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler)
+        load_accelerator_state(
+            input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler, **load_model_func_kwargs
+        )
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
             err = "Warning! Number of found checkpoints does not match the number of registered objects:"
