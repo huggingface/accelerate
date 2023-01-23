@@ -340,8 +340,10 @@ class DataLoaderShard(DataLoader):
             - `"cuda"`: the CUDA random number generator (GPU only)
             - `"xla"`: the XLA random number generator (TPU only)
             - `"generator"`: an optional `torch.Generator`
-        generator (`torch.Generator`, *optional*):
+        synchronized_generator (`torch.Generator`, *optional*):
             A random number generator to keep synchronized across processes.
+        split_batches (`int`, *optional*, defaults to 0):
+            The number of batches to skip at the beginning.
         kwargs:
             All other keyword arguments to pass to the regular `DataLoader` initialization.
 
@@ -354,11 +356,12 @@ class DataLoaderShard(DataLoader):
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
-    def __init__(self, dataset, device=None, rng_types=None, synchronized_generator=None, **kwargs):
+    def __init__(self, dataset, device=None, rng_types=None, synchronized_generator=None, skip_batches=0, **kwargs):
         super().__init__(dataset, **kwargs)
         self.device = device
         self.rng_types = rng_types
         self.synchronized_generator = synchronized_generator
+        self.skip_batches = skip_batches
         self.gradient_state = GradientState()
 
     def __iter__(self):
@@ -375,17 +378,22 @@ class DataLoaderShard(DataLoader):
             current_batch = next(dataloader_iter)
         except StopIteration:
             yield
+
+        batch_index = 0
         while True:
             try:
                 # But we still move it to the device so it is done before `StopIteration` is reached
                 if self.device is not None:
                     current_batch = send_to_device(current_batch, self.device)
                 next_batch = next(dataloader_iter)
-                yield current_batch
+                if batch_index >= self.skip_batches:
+                    yield current_batch
+                batch_index += 1
                 current_batch = next_batch
             except StopIteration:
                 self.gradient_state._set_end_of_dataloader(True)
-                yield current_batch
+                if batch_index >= self.skip_batches:
+                    yield current_batch
                 break
 
     @property
@@ -407,9 +415,10 @@ class DataLoaderShard(DataLoader):
 
 class DataLoaderDispatcher(DataLoader):
     """
-    Args:
     Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
     process their part of the batch.
+
+    Args:
         split_batches (`bool`, *optional*, defaults to `False`):
             Whether the resulting `DataLoader` should split the batches of the original data loader across devices or
             yield full batches (in which case it will yield batches starting at the `process_index`-th and advancing of
@@ -417,6 +426,8 @@ class DataLoaderDispatcher(DataLoader):
             the same as the initial `dataloader` if this option is set to `True`, the batch size of the initial
             `dataloader` multiplied by `num_processes` otherwise. Setting this option to `True` requires that the batch
             size of the `dataloader` is a round multiple of `batch_size`.
+        skip_batches (`int`, *optional*, defaults to 0):
+            The number of batches to skip at the beginning.
 
     **Available attributes:**
 
@@ -427,7 +438,7 @@ class DataLoaderDispatcher(DataLoader):
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
-    def __init__(self, dataset, split_batches: bool = False, _drop_last: bool = False, **kwargs):
+    def __init__(self, dataset, split_batches: bool = False, skip_batches=0, _drop_last: bool = False, **kwargs):
         shuffle = False
         if is_torch_version(">=", "1.11.0"):
             from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
@@ -447,6 +458,7 @@ class DataLoaderDispatcher(DataLoader):
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
         self._drop_last = _drop_last
+        self.skip_batches = skip_batches
         # We can safely pass because the default is -1
         with suppress(Exception):
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
@@ -499,6 +511,7 @@ class DataLoaderDispatcher(DataLoader):
         self._stop_iteration = False
         first_batch = None
         next_batch, next_batch_info = self._fetch_batches(main_iterator)
+        batch_index = 0
         while not stop_iteration:
             batch, batch_info = next_batch, next_batch_info
 
@@ -537,7 +550,9 @@ class DataLoaderDispatcher(DataLoader):
             if stop_iteration:
                 self.gradient_state._set_remainder(observed_batch_size)
                 self.gradient_state._set_end_of_dataloader(True)
-            yield batch
+            if batch_index >= self.skip_batches:
+                yield batch
+            batch_index += 1
 
     def __len__(self):
         whole_length = super().__len__()
@@ -746,4 +761,120 @@ def prepare_data_loader(
 
     if state.distributed_type == DistributedType.TPU:
         return MpDeviceLoaderWrapper(dataloader, device)
+    return dataloader
+
+
+class SkipBatchSampler(BatchSampler):
+    """
+    A `torch.utils.data.BatchSampler` that skips the first batches of another `torch.utils.data.BatchSampler`.
+    """
+
+    def __init__(self, batch_sampler, skip_batches=0):
+        self.batch_sampler = batch_sampler
+        self.skip_batches = skip_batches
+
+    def __iter__(self):
+        for index, samples in enumerate(self.batch_sampler):
+            if index >= self.skip_batches:
+                yield samples
+
+    @property
+    def total_length(self):
+        return len(self.batch_sampler)
+
+    def __len__(self):
+        return len(self.batch_sampler) - self.skip_batches
+
+
+class SkipDataLoader(DataLoader):
+    """
+    Subclass of a PyTorch `DataLoader` that will skip the first batches.
+
+    Args:
+        dataset (`torch.utils.data.dataset.Dataset`):
+            The dataset to use to build this datalaoder.
+        skip_batches (`int`, *optional*, defaults to 0):
+            The number of batches to skip at the beginning.
+        kwargs:
+            All other keyword arguments to pass to the regular `DataLoader` initialization.
+    """
+
+    def __init__(self, dataset, skip_batches=0, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.skip_batches = skip_batches
+
+    def __iter__(self):
+        for index, batch in enumerate(self):
+            if index >= self.skip_batches:
+                yield batch
+
+
+def skip_batches(dataloader, num_batches=0):
+    """
+    Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
+    """
+    dataset = dataloader.dataset
+    sampler_is_batch_sampler = False
+    if isinstance(dataset, IterableDataset):
+        new_batch_sampler = None
+    else:
+        sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+        batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
+        new_batch_sampler = SkipBatchSampler(batch_sampler, skip_batches=num_batches)
+
+    # We ignore all of those since they are all dealt with by our new_batch_sampler
+    ignore_kwargs = [
+        "batch_size",
+        "shuffle",
+        "sampler",
+        "batch_sampler",
+        "drop_last",
+    ]
+
+    kwargs = {
+        k: getattr(dataloader, k, _PYTORCH_DATALOADER_KWARGS[k])
+        for k in _PYTORCH_DATALOADER_KWARGS
+        if k not in ignore_kwargs
+    }
+
+    # Need to provide batch_size as batch_sampler is None for Iterable dataset
+    if new_batch_sampler is None:
+        kwargs["drop_last"] = dataloader.drop_last
+        kwargs["batch_size"] = dataloader.batch_size
+
+    if isinstance(dataloader, DataLoaderDispatcher):
+        if new_batch_sampler is None:
+            # Need to manually skip batches in the dataloader
+            kwargs["skip_batches"] = num_batches
+        dataloader = DataLoaderDispatcher(
+            dataset,
+            split_batches=dataloader.split_batches,
+            batch_sampler=new_batch_sampler,
+            _drop_last=dataloader._drop_last,
+            **kwargs,
+        )
+    elif isinstance(dataloader, DataLoaderShard):
+        if new_batch_sampler is None:
+            # Need to manually skip batches in the dataloader
+            kwargs["skip_batches"] = num_batches
+        elif sampler_is_batch_sampler:
+            kwargs["sampler"] = new_batch_sampler
+            kwargs["batch_size"] = dataloader.batch_size
+        else:
+            kwargs["batch_sampler"] = new_batch_sampler
+        dataloader = DataLoaderShard(
+            dataset,
+            device=dataloader.device,
+            split_batches=dataloader.split_batches,
+            rng_types=dataloader.rng_types,
+            synchronized_generator=dataloader.synchronized_generator,
+            **kwargs,
+        )
+    else:
+        if new_batch_sampler is None:
+            # Need to manually skip batches in the dataloader
+            dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
+        else:
+            dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
+
     return dataloader
