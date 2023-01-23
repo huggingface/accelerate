@@ -1580,7 +1580,6 @@ class Accelerator:
         >>> dataloader = accelerator.prepare(dataloader)
         >>> batch = next(iter(dataloader))
         >>> gathered_items = accelerator.gather_for_metrics(batch)
-        >>> assert len(items) < len(gathered_items)
         >>> assert len(gathered_items) == 9
         ```
         """
