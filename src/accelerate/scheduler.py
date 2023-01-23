@@ -16,7 +16,7 @@
 
 import warnings
 
-from .state import AcceleratorState
+from .state import AcceleratorState, GradientState
 
 
 warnings.filterwarnings("ignore", category=UserWarning, module="torch.optim.lr_scheduler")
@@ -49,6 +49,7 @@ class AcceleratedScheduler:
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
         self.step_with_optimizer = step_with_optimizer
+        self.gradient_state = GradientState()
 
     def step(self, *args, **kwargs):
         if not self.step_with_optimizer:
@@ -57,6 +58,9 @@ class AcceleratedScheduler:
             return
 
         # Otherwise, first make sure the optimizer was stepped.
+        if not self.gradient_state.sync_gradients:
+            return
+
         for opt in self.optimizers:
             if opt.step_was_skipped:
                 return
