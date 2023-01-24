@@ -380,6 +380,24 @@ def load_checkpoint_and_dispatch(
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+
+    Example:
+
+    ```python
+    >>> from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+    >>> from transformers import AutoConfig, AutoModelForCasualLM
+
+    >>> # Create a model and initialize it
+    >>> checkpoint = "EleutherAI/gpt-j-6B"
+    >>> config = AutoConfig.from_pretrained(checkpoint)
+    >>> with init_empty_weights():
+    ...     model = AutoModelForCausalLM.from_config(config)
+
+    >>> # Load the checkpoint and dispatch it to the right devices
+    >>> model = load_checkpoint_and_dispatch(
+    ...     model, "sharded-gpt-j-6B", device_map="auto", no_split_module_classes=["GPTJBlock"]
+    ... )
+    ```
     """
     if not is_torch_version(">=", "1.9.0"):
         raise NotImplementedError("Loading and dispatching requires torch >= 1.9.0")

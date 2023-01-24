@@ -27,6 +27,13 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
     Launches a training function, using several processes if it's possible in the current environment (TPU with
     multiple cores for instance).
 
+    <Tip warning={true}>
+
+    To use this function absolutely zero calls to a CUDA device must be made in the notebook session before calling. If
+    any have been made, you will need to restart the notebook and make sure no cells use any CUDA capability.
+
+    </Tip>
+
     Args:
         function (`Callable`):
             The training function to execute. If it accepts arguments, the first argument should be the index of the
@@ -40,6 +47,21 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
             If `fp16` or `bf16`, will use mixed precision training on multi-GPU.
         use_port (`str`, *optional*, defaults to `"29500"`):
             The port to use to communicate between processes when launching a multi-GPU training.
+
+    Example:
+
+    ```python
+    # Assume this is defined in a Jupyter Notebook on an instance with two GPUs
+    from accelerate import notebook_launcher
+
+
+    def train(*args):
+        # Your training function here
+        ...
+
+
+    notebook_launcher(train, args=(arg1, arg2), num_processes=2, mixed_precision="fp16")
+    ```
     """
     # Are we in a google colab or a Kaggle Kernel?
     in_colab = False
