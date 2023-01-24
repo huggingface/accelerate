@@ -92,8 +92,10 @@ def offload_state_dict(save_dir: Union[str, os.PathLike], state_dict: Dict[str, 
     Offload a state dict in a given folder.
 
     Args:
-        save_dir (`str` or `os.PathLike`): The directory in which to offload the state dict.
-        state_dict (`Dict[str, torch.Tensor]`): The dictionary of tensors to offload.
+        save_dir (`str` or `os.PathLike`):
+            The directory in which to offload the state dict.
+        state_dict (`Dict[str, torch.Tensor]`):
+            The dictionary of tensors to offload.
     """
     os.makedirs(save_dir, exist_ok=True)
     index = {}
@@ -109,8 +111,10 @@ class PrefixedDataset(Mapping):
     Will access keys in a given dataset by adding a prefix.
 
     Args:
-        dataset (`Mapping`): Any map with string keys.
-        prefix (`str`): A prefix to add when trying to access any element in the underlying dataset.
+        dataset (`Mapping`):
+            Any map with string keys.
+        prefix (`str`):
+            A prefix to add when trying to access any element in the underlying dataset.
     """
 
     def __init__(self, dataset: Mapping, prefix: str):
@@ -200,8 +204,10 @@ def extract_submodules_state_dict(state_dict: Dict[str, torch.Tensor], submodule
     Extract the sub state-dict corresponding to a list of given submodules.
 
     Args:
-        state_dict (`Dict[str, torch.Tensor]`): The state dict to extract from.
-        submodule_names (`List[str]`): The list of submodule names we want to extract.
+        state_dict (`Dict[str, torch.Tensor]`):
+            The state dict to extract from.
+        submodule_names (`List[str]`):
+            The list of submodule names we want to extract.
     """
     result = {}
     for module_name in submodule_names:

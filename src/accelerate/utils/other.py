@@ -88,8 +88,10 @@ def save(obj, f):
     Save the data to disk. Use in place of `torch.save()`.
 
     Args:
-        obj: The data to save
-        f: The file (or file-like object) to use to save the data
+        obj:
+            The data to save
+        f:
+            The file (or file-like object) to use to save the data
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
@@ -103,6 +105,17 @@ def patch_environment(**kwargs):
     A context manager that will add each keyword argument passed to `os.environ` and remove them when exiting.
 
     Will convert the values in `kwargs` to strings and upper-case all the keys.
+
+    Example:
+
+    ```python
+    >>> import os
+    >>> from accelerate.utils import patch_environment
+
+    >>> with patch_environment(FOO="bar"):
+    ...     print(os.environ["FOO"])  # prints "bar"
+    >>> print(os.environ["FOO"])  # raises KeyError
+    ```
     """
     for key, value in kwargs.items():
         os.environ[key.upper()] = str(value)
