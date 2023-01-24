@@ -38,7 +38,8 @@ class ModelHook:
         To be executed when the hook is attached to the module.
 
         Args:
-            module (`torch.nn.Module`): The module attached to this hook.
+            module (`torch.nn.Module`):
+                The module attached to this hook.
         """
         return module
 
@@ -47,9 +48,12 @@ class ModelHook:
         To be executed just before the forward method of the model.
 
         Args:
-            module (`torch.nn.Module`): The module whose forward pass will be executed just after this event.
-            args (`Tuple[Any]`): The positional arguments passed to the module.
-            kwargs (`Dict[Str, Any]`): The keyword arguments passed to the module.
+            module (`torch.nn.Module`):
+                The module whose forward pass will be executed just after this event.
+            args (`Tuple[Any]`):
+                The positional arguments passed to the module.
+            kwargs (`Dict[Str, Any]`):
+                The keyword arguments passed to the module.
 
         Returns:
             `Tuple[Tuple[Any], Dict[Str, Any]]`: A tuple with the treated `args` and `kwargs`.
@@ -61,8 +65,10 @@ class ModelHook:
         To be executed just after the forward method of the model.
 
         Args:
-            module (`torch.nn.Module`): The module whose forward pass been executed just before this event.
-            output (`Any`): The output of the module.
+            module (`torch.nn.Module`):
+                The module whose forward pass been executed just before this event.
+            output (`Any`):
+                The output of the module.
 
         Returns:
             `Any`: The processed `output`.
@@ -74,7 +80,8 @@ class ModelHook:
         To be executed when the hook is detached from a module.
 
         Args:
-            module (`torch.nn.Module`): The module detached from this hook.
+            module (`torch.nn.Module`):
+                The module detached from this hook.
         """
         return module
 
@@ -121,8 +128,10 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
     </Tip>
 
     Args:
-        module (`torch.nn.Module`): The module to attach a hook to.
-        hook (`ModelHook`): The hook to attach.
+        module (`torch.nn.Module`):
+            The module to attach a hook to.
+        hook (`ModelHook`):
+            The hook to attach.
         append (`bool`, *optional*, defaults to `False`):
             Whether the hook should be chained with an existing one (if module already contains a hook) or not.
 
@@ -165,8 +174,10 @@ def remove_hook_from_module(module: nn.Module, recurse=False):
     Removes any hook attached to a module via `add_hook_to_module`.
 
     Args:
-        module (`torch.nn.Module`): The module to attach a hook to.
-        recurse (`bool`, **optional**): Whether to remove the hooks recursively
+        module (`torch.nn.Module`):
+            The module to attach a hook to.
+        recurse (`bool`, **optional**):
+            Whether to remove the hooks recursively
 
     Returns:
         `torch.nn.Module`: The same module, with the hook detached (the module is modified in place, so the result can
@@ -391,7 +402,8 @@ def remove_hook_from_submodules(module: nn.Module):
     Recursively removes all hooks attached on the submodules of a given model.
 
     Args:
-        module (`torch.nn.Module`): The module on which to remove all hooks.
+        module (`torch.nn.Module`):
+            The module on which to remove all hooks.
     """
     remove_hook_from_module(module)
     for child in module.children():
