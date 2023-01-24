@@ -564,7 +564,8 @@ class Accelerator:
 
         >>> accelerator = Accelerator()
         >>> with accelerator.main_process_first():
-        ...     # This will be printed by process 0 then by process 1, etc.
+        ...     # This will be printed by process 0 then in a seemingly
+        ...     # random order by the other processes.
         ...     print(f"This will be printed by process {accelerator.process_index}")
         ```
         """
@@ -584,7 +585,8 @@ class Accelerator:
 
         >>> accelerator = Accelerator()
         >>> with accelerator.local_main_process_first():
-        ...     # This will be printed by local process 0 then by process 1, etc.
+        ...     # This will be printed first by local process 0 then in a seemingly
+        ...     # random order by the other processes.
         ...     print(f"This will be printed by process {accelerator.local_process_index}")
         ```
         """
