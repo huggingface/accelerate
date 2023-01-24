@@ -167,14 +167,17 @@ class DeepSpeedEngineWrapper:
         # runs backpropagation and handles mixed precision
         self.engine.backward(loss)
 
-        # deepspeed `engine.step` performs following operations:
-        # gradient accumulation check
-        # gradient clipping
-        # optimizer step
-        # zero grad
-        # checking overflow
-        # lr_scheduler step
+        # Deepspeed's `engine.step` performs the following operations:
+        # - gradient accumulation check
+        # - gradient clipping
+        # - optimizer step
+        # - zero grad
+        # - checking overflow
+        # - lr_scheduler step (only if engine.lr_scheduler is not None)
         self.engine.step()
+        # and this plugin overrides the above calls with no-ops when Accelerate runs under
+        # Deepspeed, but allows normal functionality for non-Deepspeed cases thus enabling a simple
+        # training loop that works transparently under many training regimes.
 
 
 class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
@@ -190,10 +193,10 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
         super().__init__(optimizer, device_placement=False, scaler=None)
 
     def zero_grad(self, set_to_none=None):
-        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
+        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
 
     def step(self):
-        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
+        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
 
     @property
     def step_was_skipped(self):
@@ -215,7 +218,7 @@ class DeepSpeedSchedulerWrapper(AcceleratedScheduler):
         super().__init__(scheduler, optimizers)
 
     def step(self):
-        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
+        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
 
 
 class DummyOptim:

@@ -1386,7 +1386,7 @@ class Accelerator:
                 if parameters == [p for p in model.parameters()]:
                     return model.clip_grad_norm_(max_norm, norm_type)
         elif self.distributed_type == DistributedType.DEEPSPEED:
-            # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
+            # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
             return None
         self.unscale_gradients()
