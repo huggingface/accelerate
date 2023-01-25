@@ -89,6 +89,7 @@ class AcceleratorState:
             dynamo_backend = (
                 parse_choice_from_env("ACCELERATE_DYNAMO_BACKEND", "no") if dynamo_backend is None else dynamo_backend
             )
+            env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.dynamo_backend = DynamoBackend(dynamo_backend.upper())
             if not _from_accelerator:
                 raise ValueError(
@@ -110,9 +111,7 @@ class AcceleratorState:
                     self.num_processes = torch.distributed.get_world_size()
                     self.process_index = torch.distributed.get_rank()
                     self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
-                    self.device = torch.device(
-                        "cuda", os.environ.get("ACCELERATE_TORCH_DEVICE", self.local_process_index)
-                    )
+                    self.device = torch.device("cuda", self.local_process_index)
                     torch.cuda.set_device(self.device)
                     self._mixed_precision = mixed_precision
             elif is_tpu_available() and not cpu:
@@ -150,7 +149,10 @@ class AcceleratorState:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
-                self.device = torch.device("cuda", os.environ.get("ACCELERATE_TORCH_DEVICE", self.local_process_index))
+                if env_device is not None:
+                    self.device = torch.device(env_device)
+                else:
+                    self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
                 self.deepspeed_plugin = deepspeed_plugin
@@ -162,7 +164,10 @@ class AcceleratorState:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
-                self.device = torch.device("cuda", os.environ.get("ACCELERATE_TORCH_DEVICE", self.local_process_index))
+                if env_device is not None:
+                    self.device = torch.device(env_device)
+                else:
+                    self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
                 self._mixed_precision = mixed_precision
                 if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
@@ -213,7 +218,10 @@ class AcceleratorState:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
-                self.device = torch.device(os.environ.get("ACCELERATE_TORCH_DEVICE", "cpu"))
+                if env_device is not None:
+                    self.device = torch.device(env_device)
+                else:
+                    self.device = torch.device("cpu")
                 self._mixed_precision = mixed_precision
             else:
                 self.distributed_type = DistributedType.NO
@@ -242,11 +250,17 @@ class AcceleratorState:
                                 "It has major fixes related to model correctness and performance improvements for transformer based models. "
                                 "Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details."
                             )
-                        self.device = torch.device(os.environ.get("ACCELERATE_TORCH_DEVICE", "mps"))
-                elif cpu or not torch.cuda.is_available():
-                    self.device = torch.device(os.environ.get("ACCELERATE_TORCH_DEVICE", "cpu"))
+                        if env_device is not None:
+                            self.device = torch.device(env_device)
+                        else:
+                            self.device = torch.device("mps")
                 else:
-                    self.device = torch.device(os.environ.get("ACCELERATE_TORCH_DEVICE", "cuda"))
+                    if env_device is not None:
+                        self.device = torch.device(env_device)
+                    elif cpu or not torch.cuda.is_available():
+                        self.device = torch.device("cpu")
+                    else:
+                        self.device = torch.device("cuda")
                 self._mixed_precision = mixed_precision
 
             if (
