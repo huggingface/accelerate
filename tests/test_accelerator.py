@@ -60,6 +60,6 @@ class AcceleratorTester(unittest.TestCase):
         def noop(*args, **kwargs):
             pass
 
-        with patch("torch.cuda.set_device", noop), patch_environment(ACCELERATE_TORCH_DEVICE="privateuseone"):
+        with patch("torch.cuda.set_device", noop), patch_environment(ACCELERATE_TORCH_DEVICE="cuda:1234"):
             accelerator = Accelerator()
-            self.assertEqual(str(accelerator.state.device), "privateuseone")
+            self.assertEqual(str(accelerator.state.device), "cuda:1234")
