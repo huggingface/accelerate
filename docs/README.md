@@ -157,11 +157,15 @@ description:
 If the description is too long to fit in one line (more than 119 characters in total), another indentation is necessary 
 before writing the description after the argument.
 
+Finally, to maintain uniformity if any *one* description is too long to fit on one line, the 
+rest of the parameters should follow suit and have an indention before their description.
+
 Here's an example showcasing everything so far:
 
 ```
     Args:
-        arg1 (`int`): The first argument
+        arg1 (`int`): 
+            The first argument
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
