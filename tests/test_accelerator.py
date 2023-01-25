@@ -1,10 +1,12 @@
 import unittest
+from unittest.mock import patch
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate.accelerator import Accelerator
 from accelerate.state import AcceleratorState
+from accelerate.utils import patch_environment
 
 
 def create_components():
@@ -49,3 +51,14 @@ class AcceleratorTester(unittest.TestCase):
         self.assertTrue(len(accelerator._schedulers) == 0)
         self.assertTrue(len(accelerator._dataloaders) == 0)
         AcceleratorState._reset_state()
+
+    def test_env_var_device(self):
+        """Tests that setting the torch device with ACCELERATE_TORCH_DEVICE overrides default device."""
+
+        # Set torch.cuda.set_device to avoid an exception as the device test doesn't exist
+        def noop(*args, **kwargs):
+            pass
+
+        with patch("torch.cuda.set_device", noop), patch_environment(ACCELERATE_TORCH_DEVICE="privateuseone"):
+            accelerator = Accelerator()
+            assert str(accelerator.device) == "privateuseone"
