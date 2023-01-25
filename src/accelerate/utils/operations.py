@@ -502,8 +502,7 @@ def find_device(data):
     Finds the device on which a nested dict/list/tuple of tensors lies (assuming they are all on the same device).
 
     Args:
-        (nested list/tuple/dictionary of `torch.Tensor`):
-            The data we want to know the device of.
+        (nested list/tuple/dictionary of `torch.Tensor`): The data we want to know the device of.
     """
     if isinstance(data, Mapping):
         for obj in data.values():

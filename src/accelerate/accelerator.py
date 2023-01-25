@@ -1860,10 +1860,8 @@ class Accelerator:
         Save the object passed to disk once per machine. Use in place of `torch.save`.
 
         Args:
-            obj (`object`):
-                The object to save.
-            f (`str` or `os.PathLike`):
-                Where to save the content of `obj`.
+            obj (`object`): The object to save.
+            f (`str` or `os.PathLike`): Where to save the content of `obj`.
 
         Example:
 

@@ -88,10 +88,8 @@ def save(obj, f):
     Save the data to disk. Use in place of `torch.save()`.
 
     Args:
-        obj:
-            The data to save
-        f:
-            The file (or file-like object) to use to save the data
+        obj: The data to save
+        f: The file (or file-like object) to use to save the data
     """
     if AcceleratorState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)

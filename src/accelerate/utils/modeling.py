@@ -183,8 +183,7 @@ def find_tied_parameters(model: nn.Module, **kwargs):
     </Tip>
 
     Args:
-        model (`torch.nn.Module`):
-            The model to inspect.
+        model (`torch.nn.Module`): The model to inspect.
 
     Returns:
         Dict[str, str]: A dictionary mapping tied parameter names to the name of the parameter they are tied to.
@@ -628,10 +627,8 @@ def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, tor
     Checks a device map covers everything in a given model.
 
     Args:
-        model (`torch.nn.Module`):
-            The model to check the device map against.
-        device_map (`Dict[str, Union[int, str, torch.device]]`):
-            The device map to check.
+        model (`torch.nn.Module`): The model to check the device map against.
+        device_map (`Dict[str, Union[int, str, torch.device]]`): The device map to check.
     """
     all_model_tensors = [name for name, _ in model.state_dict().items()]
     for module_name in device_map.keys():
