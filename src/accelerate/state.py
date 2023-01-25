@@ -90,10 +90,7 @@ class AcceleratorState:
                 parse_choice_from_env("ACCELERATE_DYNAMO_BACKEND", "no") if dynamo_backend is None else dynamo_backend
             )
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
-            if env_device:
-                self.device = torch.device(env_device)
-            else:
-                self.device = None
+            self.device = torch.device(env_device) if env_device is not None else None
             self.dynamo_backend = DynamoBackend(dynamo_backend.upper())
             if not _from_accelerator:
                 raise ValueError(
@@ -115,7 +112,7 @@ class AcceleratorState:
                     self.num_processes = torch.distributed.get_world_size()
                     self.process_index = torch.distributed.get_rank()
                     self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
-                    if not self.device:
+                    if self.device is None:
                         self.device = torch.device("cuda", self.local_process_index)
                     torch.cuda.set_device(self.device)
                     self._mixed_precision = mixed_precision
@@ -154,7 +151,7 @@ class AcceleratorState:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
-                if not self.device:
+                if self.device is None:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
@@ -167,7 +164,7 @@ class AcceleratorState:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
-                if not self.device:
+                if self.device is None:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
                 self._mixed_precision = mixed_precision
@@ -219,7 +216,7 @@ class AcceleratorState:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
-                if not self.device:
+                if self.device is None:
                     self.device = torch.device("cpu")
                 self._mixed_precision = mixed_precision
             else:
@@ -249,9 +246,9 @@ class AcceleratorState:
                                 "It has major fixes related to model correctness and performance improvements for transformer based models. "
                                 "Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details."
                             )
-                        if not self.device:
+                        if self.device is None:
                             self.device = torch.device("mps")
-                elif not self.device:
+                elif self.device is None:
                     if cpu or not torch.cuda.is_available():
                         self.device = torch.device("cpu")
                     else:
