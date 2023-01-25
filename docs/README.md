@@ -137,9 +137,9 @@ adds a link to its documentation with this syntax: \[\`XXXClass\`\] or \[\`funct
 function to be in the main package.
 
 If you want to create a link to some internal class or function, you need to
-provide its path. For instance: \[\`utils.ModelOutput\`\]. This will be converted into a link with
-`utils.ModelOutput` in the description. To get rid of the path and only keep the name of the object you are
-linking to in the description, add a ~: \[\`~utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
+provide its path. For instance: \[\`utils.gather\`\]. This will be converted into a link with
+`utils.gather` in the description. To get rid of the path and only keep the name of the object you are
+linking to in the description, add a ~: \[\`~utils.gather\`\] will generate a link with `gather` in the description.
 
 The same works for methods so you can either use \[\`XXXClass.method\`\] or \[~\`XXXClass.method\`\].
 
@@ -164,15 +164,10 @@ Here's an example showcasing everything so far:
 
 ```
     Args:
-        arg1 (`int`): 
-            The first argument
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AlbertTokenizer`]. See [`~PreTrainedTokenizer.encode`] and
-            [`~PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
+        gradient_accumulation_steps (`int`, *optional*, default to 1):
+            The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with `Accelerator.accumulate`.
+        cpu (`bool`, *optional*):
+            Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force the execution on one process only.
 ```
 
 For optional arguments or arguments with defaults we follow the following syntax: imagine we have a function with the
