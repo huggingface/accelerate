@@ -15,7 +15,6 @@
 
 import inspect
 import os
-import unittest
 
 import torch
 
@@ -23,6 +22,7 @@ import accelerate
 from accelerate.accelerator import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import (
+    AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
     require_cuda,
@@ -53,7 +53,7 @@ dtypes = [FP16, BF16]
 
 @require_fsdp
 @require_cuda
-class FSDPPluginIntegration(unittest.TestCase):
+class FSDPPluginIntegration(AccelerateTestCase):
     def setUp(self):
         super().setUp()
 
@@ -65,10 +65,6 @@ class FSDPPluginIntegration(unittest.TestCase):
             LOCAL_RANK="0",
             WORLD_SIZE="1",
         )
-
-    def tearDown(self):
-        super().tearDown()
-        AcceleratorState._reset_state()
 
     def test_sharding_strategy(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy

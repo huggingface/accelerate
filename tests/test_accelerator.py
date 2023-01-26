@@ -1,13 +1,12 @@
 import json
 import os
 import tempfile
-import unittest
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate.accelerator import Accelerator
-from accelerate.state import AcceleratorState
+from accelerate.test_utils.testing import AccelerateTestCase
 
 
 def create_components():
@@ -29,7 +28,7 @@ def load_random_weights(model):
     model.load_state_dict(state)
 
 
-class AcceleratorTester(unittest.TestCase):
+class AcceleratorTester(AccelerateTestCase):
     def test_prepared_objects_are_referenced(self):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
@@ -47,20 +46,17 @@ class AcceleratorTester(unittest.TestCase):
         self.assertTrue(prepared_scheduler in accelerator._schedulers)
         self.assertTrue(prepared_train_dl in accelerator._dataloaders)
         self.assertTrue(prepared_valid_dl in accelerator._dataloaders)
-        AcceleratorState._reset_state()
 
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
         accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
-
         accelerator.free_memory()
 
         self.assertTrue(len(accelerator._models) == 0)
         self.assertTrue(len(accelerator._optimizers) == 0)
         self.assertTrue(len(accelerator._schedulers) == 0)
         self.assertTrue(len(accelerator._dataloaders) == 0)
-        AcceleratorState._reset_state()
 
     def test_save_load_model(self):
         accelerator = Accelerator()
