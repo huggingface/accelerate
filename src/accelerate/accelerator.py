@@ -57,6 +57,7 @@ from .utils import (
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
+    parse_choice_from_env,
     recursively_apply,
     reduce,
     release_memory,
@@ -126,7 +127,8 @@ class Accelerator:
             command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
         gradient_accumulation_steps (`int`, *optional*, default to 1):
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
-            `Accelerator.accumulate`.
+            `Accelerator.accumulate`. If not passed, will default to the value in the environment variable
+            `ACCELERATE_GRADIENT_ACCUMULATION_STEPS`.
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
@@ -344,8 +346,9 @@ class Accelerator:
                 raise NotImplementedError(
                     "Gradient accumulation on TPU is not supported. Pass in `gradient_accumulation_steps=1`"
                 )
-
-        self.gradient_accumulation_steps = gradient_accumulation_steps
+        self.gradient_accumulation_steps = int(
+            parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
+        )
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
