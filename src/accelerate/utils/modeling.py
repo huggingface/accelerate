@@ -223,6 +223,25 @@ def find_tied_parameters(model: nn.Module, **kwargs):
     return result
 
 
+def retie_parameters(model, tied_params):
+    """
+    Reties tied parameters in a given model if the link was broken (for instance when adding hooks).
+
+    Args:
+        model (`torch.nn.Module`): The model in which to retie parameters.
+        tied_params (`Dict[str, str]`):
+            A mapping parameter name to tied parameter name as obtained by `find_tied_parameters`.
+    """
+    for param_name, tied_param_name in tied_params.items():
+        param = model
+        for split in param_name.split("."):
+            param = getattr(param, split)
+        tied_module = model
+        for split in tied_param_name.split(".")[:-1]:
+            tied_module = getattr(tied_module, split)
+        setattr(tied_module, tied_param_name.split(".")[-1], param)
+
+
 def compute_module_sizes(model: nn.Module, dtype: Optional[Union[str, torch.device]] = None):
     """
     Compute the size of each submodule of a given model.
