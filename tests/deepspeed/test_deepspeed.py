@@ -18,7 +18,6 @@ import itertools
 import json
 import os
 import tempfile
-import unittest
 from copy import deepcopy
 from pathlib import Path
 
@@ -30,6 +29,7 @@ from accelerate.accelerator import Accelerator
 from accelerate.scheduler import AcceleratedScheduler
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import (
+    AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
     require_cuda,
@@ -94,7 +94,7 @@ optim_scheduler_params = list(itertools.product(optims, schedulers))
 
 @require_deepspeed
 @require_cuda
-class DeepSpeedConfigIntegration(unittest.TestCase):
+class DeepSpeedConfigIntegration(AccelerateTestCase):
     def setUp(self):
         super().setUp()
 
@@ -126,10 +126,6 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             LOCAL_RANK="0",
             WORLD_SIZE="1",
         )
-
-    def tearDown(self):
-        super().tearDown()
-        AcceleratorState._reset_state()
 
     def get_config_dict(self, stage):
         # As some tests modify the dict, always make a copy

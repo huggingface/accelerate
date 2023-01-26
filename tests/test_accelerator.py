@@ -1,14 +1,13 @@
 import json
 import os
 import tempfile
-import unittest
 from unittest.mock import patch
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate.accelerator import Accelerator
-from accelerate.state import AcceleratorState
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import patch_environment
 
 
@@ -31,10 +30,7 @@ def load_random_weights(model):
     model.load_state_dict(state)
 
 
-class AcceleratorTester(unittest.TestCase):
-    def tearDown(self) -> None:
-        AcceleratorState._reset_state()
-
+class AcceleratorTester(AccelerateTestCase):
     def test_prepared_objects_are_referenced(self):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
@@ -57,7 +53,6 @@ class AcceleratorTester(unittest.TestCase):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
         accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
-
         accelerator.free_memory()
 
         self.assertTrue(len(accelerator._models) == 0)
