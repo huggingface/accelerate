@@ -1,3 +1,6 @@
+import json
+import os
+import tempfile
 import unittest
 
 import torch
@@ -15,6 +18,15 @@ def create_components():
     valid_dl = DataLoader(TensorDataset(torch.tensor([4, 5, 6])))
 
     return model, optimizer, scheduler, train_dl, valid_dl
+
+
+def get_signature(model):
+    return (model.weight.abs().sum() + model.bias.abs().sum()).item()
+
+
+def load_random_weights(model):
+    state = torch.nn.Linear(*tuple(model.weight.T.shape)).state_dict()
+    model.load_state_dict(state)
 
 
 class AcceleratorTester(unittest.TestCase):
@@ -49,3 +61,83 @@ class AcceleratorTester(unittest.TestCase):
         self.assertTrue(len(accelerator._schedulers) == 0)
         self.assertTrue(len(accelerator._dataloaders) == 0)
         AcceleratorState._reset_state()
+
+    def test_save_load_model(self):
+        accelerator = Accelerator()
+        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+        accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
+
+        model_signature = get_signature(model)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            accelerator.save_state(tmpdirname)
+
+            # make sure random weights don't match
+            load_random_weights(model)
+            self.assertTrue(abs(model_signature - get_signature(model)) > 1e-3)
+
+            # make sure loaded weights match
+            accelerator.load_state(tmpdirname)
+            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+
+    def test_save_load_model_with_hooks(self):
+        accelerator = Accelerator()
+        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+        accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
+
+        model_signature = get_signature(model)
+
+        # saving hook
+        def save_config(models, weights, output_dir):
+            config = {"class_name": models[0].__class__.__name__}
+
+            with open(os.path.join(output_dir, "data.json"), "w") as f:
+                json.dump(config, f)
+
+        # loading hook
+        def load_config(models, input_dir):
+            with open(os.path.join(input_dir, "data.json"), "r") as f:
+                config = json.load(f)
+
+            models[0].class_name = config["class_name"]
+
+        save_hook = accelerator.register_save_state_pre_hook(save_config)
+        load_hook = accelerator.register_load_state_pre_hook(load_config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            accelerator.save_state(tmpdirname)
+
+            # make sure random weights don't match with hooks
+            load_random_weights(model)
+            self.assertTrue(abs(model_signature - get_signature(model)) > 1e-3)
+
+            # random class name to verify correct one is loaded
+            model.class_name = "random"
+
+            # make sure loaded weights match with hooks
+            accelerator.load_state(tmpdirname)
+            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+
+            # mode.class_name is loaded from config
+            self.assertTrue(model.class_name == model.__class__.__name__)
+
+        # remove hooks
+        save_hook.remove()
+        load_hook.remove()
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            accelerator.save_state(tmpdirname)
+
+            # make sure random weights don't match with hooks removed
+            load_random_weights(model)
+            self.assertTrue(abs(model_signature - get_signature(model)) > 1e-3)
+
+            # random class name to verify correct one is loaded
+            model.class_name = "random"
+
+            # make sure loaded weights match with hooks removed
+            accelerator.load_state(tmpdirname)
+            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+
+            # mode.class_name is NOT loaded from config
+            self.assertTrue(model.class_name != model.__class__.__name__)

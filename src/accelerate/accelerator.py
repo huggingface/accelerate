@@ -21,7 +21,7 @@ import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import wraps
-from typing import List, Optional, Union, Callable
+from typing import Callable, List, Optional, Union
 
 import torch
 import torch.utils.hooks as hooks
@@ -1620,6 +1620,29 @@ class Accelerator:
         save(obj, f)
 
     def register_save_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
+        """
+        Registers a pre hook to be run before `save_checkpoint` is called in [`Accelerator.save_state`].
+
+        Args:
+            hook (`Callable`):
+                A function to be called in [`Accelerator.save_state`] before `save_checkpoint`. The hook should have
+                the following signature: \n `hook(models: List[torch.nn.Module], weigths: List[Dict[str,
+                torch.Tensor]], input_dir: str) -> None` \n The `models` argument are the models as saved in the
+                accelerator state under `accelerator._models`, `weigths` argument are the state dicts of the `models`,
+                and the `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
+
+        <Tip>
+
+        Should only be used in conjunction with [`Accelerator.register_save_state_pre_hook`]. Can be useful to save
+        configurations in addition to model weights. Can also be used to overwrite model saving with a customized
+        method. In this case, make sure to remove already loaded weights from the weights list.
+
+        </Tip>
+
+        Returns:
+            `torch.utils.hooks.RemovableHandle`: a handle that can be used to remove the added hook by calling
+            `handle.remove()`
+        """
         handle = hooks.RemovableHandle(self._save_model_state_pre_hook)
         self._save_model_state_pre_hook[handle.id] = hook
         return handle
@@ -1721,6 +1744,28 @@ class Accelerator:
         return save_location
 
     def register_load_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
+        """
+        Registers a pre hook to be run before [`load_checkpoint`] is called in [`Accelerator.load_state`].
+
+        Args:
+            hook (`Callable`):
+                A function to be called in [`Accelerator.load_state`] before `load_checkpoint`. The hook should have
+                the following signature: \n `hook(models: List[torch.nn.Module], input_dir: str) -> None` \n The
+                `models` argument are the models as saved in the accelerator state under `accelerator._models`, and the
+                `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
+
+        <Tip>
+
+        Should only be used in conjunction with [`Accelerator.register_save_state_pre_hook`]. Can be useful to load
+        configurations in addition to model weights. Can also be used to overwrite model loading with a customized
+        method. In this case, make sure to remove already loaded models from the models list.
+
+        </Tip>
+
+        Returns:
+            `torch.utils.hooks.RemovableHandle`: a handle that can be used to remove the added hook by calling
+            `handle.remove()`
+        """
         handle = hooks.RemovableHandle(self._load_model_state_pre_hook)
         self._load_model_state_pre_hook[handle.id] = hook
         return handle
