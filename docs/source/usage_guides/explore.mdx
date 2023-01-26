@@ -23,8 +23,11 @@ the documentation!
     width="850"
     height="750"
 ></iframe>
-<!-- {/* <script 
+<svelte:head>
+  <script 
     type="module"
     src="https://gradio.s3-us-west-2.amazonaws.com/3.14.0/gradio.js">
-</script>
-<gradio-app src="https://muellerzr-accelerate-examples.hf.space"></gradio-app> */} -->
+  </script>
+</svelte:head>
+
+<gradio-app src="https://muellerzr-accelerate-examples.hf.space"></gradio-app>
