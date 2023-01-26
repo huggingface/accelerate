@@ -53,7 +53,6 @@ class AcceleratorTester(unittest.TestCase):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
         accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
-
         accelerator.free_memory()
 
         self.assertTrue(len(accelerator._models) == 0)
@@ -79,6 +78,7 @@ class AcceleratorTester(unittest.TestCase):
             # make sure loaded weights match
             accelerator.load_state(tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+        AcceleratorState._reset_state()
 
     def test_save_load_model_with_hooks(self):
         accelerator = Accelerator()
@@ -141,3 +141,4 @@ class AcceleratorTester(unittest.TestCase):
 
             # mode.class_name is NOT loaded from config
             self.assertTrue(model.class_name != model.__class__.__name__)
+        AcceleratorState._reset_state()
