@@ -22,15 +22,6 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
-<<<<<<< HEAD
-
-=======
-from datasets import load_dataset
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, BertForSequenceClassification, get_linear_schedule_with_warmup, set_seed
-from modeling_bert_te import BertForSequenceClassification as TEBertForSequenceClassification
-from modeling_bert_te_lin import BertForSequenceClassification as TEBertForSequenceClassificationNoLN
-from modeling_bert_te_ln import BertForSequenceClassification as TEBertForSequenceClassificationNoLinear
->>>>>>> More options in example
 
 ########################################################################
 # This is a fully working simple example to use Accelerate
