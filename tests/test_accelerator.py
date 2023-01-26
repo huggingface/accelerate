@@ -56,10 +56,10 @@ class AcceleratorTester(unittest.TestCase):
     def test_env_var_device(self):
         """Tests that setting the torch device with ACCELERATE_TORCH_DEVICE overrides default device."""
 
-        # Mock torch.cuda.set_device to avoid an exception as the device test doesn't exist
+        # Mock torch.cuda.set_device to avoid an exception as the device doesn't exist
         def noop(*args, **kwargs):
             pass
 
-        with patch("torch.cuda.set_device", noop), patch_environment(ACCELERATE_TORCH_DEVICE="cuda:1234"):
+        with patch("torch.cuda.set_device", noop), patch_environment(ACCELERATE_TORCH_DEVICE="cuda:64"):
             accelerator = Accelerator()
-            self.assertEqual(str(accelerator.state.device), "cuda:1234")
+            self.assertEqual(str(accelerator.state.device), "cuda:64")
