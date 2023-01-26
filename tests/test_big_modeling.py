@@ -44,6 +44,17 @@ class ModelForTest(nn.Module):
         return self.linear2(self.batchnorm(self.linear1(x)))
 
 
+class ModelForTestTiedWeights(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = nn.Linear(4, 4)
+        self.batchnorm = nn.BatchNorm1d(4)
+        self.linear2 = nn.Linear(4, 4)
+
+    def forward(self, x):
+        return self.linear2(self.batchnorm(self.linear1(x)))
+
+
 class BiggerModelForTest(nn.Module):
     def __init__(self):
         super().__init__()
@@ -272,6 +283,15 @@ class BigModelingTester(unittest.TestCase):
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
+    def test_dispatch_model_tied_weights(self):
+        model = ModelForTestTiedWeights()
+        model.linear1.weight = model.linear2.weight
+        device_map = {"linear1": 0, "batchnorm": 0, "linear2": 0}
+
+        dispatch_model(model, device_map)
+        self.assertIs(model.linear2.weight, model.linear1.weight)
 
     @require_multi_gpu
     def test_dispatch_model_multi_gpu(self):
