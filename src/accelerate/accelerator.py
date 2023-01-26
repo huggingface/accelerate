@@ -1637,7 +1637,7 @@ class Accelerator:
 
         <Tip>
 
-        Should only be used in conjunction with [`Accelerator.register_save_state_pre_hook`]. Can be useful to save
+        Should only be used in conjunction with [`Accelerator.register_load_state_pre_hook`]. Can be useful to save
         configurations in addition to model weights. Can also be used to overwrite model saving with a customized
         method. In this case, make sure to remove already loaded weights from the weights list.
 
