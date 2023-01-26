@@ -101,9 +101,9 @@ if is_tpu_available(check_device=False):
     import torch_xla.distributed.xla_multiprocessing as xmp
 
 
-if is_torch_version("<=", "1.13.5"):
+try:
     from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
-else:
+except ImportError:
     from torch.optim.lr_scheduler import LRScheduler as LRScheduler
 
 logger = get_logger(__name__)
