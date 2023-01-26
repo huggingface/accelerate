@@ -30,6 +30,10 @@ def load_random_weights(model):
 
 
 class AcceleratorTester(unittest.TestCase):
+    def tearDown(self):
+        # Reset the state of the AcceleratorState singleton.
+        AcceleratorState._reset_state()
+
     def test_prepared_objects_are_referenced(self):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
@@ -47,7 +51,6 @@ class AcceleratorTester(unittest.TestCase):
         self.assertTrue(prepared_scheduler in accelerator._schedulers)
         self.assertTrue(prepared_train_dl in accelerator._dataloaders)
         self.assertTrue(prepared_valid_dl in accelerator._dataloaders)
-        AcceleratorState._reset_state()
 
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()
@@ -59,7 +62,6 @@ class AcceleratorTester(unittest.TestCase):
         self.assertTrue(len(accelerator._optimizers) == 0)
         self.assertTrue(len(accelerator._schedulers) == 0)
         self.assertTrue(len(accelerator._dataloaders) == 0)
-        AcceleratorState._reset_state()
 
     def test_save_load_model(self):
         accelerator = Accelerator()
@@ -78,7 +80,6 @@ class AcceleratorTester(unittest.TestCase):
             # make sure loaded weights match
             accelerator.load_state(tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
-        AcceleratorState._reset_state()
 
     def test_save_load_model_with_hooks(self):
         accelerator = Accelerator()
@@ -141,4 +142,3 @@ class AcceleratorTester(unittest.TestCase):
 
             # mode.class_name is NOT loaded from config
             self.assertTrue(model.class_name != model.__class__.__name__)
-        AcceleratorState._reset_state()
