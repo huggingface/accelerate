@@ -18,11 +18,13 @@ import os
 import shutil
 import sys
 import warnings
+from collections import OrderedDict
 from contextlib import contextmanager
 from functools import wraps
-from typing import List, Optional, Union
+from typing import Callable, List, Optional, Union
 
 import torch
+import torch.utils.hooks as hooks
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader
@@ -405,6 +407,10 @@ class Accelerator:
         self._schedulers = []
         self._dataloaders = []
         self._custom_objects = []
+
+        # Hooks
+        self._load_model_state_pre_hook = OrderedDict()
+        self._save_model_state_pre_hook = OrderedDict()
 
         # RNG Types
         self.rng_types = rng_types
@@ -1616,6 +1622,38 @@ class Accelerator:
         """
         save(obj, f)
 
+    def register_save_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
+        """
+        Registers a pre hook to be run before `save_checkpoint` is called in [`Accelerator.save_state`].
+
+        Args:
+            hook (`Callable`):
+                A function to be called in [`Accelerator.save_state`] before `save_checkpoint`.
+
+        The hook should have the following signature:
+
+        `hook(models: List[torch.nn.Module], weights: List[Dict[str, torch.Tensor]], input_dir: str) -> None`
+
+        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, `weigths`
+        argument are the state dicts of the `models`, and the `input_dir` argument is the `input_dir` argument passed
+        to [`Accelerator.load_state`].
+
+        <Tip>
+
+        Should only be used in conjunction with [`Accelerator.register_load_state_pre_hook`]. Can be useful to save
+        configurations in addition to model weights. Can also be used to overwrite model saving with a customized
+        method. In this case, make sure to remove already loaded weights from the weights list.
+
+        </Tip>
+
+        Returns:
+            `torch.utils.hooks.RemovableHandle`: a handle that can be used to remove the added hook by calling
+            `handle.remove()`
+        """
+        handle = hooks.RemovableHandle(self._save_model_state_pre_hook)
+        self._save_model_state_pre_hook[handle.id] = hook
+        return handle
+
     def save_state(self, output_dir: str = None, **save_model_func_kwargs):
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
@@ -1702,6 +1740,11 @@ class Accelerator:
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
 
+        # Call model loading hooks that might have been registered with
+        # accelerator.register_model_state_hook
+        for hook in self._save_model_state_pre_hook.values():
+            hook(self._models, weights, output_dir)
+
         save_location = save_accelerator_state(
             output_dir, weights, optimizers, schedulers, self.state.process_index, self.scaler
         )
@@ -1709,6 +1752,37 @@ class Accelerator:
             save_custom_state(obj, output_dir, i)
         self.project_configuration.iteration += 1
         return save_location
+
+    def register_load_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
+        """
+        Registers a pre hook to be run before [`load_checkpoint`] is called in [`Accelerator.load_state`].
+
+        Args:
+            hook (`Callable`):
+                A function to be called in [`Accelerator.load_state`] before `load_checkpoint`.
+
+        The hook should have the following signature:
+
+        `hook(models: List[torch.nn.Module], input_dir: str) -> None`
+
+        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, and the
+        `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
+
+        <Tip>
+
+        Should only be used in conjunction with [`Accelerator.register_save_state_pre_hook`]. Can be useful to load
+        configurations in addition to model weights. Can also be used to overwrite model loading with a customized
+        method. In this case, make sure to remove already loaded models from the models list.
+
+        </Tip>
+
+        Returns:
+            `torch.utils.hooks.RemovableHandle`: a handle that can be used to remove the added hook by calling
+            `handle.remove()`
+        """
+        handle = hooks.RemovableHandle(self._load_model_state_pre_hook)
+        self._load_model_state_pre_hook[handle.id] = hook
+        return handle
 
     def load_state(self, input_dir: str, **load_model_func_kwargs):
         """
@@ -1771,6 +1845,11 @@ class Accelerator:
                 schedulers.append(scheduler)
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
+
+        # Call model loading hooks that might have been registered with
+        # accelerator.register_model_state_hook
+        for hook in self._load_model_state_pre_hook.values():
+            hook(models, input_dir)
 
         load_accelerator_state(
             input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler, **load_model_func_kwargs
