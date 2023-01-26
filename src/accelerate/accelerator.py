@@ -1625,11 +1625,13 @@ class Accelerator:
 
         Args:
             hook (`Callable`):
-                A function to be called in [`Accelerator.save_state`] before `save_checkpoint`. The hook should have
-                the following signature: \n `hook(models: List[torch.nn.Module], weigths: List[Dict[str,
-                torch.Tensor]], input_dir: str) -> None` \n The `models` argument are the models as saved in the
-                accelerator state under `accelerator._models`, `weigths` argument are the state dicts of the `models`,
-                and the `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
+                A function to be called in [`Accelerator.save_state`] before `save_checkpoint`.
+
+        The hook should have the following signature:
+
+        `hook(models: List[torch.nn.Module], weights: List[Dict[str, torch.Tensor]], input_dir: str) -> None`
+
+        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, `weigths` argument are the state dicts of the `models`, and the `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
 
         <Tip>
 
@@ -1749,10 +1751,13 @@ class Accelerator:
 
         Args:
             hook (`Callable`):
-                A function to be called in [`Accelerator.load_state`] before `load_checkpoint`. The hook should have
-                the following signature: \n `hook(models: List[torch.nn.Module], input_dir: str) -> None` \n The
-                `models` argument are the models as saved in the accelerator state under `accelerator._models`, and the
-                `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
+                A function to be called in [`Accelerator.load_state`] before `load_checkpoint`.
+
+        The hook should have the following signature:
+
+        `hook(models: List[torch.nn.Module], input_dir: str) -> None`
+
+        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, and the `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
 
         <Tip>
 
