@@ -1557,7 +1557,8 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> process_tensor = torch.tensor([accelerator.process_index])
         >>> gathered_tensor = accelerator.gather(process_tensor)
-        >>> assert gathered_tensor.tolist() == [0, 1, 2, 3]
+        >>> gathered_tensor
+        tensor([0, 1, 2, 3])
         ```
         """
         return gather(tensor)
@@ -1583,7 +1584,8 @@ class Accelerator:
         >>> dataloader = accelerator.prepare(dataloader)
         >>> batch = next(iter(dataloader))
         >>> gathered_items = accelerator.gather_for_metrics(batch)
-        >>> assert len(gathered_items) == 9
+        >>> len(gathered_items)
+        9
         ```
         """
         tensor = self.gather(tensor)
@@ -1637,7 +1639,8 @@ class Accelerator:
         >>> process_tensor = torch.arange(accelerator.num_processes) + 1 + (2 * accelerator.process_index)
         >>> process_tensor = process_tensor.to(accelerator.device)
         >>> reduced_tensor = accelerator.reduce(process_tensor, reduction="sum")
-        >>> assert reduced_tensor == torch.tensor([4, 6])
+        >>> reduced_tensor
+        tensor([4, 6])
         ```
         """
         return reduce(tensor, reduction)
@@ -1671,7 +1674,8 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> process_tensor = torch.arange(accelerator.process_index + 1).to(accelerator.device)
         >>> padded_tensor = accelerator.pad_across_processes(process_tensor)
-        >>> assert padded_tensor.shape == torch.Size([2])
+        >>> padded_tensor.shape
+        torch.Size([2])
         ```
         """
         return pad_across_processes(tensor, dim=dim, pad_index=pad_index, pad_first=pad_first)
@@ -1699,9 +1703,12 @@ class Accelerator:
 
         >>> accelerator = Accelerator()
         >>> model = accelerator.prepare(MyModel())
-        >>> assert isinstance(model, DistributedDataParallel)
+        >>> print(model.__class__.__name__)
+        DistributedDataParallel
+
         >>> model = accelerator.unwrap_model(model)
-        >>> assert not isinstance(model, DistributedDataParallel)
+        >>> print(model.__class__.__name__)
+        MyModel
         ```
         """
         return extract_model_from_parallel(model, keep_fp32_wrapper)

@@ -385,17 +385,21 @@ def load_checkpoint_and_dispatch(
 
     ```python
     >>> from accelerate import init_empty_weights, load_checkpoint_and_dispatch
-    >>> from transformers import AutoConfig, AutoModelForCasualLM
+    >>> from huggingface_hub import hf_hub_download
+    >>> from transformers import AutoConfig, AutoModelForCausalLM
 
-    >>> # Create a model and initialize it
+    >>> # Download the Weights
     >>> checkpoint = "EleutherAI/gpt-j-6B"
+    >>> weights_location = hf_hub_download(checkpoint, "pytorch_model.bin")
+
+    >>> # Create a model and initialize it with empty weights
     >>> config = AutoConfig.from_pretrained(checkpoint)
     >>> with init_empty_weights():
     ...     model = AutoModelForCausalLM.from_config(config)
 
     >>> # Load the checkpoint and dispatch it to the right devices
     >>> model = load_checkpoint_and_dispatch(
-    ...     model, "sharded-gpt-j-6B", device_map="auto", no_split_module_classes=["GPTJBlock"]
+    ...     model, weights_location, device_map="auto", no_split_module_classes=["GPTJBlock"]
     ... )
     ```
     """
