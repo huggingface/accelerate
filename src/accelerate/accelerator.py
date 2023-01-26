@@ -1631,7 +1631,9 @@ class Accelerator:
 
         `hook(models: List[torch.nn.Module], weights: List[Dict[str, torch.Tensor]], input_dir: str) -> None`
 
-        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, `weigths` argument are the state dicts of the `models`, and the `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
+        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, `weigths`
+        argument are the state dicts of the `models`, and the `input_dir` argument is the `input_dir` argument passed
+        to [`Accelerator.load_state`].
 
         <Tip>
 
@@ -1760,7 +1762,8 @@ class Accelerator:
 
         `hook(models: List[torch.nn.Module], input_dir: str) -> None`
 
-        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, and the `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
+        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, and the
+        `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
 
         <Tip>
 
@@ -1839,7 +1842,6 @@ class Accelerator:
                 schedulers.append(scheduler)
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
-
 
         # Call model loading hooks that might have been registered with
         # accelerator.register_model_state_hook
