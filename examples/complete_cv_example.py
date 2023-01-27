@@ -207,7 +207,7 @@ def training_function(config, args):
             # We need to skip steps until we reach the resumed step
             train_dataloader = accelerator.skip_batches(train_dataloader, resume_step)
             overall_step += resume_step
-        for step, batch in enumerate(train_dataloader):
+        for batch in train_dataloader:
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
             inputs = (batch["image"] - mean) / std
