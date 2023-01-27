@@ -804,7 +804,7 @@ class SkipDataLoader(DataLoader):
         self.skip_batches = skip_batches
 
     def __iter__(self):
-        for index, batch in enumerate(self):
+        for index, batch in enumerate(super().__iter__()):
             if index >= self.skip_batches:
                 yield batch
 
