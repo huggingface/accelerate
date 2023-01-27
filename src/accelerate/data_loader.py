@@ -809,7 +809,7 @@ class SkipDataLoader(DataLoader):
                 yield batch
 
 
-def skip_batches(dataloader, num_batches=0):
+def skip_first_batches(dataloader, num_batches=0):
     """
     Creates a `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
     """

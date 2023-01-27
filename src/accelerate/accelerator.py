@@ -25,7 +25,7 @@ from typing import List, Optional, Union
 import torch
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_batches
+from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -1919,7 +1919,7 @@ class Accelerator:
                 return True
         return False
 
-    def skip_batches(self, dataloader, num_batches: int = 0):
+    def skip_first_batches(self, dataloader, num_batches: int = 0):
         """
         Creates a new `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
 
@@ -1927,4 +1927,4 @@ class Accelerator:
             dataloader (`torch.utils.data.DataLoader`): The data loader in which to skip batches.
             num_batches (`int`, *optional*, defaults to 0): The number of batches to skip
         """
-        return skip_batches(dataloader, num_batches=num_batches)
+        return skip_first_batches(dataloader, num_batches=num_batches)
