@@ -203,13 +203,12 @@ def training_function(config, args):
     # Now we train the model
     for epoch in range(starting_epoch, num_epochs):
         model.train()
-        for step, batch in enumerate(train_dataloader):
-            # New Code #
-            # We need to skip steps until we reach the resumed step during the first epoch
-            if args.resume_from_checkpoint and epoch == starting_epoch:
-                if resume_step is not None and step < resume_step:
-                    overall_step += 1
-                    continue
+        # New Code #
+        if args.resume_from_checkpoint and epoch == starting_epoch:
+            # We need to skip steps until we reach the resumed step
+            train_dataloader = accelerator.skip_batches(train_dataloader, resume_step)
+            overall_step += resume_step
+        for batch in train_dataloader:
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
