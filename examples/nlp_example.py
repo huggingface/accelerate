@@ -132,7 +132,6 @@ def training_function(config, args):
     # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
     # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
     model = model.to(accelerator.device)
-    model = accelerator.prepare(model)
     # Instantiate optimizer
     optimizer = AdamW(params=model.parameters(), lr=lr)
 
@@ -147,9 +146,9 @@ def training_function(config, args):
     # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
     # prepare method.
     
-    #model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-    #    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
-    #)
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+    )
 
     # Now we train the model
     for epoch in range(num_epochs):
