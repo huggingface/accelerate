@@ -89,9 +89,6 @@ learning_rate *= accelerator.num_processes
 optimizer = AdamW(params=model.parameters(), lr=learning_rate)
 ```
 
-You will also find that `accelerate` will step the learning rate based upon the number of processes, so if you have a learning rate scheduler
-that steps every 1000 steps, it will step every 1000 * `num_processes` steps. You should adjust the number of steps
-beforehand to account for this. The reasoning is due to how Accelerate will split the data across the processes while maintaining an effective batch size of 
-`batch_size * num_processes`. 
-
-Another way to put this is `accelerate` will treat each process as a single batch, effectively running `n` batches all at once.
+You will also find that `accelerate` will step the learning rate based on the number of processes being trained on. This is because 
+of the observed batch size noted earlier. So in a case of 2 GPUs, the learning rate will be stepped twice as often as a single GPU
+to account for the batch size being twice as large (if no changes to the batch size on the single GPU instance are made).
