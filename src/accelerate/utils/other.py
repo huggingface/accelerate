@@ -60,8 +60,8 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
                 if forward == original_forward:
                     break
             model.forward = forward
-    if getattr(model, "_converted_to_transformer_engine", False):
-        convert_model(model, to_transformer_engine=False)
+        if getattr(model, "_converted_to_transformer_engine", False):
+            convert_model(model, to_transformer_engine=False)
     return model
 
 
