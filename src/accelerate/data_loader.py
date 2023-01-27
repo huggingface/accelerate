@@ -427,7 +427,7 @@ class DataLoaderDispatcher(DataLoader):
             `dataloader` multiplied by `num_processes` otherwise. Setting this option to `True` requires that the batch
             size of the `dataloader` is a round multiple of `batch_size`.
         skip_batches (`int`, *optional*, defaults to 0):
-            The number of batches to skip at the beginning.
+            The number of batches to skip at the beginning of an iteration.
 
     **Available attributes:**
 
@@ -766,7 +766,7 @@ def prepare_data_loader(
 
 class SkipBatchSampler(BatchSampler):
     """
-    A `torch.utils.data.BatchSampler` that skips the first batches of another `torch.utils.data.BatchSampler`.
+    A `torch.utils.data.BatchSampler` that skips the first `n` batches of another `torch.utils.data.BatchSampler`.
     """
 
     def __init__(self, batch_sampler, skip_batches=0):
