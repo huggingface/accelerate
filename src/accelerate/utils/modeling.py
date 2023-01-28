@@ -109,7 +109,10 @@ def set_module_tensor_to_device(
     if "." in tensor_name:
         splits = tensor_name.split(".")
         for split in splits[:-1]:
-            new_module = getattr(module, split)
+            if hasattr(module, split):
+                new_module = getattr(module, split)
+            elif hasattr(module, "transformer"): # Hack for BLOOM models
+                new_module = getattr(module.transformer, split, None)
             if new_module is None:
                 raise ValueError(f"{module} has no attribute {split}.")
             module = new_module
