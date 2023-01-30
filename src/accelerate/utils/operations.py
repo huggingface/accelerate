@@ -16,7 +16,6 @@
 A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
-
 import pickle
 from functools import update_wrapper
 from typing import Any, Mapping
@@ -45,7 +44,7 @@ def is_tensor_information(tensor_info):
 
 def honor_type(obj, generator):
     """
-    Cast a generator to the same type as obj (list, tuple or namedtuple)
+    Cast a generator to the same type as obj (list, tuple, or namedtuple)
     """
     try:
         return type(obj)(generator)

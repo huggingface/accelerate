@@ -85,6 +85,20 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
             A function to wrap
         starting_batch_size (`int`, *optional*):
             The batch size to try and fit into memory
+
+    Example:
+
+    ```python
+    >>> from accelerate.utils import find_executable_batch_size
+
+
+    >>> @find_executable_batch_size(starting_batch_size=128)
+    ... def train(batch_size, model, optimizer):
+    ...     ...
+
+
+    >>> train(model, optimizer)
+    ```
     """
     if function is None:
         return functools.partial(find_executable_batch_size, starting_batch_size=starting_batch_size)

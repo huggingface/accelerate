@@ -735,7 +735,6 @@ class Accelerator:
         ...         optimizer.step()
         ...         optimizer.zero_grad()
         ```
-
         """
         if is_torch_version("<", "1.10.0"):
             raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
@@ -1763,6 +1762,19 @@ class Accelerator:
                 ```python
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(log_with="tensorboard")
+        >>> accelerator.init_trackers(
+        ...     project_name="my_project",
+        ...     config={"learning_rate": 0.001, "batch_size": 32},
+        ...     init_kwargs={"tensorboard": {"flush_secs": 60}},
+        ... )
+        ```
         """
         self.trackers = []
         for tracker in self.log_with:
@@ -1790,6 +1802,19 @@ class Accelerator:
         Args:
             name (`str`):
                 The name of a tracker, corresponding to the `.name` property.
+
+        Returns:
+            `GeneralTracker`: The tracker corresponding to `name` if it exists.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(log_with="tensorboard")
+        >>> accelerator.init_trackers("my_project")
+        >>> tensorboard_tracker = accelerator.get_tracker("tensorboard")
+        ```
         """
         for tracker in self.trackers:
             if tracker.name == name:
@@ -1812,6 +1837,16 @@ class Accelerator:
                 ```python
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(log_with="tensorboard")
+        >>> accelerator.init_trackers("my_project")
+        >>> accelerator.log({"loss": 0.5, "accuracy": 0.9})
+        ```
         """
         for tracker in self.trackers:
             tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
@@ -1821,6 +1856,17 @@ class Accelerator:
         """
         Runs any special end training behaviors, such as stopping trackers on the main process only. Should always be
         called at the end of your script if using experiment tracking.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(log_with="tensorboard")
+        >>> accelerator.init_trackers("my_project")
+        >>> # Do training
+        >>> accelerator.end_training()
+        ```
         """
         for tracker in self.trackers:
             tracker.finish()
@@ -1830,9 +1876,18 @@ class Accelerator:
         Save the object passed to disk once per machine. Use in place of `torch.save`.
 
         Args:
-            obj: The object to save.
-            f (`str` or `os.PathLike`):
-                Where to save the content of `obj`.
+            obj (`object`): The object to save.
+            f (`str` or `os.PathLike`): Where to save the content of `obj`.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> arr = [0, 1, 2, 3]
+        >>> accelerator.save(arr, "array.pkl")
+        ```
         """
         save(obj, f)
 
@@ -1892,6 +1947,17 @@ class Accelerator:
             save_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for saving model which can be passed to the underlying save function, such
                 as optional arguments for DeepSpeed's `save_checkpoint` function.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer, lr_scheduler = ...
+        >>> model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
+        >>> accelerator.save_state(output_dir="my_checkpoint")
+        ```
         """
         if self.project_configuration.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
@@ -2014,6 +2080,17 @@ class Accelerator:
             load_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for loading model which can be passed to the underlying load function,
                 such as optional arguments for DeepSpeed's `load_checkpoint` function.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer, lr_scheduler = ...
+        >>> model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
+        >>> accelerator.load_state("my_checkpoint")
+        ```
         """
         # Check if folder exists
         input_dir = os.path.expanduser(input_dir)
@@ -2083,6 +2160,18 @@ class Accelerator:
         """
         Will release all references to the internal objects stored and call the garbage collector. You should call this
         method between two trainings with different models/optimizers.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer, scheduler = ...
+        >>> model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+        >>> accelerator.free_memory()
+        >>> del model, optimizer, scheduler
+        ```
         """
         self._schedulers = []
         self._optimizers = []
@@ -2095,6 +2184,18 @@ class Accelerator:
         """
         Alias for [`Accelerate.free_memory`], releases all references to the internal objects stored and call the
         garbage collector. You should call this method between two trainings with different models/optimizers.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer, scheduler = ...
+        >>> model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+        >>> accelerator.free_memory()
+        >>> del model, optimizer, scheduler
+        ```
         """
         self.free_memory()
 
@@ -2125,13 +2226,29 @@ class Accelerator:
 
     def get_state_dict(self, model, unwrap=True):
         """
-        Returns the state dictionary of a model sent through [`Accelerator.prepare`] in full precision
+        Returns the state dictionary of a model sent through [`Accelerator.prepare`] potentially without full
+        precision.
 
         Args:
             model (`torch.nn.Module`):
                 A PyTorch model sent through [`Accelerator.prepare`]
             unwrap (`bool`, *optional*, defaults to `True`):
                 Whether to return the original underlying state_dict of `model` or to return the wrapped state_dict
+
+        Returns:
+            `dict`: The state dictionary of the model potentially without full precision.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> net = torch.nn.Linear(2, 2)
+        >>> net = accelerator.prepare(net)
+        >>> state_dict = accelerator.get_state_dict(net)
+        ```
         """
         is_zero_3 = False
         if self.distributed_type == DistributedType.DEEPSPEED:
@@ -2164,13 +2281,25 @@ class Accelerator:
         Makes note of `objects` and will save or load them in during `save_state` or `load_state`.
 
         These should be utilized when the state is being loaded or saved in the same script. It is not designed to be
-        used in different scripts
+        used in different scripts.
 
         <Tip>
 
         Every `object` must have a `load_state_dict` and `state_dict` function to be stored.
 
         </Tip>
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume `CustomObject` has a `state_dict` and `load_state_dict` function.
+        >>> obj = CustomObject()
+        >>> accelerator.register_for_checkpointing(obj)
+        >>> accelerator.save_state("checkpoint.pt")
+        ```
         """
         invalid_objects = []
         for obj in objects:
@@ -2188,6 +2317,16 @@ class Accelerator:
         """
         Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
         different will happen otherwise.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(mixed_precision="fp16")
+        >>> with accelerator.autocast():
+        ...     train()
+        ```
         """
         if self.native_amp:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
