@@ -865,7 +865,6 @@ def skip_first_batches(dataloader, num_batches=0):
         dataloader = DataLoaderShard(
             dataset,
             device=dataloader.device,
-            split_batches=dataloader.split_batches,
             rng_types=dataloader.rng_types,
             synchronized_generator=dataloader.synchronized_generator,
             **kwargs,
