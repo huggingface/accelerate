@@ -206,7 +206,7 @@ def training_function(config, args):
         # New Code #
         if args.resume_from_checkpoint and epoch == starting_epoch:
             # We need to skip steps until we reach the resumed step
-            train_dataloader = accelerator.skip_batches(train_dataloader, resume_step)
+            train_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
             overall_step += resume_step
         for step, batch in enumerate(train_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
