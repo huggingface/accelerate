@@ -662,7 +662,7 @@ def load_state_dict(checkpoint_file, device_map=None):
     if checkpoint_file.endswith(".safetensors"):
         if not is_safetensors_available():
             raise ImportError(
-                f"To load {checkpoint_file}, the `safetensors` library is necessary `pip install safetensors`>"
+                f"To load {checkpoint_file}, the `safetensors` library is necessary `pip install safetensors`."
             )
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
