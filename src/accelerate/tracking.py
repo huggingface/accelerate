@@ -314,7 +314,8 @@ class WandBTracker(GeneralTracker):
         step: Optional[int] = None,
         **kwargs,
     ):
-        """Log a Table containing any object type (text, image, audio, video, molecule, html, etc).
+        """
+        Log a Table containing any object type (text, image, audio, video, molecule, html, etc).
         Can be defined either with `columns` and `data` or with `dataframe`.
 
         Args:
@@ -322,7 +323,12 @@ class WandBTracker(GeneralTracker):
                 The name to give to the logged table on the wandb workspace
             columns (List of `str`'s *optional*):
                 The name of the columns on the table
-            data (List of List of Any data
+            data (List of List of Any data type *optional*):
+                The data to be logged in the table
+            dataframe (Any data type *optional*):
+                The data to be logged in the table
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
         """
 
         values = {table_name: wandb.Table(columns=columns, data=data, dataframe=dataframe)}
