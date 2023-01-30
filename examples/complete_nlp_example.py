@@ -180,12 +180,11 @@ def training_function(config, args):
         model.train()
         if args.with_tracking:
             total_loss = 0
-        for step, batch in enumerate(train_dataloader):
+        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
             # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == starting_epoch:
-                if resume_step is not None and step < resume_step:
-                    overall_step += 1
-                    continue
+            train_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            overall_step += resume_step
+        for step, batch in enumerate(train_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)

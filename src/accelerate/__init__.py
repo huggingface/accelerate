@@ -13,6 +13,7 @@ from .big_modeling import (
     init_on_device,
     load_checkpoint_and_dispatch,
 )
+from .data_loader import skip_first_batches
 from .launchers import debug_launcher, notebook_launcher
 from .utils import (
     DeepSpeedPlugin,
