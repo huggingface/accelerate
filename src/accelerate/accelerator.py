@@ -2361,5 +2361,21 @@ class Accelerator:
         Args:
             dataloader (`torch.utils.data.DataLoader`): The data loader in which to skip batches.
             num_batches (`int`, *optional*, defaults to 0): The number of batches to skip
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
+
+        >>> for (input, target) in accelerator.skip_first_batches(dataloader, num_batches=2):
+        ...     optimizer.zero_grad()
+        ...     output = model(input)
+        ...     loss = loss_func(output, target)
+        ...     accelerator.backward(loss)
+        ...     optimizer.step()
+        ```
         """
         return skip_first_batches(dataloader, num_batches=num_batches)
