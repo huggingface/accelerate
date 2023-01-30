@@ -51,6 +51,7 @@ from .modeling import (
     infer_auto_device_map,
     load_checkpoint_in_model,
     load_offloaded_weights,
+    load_state_dict,
     named_module_tensors,
     retie_parameters,
     set_module_tensor_to_device,

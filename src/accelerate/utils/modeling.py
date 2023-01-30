@@ -24,8 +24,13 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
+from .imports import is_safetensors_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 
+
+if is_safetensors_available():
+    from safetensors import safe_open
+    from safetensors.torch import load_file as safe_load_file
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
@@ -643,6 +648,55 @@ def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, tor
         )
 
 
+def load_state_dict(checkpoint_file, device_map=None):
+    """
+    Load a checkpoint from a given file. If the checkpoint is in the safetensors format and a device map is passed, the
+    weights can be fast-loaded directly on the GPU.
+
+    Args:
+        checkpoint_file (`str`): The path to the checkpoint to load.
+        device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
+            A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
+            name, once a given module name is inside, every submodule of it will be sent to the same device.
+    """
+    if checkpoint_file.endswith(".safetensors"):
+        if not is_safetensors_available():
+            raise ImportError(
+                f"To load {checkpoint_file}, the `safetensors` library is necessary `pip install safetensors`>"
+            )
+        with safe_open(checkpoint_file, framework="pt") as f:
+            metadata = f.metadata()
+            weight_names = f.keys()
+        if metadata.get("format") not in ["pt", "tf", "flax"]:
+            raise OSError(
+                f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
+                "you save your model with the `save_pretrained` method."
+            )
+        elif metadata["format"] != "pt":
+            raise ValueError(f"The checkpoint passed was saved with {metadata['format']}, we need a the pt format.")
+        if device_map is None:
+            return safe_load_file(checkpoint_file)
+        else:
+            devices = [device for device in device_map.values() if device not in ["disk"]]
+
+            # For each device, get the weights that go there
+            device_weights = {device: [] for device in devices}
+            for module_name, device in device_map.items():
+                if device in devices:
+                    device_weights[device].extend([k for k in weight_names if k.startswith(module_name)])
+            device_weights["cpu"].extend([k for k in weight_names if k not in device_weights])
+
+            tensors = {}
+            for device in devices:
+                with safe_open(checkpoint_file, framework="pt", device=device) as f:
+                    for key in device_weights[device]:
+                        tensors[key] = f.get_tensor(key)
+
+            return tensors
+    else:
+        return torch.load(checkpoint_file)
+
+
 def load_checkpoint_in_model(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
@@ -737,7 +791,7 @@ def load_checkpoint_in_model(
     buffer_names = [name for name, _ in model.named_buffers()]
 
     for checkpoint_file in checkpoint_files:
-        checkpoint = torch.load(checkpoint_file)
+        checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
         if device_map is None:
             model.load_state_dict(checkpoint, strict=False)
         else:

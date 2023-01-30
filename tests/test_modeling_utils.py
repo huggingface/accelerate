@@ -20,7 +20,7 @@ import unittest
 import torch
 import torch.nn as nn
 
-from accelerate.test_utils import require_cuda, require_multi_gpu
+from accelerate.test_utils import require_cuda, require_multi_gpu, require_safetensors
 from accelerate.test_utils.testing import require_torch_min_version
 from accelerate.utils.modeling import (
     check_device_map,
@@ -30,6 +30,7 @@ from accelerate.utils.modeling import (
     get_balanced_memory,
     infer_auto_device_map,
     load_checkpoint_in_model,
+    load_state_dict,
     named_module_tensors,
     set_module_tensor_to_device,
 )
@@ -413,3 +414,20 @@ class ModelingUtilsTester(unittest.TestCase):
         # If we set a device to 0, it's not counted.
         max_memory = get_balanced_memory(model, max_memory={0: 0, 1: 300, 2: 300})
         self.assertDictEqual({0: 0, 1: 215, 2: 300}, max_memory)
+
+    @require_cuda
+    @require_safetensors
+    def test_load_state_dict(self):
+        from safetensors.torch import save_file
+
+        state_dict = {k: torch.randn(4, 5) for k in ["a", "b", "c"]}
+        device_map = {"a": "cpu", "b": 0, "c": "disk"}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_file = os.path.join(tmp_dir, "model.safetensors")
+            save_file(state_dict, checkpoint_file, metadata={"format": "pt"})
+
+            loaded_state_dict = load_state_dict(checkpoint_file, device_map=device_map)
+
+        self.assertEqual(loaded_state_dict["a"].device, torch.device("cpu"))
+        self.assertEqual(loaded_state_dict["b"].device, torch.device(0))
+        self.assertEqual(loaded_state_dict["c"].device, torch.device("cpu"))
