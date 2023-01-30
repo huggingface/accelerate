@@ -180,7 +180,7 @@ def training_function(config, args):
         model.train()
         if args.with_tracking:
             total_loss = 0
-        if args.resume_from_checkpoint and epoch == starting_epoch:
+        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
             # We need to skip steps until we reach the resumed step
             train_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
             overall_step += resume_step

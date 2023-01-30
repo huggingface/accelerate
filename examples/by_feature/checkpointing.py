@@ -204,7 +204,7 @@ def training_function(config, args):
     for epoch in range(starting_epoch, num_epochs):
         model.train()
         # New Code #
-        if args.resume_from_checkpoint and epoch == starting_epoch:
+        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
             # We need to skip steps until we reach the resumed step
             train_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
             overall_step += resume_step
