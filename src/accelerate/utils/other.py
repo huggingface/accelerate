@@ -30,7 +30,7 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
-def extract_model_from_parallel(model, keep_fp32_wrapper: bool = False):
+def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
     """
     Extract a model from its distributed containers.
 
