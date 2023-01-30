@@ -119,19 +119,6 @@ class GeneralTracker(object, metaclass=ABCMeta):
         """
         pass
 
-    def log_images(self, values: dict, step: Optional[int], **kwargs):
-        """
-        Logs `images` to the current run. Should be implemented if the tracking API supports image logging.
-
-        Args:
-            values (Dictionary `str` to `List` of `np.ndarray` or `PIL.Image`):
-                Values to be logged as key-value pairs. The values need to have type `List` of `np.ndarray` or
-                `PIL.Image`.
-            step (`int`, *optional*):
-                The run step. If included, the log will be affiliated with this step.
-        """
-        pass
-
     def finish(self):
         """
         Should run any finalizing functions within the tracking API. If the API should not have one, just don't
