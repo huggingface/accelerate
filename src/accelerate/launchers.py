@@ -123,7 +123,7 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                 print("Launching training on one GPU.")
             else:
                 print("Launching training on CPU.")
-            with patch_environment(use_mps_device=use_mps_device):
+            with patch_environment(accelerate_use_mps_device=use_mps_device):
                 function(*args)
 
 
