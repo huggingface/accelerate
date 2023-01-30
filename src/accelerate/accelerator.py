@@ -565,6 +565,18 @@ class Accelerator:
         Lets the main process go first inside a with block.
 
         The other processes will enter the with block after the main process exits.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> with accelerator.main_process_first():
+        ...     # This will be printed first by process 0 then in a seemingly
+        ...     # random order by the other processes.
+        ...     print(f"This will be printed by process {accelerator.process_index}")
+        ```
         """
         yield from self._goes_first(self.is_main_process)
 
@@ -574,6 +586,18 @@ class Accelerator:
         Lets the local main process go inside a with block.
 
         The other processes will enter the with block after the main process exits.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> with accelerator.local_main_process_first():
+        ...     # This will be printed first by local process 0 then in a seemingly
+        ...     # random order by the other processes.
+        ...     print(f"This will be printed by process {accelerator.local_process_index}")
+        ```
         """
         yield from self._goes_first(self.is_local_main_process)
 
@@ -756,7 +780,16 @@ class Accelerator:
 
     def print(self, *args, **kwargs):
         """
-        Use in replacement of `print()` to only print once per server.
+        Drop in replacement of `print()` to only print once per server.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> accelerator.print("Hello world!")
+        ```
         """
         if self.is_local_main_process:
             print(*args, **kwargs)
@@ -847,6 +880,16 @@ class Accelerator:
           You don't need to prepare a model if you only use it for inference without any kind of mixed precision
 
         </Tip>
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume a model, optimizer, data_loader and scheduler are defined
+        >>> model, optimizer, data_loader, scheduler = accelerator.prepare(model, optimizer, data_loader, scheduler)
+        ```
         """
         if device_placement is None:
             device_placement = [None for _ in args]
@@ -933,6 +976,16 @@ class Accelerator:
                 any kind of mixed precision
             device_placement (`bool`, *optional*):
                 Whether or not to place the model on the proper device. Will default to `self.device_placement`.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume a model is defined
+        >>> model = accelerator.prepare_model(model)
+        ```
         """
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
@@ -1266,6 +1319,17 @@ class Accelerator:
             device_placement (`bool`, *optional*):
                 Whether or not to place the batches on the proper device in the prepared dataloader. Will default to
                 `self.device_placement`.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> data_loader = torch.utils.data.DataLoader(...)
+        >>> data_loader = accelerator.prepare_data_loader(data_loader, device_placement=True)
+        ```
         """
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
@@ -1293,6 +1357,17 @@ class Accelerator:
                 A vanilla PyTorch optimizer to prepare
             device_placement (`bool`, *optional*):
                 Whether or not to place the optimizer on the proper device. Will default to `self.device_placement`.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> optimizer = torch.optim.Adam(...)
+        >>> optimizer = accelerator.prepare_optimizer(optimizer, device_placement=True)
+        ```
         """
         if device_placement is None:
             device_placement = self.device_placement
@@ -1308,6 +1383,18 @@ class Accelerator:
         Args:
             scheduler (`torch.optim.lr_scheduler.LRScheduler`):
                 A vanilla PyTorch scheduler to prepare
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> optimizer = torch.optim.Adam(...)
+        >>> scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, ...)
+        >>> scheduler = accelerator.prepare_scheduler(scheduler)
+        ```
         """
         # We try to find the optimizer associated with `scheduler`, the default is the full list.
         optimizer = self._optimizers
@@ -1330,6 +1417,17 @@ class Accelerator:
         `backward()` based on the configuration.
 
         Should be used in lieu of `loss.backward()`.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(gradient_accumulation_steps=1)
+        >>> outputs = model(inputs)
+        >>> loss = loss_fn(outputs, labels)
+        >>> accelerator.backward(loss)
+        ```
         """
         if self.distributed_type != DistributedType.DEEPSPEED:
             # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
@@ -1347,10 +1445,25 @@ class Accelerator:
         """
         Unscale the gradients in mixed precision training with AMP. This is a noop in all other settings.
 
+        Likely should be called through [`Accelerator.clip_grad_norm_`] or [`Accelerator.clip_grad_value_`]
+
         Args:
             optimizer (`torch.optim.Optimizer` or `List[torch.optim.Optimizer]`, *optional*):
                 The optimizer(s) for which to unscale gradients. If not set, will unscale gradients on all optimizers
                 that were passed to [`~Accelerator.prepare`].
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer = accelerator.prepare(model, optimizer)
+        >>> outputs = model(inputs)
+        >>> loss = loss_fn(outputs, labels)
+        >>> accelerator.backward(loss)
+        >>> accelerator.unscale_gradients(optimizer=optimizer)
+        ```
         """
         if self.use_fp16 and self.native_amp:
             if optimizer is None:
@@ -1443,6 +1556,20 @@ class Accelerator:
         Returns:
             `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The gathered tensor(s). Note that the
             first dimension of the result is *num_processes* multiplied by the first dimension of the input tensors.
+
+        Example:
+
+        ```python
+        >>> # Assuming four processes
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> process_tensor = torch.tensor([accelerator.process_index])
+        >>> gathered_tensor = accelerator.gather(process_tensor)
+        >>> gathered_tensor
+        tensor([0, 1, 2, 3])
+        ```
         """
         return gather(tensor)
 
@@ -1454,6 +1581,22 @@ class Accelerator:
         Args:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors for calculating metrics across all processes.
+
+        Example:
+
+        ```python
+        >>> # Assuming two processes, with a batch size of 5 on a dataset with 9 samples
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> dataloader = torch.utils.data.DataLoader(range(9), batch_size=5)
+        >>> dataloader = accelerator.prepare(dataloader)
+        >>> batch = next(iter(dataloader))
+        >>> gathered_items = accelerator.gather_for_metrics(batch)
+        >>> len(gathered_items)
+        9
+        ```
         """
         tensor = self.gather(tensor)
         if self.use_distributed:
@@ -1492,7 +1635,23 @@ class Accelerator:
                 A reduction type, can be one of 'sum', 'mean', or 'none'. If 'none', will not perform any operation.
 
         Returns:
-            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The reduced tensor(s).
+            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`:
+                The reduced tensor(s).
+
+        Example:
+
+        ```python
+        >>> # Assuming two processes
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> process_tensor = torch.arange(accelerator.num_processes) + 1 + (2 * accelerator.process_index)
+        >>> process_tensor = process_tensor.to(accelerator.device)
+        >>> reduced_tensor = accelerator.reduce(process_tensor, reduction="sum")
+        >>> reduced_tensor
+        tensor([4, 6])
+        ```
         """
         return reduce(tensor, reduction)
 
@@ -1510,6 +1669,24 @@ class Accelerator:
                 The value with which to pad.
             pad_first (`bool`, *optional*, defaults to `False`):
                 Whether to pad at the beginning or the end.
+
+        Returns:
+            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`:
+                The padded tensor(s).
+
+        Example:
+
+        ```python
+        >>> # Assuming two processes, with the first processes having a tensor of size 1 and the second of size 2
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> process_tensor = torch.arange(accelerator.process_index + 1).to(accelerator.device)
+        >>> padded_tensor = accelerator.pad_across_processes(process_tensor)
+        >>> padded_tensor.shape
+        torch.Size([2])
+        ```
         """
         return pad_across_processes(tensor, dim=dim, pad_index=pad_index, pad_first=pad_first)
 
@@ -1523,6 +1700,26 @@ class Accelerator:
                 The model to unwrap.
             keep_fp32_wrapper (`bool`, *optional*, defaults to `True`):
                 Whether to not remove the mixed precision hook if it was added.
+
+        Returns:
+            `torch.nn.Module`: The unwrapped model.
+
+        Example:
+
+        ```python
+        >>> # Assuming two GPU processes
+        >>> from torch.nn.parallel import DistributedDataParallel
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model = accelerator.prepare(MyModel())
+        >>> print(model.__class__.__name__)
+        DistributedDataParallel
+
+        >>> model = accelerator.unwrap_model(model)
+        >>> print(model.__class__.__name__)
+        MyModel
+        ```
         """
         return extract_model_from_parallel(model, keep_fp32_wrapper)
 
@@ -1530,6 +1727,23 @@ class Accelerator:
         """
         Will stop the execution of the current process until every other process has reached that point (so this does
         nothing when the script is only run in one process). Useful to do before saving a model.
+
+        Example:
+
+        ```python
+        >>> # Assuming two GPU processes
+        >>> import time
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> if accelerator.is_main_process:
+        ...     time.sleep(2)
+        >>> else:
+        ...     print("I'm waiting for the main process to finish its sleep...")
+        >>> accelerator.wait_for_everyone()
+        >>> # Should print on every process at the same time
+        >>> print("Everyone is here")
+        ```
         """
         wait_for_everyone()
 
