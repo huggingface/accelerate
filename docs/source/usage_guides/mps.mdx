@@ -31,41 +31,10 @@ please follow this nice medium article [GPU-Acceleration Comes to PyTorch on M1 
 
 
 ## How it works out of the box
+It is enabled by default on MacOs machines with MPS enabled Apple Silicon GPUs.
+To disable it, pass `--cpu` flag to `accelerate launch` command or answer the corresponding question when answering the `accelerate config` questionnaire.
 
-On your machine(s) just run:
-
-```bash
-accelerate config
-```
-
-and answer the questions asked, specifically choose `MPS` for the query:
-
-```
- Which type of machine are you using?. 
- ```
-
-This will generate a config file that will be used automatically to properly set 
-the default options when doing `accelerate launch`, such as the one shown below:
-
-```bash
-compute_environment: LOCAL_MACHINE
-deepspeed_config: {}
-distributed_type: MPS
-downcast_bf16: 'no'
-fsdp_config: {}
-machine_rank: 0
-main_process_ip: null
-main_process_port: null
-main_training_function: main
-mixed_precision: 'no'
-num_machines: 1
-num_processes: 1
-use_cpu: false
-```
-
-After this configuration has been made, here is how you run the CV example 
-(from the root of the repo) with MPS enabled:
-
+You can directly run the following script to test it out on MPS enabled Apple Silicon machines:
 ```bash
 accelerate launch /examples/cv_example.py --data_dir images
 ```

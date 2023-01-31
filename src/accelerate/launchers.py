@@ -115,16 +115,14 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
 
         else:
             # No need for a distributed launch otherwise as it's either CPU, GPU or MPS.
-            use_mps_device = "false"
-            if torch.backends.mps.is_available():
+            if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+                os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                 print("Launching training on MPS.")
-                use_mps_device = "true"
             elif torch.cuda.is_available():
                 print("Launching training on one GPU.")
             else:
                 print("Launching training on CPU.")
-            with patch_environment(accelerate_use_mps_device=use_mps_device):
-                function(*args)
+            function(*args)
 
 
 def debug_launcher(function, args=(), num_processes=2):
