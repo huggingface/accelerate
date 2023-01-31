@@ -143,12 +143,12 @@ def set_module_tensor_to_device(
         elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
-            if (kwargs.get("ds_tensor") is not None):
-                new_value = param_cls(
-                    new_value, requires_grad=old_value.requires_grad).to(device)
-            else:
+            if (param_cls.__name__ == "Int8Params"):
                 new_value = param_cls(
                     new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+            else:
+                new_value = param_cls(
+                    new_value, requires_grad=old_value.requires_grad).to(device)
             module._parameters[tensor_name] = new_value
 
 
