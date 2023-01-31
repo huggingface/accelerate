@@ -21,6 +21,7 @@ from ...utils import (
     DistributedType,
     DynamoBackend,
     is_deepspeed_available,
+    is_mps_available,
     is_transformers_available,
 )
 from ...utils.constants import (
@@ -129,14 +130,7 @@ def get_cluster_input():
     else:
         dynamo_backend = DynamoBackend.NO
 
-    use_mps = False
-    if distributed_type == DistributedType.NO:
-        use_mps = _ask_field(
-            "Do you want to use Apple Silicon GPUs via `mps` device backend? [yes/NO]:",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
-        )
+    use_mps = not use_cpu and is_mps_available()
     deepspeed_config = {}
     if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO] and not use_mps:
         use_deepspeed = _ask_field(

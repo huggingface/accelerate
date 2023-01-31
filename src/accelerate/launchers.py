@@ -19,7 +19,7 @@ import tempfile
 import torch
 
 from .state import AcceleratorState
-from .utils import PrecisionType, PrepareForLaunch, patch_environment
+from .utils import PrecisionType, PrepareForLaunch, is_mps_available, patch_environment
 
 
 def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no", use_port="29500"):
@@ -115,7 +115,7 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
 
         else:
             # No need for a distributed launch otherwise as it's either CPU, GPU or MPS.
-            if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+            if is_mps_available():
                 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                 print("Launching training on MPS.")
             elif torch.cuda.is_available():

@@ -24,6 +24,7 @@ from .utils import (
     get_int_from_env,
     is_ccl_available,
     is_deepspeed_available,
+    is_mps_available,
     is_tpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
@@ -228,7 +229,7 @@ class AcceleratorState:
                 if parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE") and not cpu:
                     from .utils import is_torch_version
 
-                    if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+                    if is_mps_available():
                         if not is_torch_version(">", "1.12.0"):
                             warnings.warn(
                                 "We strongly recommend to install PyTorch >= 1.13 for transformer based models."
@@ -242,13 +243,9 @@ class AcceleratorState:
                         )
 
                 if self.device is None:
-                    if (
-                        cpu
-                        or not torch.cuda.is_available()
-                        or not (torch.backends.mps.is_available() and torch.backends.mps.is_built())
-                    ):
+                    if cpu or not (torch.cuda.is_available() or is_mps_available()):
                         self.device = torch.device("cpu")
-                    elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+                    elif is_mps_available():
                         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                         self.device = torch.device("mps")
                     else:
