@@ -159,4 +159,4 @@ def is_mlflow_available():
 
 
 def is_mps_available():
-    return torch.backends.mps.is_available() and torch.backends.mps.is_built()
+    return is_torch_version(">=", "1.12") and torch.backends.mps.is_available() and torch.backends.mps.is_built()
