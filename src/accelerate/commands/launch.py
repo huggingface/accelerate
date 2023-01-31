@@ -1052,7 +1052,7 @@ def launch_command(args):
             warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
             args.dynamo_backend = "no"
 
-    if args.num_cpu_threads_per_process is None:
+    if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE and args.num_cpu_threads_per_process is None:
         args.num_cpu_threads_per_process = 1
         if args.use_cpu and args.num_processes > 1:
             local_size = get_int_from_env(
