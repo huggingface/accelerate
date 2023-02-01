@@ -24,6 +24,7 @@ from .utils import (
     get_int_from_env,
     is_ccl_available,
     is_deepspeed_available,
+    is_mps_available,
     is_tpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
@@ -223,34 +224,30 @@ class AcceleratorState:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
-                if parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE") and not cpu:
-                    if not torch.backends.mps.is_available():
-                        if not torch.backends.mps.is_built():
-                            raise AssertionError(
-                                "MPS not available because the current PyTorch install was not "
-                                "built with MPS enabled. Please install torch version >=1.12.0 on "
-                                "your Apple silicon Mac running macOS 12.3 or later with a native "
-                                "version (arm64) of Python"
-                            )
-                        else:
-                            raise AssertionError(
-                                "MPS not available because the current MacOS version is not 12.3+ "
-                                "and/or you do not have an MPS-enabled device on this machine."
-                            )
-                    else:
-                        from .utils import is_torch_version
 
+                # the below block using env variable for `mps` will be removed in version 0.18.0
+                if parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE") and not cpu:
+                    from .utils import is_torch_version
+
+                    if is_mps_available():
                         if not is_torch_version(">", "1.12.0"):
                             warnings.warn(
-                                "We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. "
-                                "It has major fixes related to model correctness and performance improvements for transformer based models. "
-                                "Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details."
+                                "We strongly recommend to install PyTorch >= 1.13 for transformer based models."
                             )
-                        if self.device is None:
-                            self.device = torch.device("mps")
-                elif self.device is None:
-                    if cpu or not torch.cuda.is_available():
+                        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+                        self.device = torch.device("mps")
+                    else:
+                        raise AssertionError(
+                            "MPS not available because PyTorch version is < 1.12.0 or MacOS version is < 12.3 "
+                            "and/or you do not have an MPS-enabled device on this machine."
+                        )
+
+                if self.device is None:
+                    if cpu or not (torch.cuda.is_available() or is_mps_available()):
                         self.device = torch.device("cpu")
+                    elif is_mps_available():
+                        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+                        self.device = torch.device("mps")
                     else:
                         self.device = torch.device("cuda")
                 self._mixed_precision = mixed_precision

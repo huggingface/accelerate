@@ -21,6 +21,7 @@ from ...utils import (
     DistributedType,
     DynamoBackend,
     is_deepspeed_available,
+    is_mps_available,
     is_transformers_available,
 )
 from ...utils.constants import (
@@ -44,7 +45,7 @@ from .config_utils import (
 def get_cluster_input():
     distributed_type = _ask_options(
         "Which type of machine are you using?",
-        ["No distributed training", "multi-CPU", "multi-GPU", "TPU", "MPS"],
+        ["No distributed training", "multi-CPU", "multi-GPU", "TPU"],
         _convert_distributed_mode,
     )
 
@@ -92,7 +93,7 @@ def get_cluster_input():
 
     if distributed_type == DistributedType.NO:
         use_cpu = _ask_field(
-            "Do you want to run your training on CPU only (even if a GPU is available)? [yes/NO]:",
+            "Do you want to run your training on CPU only (even if a GPU / Apple Silicon device is available)? [yes/NO]:",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
@@ -129,8 +130,9 @@ def get_cluster_input():
     else:
         dynamo_backend = DynamoBackend.NO
 
+    use_mps = not use_cpu and is_mps_available()
     deepspeed_config = {}
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
+    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO] and not use_mps:
         use_deepspeed = _ask_field(
             "Do you want to use DeepSpeed? [yes/NO]: ",
             _convert_yes_no_to_bool,
@@ -452,7 +454,7 @@ def get_cluster_input():
     else:
         num_processes = 1
 
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO] and not use_cpu:
+    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO] and not use_cpu and not use_mps:
         gpu_ids = _ask_field(
             "What GPU(s) (by id) should be used for training on this machine as a comma-seperated list? [all]:",
             default="all",

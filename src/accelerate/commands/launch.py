@@ -20,6 +20,7 @@ import logging
 import os
 import subprocess
 import sys
+import warnings
 from ast import literal_eval
 from pathlib import Path
 from typing import Dict, List
@@ -152,7 +153,8 @@ def launch_command_parser(subparsers=None):
         "--mps",
         default=False,
         action="store_true",
-        help="Whether or not this should use MPS-enabled GPU device on MacOS machines.",
+        help="This argument is deprecated. MPS device will be enabled by default when available and can be disabled via `--cpu`."
+        " Whether or not this should use MPS-enabled GPU device on MacOS machines.",
     )
     hardware_args.add_argument(
         "--multi_gpu",
@@ -518,7 +520,11 @@ def simple_launcher(args):
     current_env["ACCELERATE_USE_CPU"] = str(args.cpu or args.use_cpu)
     current_env["ACCELERATE_USE_MPS_DEVICE"] = str(args.mps)
     if args.mps:
-        current_env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+        warnings.warn(
+            "`mps` is deprecated and will be removed in version 0.18.0 of 🤗 Accelerate."
+            " MPS device will be enabled by default when available and can be disabled via `--cpu`.",
+            FutureWarning,
+        )
     elif args.gpu_ids != "all" and args.gpu_ids is not None:
         current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
