@@ -47,19 +47,19 @@ def convert_file_size_to_int(size: Union[int, str]):
     if isinstance(size, int):
         return size
     if size.upper().endswith("GIB"):
-        return int(size[:-3]) * (2**30)
+        return int(size[:-3]) * (2 ** 30)
     if size.upper().endswith("MIB"):
-        return int(size[:-3]) * (2**20)
+        return int(size[:-3]) * (2 ** 20)
     if size.upper().endswith("KIB"):
-        return int(size[:-3]) * (2**10)
+        return int(size[:-3]) * (2 ** 10)
     if size.upper().endswith("GB"):
-        int_size = int(size[:-2]) * (10**9)
+        int_size = int(size[:-2]) * (10 ** 9)
         return int_size // 8 if size.endswith("b") else int_size
     if size.upper().endswith("MB"):
-        int_size = int(size[:-2]) * (10**6)
+        int_size = int(size[:-2]) * (10 ** 6)
         return int_size // 8 if size.endswith("b") else int_size
     if size.upper().endswith("KB"):
-        int_size = int(size[:-2]) * (10**3)
+        int_size = int(size[:-2]) * (10 ** 3)
         return int_size // 8 if size.endswith("b") else int_size
     raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
@@ -146,12 +146,10 @@ def set_module_tensor_to_device(
         elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
-            if (param_cls.__name__ == "Int8Params"):
-                new_value = param_cls(
-                    new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+            if param_cls.__name__ == "Int8Params":
+                new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
-                new_value = param_cls(
-                    new_value, requires_grad=old_value.requires_grad).to(device)
+                new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
             module._parameters[tensor_name] = new_value
 
 
