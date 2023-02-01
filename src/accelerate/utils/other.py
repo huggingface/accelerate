@@ -30,7 +30,7 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
-def extract_model_from_parallel(model, keep_fp32_wrapper: bool = False):
+def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
     """
     Extract a model from its distributed containers.
 
@@ -103,6 +103,17 @@ def patch_environment(**kwargs):
     A context manager that will add each keyword argument passed to `os.environ` and remove them when exiting.
 
     Will convert the values in `kwargs` to strings and upper-case all the keys.
+
+    Example:
+
+    ```python
+    >>> import os
+    >>> from accelerate.utils import patch_environment
+
+    >>> with patch_environment(FOO="bar"):
+    ...     print(os.environ["FOO"])  # prints "bar"
+    >>> print(os.environ["FOO"])  # raises KeyError
+    ```
     """
     for key, value in kwargs.items():
         os.environ[key.upper()] = str(value)

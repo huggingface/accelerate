@@ -96,11 +96,14 @@ def set_module_tensor_to_device(
     `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function).
 
     Args:
-        module (`torch.nn.Module`): The module in which the tensor we want to move lives.
-        param_name (`str`): The full name of the parameter/buffer.
-        device (`int`, `str` or `torch.device`): The device on which to set the tensor.
-        value (`torch.Tensor`, *optional*): The value of the tensor (useful when going from the meta device to any
-            other device).
+        module (`torch.nn.Module`):
+            The module in which the tensor we want to move lives.
+        param_name (`str`):
+            The full name of the parameter/buffer.
+        device (`int`, `str` or `torch.device`):
+            The device on which to set the tensor.
+        value (`torch.Tensor`, *optional*):
+            The value of the tensor (useful when going from the meta device to any other device).
         dtype (`torch.dtype`, *optional*):
             If passed along the value of the parameter will be cast to this `dtype`. Otherwise, `value` will be cast to
             the dtype of the existing parameter in the model.
@@ -158,8 +161,10 @@ def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurs
     it's the same as doing `module.named_parameters(recurse=recurse) + module.named_buffers(recurse=recurse)`.
 
     Args:
-        module (`torch.nn.Module`): The module we want the tensors or.
-        include_buffer (`bool`, *optional*, defaults to `True`): Whether or not to include the buffers in the result.
+        module (`torch.nn.Module`):
+            The module we want the tensors on.
+        include_buffer (`bool`, *optional*, defaults to `True`):
+            Whether or not to include the buffers in the result.
         recurse (`bool`, *optional`, defaults to `False`):
             Whether or not to go look in every submodule or just return the direct parameters and buffers.
     """
@@ -175,9 +180,6 @@ def find_tied_parameters(model: nn.Module, **kwargs):
     """
     Find the tied parameters in a given model.
 
-    Args:
-        model (`torch.nn.Module`): The model to inspect.
-
     <Tip warning={true}>
 
     The signature accepts keyword arguments, but they are for the recursive part of this function and you should ignore
@@ -185,8 +187,13 @@ def find_tied_parameters(model: nn.Module, **kwargs):
 
     </Tip>
 
-    Example:
+    Args:
+        model (`torch.nn.Module`): The model to inspect.
 
+    Returns:
+        Dict[str, str]: A dictionary mapping tied parameter names to the name of the parameter they are tied to.
+
+    Example:
 
     ```py
     >>> from collections import OrderedDict
@@ -197,9 +204,6 @@ def find_tied_parameters(model: nn.Module, **kwargs):
     >>> find_tied_parameters(test_model)
     {'linear1.weight': 'linear2.weight'}
     ```
-
-    Returns:
-        Dict[str, str]: A dictionary mapping tied parameter names to the name of the parameter they are tied to.
     """
     # Initialize result and named_parameters before recursing.
     named_parameters = kwargs.get("named_parameters", None)
@@ -233,7 +237,8 @@ def retie_parameters(model, tied_params):
     Reties tied parameters in a given model if the link was broken (for instance when adding hooks).
 
     Args:
-        model (`torch.nn.Module`): The model in which to retie parameters.
+        model (`torch.nn.Module`):
+            The model in which to retie parameters.
         tied_params (`Dict[str, str]`):
             A mapping parameter name to tied parameter name as obtained by `find_tied_parameters`.
     """
@@ -355,6 +360,18 @@ def clean_device_map(device_map: Dict[str, Union[int, str, torch.device]], modul
 
 
 def load_offloaded_weights(model, index, offload_folder):
+    """
+    Loads the weights from the offload folder into the model.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to load the weights into.
+        index (`dict`):
+            A dictionary containing the parameter name and its metadata for each parameter that was offloaded from the
+            model.
+        offload_folder (`str`):
+            The folder where the offloaded weights are stored.
+    """
     if index is None or len(index) == 0:
         # Nothing to do
         return
@@ -383,7 +400,8 @@ def get_balanced_memory(
     </Tip>
 
     Args:
-        model (`torch.nn.Module`): The model to analyze.
+        model (`torch.nn.Module`):
+            The model to analyze.
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
         no_split_module_classes (`List[str]`, *optional*):
@@ -480,7 +498,8 @@ def infer_auto_device_map(
     </Tip>
 
     Args:
-        model (`torch.nn.Module`): The model to analyze.
+        model (`torch.nn.Module`):
+            The model to analyze.
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
         no_split_module_classes (`List[str]`, *optional*):
@@ -647,7 +666,8 @@ def load_checkpoint_in_model(
     </Tip>
 
     Args:
-        model (`torch.nn.Module`): The model in which we want to load a checkpoint.
+        model (`torch.nn.Module`):
+            The model in which we want to load a checkpoint.
         checkpoint (`str` or `os.PathLike`):
             The folder checkpoint to load. It can be:
             - a path to a file containing a whole model state dict

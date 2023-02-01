@@ -89,3 +89,6 @@ learning_rate *= accelerator.num_processes
 optimizer = AdamW(params=model.parameters(), lr=learning_rate)
 ```
 
+You will also find that `accelerate` will step the learning rate based on the number of processes being trained on. This is because 
+of the observed batch size noted earlier. So in a case of 2 GPUs, the learning rate will be stepped twice as often as a single GPU
+to account for the batch size being twice as large (if no changes to the batch size on the single GPU instance are made).

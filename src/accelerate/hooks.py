@@ -121,8 +121,10 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
     </Tip>
 
     Args:
-        module (`torch.nn.Module`): The module to attach a hook to.
-        hook (`ModelHook`): The hook to attach.
+        module (`torch.nn.Module`):
+            The module to attach a hook to.
+        hook (`ModelHook`):
+            The hook to attach.
         append (`bool`, *optional*, defaults to `False`):
             Whether the hook should be chained with an existing one (if module already contains a hook) or not.
 

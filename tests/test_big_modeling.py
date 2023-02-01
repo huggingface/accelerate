@@ -318,7 +318,7 @@ class BigModelingTester(unittest.TestCase):
             "transformer.wte": 0,
             "transformer.wpe": 0,
             "transformer.ln_f": 1,
-            "lm_head": 1,
+            "lm_head": 0,
         }
         for i in range(12):
             device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1

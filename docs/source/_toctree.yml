@@ -17,6 +17,8 @@
     title: Launching distributed training from Jupyter Notebooks
   title: Tutorials
 - sections:
+  - local: usage_guides/explore
+    title: Start Here!
   - local: usage_guides/training_zoo
     title: Example Zoo
   - local: usage_guides/big_modeling

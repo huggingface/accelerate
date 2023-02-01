@@ -85,7 +85,7 @@ class UtilsTester(unittest.TestCase):
         model = RegressionModel()
         model._original_forward = model.forward
         model.forward = convert_outputs_to_fp32(model.forward)
-        model = extract_model_from_parallel(model)
+        model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
         _ = pickle.dumps(model)
 
     @require_cuda
@@ -94,7 +94,7 @@ class UtilsTester(unittest.TestCase):
         model._original_forward = model.forward
         model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
         model.forward = convert_outputs_to_fp32(model.forward)
-        model = extract_model_from_parallel(model)
+        model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
         _ = pickle.dumps(model)
 
     def test_find_device(self):

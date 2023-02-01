@@ -223,6 +223,19 @@ class TempDirTestCase(unittest.TestCase):
                     shutil.rmtree(path)
 
 
+class AccelerateTestCase(unittest.TestCase):
+    """
+    A TestCase class that will reset the accelerator state at the end of every test. Every test that checks or utilizes
+    the `AcceleratorState` class should inherit from this to avoid silent failures due to state being shared between
+    tests.
+    """
+
+    def tearDown(self):
+        super().tearDown()
+        # Reset the state of the AcceleratorState singleton.
+        AcceleratorState._reset_state()
+
+
 class MockingTestCase(unittest.TestCase):
     """
     A TestCase class designed to dynamically add various mockers that should be used in every test, mimicking the

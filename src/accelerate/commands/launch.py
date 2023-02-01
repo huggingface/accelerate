@@ -1052,7 +1052,10 @@ def launch_command(args):
             warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
             args.dynamo_backend = "no"
 
-    if args.num_cpu_threads_per_process is None:
+    is_aws_env_disabled = defaults is None or (
+        defaults is not None and defaults.compute_environment != ComputeEnvironment.AMAZON_SAGEMAKER
+    )
+    if is_aws_env_disabled and args.num_cpu_threads_per_process is None:
         args.num_cpu_threads_per_process = 1
         if args.use_cpu and args.num_processes > 1:
             local_size = get_int_from_env(
