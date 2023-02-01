@@ -33,7 +33,7 @@ EVAL_BATCH_SIZE = 32
 
 # Converting Bytes to Megabytes
 def b2mb(x):
-    return int(x / 2 ** 20)
+    return int(x / 2**20)
 
 
 # This context manager is used to track the peak memory usage of the process

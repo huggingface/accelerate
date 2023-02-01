@@ -52,7 +52,7 @@ EVAL_BATCH_SIZE = 32
 # New Code #
 # Converting Bytes to Megabytes
 def b2mb(x):
-    return int(x / 2 ** 20)
+    return int(x / 2**20)
 
 
 # New Code #
