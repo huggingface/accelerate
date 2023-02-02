@@ -72,7 +72,7 @@ First the code shown earlier will be converted to utilize 🤗 Accelerate withou
 
 <Tip warning={true}>
 
-  In its current state, this code is not going to perform gradient accumulation efficiently due to a process called gradient synchronization. Read more about that in the [Concepts tutorial](concept_guides/gradient_synchronization)!
+  In its current state, this code is not going to perform gradient accumulation efficiently due to a process called gradient synchronization. Read more about that in the [Concepts tutorial](../concept_guides/gradient_synchronization)!
 
 </Tip>
 
@@ -127,4 +127,4 @@ for batch in training_dataloader:
         optimizer.zero_grad()
 ```
 
-To learn more about what magic this wraps around, read the [Gradient Synchronization concept guide](/concept_guides/gradient_synchronization)
+To learn more about what magic this wraps around, read the [Gradient Synchronization concept guide](../concept_guides/gradient_synchronization)
