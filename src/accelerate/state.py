@@ -372,6 +372,10 @@ class AcceleratorState:
         """
         yield from self._goes_first(self.is_local_main_process)
 
+    def print(self, *args, **kwargs):
+        if self.is_local_main_process:
+            print(*args, **kwargs)
+
 
 class GradientState:
     """

@@ -770,8 +770,7 @@ class Accelerator:
         >>> accelerator.print("Hello world!")
         ```
         """
-        if self.is_local_main_process:
-            print(*args, **kwargs)
+        self.state.print(*args, **kwargs)
 
     def _prepare_one(self, obj, first_pass=False, device_placement=None):
         # First pass of preparation: DataLoader, model, optimizer
