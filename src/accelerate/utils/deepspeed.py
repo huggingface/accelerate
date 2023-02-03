@@ -163,9 +163,9 @@ class DeepSpeedEngineWrapper:
     def __init__(self, engine):
         self.engine = engine
 
-    def backward(self, loss):
+    def backward(self, loss, **kwargs):
         # runs backpropagation and handles mixed precision
-        self.engine.backward(loss)
+        self.engine.backward(loss, **kwargs)
 
         # Deepspeed's `engine.step` performs the following operations:
         # - gradient accumulation check
