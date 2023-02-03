@@ -72,15 +72,7 @@ def wait_for_everyone():
 
     </Tip>
     """
-    if (
-        AcceleratorState().distributed_type == DistributedType.MULTI_GPU
-        or AcceleratorState().distributed_type == DistributedType.MULTI_CPU
-        or AcceleratorState().distributed_type == DistributedType.DEEPSPEED
-        or AcceleratorState().distributed_type == DistributedType.FSDP
-    ):
-        torch.distributed.barrier()
-    elif AcceleratorState().distributed_type == DistributedType.TPU:
-        xm.rendezvous("accelerate.utils.wait_for_everyone")
+    AcceleratorState().wait_for_everyone()
 
 
 def save(obj, f):

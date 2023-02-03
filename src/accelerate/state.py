@@ -14,6 +14,7 @@
 
 import os
 import warnings
+from contextlib import contextmanager
 
 import torch
 
@@ -311,6 +312,65 @@ class AcceleratorState:
                 raise ValueError(err.format(flag="cpu=True"))
             if mixed_precision is not None and mixed_precision != self._mixed_precision:
                 raise ValueError(err.format(flag=f"mixed_precision='{mixed_precision}'"))
+
+    @property
+    def is_last_process(self) -> bool:
+        "Returns whether the current process is the last process"
+        return self.process_index == self.num_processes - 1
+
+    @property
+    def is_main_process(self) -> bool:
+        "Returns whether the current process is the main process"
+        return (
+            self.process_index == 0 if self.distributed_type != DistributedType.MEGATRON_LM else self.is_last_process
+        )
+
+    @property
+    def is_local_main_process(self) -> bool:
+        "Returns whether the current process is the main process on the local node"
+        return (
+            self.local_process_index == 0
+            if self.distributed_type != DistributedType.MEGATRON_LM
+            else self.is_last_process
+        )
+
+    def wait_for_everyone(self):
+        if self.distributed_type in (
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_CPU,
+            DistributedType.DEEPSPEED,
+            DistributedType.FSDP,
+        ):
+            torch.distributed.barrier()
+        elif self.distributed_type == DistributedType.TPU:
+            xm.rendezvous("accelerate.utils.wait_for_everyone")
+
+    def _goes_first(self, is_main: bool):
+        if not is_main:
+            self.wait_for_everyone()
+
+        yield
+
+        if is_main:
+            self.wait_for_everyone()
+
+    @contextmanager
+    def main_process_first(self):
+        """
+        Lets the main process go first inside a with block.
+
+        The other processes will enter the with block after the main process exits.
+        """
+        yield from self._goes_first(self.is_main_process)
+
+    @contextmanager
+    def local_main_process_first(self):
+        """
+        Lets the local main process go inside a with block.
+
+        The other processes will enter the with block after the main process exits.
+        """
+        yield from self._goes_first(self.is_local_main_process)
 
 
 class GradientState:
