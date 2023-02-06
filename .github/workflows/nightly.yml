@@ -65,7 +65,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e . --no-deps
-          pip install pytest-reportlog
+          pip install pytest-reportlog slack_sdk
 
       - name: Run core and big modeling tests on GPUs
         run: |
