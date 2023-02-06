@@ -8,6 +8,8 @@ on:
 env:
   RUN_SLOW: "no"
   IS_GITHUB_CI: "1"
+  SLACK_API_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+
 
 jobs:
   run_all_tests_single_gpu:
