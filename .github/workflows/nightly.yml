@@ -29,7 +29,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }} 
           pip install -e . --no-deps
-          pip install pytest-reportlog slack_sdk
+          pip install pytest-reportlog
 
       - name: Run test on GPUs
         run: |
@@ -44,6 +44,7 @@ jobs:
       - name: Generate Report
         if: always()
         run: |
+          pip install slack_sdk
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
@@ -65,7 +66,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e . --no-deps
-          pip install pytest-reportlog slack_sdk
+          pip install pytest-reportlog
 
       - name: Run core and big modeling tests on GPUs
         run: |
@@ -87,4 +88,5 @@ jobs:
       - name: Generate Report
         if: always()
         run: |
+          pip install slack_sdk
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
