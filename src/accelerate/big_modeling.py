@@ -303,6 +303,7 @@ def dispatch_model(
     execution_device = {
         name: main_device if device in ["cpu", "disk"] else device for name, device in device_map.items()
     }
+    execution_device[""] = main_device
     offloaded_devices = ["disk"] if main_device == "cpu" else ["cpu", "disk"]
     offload = {name: device in offloaded_devices for name, device in device_map.items()}
     save_folder = offload_dir if len(disk_modules) > 0 else None

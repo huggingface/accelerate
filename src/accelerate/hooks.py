@@ -454,7 +454,7 @@ def attach_align_device_hook_on_blocks(
     if not isinstance(offload, Mapping):
         offload = {key: offload for key in execution_device.keys()}
 
-    if module_name in execution_device and not offload[module_name]:
+    if module_name in execution_device and module_name in offload and not offload[module_name]:
         hook = AlignDevicesHook(
             execution_device=execution_device[module_name],
             offload_buffers=offload_buffers,
@@ -463,7 +463,7 @@ def attach_align_device_hook_on_blocks(
         )
         add_hook_to_module(module, hook)
         attach_execution_device_hook(module, execution_device[module_name])
-    elif module_name in execution_device:
+    elif module_name in execution_device and module_name in offload:
         attach_align_device_hook(
             module,
             execution_device=execution_device[module_name],
@@ -480,7 +480,7 @@ def attach_align_device_hook_on_blocks(
             module, execution_device[module_name], preload_module_classes=preload_module_classes
         )
     elif module_name == "":
-        hook = AlignDevicesHook(io_same_device=True)
+        hook = AlignDevicesHook(execution_device=execution_device.get(""), io_same_device=True)
         add_hook_to_module(module, hook)
 
     for child_name, child in module.named_children():
