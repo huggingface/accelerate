@@ -454,18 +454,12 @@ class Accelerator:
     @property
     def is_main_process(self):
         """True for one process only."""
-        return (
-            self.process_index == 0 if self.distributed_type != DistributedType.MEGATRON_LM else self.is_last_process
-        )
+        return self.state.is_main_process
 
     @property
     def is_local_main_process(self):
         """True for one process per server."""
-        return (
-            self.local_process_index == 0
-            if self.distributed_type != DistributedType.MEGATRON_LM
-            else self.is_last_process
-        )
+        return self.state.is_local_main_process
 
     @property
     def use_fp16(self):
@@ -545,15 +539,6 @@ class Accelerator:
 
         return decorator
 
-    def _goes_first(self, is_main):
-        if not is_main:
-            self.wait_for_everyone()
-
-        yield
-
-        if is_main:
-            self.wait_for_everyone()
-
     @contextmanager
     def main_process_first(self):
         """
@@ -573,7 +558,7 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.process_index}")
         ```
         """
-        yield from self._goes_first(self.is_main_process)
+        yield self.state.main_process_first()
 
     @contextmanager
     def local_main_process_first(self):
@@ -594,7 +579,7 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.local_process_index}")
         ```
         """
-        yield from self._goes_first(self.is_local_main_process)
+        yield self.state.local_main_process_first()
 
     @contextmanager
     def no_sync(self, model):
@@ -785,8 +770,7 @@ class Accelerator:
         >>> accelerator.print("Hello world!")
         ```
         """
-        if self.is_local_main_process:
-            print(*args, **kwargs)
+        self.state.print(*args, **kwargs)
 
     def _prepare_one(self, obj, first_pass=False, device_placement=None):
         # First pass of preparation: DataLoader, model, optimizer
