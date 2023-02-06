@@ -1,5 +1,4 @@
 import json, os
-from slack_sdk import WebClient
 from pathlib import Path
 from datetime import date
 
@@ -44,7 +43,8 @@ else:
     message = "No failed tests! 🤗"
     print(f'## {message}')
 
-if os.environ.get("TEST_TYPE", None) is not None:
+if os.environ.get("TEST_TYPE", "") != "":
+    from slack_sdk import WebClient
     message = f'*Nightly {os.environ.get("TEST_TYPE")} test results for {date.today()}:*\n{message}'
 
     client = WebClient(token=os.environ['SLACK_API_TOKEN'])
