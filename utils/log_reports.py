@@ -27,7 +27,7 @@ for log in Path().glob("*.log"):
     group_info.append([str(log), section_num_failed, failed])
     failed = []
 message = ""
-if len(total_num_failed) > 0:
+if total_num_failed > 0:
     for name, num_failed, failed_tests in group_info:
         if num_failed > 0:
             if len(num_failed) == 1:
