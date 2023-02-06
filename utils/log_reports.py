@@ -31,20 +31,21 @@ if total_num_failed > 0:
     for name, num_failed, failed_tests in group_info:
         if num_failed > 0:
             if len(num_failed) == 1:
-                message += f"### {name}: {num_failed} failed test\n"
+                message += f"**{name}: {num_failed} failed test**\n"
             else:
-                message += f"### {name}: {num_failed} failed tests\n"
+                message += f"**{name}: {num_failed} failed tests**\n"
             failed_table = '| Test Location | Test Class | Test Name | PyTorch Version |\n|---|---|---|---|\n| '
             for test in failed_tests:
                 failed_table += ' | '.join(test[0].split("::"))
             failed_table += f" | {test[2]} |"
             message += failed_table
+    print(f'### {message}')
 else:
-    message = "## No failed tests! 🤗"
-    print(message)
+    message = "No failed tests! 🤗"
+    print(f'## {message}')
 
 if os.environ.get("TEST_TYPE", None) is not None:
-    message = f'# Nightly {os.environ.get("TEST_TYPE")} test results for {date.today()}:\n{message}'
+    message = f'**Nightly {os.environ.get("TEST_TYPE")} test results for {date.today()}:**\n{message}'
 
     client = WebClient(token=os.environ['SLACK_API_TOKEN'])
     client.chat_postMessage(channel='#accelerate-ci-daily', text=message)
