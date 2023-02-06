@@ -31,6 +31,15 @@ from accelerate.utils import (
 )
 
 
+def process_execution_check():
+    # Test that printing on a single process works
+    accelerator = Accelerator()
+    with accelerator.main_process_first():
+        idx = torch.tensor(accelerator.process_index).to(accelerator.device)
+    idxs = accelerator.gather(idx)
+    assert idxs[0] == 0, "Main process was not first."
+
+
 def init_state_check():
     # Test we can instantiate this twice in a row.
     state = AcceleratorState()
@@ -307,6 +316,9 @@ def main():
     if state.local_process_index == 0:
         print("**Initialization**")
     init_state_check()
+    if state.local_process_index == 0:
+        print("\n**Test process execution**")
+    process_execution_check()
 
     if state.local_process_index == 0:
         print("\n**Test random number generator synchronization**")
