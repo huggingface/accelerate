@@ -504,7 +504,9 @@ def attach_align_device_hook_on_blocks(
 
 
 class CpuOffload(ModelHook):
-    def __init__(self, execution_device=None):
+    def __init__(self, execution_device=None, prev_module_hook: Optional[UserCpuOffloadHook] = None):
+        self.prev_model_hook = prev_module_hook
+        
         if execution_device is not None:
             self.execution_device = execution_device
         elif is_mps_available():
@@ -519,6 +521,8 @@ class CpuOffload(ModelHook):
 
     def pre_forward(self, module, *args, **kwargs):
         module.to(self.execution_device)
+        if self.prev_module_hook is not None:
+            prev_module_hook.offload()
         return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
 
 

@@ -191,8 +191,8 @@ def cpu_offload(
     return model
 
 
-def cpu_offload_with_hook(model, execution_device=None):
-    hook = CpuOffload(execution_device=execution_device)
+def cpu_offload_with_hook(model, execution_device=None, user_hook=None):
+    hook = CpuOffload(execution_device=execution_device, user_hook=user_hook)
     add_hook_to_module(model, hook, append=True)
     user_hook = UserCpuOffloadHook(model, hook)
     return model, user_hook
