@@ -284,7 +284,7 @@ def launch_command_parser(subparsers=None):
         help="Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.",
     )
 
-    # tpu arguments
+    # TPU arguments
     tpu_args = parser.add_argument_group("TPU", "Arguments related to TPU.")
     tpu_args.add_argument(
         "--main_training_function",
