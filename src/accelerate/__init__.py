@@ -7,6 +7,7 @@ __version__ = "0.17.0.dev0"
 from .accelerator import Accelerator
 from .big_modeling import (
     cpu_offload,
+    cpu_offload_with_hook,
     disk_offload,
     dispatch_model,
     init_empty_weights,
