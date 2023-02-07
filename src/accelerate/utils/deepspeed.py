@@ -40,7 +40,6 @@ class HfDeepSpeedConfig:
     """
 
     def __init__(self, config_file_or_dict):
-
         if isinstance(config_file_or_dict, dict):
             # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
             # modified it, it will not be accepted here again, since `auto` values would have been overridden

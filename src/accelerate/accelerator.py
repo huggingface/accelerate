@@ -1017,7 +1017,6 @@ class Accelerator:
         return model
 
     def _prepare_deepspeed(self, *args):
-
         deepspeed_plugin = self.state.deepspeed_plugin
 
         if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto":
@@ -1469,7 +1468,7 @@ class Accelerator:
         >>> accelerator = Accelerator(gradient_accumulation_steps=2)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
-        >>> for (input, target) in dataloader:
+        >>> for input, target in dataloader:
         ...     optimizer.zero_grad()
         ...     output = model(input)
         ...     loss = loss_func(output, target)
@@ -1504,7 +1503,7 @@ class Accelerator:
         >>> accelerator = Accelerator(gradient_accumulation_steps=2)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
-        >>> for (input, target) in dataloader:
+        >>> for input, target in dataloader:
         ...     optimizer.zero_grad()
         ...     output = model(input)
         ...     loss = loss_func(output, target)
@@ -1594,7 +1593,7 @@ class Accelerator:
                 else:
                     # Not at the end of the dataloader, no need to adjust the tensors
                     return tensor
-            except:
+            except Exception:
                 # Dataset had no length or raised an error
                 return tensor
         return tensor
@@ -2349,7 +2348,7 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
-        >>> for (input, target) in accelerator.skip_first_batches(dataloader, num_batches=2):
+        >>> for input, target in accelerator.skip_first_batches(dataloader, num_batches=2):
         ...     optimizer.zero_grad()
         ...     output = model(input)
         ...     loss = loss_func(output, target)

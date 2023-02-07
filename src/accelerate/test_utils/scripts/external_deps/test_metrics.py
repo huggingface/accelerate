@@ -15,17 +15,17 @@
 import math
 from copy import deepcopy
 
-import torch
-from torch.utils.data import DataLoader
-
 import datasets
 import evaluate
+import torch
 import transformers
+from datasets import load_dataset
+from torch.utils.data import DataLoader
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 from accelerate import Accelerator
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import is_tpu_available, set_seed
-from datasets import load_dataset
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 
 def get_basic_setup(accelerator, num_samples=82, batch_size=16):
@@ -84,7 +84,7 @@ def generate_predictions(model, dataloader, accelerator):
             logit, target = accelerator.gather_for_metrics((logit, target))
             logits_and_targets.append((logit, target))
     logits, targs = [], []
-    for (logit, targ) in logits_and_targets:
+    for logit, targ in logits_and_targets:
         logits.append(logit)
         targs.append(targ)
     logits, targs = torch.cat(logits), torch.cat(targs)

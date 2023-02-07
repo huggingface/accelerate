@@ -20,7 +20,6 @@ from distutils.util import strtobool
 from functools import lru_cache
 
 import torch
-
 from packaging.version import parse
 
 from .environment import parse_flag_from_env
