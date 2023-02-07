@@ -21,6 +21,7 @@ import torch.nn as nn
 
 from accelerate.big_modeling import (
     cpu_offload,
+    cpu_offload_with_hook,
     disk_offload,
     dispatch_model,
     init_empty_weights,
@@ -484,3 +485,33 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
+    def test_cpu_offload_with_hook(self):
+        model1 = torch.nn.Linear(4, 5)
+        model1, hook1 = cpu_offload_with_hook(model1)
+        self.assertEqual(model1.weight.device, torch.device("cpu"))
+
+        inputs = torch.randn(3, 4)
+        outputs = model1(inputs)
+        self.assertEqual(outputs.device, torch.device(0))
+        self.assertEqual(model1.weight.device, torch.device(0))
+
+        hook1.offload()
+        self.assertEqual(model1.weight.device, torch.device("cpu"))
+
+        model2 = torch.nn.Linear(5, 5)
+        model2, hook2 = cpu_offload_with_hook(model2, prev_module_hook=hook1)
+        self.assertEqual(model2.weight.device, torch.device("cpu"))
+
+        outputs = model1(inputs)
+        self.assertEqual(outputs.device, torch.device(0))
+        self.assertEqual(model1.weight.device, torch.device(0))
+
+        outputs = model2(outputs)
+        self.assertEqual(outputs.device, torch.device(0))
+        self.assertEqual(model1.weight.device, torch.device("cpu"))
+        self.assertEqual(model2.weight.device, torch.device(0))
+
+        hook2.offload()
+        self.assertEqual(model2.weight.device, torch.device("cpu"))
