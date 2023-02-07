@@ -194,7 +194,7 @@ def cpu_offload(
 def cpu_offload_with_hook(
     model: torch.nn.Module,
     execution_device: Optional[Union[int, str, torch.device]] = None,
-    user_hook: Optional[UserCpuOffloadHook] = None,
+    prev_module_hook: Optional[UserCpuOffloadHook] = None,
 ):
     """
     Offloads a model on the CPU and puts it back to an execution device when executed. The difference with
@@ -215,8 +215,8 @@ def cpu_offload_with_hook(
 
     ```py
     hook_1 = cpu_offload_with_hook(model_1, cuda_device)
-    hook_2 = cpu_offload_with_hook(model_2, cuda_device, user_hook=hook_1)
-    hook_3 = cpu_offload_with_hook(model_3, cuda_device, user_hook=hook_2)
+    hook_2 = cpu_offload_with_hook(model_2, cuda_device, prev_module_hook=hook_1)
+    hook_3 = cpu_offload_with_hook(model_3, cuda_device, prev_module_hook=hook_2)
 
     hid_1 = model_1(input)
     for i in range(50):
@@ -229,7 +229,7 @@ def cpu_offload_with_hook(
     hook_3.offload()
     ```
     """
-    hook = CpuOffload(execution_device=execution_device, user_hook=user_hook)
+    hook = CpuOffload(execution_device=execution_device, prev_module_hook=prev_module_hook)
     add_hook_to_module(model, hook, append=True)
     user_hook = UserCpuOffloadHook(model, hook)
     return model, user_hook
