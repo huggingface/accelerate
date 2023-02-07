@@ -6,6 +6,7 @@ from .testing import (
     require_huggingface_suite,
     require_mps,
     require_multi_gpu,
+    require_safetensors,
     require_single_gpu,
     require_torch_min_version,
     require_tpu,
