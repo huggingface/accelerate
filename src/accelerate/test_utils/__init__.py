@@ -1,4 +1,3 @@
-from .scripts import test_script, test_sync
 from .testing import (
     are_the_same_tensors,
     execute_subprocess_async,
@@ -14,3 +13,6 @@ from .testing import (
     slow,
 )
 from .training import RegressionDataset, RegressionModel
+
+
+from .scripts import test_script, test_sync  # isort: skip
