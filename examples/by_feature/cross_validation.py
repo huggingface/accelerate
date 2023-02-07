@@ -15,19 +15,19 @@
 import argparse
 from typing import List
 
+import evaluate
 import numpy as np
 import torch
-from torch.optim import AdamW
-from torch.utils.data import DataLoader
-
-import evaluate
-from accelerate import Accelerator, DistributedType
 from datasets import DatasetDict, load_dataset
 
 # New Code #
 # We'll be using StratifiedKFold for this example
 from sklearn.model_selection import StratifiedKFold
+from torch.optim import AdamW
+from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
+
+from accelerate import Accelerator, DistributedType
 
 
 ########################################################################

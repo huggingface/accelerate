@@ -18,8 +18,9 @@ import argparse
 import os
 import subprocess
 
-from accelerate.commands.config.config_args import default_config_file, load_config_from_file
 from packaging.version import Version, parse
+
+from accelerate.commands.config.config_args import default_config_file, load_config_from_file
 
 
 _description = "Run commands across TPU VMs for initial setup before running `accelerate launch`."

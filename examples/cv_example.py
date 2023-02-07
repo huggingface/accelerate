@@ -17,14 +17,14 @@ import os
 import re
 
 import numpy as np
+import PIL
 import torch
+from timm import create_model
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader, Dataset
-
-import PIL
-from accelerate import Accelerator
-from timm import create_model
 from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
+
+from accelerate import Accelerator
 
 
 ########################################################################

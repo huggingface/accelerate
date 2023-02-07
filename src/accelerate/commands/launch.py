@@ -25,9 +25,9 @@ from ast import literal_eval
 from pathlib import Path
 from typing import Dict, List
 
+import psutil
 import torch
 
-import psutil
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.commands.config.config_utils import DYNAMO_BACKENDS
@@ -644,7 +644,7 @@ def multi_gpu_launcher(args):
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)
-        except:
+        except Exception:
             if is_rich_available() and debug:
                 console = get_console()
                 console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
@@ -770,7 +770,7 @@ def deepspeed_launcher(args):
         with patch_environment(**current_env):
             try:
                 distrib_run.run(args)
-            except:
+            except Exception:
                 if is_rich_available() and debug:
                     console = get_console()
                     console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")

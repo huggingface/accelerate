@@ -169,7 +169,7 @@ def load_accelerator_state(
         if is_tpu_available():
             xm.set_rng_state(states["xm_seed"])
         logger.info("All random states loaded successfully")
-    except:
+    except Exception:
         logger.info("Could not load random states")
 
 

@@ -77,7 +77,6 @@ def verify_dataloader_batch_sizes(
 
 
 def test_default_ensures_even_batch_sizes():
-
     accelerator = create_accelerator()
 
     # without padding, we would expect a different number of batches
@@ -144,7 +143,6 @@ def test_can_join_uneven_inputs():
 
 
 def test_join_raises_warning_for_non_ddp_distributed(accelerator):
-
     with warnings.catch_warnings(record=True) as w:
         with accelerator.join_uneven_inputs([Mock()]):
             pass
