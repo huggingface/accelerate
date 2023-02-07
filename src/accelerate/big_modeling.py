@@ -19,7 +19,14 @@ from typing import Dict, List, Optional, Union
 import torch
 import torch.nn as nn
 
-from .hooks import AlignDevicesHook, add_hook_to_module, attach_align_device_hook, attach_align_device_hook_on_blocks, CpuOffload, UserCpuOffloadHook
+from .hooks import (
+    AlignDevicesHook,
+    CpuOffload,
+    UserCpuOffloadHook,
+    add_hook_to_module,
+    attach_align_device_hook,
+    attach_align_device_hook_on_blocks,
+)
 from .utils import (
     OffloadedWeightsLoader,
     check_device_map,
