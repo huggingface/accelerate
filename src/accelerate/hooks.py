@@ -18,7 +18,7 @@ from typing import Dict, List, Mapping, Optional, Union
 import torch
 import torch.nn as nn
 
-from .utils import PrefixedDataset, find_device, named_module_tensors, send_to_device, set_module_tensor_to_device
+from .utils import PrefixedDataset, find_device, named_module_tensors, send_to_device, set_module_tensor_to_device, is_mps_available
 
 
 class ModelHook:
@@ -494,3 +494,34 @@ def attach_align_device_hook_on_blocks(
             module_name=child_name,
             preload_module_classes=preload_module_classes,
         )
+
+
+class CpuOffload(ModelHook):
+    def __init__(self, execution_device=None):
+        if execution_device is not None:
+            self.execution_device = execution_device
+        elif is_mps_available():
+            self.execution_device = torch.device("mps")
+        elif torch.cuda.is_available():
+            self.execution_device = torch.device(0)
+        else:
+            self.execution_device = torch.device("cpu")
+    
+    def init_hook(self, module):
+        return module.to("cpu")
+    
+    def pre_forward(self, module, *args, **kwargs):
+        module.to(self.execution_device)
+        return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
+
+
+class UserCpuOffloadHook:
+    def __init__(self, model, hook):
+        self.model = model
+        self.hook = hook
+    
+    def offload(self):
+        self.hook.init_hook(self.model)
+    
+    def remove(self):
+        remove_hook_from_module(self.model)

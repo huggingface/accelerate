@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 import torch
 import torch.nn as nn
 
-from .hooks import AlignDevicesHook, add_hook_to_module, attach_align_device_hook, attach_align_device_hook_on_blocks
+from .hooks import AlignDevicesHook, add_hook_to_module, attach_align_device_hook, attach_align_device_hook_on_blocks, CpuOffload, UserCpuOffloadHook
 from .utils import (
     OffloadedWeightsLoader,
     check_device_map,
@@ -182,6 +182,13 @@ def cpu_offload(
     )
 
     return model
+
+
+def cpu_offload_with_hook(model, execution_device=None):
+    hook = CpuOffload(execution_device=execution_device)
+    add_hook_to_module(model, hook, append=True)
+    user_hook = UserCpuOffloadHook(model, hook)
+    return model, user_hook
 
 
 def disk_offload(
