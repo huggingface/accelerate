@@ -431,6 +431,7 @@ def get_cluster_input():
     tpu_vm = None
     tpu_env = []
     use_cluster = False
+    tpu_use_sudo = False
 
     if distributed_type == DistributedType.TPU:
         if mixed_precision == "bf16":
