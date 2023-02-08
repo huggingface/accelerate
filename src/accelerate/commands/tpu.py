@@ -95,7 +95,7 @@ def tpu_command_launcher(args):
         defaults = load_config_from_file(args.config_file)
         if not args.command_file and defaults.command_file is not None and not args.command:
             args.command_file = defaults.command_file
-        if not args.commands and defaults.commands is not None:
+        if not args.command and defaults.commands is not None:
             args.command = defaults.commands
         if not args.tpu_name:
             args.tpu_name = defaults.tpu_name
