@@ -53,12 +53,17 @@ def tpu_command_parser(subparsers=None):
     )
     pod_args = parser.add_argument_group("TPU Arguments", "Arguments for options ran inside the TPU.")
     pod_args.add_argument(
-        "--command_file",
+        "--use_alpha",
+        default="store_true",
+        help="Whether to use `gcloud alpha` when running the TPU training script instead of `gcloud`.",
+    )
+    pod_args.add_argument(
+        "--tpu_command_file",
         default=None,
         help="The path to the file containing the commands to run on the pod on startup.",
     )
     pod_args.add_argument(
-        "--command",
+        "--tpu_command",
         action="append",
         nargs="+",
         help="A command to run on the pod. Can be passed multiple times.",
@@ -88,10 +93,10 @@ def tpu_command_launcher(args):
     # Get the default from the config file if it exists.
     if args.config_file is not None or os.path.isfile(default_config_file):
         defaults = load_config_from_file(args.config_file)
-        if not args.command_file and defaults.command_file is not None and not args.command:
-            args.command_file = defaults.command_file
-        if not args.command and defaults.commands is not None:
-            args.command = defaults.commands
+        if not args.tpu_command_file and defaults.tpu_command_file is not None and not args.command:
+            args.tpu_command_file = defaults.tpu_command_file
+        if not args.tpu_commands and defaults.tpu_commands is not None:
+            args.command = defaults.tpu_commands
         if not args.tpu_name:
             args.tpu_name = defaults.tpu_name
         if not args.tpu_zone:
@@ -122,8 +127,10 @@ def tpu_command_launcher(args):
 
     # Then send it to gcloud
     # Eventually try to use google-api-core to do this instead of subprocess
-    cmd = [
-        "gcloud",
+    cmd = ["gcloud"]
+    if args.alpha:
+        cmd += ["alpha"]
+    cmd += [
         "compute",
         "tpus",
         "tpu-vm",

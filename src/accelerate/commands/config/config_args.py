@@ -162,8 +162,12 @@ class ClusterConfig(BaseConfig):
     # args for TPU pods
     tpu_name: str = None
     tpu_zone: str = None
-    command_file: str = None
-    commands: List[str] = None
+    tpu_use_cluster: bool = False
+    tpu_use_sudo: bool = False
+    tpu_command_file: str = None
+    tpu_commands: List[str] = None
+    tpu_vm: List[str] = None
+    tpu_env: List[str] = None
 
     def __post_init__(self):
         if self.deepspeed_config is None:
