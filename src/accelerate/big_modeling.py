@@ -214,9 +214,9 @@ def cpu_offload_with_hook(
     Example:
 
     ```py
-    _, hook_1 = cpu_offload_with_hook(model_1, cuda_device)
-    _, hook_2 = cpu_offload_with_hook(model_2, cuda_device, prev_module_hook=hook_1)
-    _, hook_3 = cpu_offload_with_hook(model_3, cuda_device, prev_module_hook=hook_2)
+    model_1, hook_1 = cpu_offload_with_hook(model_1, cuda_device)
+    model_2, hook_2 = cpu_offload_with_hook(model_2, cuda_device, prev_module_hook=hook_1)
+    model_3, hook_3 = cpu_offload_with_hook(model_3, cuda_device, prev_module_hook=hook_2)
 
     hid_1 = model_1(input)
     for i in range(50):
