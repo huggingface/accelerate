@@ -58,12 +58,12 @@ def tpu_command_parser(subparsers=None):
         help="Whether to use `gcloud alpha` when running the TPU training script instead of `gcloud`.",
     )
     pod_args.add_argument(
-        "--tpu_command_file",
+        "--command_file",
         default=None,
         help="The path to the file containing the commands to run on the pod on startup.",
     )
     pod_args.add_argument(
-        "--tpu_command",
+        "--command",
         action="append",
         nargs="+",
         help="A command to run on the pod. Can be passed multiple times.",
