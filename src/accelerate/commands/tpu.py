@@ -128,7 +128,7 @@ def tpu_command_launcher(args):
     # Then send it to gcloud
     # Eventually try to use google-api-core to do this instead of subprocess
     cmd = ["gcloud"]
-    if args.alpha:
+    if args.use_alpha:
         cmd += ["alpha"]
     cmd += [
         "compute",
