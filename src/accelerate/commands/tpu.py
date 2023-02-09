@@ -54,7 +54,7 @@ def tpu_command_parser(subparsers=None):
     pod_args = parser.add_argument_group("TPU Arguments", "Arguments for options ran inside the TPU.")
     pod_args.add_argument(
         "--use_alpha",
-        default="store_true",
+        action="store_true",
         help="Whether to use `gcloud alpha` when running the TPU training script instead of `gcloud`.",
     )
     pod_args.add_argument(
