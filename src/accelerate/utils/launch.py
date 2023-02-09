@@ -40,7 +40,6 @@ def _filter_args(args, parser, default_args=[]):
     Filters out all `accelerate` specific args
     """
     new_args, _ = parser.parse_known_args(default_args)
-
     for key, value in vars(args).items():
         if key in vars(new_args).keys():
             setattr(new_args, key, value)

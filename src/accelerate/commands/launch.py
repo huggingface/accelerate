@@ -672,7 +672,11 @@ def multi_gpu_launcher(args):
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
     debug = getattr(args, "debug", False)
-    args = _filter_args(args, distrib_run.get_args_parser())
+    args = _filter_args(
+        args,
+        distrib_run.get_args_parser(),
+        ["--training_script", args.training_script, "--training_script_args", args.training_script_args],
+    )
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)
@@ -798,7 +802,11 @@ def deepspeed_launcher(args):
             raise NotImplementedError("Multi-node training requires pytorch>=1.9.1")
 
         debug = getattr(args, "debug", False)
-        args = _filter_args(args, distrib_run.get_args_parser())
+        args = _filter_args(
+            args,
+            distrib_run.get_args_parser(),
+            ["--training_script", args.training_script, "--training_script_args", args.training_script_args],
+        )
         with patch_environment(**current_env):
             try:
                 distrib_run.run(args)
