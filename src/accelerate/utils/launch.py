@@ -35,19 +35,34 @@ def get_launch_prefix():
     return cmd
 
 
-def _filter_args(args):
+def _filter_args(args, parser, default_args=[]):
     """
     Filters out all `accelerate` specific args
     """
-    if is_torch_version(">=", "1.9.1"):
-        import torch.distributed.run as distrib_run
-    distrib_args = distrib_run.get_args_parser()
-    new_args, _ = distrib_args.parse_known_args()
+    new_args, _ = parser.parse_known_args(default_args)
 
     for key, value in vars(args).items():
         if key in vars(new_args).keys():
             setattr(new_args, key, value)
     return new_args
+
+
+def prepare_tpu(args, current_env, pod=False):
+    """
+    Prepares and returns an environment with the correct TPU environment variables.
+    """
+    current_env["XLA_USE_BF16"] = "0"
+    current_env["XLA_DOWNCAST_BF16"] = "0"
+    if args.mixed_precision == "bf16":
+        if args.downcast_bf16:
+            current_env["XLA_DOWNCAST_BF16"] = "1"
+        else:
+            current_env["XLA_USE_BF16"] = "1"
+    if pod:
+        # Take explicit args and set them up for XLA
+        args.vm = args.tpu_vm
+        args.tpu = args.tpu_name
+    return args, current_env
 
 
 def env_var_path_add(env_var_name, path_to_add):

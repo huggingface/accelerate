@@ -44,6 +44,7 @@ from accelerate.utils import (
     is_sagemaker_available,
     is_torch_version,
     patch_environment,
+    prepare_tpu,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
@@ -277,8 +278,39 @@ def launch_command_parser(subparsers=None):
         help="Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.",
     )
 
-    # tpu arguments
+    # TPU arguments
     tpu_args = parser.add_argument_group("TPU", "Arguments related to TPU.")
+    tpu_args.add_argument(
+        "--tpu_cluster",
+        action="store_true",
+        help="Whether to use a GCP TPU pod for training.",
+    )
+    tpu_args.add_argument(
+        "--no_tpu_cluster",
+        action="store_false",
+        dest="tpu_cluster",
+        help="Should not be passed explicitly, this is for internal use only.",
+    )
+    tpu_args.add_argument(
+        "--tpu_use_sudo",
+        action="store_true",
+        help="Whether to use `sudo` when running the TPU training script in each pod.",
+    )
+    tpu_args.add_argument(
+        "--vm",
+        type=str,
+        action="append",
+        help=(
+            "List of single Compute VM instance names. "
+            "If not provided we assume usage of instance groups. For TPU pods."
+        ),
+    )
+    tpu_args.add_argument(
+        "--env",
+        type=str,
+        action="append",
+        help="List of environment variables to set on the Compute VM instances. For TPU pods.",
+    )
     tpu_args.add_argument(
         "--main_training_function",
         type=str,
@@ -640,7 +672,7 @@ def multi_gpu_launcher(args):
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
     debug = getattr(args, "debug", False)
-    args = _filter_args(args)
+    args = _filter_args(args, distrib_run.get_args_parser())
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)
@@ -766,7 +798,7 @@ def deepspeed_launcher(args):
             raise NotImplementedError("Multi-node training requires pytorch>=1.9.1")
 
         debug = getattr(args, "debug", False)
-        args = _filter_args(args)
+        args = _filter_args(args, distrib_run.get_args_parser())
         with patch_environment(**current_env):
             try:
                 distrib_run.run(args)
@@ -780,18 +812,10 @@ def deepspeed_launcher(args):
 def tpu_launcher(args):
     import torch_xla.distributed.xla_multiprocessing as xmp
 
-    current_env = {}
-
     if args.no_python:
         raise ValueError("--no_python cannot be used with TPU launcher")
 
-    if args.mixed_precision == "bf16":
-        if args.downcast_bf16:
-            current_env["XLA_USE_BF16"] = "0"
-            current_env["XLA_DOWNCAST_BF16"] = "1"
-        else:
-            current_env["XLA_USE_BF16"] = "1"
-            current_env["XLA_DOWNCAST_BF16"] = "0"
+    args, current_env = prepare_tpu(args, {})
 
     if args.module:
         mod_name = args.training_script
@@ -814,6 +838,65 @@ def tpu_launcher(args):
     main_function = getattr(mod, args.main_training_function)
     with patch_environment(**current_env):
         xmp.spawn(PrepareForLaunch(main_function), args=(), nprocs=args.num_processes)
+
+
+def tpu_pod_launcher(args):
+    from torch_xla.distributed import xla_dist
+
+    current_env = {}
+    args, current_env = prepare_tpu(args, current_env, True)
+    debug = getattr(args, "debug", False)
+
+    training_script = args.training_script
+    training_script_args = args.training_script_args
+    new_args = _filter_args(
+        args, xla_dist.get_args_parser(), ["--tpu", args.tpu_name, "--positional", "", "--restart-tpuvm-pod-server"]
+    )
+
+    if args.tpu_use_sudo:
+        new_cmd = ["sudo"]
+    else:
+        new_cmd = []
+
+    new_cmd += [
+        "accelerate-launch",
+        "--tpu",
+        "--no_tpu_cluster",
+        "--num_machines",
+        str(1),
+        "--mixed_precision",
+        "no",
+        "--dynmo_backend",
+        "no",
+        "--num_processes",
+        str(args.num_processes),
+        "--main_training_function",
+        str(args.main_training_function),
+        training_script,
+    ] + training_script_args
+
+    new_args.positional = new_cmd
+    bad_flags = ""
+    for arg in vars(new_args):
+        if arg.startswith("docker_"):
+            value = getattr(new_args, arg)
+            if value != "" and value is not None:
+                bad_flags += f'{arg}="{value}"\n'
+    if bad_flags != "":
+        raise ValueError(
+            f"Docker containers are not supported for TPU pod launcher currently, please remove the following flags:\n{bad_flags}"
+        )
+    new_args.env = [f"{k}={v}" for k, v in current_env.items()]
+    new_args.env.append("ACCELERATE_IN_TPU_POD=1")
+    try:
+        xla_dist.resolve_and_execute(new_args)
+    except Exception:
+        if is_rich_available() and debug:
+            console = get_console()
+            console.print("\n[bold red]Using --debug, `torch_xla.xla_dist` Stack Trace:[/bold red]")
+            console.print_exception(suppress=[__file__], show_locals=False)
+        else:
+            raise
 
 
 def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
@@ -992,6 +1075,7 @@ def launch_command(args):
         if (
             not args.multi_gpu
             and not args.tpu
+            and not args.tpu_cluster
             and not args.mps
             and not args.use_deepspeed
             and not args.use_fsdp
@@ -1000,6 +1084,7 @@ def launch_command(args):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
+            args.tpu_cluster = defaults.tpu_cluster and args.tpu
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.mps = defaults.distributed_type == DistributedType.MPS
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
@@ -1096,7 +1181,10 @@ def launch_command(args):
     elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
-        tpu_launcher(args)
+        if args.tpu_cluster:
+            tpu_pod_launcher(args)
+        else:
+            tpu_launcher(args)
     elif defaults is not None and defaults.compute_environment == ComputeEnvironment.AMAZON_SAGEMAKER:
         sagemaker_launcher(defaults, args)
     else:

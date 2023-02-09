@@ -99,7 +99,7 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
-from .launch import PrepareForLaunch, _filter_args, get_launch_prefix
+from .launch import PrepareForLaunch, _filter_args, get_launch_prefix, prepare_tpu
 from .megatron_lm import (
     AbstractTrainStep,
     BertTrainStep,

@@ -53,6 +53,11 @@ def tpu_command_parser(subparsers=None):
     )
     pod_args = parser.add_argument_group("TPU Arguments", "Arguments for options ran inside the TPU.")
     pod_args.add_argument(
+        "--use_alpha",
+        action="store_true",
+        help="Whether to use `gcloud alpha` when running the TPU training script instead of `gcloud`.",
+    )
+    pod_args.add_argument(
         "--command_file",
         default=None,
         help="The path to the file containing the commands to run on the pod on startup.",
@@ -122,8 +127,10 @@ def tpu_command_launcher(args):
 
     # Then send it to gcloud
     # Eventually try to use google-api-core to do this instead of subprocess
-    cmd = [
-        "gcloud",
+    cmd = ["gcloud"]
+    if args.use_alpha:
+        cmd += ["alpha"]
+    cmd += [
         "compute",
         "tpus",
         "tpu-vm",
