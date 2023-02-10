@@ -73,6 +73,7 @@ class PartialState:
         self.__dict__ = self._shared_state
         self._check_initialized(cpu)
         if not self.initialized:
+            self.backend = None
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.device = torch.device(env_device) if env_device is not None else None
             if (
