@@ -219,7 +219,7 @@ class PartialState:
     def _reset_state():
         "Resets `_shared_state`, is used internally and should not be called"
         PartialState._shared_state = {}
-    # This is a test commit
+
     @property
     def initialized(self) -> bool:
         "Returns whether the `PartialState` has been initialized"
