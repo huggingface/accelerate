@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
 from accelerate.data_loader import prepare_data_loader
-from accelerate.state import AcceleratorState
+from accelerate.state import AcceleratorState, PartialState
 from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
 from accelerate.utils import (
     DistributedType,
@@ -33,11 +33,20 @@ from accelerate.utils import (
 
 def process_execution_check():
     # Test that printing on a single process works
+    # First from the `PartialState`
+    partial_state = PartialState()
+    with partial_state.main_process_first():
+        idx = torch.tensor(partial_state.process_index).to(partial_state.device)
+    idxs = gather(idx)
+    assert idxs[0] == 0, "Main process was not first when using `PartialState`."
+    partial_state._reset_state()
+
+    # Then on the `AcceleratorState`
     accelerator = Accelerator()
     with accelerator.main_process_first():
         idx = torch.tensor(accelerator.process_index).to(accelerator.device)
     idxs = accelerator.gather(idx)
-    assert idxs[0] == 0, "Main process was not first."
+    assert idxs[0] == 0, "Main process was not first when using `AcceleratorState`."
 
 
 def init_state_check():

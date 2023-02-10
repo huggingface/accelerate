@@ -74,7 +74,7 @@ class PartialState:
         self._check_initialized(cpu)
         if not self.initialized:
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
-            self.deivce = torch.device(env_device) if env_device is not None else None
+            self.device = torch.device(env_device) if env_device is not None else None
             if (
                 os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
                 and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
@@ -296,7 +296,7 @@ class PartialState:
             print(*args, **kwargs)
 
 
-class AcceleratorState(PartialState):
+class AcceleratorState:
     """
     Singleton class that has information about the current training environment.
 
@@ -316,6 +316,8 @@ class AcceleratorState(PartialState):
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
     """
 
+    _shared_state = {}
+
     def __init__(
         self,
         mixed_precision: str = None,
@@ -327,8 +329,11 @@ class AcceleratorState(PartialState):
         _from_accelerator: bool = False,
         **kwargs,
     ):
-        super().__init__(cpu, **kwargs)
-        self._check_initialized(mixed_precision, cpu)
+        self.__dict__ = self._shared_state
+        if PartialState._shared_state == {}:
+            PartialState(cpu, **kwargs)
+        self.__dict__.update(PartialState._shared_state)
+        self._check_initialized(mixed_precision)
         if not self.initialized:
             self.backend = None
             self.deepspeed_plugin = None
@@ -379,15 +384,15 @@ class AcceleratorState(PartialState):
 
     @property
     def initialized(self) -> bool:
-        return super().initialized and getattr(self, "_mixed_precision", None) is not None
+        return PartialState._shared_state != {} and getattr(self, "_mixed_precision", None) is not None
 
     def __repr__(self):
-        repr = (super().__repr__(), f"Mixed precision type: {self.mixed_precision}\n")
+        repr = PartialState().__repr__() + f"\nMixed precision type: {self.mixed_precision}\n"
         if self.distributed_type == DistributedType.DEEPSPEED:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
         return repr
 
-    def _check_initialized(self, mixed_precision=None, cpu=None):
+    def _check_initialized(self, mixed_precision=None):
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
         if self.initialized:
             err = "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `Accelerator()`."
@@ -417,6 +422,46 @@ class AcceleratorState(PartialState):
     def _reset_state():
         "Resets `_shared_state`, is used internally and should not be called"
         AcceleratorState._shared_state = {}
+        PartialState._shared_state = {}
+
+    @property
+    def is_last_process(self) -> bool:
+        "Returns whether the current process is the last one"
+        return PartialState().is_last_process
+
+    @property
+    def is_main_process(self) -> bool:
+        "Returns whether the current process is the main process"
+        return PartialState().is_main_process
+
+    @property
+    def is_local_main_process(self) -> bool:
+        "Returns whether the current process is the main process on the local node"
+        return PartialState().is_local_main_process
+
+    def wait_for_everyone(self):
+        PartialState().wait_for_everyone()
+
+    @contextmanager
+    def main_process_first(self):
+        """
+        Lets the main process go first inside a with block.
+
+        The other processes will enter the with block after the main process exits.
+        """
+        yield PartialState().main_process_first()
+
+    @contextmanager
+    def local_main_process_first(self):
+        """
+        Lets the local main process go inside a with block.
+
+        The other processes will enter the with block after the main process exits.
+        """
+        yield PartialState().local_main_process_first()
+
+    def print(self, *args, **kwargs):
+        PartialState().print(*args, **kwargs)
 
 
 class GradientState:
