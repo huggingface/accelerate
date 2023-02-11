@@ -27,7 +27,7 @@ from unittest import mock
 
 import torch
 
-from ..state import AcceleratorState
+from ..state import AcceleratorState, PartialState
 from ..utils import (
     gather,
     is_comet_ml_available,
@@ -243,6 +243,7 @@ class AccelerateTestCase(unittest.TestCase):
         super().tearDown()
         # Reset the state of the AcceleratorState singleton.
         AcceleratorState._reset_state()
+        PartialState._reset_state()
 
 
 class MockingTestCase(unittest.TestCase):

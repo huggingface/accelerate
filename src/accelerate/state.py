@@ -420,10 +420,9 @@ class AcceleratorState:
         return mixed_precision
 
     @staticmethod
-    def _reset_state():
+    def _reset_state(with_partial=True):
         "Resets `_shared_state`, is used internally and should not be called"
         AcceleratorState._shared_state = {}
-        PartialState._shared_state = {}
 
     @property
     def is_last_process(self) -> bool:
