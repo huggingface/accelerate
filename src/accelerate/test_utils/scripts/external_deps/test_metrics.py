@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import os
 from copy import deepcopy
 
 import datasets
@@ -26,6 +27,9 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from accelerate import Accelerator
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import is_tpu_available, set_seed
+
+
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
 
 
 def get_basic_setup(accelerator, num_samples=82, batch_size=16):

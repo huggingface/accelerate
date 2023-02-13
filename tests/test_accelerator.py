@@ -7,7 +7,8 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate.accelerator import Accelerator
-from accelerate.test_utils.testing import AccelerateTestCase
+from accelerate.state import PartialState
+from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
 from accelerate.utils import patch_environment
 
 
@@ -31,6 +32,15 @@ def load_random_weights(model):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    @require_cuda
+    def test_accelerator_can_be_reinstantiated(self):
+        _ = Accelerator()
+        assert PartialState._shared_state["_cpu"] is False
+        assert PartialState._shared_state["device"].type == "cuda"
+        _ = Accelerator(cpu=True)
+        assert PartialState._shared_state["_cpu"] is True
+        assert PartialState._shared_state["device"].type == "cpu"
+
     def test_prepared_objects_are_referenced(self):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()

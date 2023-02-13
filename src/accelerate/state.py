@@ -71,8 +71,12 @@ class PartialState:
 
     def __init__(self, cpu: bool = False, **kwargs):
         self.__dict__ = self._shared_state
-        self._check_initialized(cpu)
+        # Override the existing intialization if the user chooses a different CPU setting.
+        if self.initialized and (self._cpu != cpu):
+            # Needs to happen in this object, can't be done via staticmethod
+            self._shared_state = {}
         if not self.initialized:
+            self._cpu = cpu
             self.backend = None
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.device = torch.device(env_device) if env_device is not None else None
@@ -226,13 +230,6 @@ class PartialState:
         "Returns whether the `PartialState` has been initialized"
         return self._shared_state != {}
 
-    def _check_initialized(self, cpu=None):
-        "Checks if a modification is trying to be made and the `PartialState` has already been initialized"
-        if self.initialized:
-            err = "PartialState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `PartialState()`."
-            if cpu and self.device.type != "cpu":
-                raise ValueError(err.format(flag="cpu=True"))
-
     @property
     def is_last_process(self) -> bool:
         "Returns whether the current process is the last one"
@@ -331,7 +328,7 @@ class AcceleratorState:
         **kwargs,
     ):
         self.__dict__ = self._shared_state
-        if PartialState._shared_state == {}:
+        if PartialState._shared_state == {} or (cpu != PartialState._shared_state.get("_cpu", False)):
             PartialState(cpu, **kwargs)
         self.__dict__.update(PartialState._shared_state)
         self._check_initialized(mixed_precision)
@@ -364,7 +361,7 @@ class AcceleratorState:
                         os.environ["XLA_USE_BF16"] = str(1)
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
-            elif self.distributed_type == DistributedType.DEEPSPEED:
+            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
                 self.deepspeed_plugin = deepspeed_plugin
             elif self.distributed_type == DistributedType.MULTI_GPU:
                 if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
@@ -385,7 +382,7 @@ class AcceleratorState:
 
     @property
     def initialized(self) -> bool:
-        return PartialState._shared_state != {} and getattr(self, "_mixed_precision", None) is not None
+        return self._shared_state != PartialState._shared_state
 
     def __repr__(self):
         repr = PartialState().__repr__() + f"\nMixed precision type: {self.mixed_precision}\n"
@@ -397,7 +394,11 @@ class AcceleratorState:
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
         if self.initialized:
             err = "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `Accelerator()`."
-            if mixed_precision is not None and mixed_precision != self._mixed_precision:
+            if (
+                mixed_precision is not None
+                and mixed_precision != self._mixed_precision
+                and self.distributed_type != DistributedType.DEEPSPEED
+            ):
                 raise ValueError(err.format(flag=f"mixed_precision='{mixed_precision}'"))
 
     # For backward compatibility
@@ -420,9 +421,11 @@ class AcceleratorState:
         return mixed_precision
 
     @staticmethod
-    def _reset_state(with_partial=True):
+    def _reset_state(reset_partial_state: bool = False):
         "Resets `_shared_state`, is used internally and should not be called"
         AcceleratorState._shared_state = {}
+        if reset_partial_state:
+            PartialState._reset_state()
 
     @property
     def is_last_process(self) -> bool:
