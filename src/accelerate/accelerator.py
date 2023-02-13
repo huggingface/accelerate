@@ -1108,15 +1108,20 @@ class Accelerator:
                 )
 
         if model is not None:
-            if hasattr(model, "config") and hasattr(model.config, "hidden_size"):
-                hidden_size = model.config.hidden_size
-                config_kwargs.update(
-                    {
-                        "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
-                        "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
-                        "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
-                    }
+            if hasattr(model, "config"):
+                hidden_size = (
+                    max(model.config.hidden_sizes)
+                    if getattr(model.config, "hidden_sizes", None)
+                    else getattr(model.config, "hidden_size", None)
                 )
+                if hidden_size is not None:
+                    config_kwargs.update(
+                        {
+                            "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
+                            "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
+                            "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
+                        }
+                    )
 
             if isinstance(optimizer, (DummyOptim)):
                 config_kwargs.update(
