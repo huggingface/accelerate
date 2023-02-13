@@ -18,6 +18,7 @@ from functools import partial
 import torch
 
 from accelerate import Accelerator, debug_launcher
+from accelerate.state import AcceleratorState
 from accelerate.test_utils import require_cpu
 
 
@@ -82,15 +83,19 @@ class SchedulerTester(unittest.TestCase):
         debug_launcher(partial(one_cycle_test, num_processes=1, step_scheduler_with_optimizer=False), num_processes=1)
 
     def test_lambda_scheduler_steps_with_optimizer_multiprocess(self):
+        AcceleratorState._reset_state(True)
         debug_launcher(lambda_test)
         debug_launcher(partial(lambda_test, num_processes=1, split_batches=True), num_processes=1)
 
     def test_one_cycle_scheduler_steps_with_optimizer_multiprocess(self):
+        AcceleratorState._reset_state(True)
         debug_launcher(one_cycle_test)
         debug_launcher(partial(one_cycle_test, num_processes=1, split_batches=True), num_processes=1)
 
     def test_lambda_scheduler_not_step_with_optimizer_multiprocess(self):
+        AcceleratorState._reset_state(True)
         debug_launcher(partial(lambda_test, step_scheduler_with_optimizer=False))
 
     def test_one_cycle_scheduler_not_step_with_optimizer_multiprocess(self):
+        AcceleratorState._reset_state(True)
         debug_launcher(partial(one_cycle_test, step_scheduler_with_optimizer=False))
