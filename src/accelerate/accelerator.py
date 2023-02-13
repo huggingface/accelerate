@@ -463,6 +463,11 @@ class Accelerator:
 
     @property
     def use_fp16(self):
+        warnings.warn(
+            "The `use_fp16` property is deprecated and will be removed in version 1.0 of Accelerate use "
+            "`Accelerator.mixed_precision == 'fp16'` instead.",
+            FutureWarning,
+        )
         return self.mixed_precision != "no"
 
     @property
@@ -1447,7 +1452,7 @@ class Accelerator:
         >>> accelerator.unscale_gradients(optimizer=optimizer)
         ```
         """
-        if self.use_fp16 and self.native_amp:
+        if self.native_amp and self.mixed_precision == "fp16":
             if optimizer is None:
                 # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
                 optimizer = self._optimizers
