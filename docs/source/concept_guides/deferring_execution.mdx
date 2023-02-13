@@ -16,12 +16,40 @@ When you run your usual script, instructions are executed in order. Using 🤗 A
 GPUs at the same time introduces a complication: while each process executes all instructions in order, some may be
 faster than others.
 
+For this tutorial we will be utilizing both the [`Accelerator`] object and the [`PartialState`] object. The former is
+is the high-level API that you will use most of the time when using this library, the latter is the low-level API that
+you can use to defer the execution of some instructions to specific processes directly.
+
+To import and instantiate either do:
+
+```py
+from accelerate import Accelerator
+from accelerate.state import PartialState
+
+accelerator = Accelerator()
+partial_state = PartialState()
+```
+
+These two objects will be referenced as such throughout the rest of this tutorial.
+
+<Tip>
+
+    Every function that is shown from the `Accelerator` object in this tutorial can be found in the `PartialState` object as well.
+    
+</Tip>
+
 You might need to wait for all processes to have reached a certain point before executing a given instruction. For
 instance, you shouldn't save a model before being sure every process is done with training, and you wouldn't want to 
 continue training before all the model weights have been loaded in. To do this, just write the following line in your code:
 
-```
+```py
 accelerator.wait_for_everyone()
+```
+
+Or:
+
+```py
+patial_state.wait_for_everyone()
 ```
 
 This instruction will block all the processes that arrive first until all the other processes have reached that
@@ -32,7 +60,7 @@ A few example cases for when to use this utility are listed below:
 <Tip>
 
     Some of these are utilized with the [`~Accelerator.main_process_first`] context manager, which utilizes [`~Accelerator.wait_for_everyone`] to 
-    run a particular set of code on the main process beforehand before triggering and launching the other processes
+    run a particular set of code on the main process beforehand before triggering and launching the other processes.
 
 </Tip>
 
