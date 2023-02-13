@@ -18,7 +18,8 @@ faster than others.
 
 For this tutorial we will be utilizing both the [`Accelerator`] object and the [`PartialState`] object. The former is
 is the high-level API that you will use most of the time when using this library, the latter is the low-level API that
-you can use to defer the execution of some instructions to specific processes directly.
+you can use to defer the execution of some instructions to specific processes directly *without* the need to create an 
+[`Accelerator`] object first.
 
 To import and instantiate either do:
 
@@ -35,7 +36,7 @@ These two objects will be referenced as such throughout the rest of this tutoria
 <Tip>
 
     Every function that is shown from the `Accelerator` object in this tutorial can be found in the `PartialState` object as well.
-    
+
 </Tip>
 
 You might need to wait for all processes to have reached a certain point before executing a given instruction. For
