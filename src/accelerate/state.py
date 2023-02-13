@@ -74,8 +74,9 @@ class PartialState:
         # Raise an error if the user tries to reinitialize on a different device setup in the same launch
         if self.initialized and (self._cpu != cpu):
             raise AssertionError(
-                "You cannot reinitialize the state with a different device setup in the same script,"
-                "please launch the script again using the desired device setup."
+                "The current device and desired device are not the same. If the `PartialState` was generated "
+                "before the `AcceleratorState` has been made, ensure the `cpu` flag is the same for both. In this case, "
+                f"the `PartialState` has {self._cpu} and the desired device is {cpu}. Please use `cpu={self._cpu}`."
             )
         if not self.initialized:
             self._cpu = cpu
