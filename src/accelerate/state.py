@@ -71,10 +71,12 @@ class PartialState:
 
     def __init__(self, cpu: bool = False, **kwargs):
         self.__dict__ = self._shared_state
-        # Override the existing intialization if the user chooses a different CPU setting.
+        # Raise an error if the user tries to reinitialize on a different device setup in the same launch
         if self.initialized and (self._cpu != cpu):
-            # Needs to happen in this object, can't be done via staticmethod
-            self._shared_state = {}
+            raise AssertionError(
+                "You cannot reinitialize the state with a different device setup in the same script,"
+                "please launch the script again using the desired device setup."
+            )
         if not self.initialized:
             self._cpu = cpu
             self.backend = None
