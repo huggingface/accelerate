@@ -75,7 +75,7 @@ class PartialState:
         if self.initialized and (self._cpu != cpu):
             raise AssertionError(
                 "The current device and desired device are not the same. If the `PartialState` was generated "
-                "before the `AcceleratorState` has been made, ensure the `cpu` flag is the same for both. In this case, "
+                "before the `Accelerator` has been instantiated, ensure the `cpu` flag is the same for both. In this case, "
                 f"the `PartialState` has {self._cpu} and the desired device is {cpu}. Please use `cpu={self._cpu}`."
             )
         if not self.initialized:
