@@ -238,7 +238,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
     def test_accelerate_state_deepspeed(self, dtype):
-        AcceleratorState._reset_state()
+        AcceleratorState._reset_state(True)
         deepspeed_plugin = DeepSpeedPlugin(
             gradient_accumulation_steps=1,
             gradient_clipping=1.0,
@@ -622,7 +622,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             )
             self.assertTrue(deepspeed_plugin.deepspeed_config[dtype]["enabled"])
 
-        AcceleratorState._reset_state()
+        AcceleratorState._reset_state(True)
         diff_dtype = "bf16" if dtype == "fp16" else "fp16"
         with mockenv_context(**self.dist_env):
             with self.assertRaises(ValueError) as cm:

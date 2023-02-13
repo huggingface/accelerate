@@ -156,7 +156,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                     self.assertTrue(isinstance(accelerator.scaler, ShardedGradScaler))
                 elif mp_dtype == BF16:
                     self.assertIsNone(accelerator.scaler)
-                AcceleratorState._reset_state()
+                AcceleratorState._reset_state(True)
 
     def test_cpu_offload(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
