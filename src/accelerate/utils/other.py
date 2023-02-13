@@ -18,7 +18,7 @@ from contextlib import contextmanager
 import torch
 
 from ..commands.config.default import write_basic_config  # noqa: F401
-from ..state import AcceleratorState
+from ..state import PartialState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
 
@@ -72,7 +72,7 @@ def wait_for_everyone():
 
     </Tip>
     """
-    AcceleratorState().wait_for_everyone()
+    PartialState().wait_for_everyone()
 
 
 def save(obj, f):
@@ -83,9 +83,9 @@ def save(obj, f):
         obj: The data to save
         f: The file (or file-like object) to use to save the data
     """
-    if AcceleratorState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
-    elif AcceleratorState().local_process_index == 0:
+    elif PartialState().local_process_index == 0:
         torch.save(obj, f)
 
 
