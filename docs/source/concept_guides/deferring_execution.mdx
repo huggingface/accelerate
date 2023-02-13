@@ -35,7 +35,7 @@ These two objects will be referenced as such throughout the rest of this tutoria
 
 <Tip>
 
-    Every function that is shown from the `Accelerator` object in this tutorial can be found in the `PartialState` object as well.
+    Every function that is shown from `PartialState` in this tutorial can be found in the `Accelerator` class as well.
 
 </Tip>
 
@@ -60,7 +60,7 @@ A few example cases for when to use this utility are listed below:
 
 <Tip>
 
-    Some of these are utilized with the [`~Accelerator.main_process_first`] context manager, which utilizes [`~Accelerator.wait_for_everyone`] to 
+    Some of these are utilized with the [`~PartialState.main_process_first`] context manager, which utilizes [`~PartialState.wait_for_everyone`] to 
     run a particular set of code on the main process beforehand before triggering and launching the other processes.
 
 </Tip>
@@ -77,7 +77,7 @@ When downloading a dataset, you should download it first on the main process and
 </Tip>
 
 ```python
-with accelerator.main_process_first():
+with partial_state.main_process_first():
     datasets = load_dataset("glue", "mrpc")
 ```
 
@@ -85,16 +85,16 @@ Under the hood this is the same as calling:
 
 ```python
 # First do something on the main process
-if accelerator.is_main_process:
+if partial_state.is_main_process:
     datasets = load_dataset("glue", "mrpc")
 else:
-    accelerator.wait_for_everyone()
+    partial_state.wait_for_everyone()
 
 # And then send it to the rest of them
-if not accelerator.is_main_process:
+if not partial_state.is_main_process:
     datasets = load_dataset("glue", "mrpc")
 else:
-    accelerator.wait_for_everyone()
+    partial_state.wait_for_everyone()
 ```
 
 ## Saving the `state_dict`
@@ -103,7 +103,7 @@ When saving the `state_dict` of the model, since you would normally save one fil
 you should specify that:
 
 ```python
-if accelerator.is_main_process:
+if partial_state.is_main_process:
     model = accelerator.unwrap_model(model)
     torch.save(model.state_dict(), "weights.pth")
 ```
@@ -127,7 +127,7 @@ main process first, and then propagated to each one.
 ```python
 datasets = load_dataset("glue", "mrpc")
 
-with accelerator.main_process_first():
+with partial_state.main_process_first():
     tokenized_datasets = datasets.map(
         tokenize_function,
         batched=True,
