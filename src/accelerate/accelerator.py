@@ -20,8 +20,8 @@ import sys
 import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
-from functools import wraps
-from typing import Callable, List, Optional, Union
+from functools import partial
+from typing import Any, Callable, List, Optional, Union
 
 import torch
 import torch.utils.hooks as hooks
@@ -31,7 +31,7 @@ from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_b
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, GradientState, parse_flag_from_env
+from .state import AcceleratorState, GradientState, PartialState, parse_flag_from_env
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
@@ -107,6 +107,10 @@ except ImportError:
     from torch.optim.lr_scheduler import LRScheduler as LRScheduler
 
 logger = get_logger(__name__)
+
+
+def do_nothing(*args, **kwargs):
+    return None
 
 
 class Accelerator:
@@ -417,7 +421,7 @@ class Accelerator:
         """
         Whether the Accelerator is configured for distributed training
         """
-        return self.distributed_type != DistributedType.NO and self.num_processes > 1
+        return self.state.use_distributed
 
     @property
     def distributed_type(self):
@@ -478,71 +482,216 @@ class Accelerator:
     def mixed_precision(self):
         return self.state.mixed_precision
 
-    def on_main_process(func):
+    def on_main_process(self, function: Callable[..., Any] = None):
         """
-        A decorator that will run the decorated function on the main process only.
+        A decorator that will run the decorated function on the main process only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+
+
+        >>> @accelerator.on_main_process
+        ... def print_something():
+        ...     print("This will be printed by process 0 only.")
+
+
+        >>> print_something()
+        "This will be printed by process 0 only"
+        ```
         """
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
+        if PartialState().process_index == 0 or not (
+            PartialState().distributed_type != DistributedType.NO and PartialState().num_processes > 1
+        ):
+            return function
+        else:
+            return do_nothing
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if self.is_main_process or not self.use_distributed:
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    def on_local_main_process(func):
+    def on_local_main_process(self, function: Callable[..., Any] = None):
         """
-        A decorator that will run the decorated function on the local main process only.
+        A decorator that will run the decorated function on the local main process only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+        ```python
+        # Assume we have 2 servers with 4 processes each.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_local_main_process
+        def print_something():
+            print("This will be printed by process 0 only on each server.")
+
+
+        print_something()
+        # On server 1:
+        "This will be printed by process 0 only"
+        # On server 2:
+        "This will be printed by process 0 only"
+        ```
         """
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
+        if PartialState().is_local_main_process or not PartialState().use_distributed:
+            return function
+        else:
+            return do_nothing
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if self.is_local_main_process or not self.use_distributed:
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    def on_last_process(func):
+    def on_last_process(self, function: Callable[..., Any]):
         """
-        A decorator that will run the decorated function on the last process only.
+        A decorator that will run the decorated function on the last process only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+        ```python
+        # Assume we have 4 processes.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_last_process
+        def print_something():
+            print(f"Printed on process {accelerator.process_index}")
+
+
+        print_something()
+        "Printed on process 3"
+        ```
         """
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
+        if PartialState().is_last_process or not PartialState().use_distributed:
+            return function
+        else:
+            return do_nothing
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if self.is_last_process or not self.use_distributed:
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    def on_process(process_idx):
+    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
         """
-        A decorator that will run the decorated function on a given process index only.
+        A decorator that will run the decorated function on a given process index only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`, `optional`):
+                The function to decorate.
+            process_index (`int`, `optional`):
+                The index of the process on which to run the function.
+
+        Example:
+        ```python
+        # Assume we have 4 processes.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_process(process_index=2)
+        def print_something():
+            print(f"Printed on process {accelerator.process_index}")
+
+
+        print_something()
+        "Printed on process 2"
+        ```
         """
+        # Initial construction of the decorator.
+        if (self is not None) and (process_index is not None) and (function is None):
+            return partial(self.on_process, process_index=process_index)
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
+        if PartialState().process_index == process_index or not PartialState().use_distributed:
+            return function
+        else:
+            return do_nothing
 
-        def decorator(func):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                if self.process_idx == process_idx or not self.use_distributed:
-                    return func(self, *args, **kwargs)
-
-            return wrapper
-
-        return decorator
-
-    def on_local_process(local_process_idx):
+    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
         """
-        A decorator that will run the decorated function on a given local process index only.
+        A decorator that will run the decorated function on a given local process index only. Can also be called using
+        the `PartialState` class.
+
+        Args:
+            function (`Callable`, *optional*):
+                The function to decorate.
+            local_process_index (`int`, *optional*):
+                The index of the local process on which to run the function.
+
+        Example:
+        ```python
+        # Assume we have 2 servers with 4 processes each.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_local_process(local_process_index=2)
+        def print_something():
+            print(f"Printed on process {accelerator.local_process_index}")
+
+
+        print_something()
+        # On server 1:
+        "Printed on process 2"
+        # On server 2:
+        "Printed on process 2"
+        ```
         """
+        # Initial construction of the decorator.
+        if (self is not None) and (local_process_index is not None) and (function is None):
+            return partial(self.on_local_process, local_process_index=local_process_index)
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
 
-        def decorator(func):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                if self.local_process_idx == local_process_idx or not self.use_distributed:
-                    return func(self, *args, **kwargs)
-
-            return wrapper
-
-        return decorator
+        if PartialState().local_process_index == local_process_index or not PartialState().use_distributed:
+            return function
+        else:
+            return do_nothing
 
     @contextmanager
     def main_process_first(self):
