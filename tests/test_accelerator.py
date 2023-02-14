@@ -12,22 +12,6 @@ from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
 from accelerate.utils import patch_environment
 
 
-def print_main(state):
-    print(f"Printing from the main process {state.process_index}")
-
-
-def print_local_main(state):
-    print(f"Printing from the local main process {state.local_process_index}")
-
-
-def print_last(state):
-    print(f"Printing from the last process {state.process_index}")
-
-
-def print_on(state, process_idx):
-    print(f"Printing from process {process_idx}: {state.process_index}")
-
-
 def create_components():
     model = torch.nn.Linear(2, 4)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1.0)

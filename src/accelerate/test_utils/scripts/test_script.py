@@ -371,9 +371,9 @@ def training_check():
 def main():
     accelerator = Accelerator()
     state = accelerator.state
-    # if state.local_process_index == 0:
-    #     print("**Initialization**")
-    # init_state_check()
+    if state.local_process_index == 0:
+        print("**Initialization**")
+    init_state_check()
     if state.local_process_index == 0:
         print("\n**Test process execution**")
     process_execution_check()
