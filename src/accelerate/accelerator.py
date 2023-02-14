@@ -30,7 +30,7 @@ from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_b
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, GradientState, parse_flag_from_env
+from .state import AcceleratorState, GradientState, PartialState, parse_flag_from_env
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
@@ -478,7 +478,7 @@ class Accelerator:
     def mixed_precision(self):
         return self.state.mixed_precision
 
-    def on_main_process(self, function: Callable[..., Any]):
+    def on_main_process(self, function: Callable[..., Any]=None):
         """
         A decorator that will run the decorated function on the main process only. Can also be called using the
         `PartialState` class.
@@ -503,13 +503,15 @@ class Accelerator:
         "This will be printed by process 0 only"
         ```
         """
-        if not state.is_initialized():
-            raise ValueError(
-                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
-            )
-        return self.on_main_process(function)
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
+        return PartialState().on_main_process(function)
 
-    def on_local_main_process(self, function: Callable[..., Any]):
+    def on_local_main_process(self, function: Callable[..., Any]=None):
         """
         A decorator that will run the decorated function on the local main process only. Can also be called using the
         `PartialState` class.
@@ -537,11 +539,13 @@ class Accelerator:
         "This will be printed by process 0 only"
         ```
         """
-        if not state.is_initialized():
-            raise ValueError(
-                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
-            )
-        return self.state.on_local_main_process(function)
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
+        return PartialState().on_local_main_process(function)
 
     def on_last_process(self, function: Callable[..., Any]):
         """
@@ -568,11 +572,14 @@ class Accelerator:
         "Printed on process 3"
         ```
         """
-        if not state.is_initialized():
-            raise ValueError(
-                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
-            )
-        return self.state.on_last_process(function)
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
+        
+        return PartialState().on_last_process(function)
 
     def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
         """
@@ -602,11 +609,13 @@ class Accelerator:
         "Printed on process 2"
         ```
         """
-        if not state.is_initialized():
-            raise ValueError(
-                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
-            )
-        return self.state.on_process(function, process_index)
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
+        return PartialState().on_process(function, process_index)
 
     def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
         """
@@ -639,11 +648,13 @@ class Accelerator:
         "Printed on process 2"
         ```
         """
-        if not state.is_initialized():
-            raise ValueError(
-                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
-            )
-        return self.state.on_local_process(function, local_process_index)
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
+        return PartialState().on_local_process(function, local_process_index)
 
     @contextmanager
     def main_process_first(self):
@@ -875,6 +886,7 @@ class Accelerator:
             with contextlib.nullcontext(joinables):
                 yield
 
+    @on_local_main_process
     def print(self, *args, **kwargs):
         """
         Drop in replacement of `print()` to only print once per server. Can also be called using the `PartialState`
@@ -889,7 +901,7 @@ class Accelerator:
         >>> accelerator.print("Hello world!")
         ```
         """
-        self.state.print(*args, **kwargs)
+        print(*args, **kwargs)
 
     def _prepare_one(self, obj, first_pass=False, device_placement=None):
         # First pass of preparation: DataLoader, model, optimizer

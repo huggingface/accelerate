@@ -376,6 +376,8 @@ class PartialState:
         "This will be printed by process 0 only"
         ```
         """
+        if not self.initialized:
+            raise ValueError("The `PartialState` or `Accelerator` must be initialized before calling this function.")
         if self.is_main_process or not self.use_distributed:
             return function
         return do_nothing
@@ -729,8 +731,8 @@ class AcceleratorState:
         Decorator that only runs the decorated function on the specified process.
 
         Args:
-            process_id (:obj:`int`): The id of the process on which to run the function.
-            function (:obj:`Callable`): The function to decorate.
+            process_id (`int`): The id of the process on which to run the function.
+            function (`Callable`): The function to decorate.
         """
         return PartialState().on_process(process_index, function)
 
