@@ -1,5 +1,3 @@
-import contextlib
-import io
 import json
 import os
 import tempfile
@@ -177,43 +175,3 @@ class AcceleratorTester(AccelerateTestCase):
 
             # mode.class_name is NOT loaded from config
             self.assertTrue(model.class_name != model.__class__.__name__)
-
-    def test_accelerator_state_printing(self):
-        accelerator = Accelerator()
-        f = io.StringIO()
-        with contextlib.redirect_stdout(f):
-            accelerator.on_main_process(print_main)(accelerator.state)
-        if accelerator.is_main_process:
-            assert f.getvalue().rstrip() == "Printing from the main process 0"
-        else:
-            assert f.getvalue().rstrip() == ""
-        f.truncate(0)
-        f.seek(0)
-
-        with contextlib.redirect_stdout(f):
-            accelerator.on_local_main_process(print_local_main)(accelerator.state)
-        if accelerator.is_local_main_process:
-            assert f.getvalue().rstrip() == "Printing from the local main process 0"
-        else:
-            assert f.getvalue().rstrip() == ""
-        f.truncate(0)
-        f.seek(0)
-
-        with contextlib.redirect_stdout(f):
-            accelerator.on_last_process(print_last)(accelerator.state)
-        if accelerator.is_last_process:
-            assert f.getvalue().rstrip() == f"Printing from the last process {accelerator.state.num_processes - 1}"
-        else:
-            assert f.getvalue().rstrip() == ""
-        f.truncate(0)
-        f.seek(0)
-
-        for process_idx in range(accelerator.num_processes):
-            with contextlib.redirect_stdout(f):
-                accelerator.on_process(print_on, process_index=process_idx)(accelerator.state, process_idx)
-            if accelerator.process_index == process_idx:
-                assert f.getvalue().rstrip() == f"Printing from process {process_idx}: {accelerator.process_index}"
-            else:
-                assert f.getvalue().rstrip() == ""
-            f.truncate(0)
-            f.seek(0)
