@@ -344,7 +344,7 @@ class PartialState:
         """
         yield from self._goes_first(self.is_local_main_process)
 
-    def on_main_process(self, function: Callable[..., Any]):
+    def on_main_process(self, function: Callable[..., Any]=None):
         """
         Decorator that only runs the decorated function on the main process.
 
@@ -372,7 +372,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_local_main_process(self, function: Callable[..., Any]):
+    def on_local_main_process(self, function: Callable[..., Any]=None):
         """
         Decorator that only runs the decorated function on the local main process.
 
