@@ -26,7 +26,6 @@ from typing import Any, Callable, List, Optional, Union
 import torch
 import torch.utils.hooks as hooks
 
-from . import state
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -67,7 +66,6 @@ from .utils import (
     save,
     wait_for_everyone,
 )
-
 
 if is_deepspeed_available():
     import deepspeed
@@ -696,7 +694,7 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.process_index}")
         ```
         """
-        if not state.is_initialized():
+        if not (PartialState._shared_state != {}):
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
@@ -723,7 +721,7 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.local_process_index}")
         ```
         """
-        if not state.is_initialized():
+        if not (PartialState._shared_state != {}):
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
