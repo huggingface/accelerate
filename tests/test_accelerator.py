@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -10,6 +12,22 @@ from accelerate.accelerator import Accelerator
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
 from accelerate.utils import patch_environment
+
+
+def print_main(state):
+    print(f"Printing from the main process {state.process_index}")
+
+
+def print_local_main(state):
+    print(f"Printing from the local main process {state.local_process_index}")
+
+
+def print_last(state):
+    print(f"Printing from the last process {state.process_index}")
+
+
+def print_on(state, process_idx):
+    print(f"Printing from process {process_idx}: {state.process_index}")
 
 
 def create_components():
@@ -159,3 +177,43 @@ class AcceleratorTester(AccelerateTestCase):
 
             # mode.class_name is NOT loaded from config
             self.assertTrue(model.class_name != model.__class__.__name__)
+
+    def test_accelerator_state_printing(self):
+        accelerator = Accelerator()
+        f = io.StringIO()
+        with contextlib.redirect_stdout(f):
+            accelerator.on_main_process(print_main)(accelerator.state)
+        if accelerator.is_main_process:
+            assert f.getvalue().rstrip() == "Printing from the main process 0"
+        else:
+            assert f.getvalue().rstrip() == ""
+        f.truncate(0)
+        f.seek(0)
+
+        with contextlib.redirect_stdout(f):
+            accelerator.on_local_main_process(print_local_main)(accelerator.state)
+        if accelerator.is_local_main_process:
+            assert f.getvalue().rstrip() == "Printing from the local main process 0"
+        else:
+            assert f.getvalue().rstrip() == ""
+        f.truncate(0)
+        f.seek(0)
+
+        with contextlib.redirect_stdout(f):
+            accelerator.on_last_process(print_last)(accelerator.state)
+        if accelerator.is_last_process:
+            assert f.getvalue().rstrip() == f"Printing from the last process {accelerator.state.num_processes - 1}"
+        else:
+            assert f.getvalue().rstrip() == ""
+        f.truncate(0)
+        f.seek(0)
+
+        for process_idx in range(accelerator.num_processes):
+            with contextlib.redirect_stdout(f):
+                accelerator.on_process(print_on, process_index=process_idx)(accelerator.state, process_idx)
+            if accelerator.process_index == process_idx:
+                assert f.getvalue().rstrip() == f"Printing from process {process_idx}: {accelerator.process_index}"
+            else:
+                assert f.getvalue().rstrip() == ""
+            f.truncate(0)
+            f.seek(0)

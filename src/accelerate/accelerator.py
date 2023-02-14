@@ -31,7 +31,7 @@ from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_b
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, GradientState, PartialState, parse_flag_from_env
+from .state import AcceleratorState, GradientState, PartialState, is_initialized, parse_flag_from_env
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
@@ -66,6 +66,7 @@ from .utils import (
     save,
     wait_for_everyone,
 )
+
 
 if is_deepspeed_available():
     import deepspeed
@@ -694,7 +695,8 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.process_index}")
         ```
         """
-        if not (PartialState._shared_state != {}):
+        # Check that the state is initialized.
+        if not is_initialized():
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
@@ -721,7 +723,8 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.local_process_index}")
         ```
         """
-        if not (PartialState._shared_state != {}):
+        # Check that the state is initialized.
+        if not is_initialized():
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
