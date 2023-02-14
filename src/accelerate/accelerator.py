@@ -478,8 +478,8 @@ class Accelerator:
     def mixed_precision(self):
         return self.state.mixed_precision
 
-    @staticmethod
-    def on_main_process(function: Callable[..., Any]):
+    @classmethod
+    def on_main_process(cls, function: Callable[..., Any]):
         """
         A decorator that will run the decorated function on the main process only. Can also be called using the
         `PartialState` class.
