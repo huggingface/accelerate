@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import contextlib
+from functools import partial
 import math
 import os
 import shutil
@@ -615,6 +616,10 @@ class Accelerator:
                 function = self
             else:
                 raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
+        
+        if (function is None) and (process_index is not None):
+            return partial(self.on_process, function=function)
+        
         return PartialState().on_process(function, process_index)
 
     def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
@@ -654,6 +659,10 @@ class Accelerator:
                 function = self
             else:
                 raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
+        
+        if (function is None) and (local_process_index is not None):
+            return partial(self.on_process, function=function)
+        
         return PartialState().on_local_process(function, local_process_index)
 
     @contextmanager
