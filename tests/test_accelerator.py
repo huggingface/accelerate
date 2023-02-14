@@ -71,6 +71,7 @@ class AcceleratorTester(AccelerateTestCase):
 
     def test_env_var_device(self):
         """Tests that setting the torch device with ACCELERATE_TORCH_DEVICE overrides default device."""
+        PartialState._reset_state()
 
         # Mock torch.cuda.set_device to avoid an exception as the device doesn't exist
         def noop(*args, **kwargs):

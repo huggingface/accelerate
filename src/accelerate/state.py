@@ -234,6 +234,13 @@ class PartialState:
         return self._shared_state != {}
 
     @property
+    def use_distributed(self):
+        """
+        Whether the Accelerator is configured for distributed training
+        """
+        return self.distributed_type != DistributedType.NO and self.num_processes > 1
+
+    @property
     def is_last_process(self) -> bool:
         "Returns whether the current process is the last one"
         return self.process_index == self.num_processes - 1
@@ -434,6 +441,13 @@ class AcceleratorState:
         AcceleratorState._shared_state = {}
         if reset_partial_state:
             PartialState._reset_state()
+
+    @property
+    def use_distributed(self):
+        """
+        Whether the Accelerator is configured for distributed training
+        """
+        return PartialState().use_distributed
 
     @property
     def is_last_process(self) -> bool:
