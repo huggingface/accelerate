@@ -725,16 +725,26 @@ class AcceleratorState:
             function (:obj:`Callable`): The function to decorate.
         """
         return PartialState().on_process(process_index, function)
+        
 
     def on_local_process(self, function=None, process_index: int = None):
         """
         Decorator that only runs the decorated function on the specified local process.
 
         Args:
-            process_id (:obj:`int`): The id of the process on which to run the function.
-            function (:obj:`Callable`): The function to decorate.
+            process_id (`int`): The id of the process on which to run the function.
+            function (`Callable`): The function to decorate.
         """
         return PartialState().on_local_process(process_index, function)
+
+    def on_last_process(self, function):
+        """
+        Decorator that only runs the decorated function on the last process.
+
+        Args:
+            function (`Callable`): The function to decorate.
+        """
+        return PartialState().on_last_process(function)
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
