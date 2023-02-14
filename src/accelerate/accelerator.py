@@ -109,10 +109,6 @@ except ImportError:
 logger = get_logger(__name__)
 
 
-def do_nothing(*args, **kwargs):
-    return None
-
-
 class Accelerator:
     """
     Creates an instance of an accelerator for distributed training (on multi-GPU, TPU) or mixed precision training.
@@ -515,12 +511,7 @@ class Accelerator:
                 raise ValueError(
                     "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-        if PartialState().process_index == 0 or not (
-            PartialState().distributed_type != DistributedType.NO and PartialState().num_processes > 1
-        ):
-            return function
-        else:
-            return do_nothing
+        return PartialState().on_main_process(function)
 
     def on_local_main_process(self, function: Callable[..., Any] = None):
         """
@@ -556,12 +547,9 @@ class Accelerator:
                 function = self
             else:
                 raise ValueError(
-                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                    "The `on_local_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-        if PartialState().is_local_main_process or not PartialState().use_distributed:
-            return function
-        else:
-            return do_nothing
+        return PartialState().on_local_main_process(function)
 
     def on_last_process(self, function: Callable[..., Any]):
         """
@@ -594,12 +582,9 @@ class Accelerator:
                 function = self
             else:
                 raise ValueError(
-                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                    "The `on_last_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-        if PartialState().is_last_process or not PartialState().use_distributed:
-            return function
-        else:
-            return do_nothing
+        return PartialState().on_last_process(function)
 
     def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
         """
@@ -640,10 +625,7 @@ class Accelerator:
                 raise ValueError(
                     "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-        if PartialState().process_index == process_index or not PartialState().use_distributed:
-            return function
-        else:
-            return do_nothing
+        return PartialState().on_process(function, process_index)
 
     def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
         """
@@ -687,11 +669,7 @@ class Accelerator:
                 raise ValueError(
                     "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-
-        if PartialState().local_process_index == local_process_index or not PartialState().use_distributed:
-            return function
-        else:
-            return do_nothing
+        return PartialState().on_local_process(function, local_process_index)
 
     @contextmanager
     def main_process_first(self):
