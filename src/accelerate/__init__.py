@@ -12,6 +12,7 @@ from .big_modeling import (
 )
 from .data_loader import skip_first_batches
 from .launchers import debug_launcher, notebook_launcher
+from .state import PartialState
 from .utils import (
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
