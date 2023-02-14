@@ -15,7 +15,7 @@
 import logging
 import os
 
-from .state import PartialState
+# from .state import PartialState
 
 
 class MultiProcessAdapter(logging.LoggerAdapter):

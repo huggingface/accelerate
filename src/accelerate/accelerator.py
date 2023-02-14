@@ -31,7 +31,7 @@ from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_b
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, GradientState, parse_flag_from_env
+from .state import AcceleratorState, GradientState, PartialState, parse_flag_from_env
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
@@ -508,7 +508,7 @@ class Accelerator:
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
-        return state.PartialState().on_main_process(function)
+        return PartialState().on_main_process(function)
 
     @staticmethod
     def on_local_main_process(function: Callable[..., Any]):
@@ -543,7 +543,7 @@ class Accelerator:
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
-        return state.PartialState().on_local_main_process(function)
+        return PartialState().on_local_main_process(function)
 
     @staticmethod
     def on_last_process(function: Callable[..., Any]):
@@ -575,7 +575,7 @@ class Accelerator:
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
-        return state.PartialState().on_last_process(function)
+        return PartialState().on_last_process(function)
 
     @staticmethod
     def on_process(function: Callable[..., Any] = None, process_index: int = None):
@@ -610,7 +610,7 @@ class Accelerator:
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
-        return state.PartialState().on_process(function, process_index)
+        return PartialState().on_process(function, process_index)
 
     @staticmethod
     def on_local_process(function: Callable[..., Any] = None, local_process_index: int = None):
@@ -648,7 +648,7 @@ class Accelerator:
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
-        return state.PartialState().on_local_process(function, local_process_index)
+        return PartialState().on_local_process(function, local_process_index)
 
     @staticmethod
     @contextmanager
@@ -676,7 +676,7 @@ class Accelerator:
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
-        yield state.PartialState().main_process_first()
+        yield PartialState().main_process_first()
 
     @staticmethod
     @contextmanager
@@ -704,7 +704,7 @@ class Accelerator:
             raise ValueError(
                 "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
             )
-        yield state.PartialState().local_main_process_first()
+        yield PartialState().local_main_process_first()
 
     @contextmanager
     def no_sync(self, model):
