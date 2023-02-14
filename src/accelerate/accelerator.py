@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import contextlib
-from functools import partial
 import math
 import os
 import shutil
@@ -21,11 +20,13 @@ import sys
 import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
+from functools import partial
 from typing import Any, Callable, List, Optional, Union
 
 import torch
 import torch.utils.hooks as hooks
 
+from . import state
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -67,7 +68,6 @@ from .utils import (
     wait_for_everyone,
 )
 
-from . import state
 
 if is_deepspeed_available():
     import deepspeed
@@ -479,7 +479,7 @@ class Accelerator:
     def mixed_precision(self):
         return self.state.mixed_precision
 
-    def on_main_process(self, function: Callable[..., Any]=None):
+    def on_main_process(self, function: Callable[..., Any] = None):
         """
         A decorator that will run the decorated function on the main process only. Can also be called using the
         `PartialState` class.
@@ -509,10 +509,12 @@ class Accelerator:
             if "Accelerator." in self.__qualname__:
                 function = self
             else:
-                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
         return PartialState().on_main_process(function)
 
-    def on_local_main_process(self, function: Callable[..., Any]=None):
+    def on_local_main_process(self, function: Callable[..., Any] = None):
         """
         A decorator that will run the decorated function on the local main process only. Can also be called using the
         `PartialState` class.
@@ -545,7 +547,9 @@ class Accelerator:
             if "Accelerator." in self.__qualname__:
                 function = self
             else:
-                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
         return PartialState().on_local_main_process(function)
 
     def on_last_process(self, function: Callable[..., Any]):
@@ -578,8 +582,10 @@ class Accelerator:
             if "Accelerator." in self.__qualname__:
                 function = self
             else:
-                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
-        
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
+
         return PartialState().on_last_process(function)
 
     def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
@@ -610,16 +616,18 @@ class Accelerator:
         "Printed on process 2"
         ```
         """
+        # Initial construction of the decorator.
+        if (self is not None) and (process_index is not None) and (function is None):
+            return partial(self.on_process, process_index=process_index)
         # For times when the `Accelerator` object itself utilizes this decorator.
         if function is None:
             if "Accelerator." in self.__qualname__:
                 function = self
             else:
-                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
-        
-        if (function is None) and (process_index is not None):
-            return partial(self.on_process, function=function)
-        
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
+
         return PartialState().on_process(function, process_index)
 
     def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
@@ -653,16 +661,18 @@ class Accelerator:
         "Printed on process 2"
         ```
         """
+        # Initial construction of the decorator.
+        if (self is not None) and (local_process_index is not None) and (function is None):
+            return partial(self.on_local_process, local_process_index=local_process_index)
         # For times when the `Accelerator` object itself utilizes this decorator.
         if function is None:
             if "Accelerator." in self.__qualname__:
                 function = self
             else:
-                raise ValueError("The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object.")
-        
-        if (function is None) and (local_process_index is not None):
-            return partial(self.on_process, function=function)
-        
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
+
         return PartialState().on_local_process(function, local_process_index)
 
     @contextmanager
