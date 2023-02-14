@@ -39,12 +39,20 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
-def is_initialized() -> bool:
+def is_initialized(accelerator_state=True) -> bool:
     """
-    Checks if the `AcceleratorState` has been initialized from `Accelerator`. Same as `AcceleratorState.initialized`,
+    Checks if the `AcceleratorState` or `PartialState` has been initialized. Same as `AcceleratorState.initialized`,
     but works as a module method.
+
+    Args:
+        accelerator_state (`bool`, `optional`):
+            Whether or not to check if the `AcceleratorState` has been initialized. If `False`, will check if the
+            `PartialState` has been initialized instead.
     """
-    return AcceleratorState._shared_state != {}
+    if accelerator_state:
+        return AcceleratorState._shared_state != {}
+    else:
+        return PartialState._shared_state != {}
 
 
 # Lambda function that does nothing
@@ -344,7 +352,7 @@ class PartialState:
         """
         yield from self._goes_first(self.is_local_main_process)
 
-    def on_main_process(self, function: Callable[..., Any]=None):
+    def on_main_process(self, function: Callable[..., Any] = None):
         """
         Decorator that only runs the decorated function on the main process.
 
@@ -372,7 +380,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_local_main_process(self, function: Callable[..., Any]=None):
+    def on_local_main_process(self, function: Callable[..., Any] = None):
         """
         Decorator that only runs the decorated function on the local main process.
 
@@ -725,7 +733,6 @@ class AcceleratorState:
             function (:obj:`Callable`): The function to decorate.
         """
         return PartialState().on_process(process_index, function)
-        
 
     def on_local_process(self, function=None, process_index: int = None):
         """

@@ -25,12 +25,13 @@ from typing import Any, Callable, List, Optional, Union
 import torch
 import torch.utils.hooks as hooks
 
+from . import state
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, GradientState, parse_flag_from_env
+from .state import AcceleratorState, GradientState, PartialState, parse_flag_from_env
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
@@ -477,7 +478,8 @@ class Accelerator:
     def mixed_precision(self):
         return self.state.mixed_precision
 
-    def on_main_process(self, function: Callable[..., Any]):
+    @staticmethod
+    def on_main_process(function: Callable[..., Any]):
         """
         A decorator that will run the decorated function on the main process only. Can also be called using the
         `PartialState` class.
@@ -502,9 +504,14 @@ class Accelerator:
         "This will be printed by process 0 only"
         ```
         """
-        return self.state.on_main_process(function)
+        if not state.is_initialized():
+            raise ValueError(
+                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
+            )
+        return PartialState().on_main_process(function)
 
-    def on_local_main_process(self, function: Callable[..., Any]):
+    @staticmethod
+    def on_local_main_process(function: Callable[..., Any]):
         """
         A decorator that will run the decorated function on the local main process only. Can also be called using the
         `PartialState` class.
@@ -532,9 +539,14 @@ class Accelerator:
         "This will be printed by process 0 only"
         ```
         """
-        return self.state.on_local_main_process(function)
+        if not state.is_initialized():
+            raise ValueError(
+                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
+            )
+        return PartialState().on_local_main_process(function)
 
-    def on_last_process(self, function: Callable[..., Any]):
+    @staticmethod
+    def on_last_process(function: Callable[..., Any]):
         """
         A decorator that will run the decorated function on the last process only. Can also be called using the
         `PartialState` class.
@@ -559,9 +571,14 @@ class Accelerator:
         "Printed on process 3"
         ```
         """
-        return self.state.on_last_process(function)
+        if not state.is_initialized():
+            raise ValueError(
+                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
+            )
+        return PartialState().on_last_process(function)
 
-    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
+    @staticmethod
+    def on_process(function: Callable[..., Any] = None, process_index: int = None):
         """
         A decorator that will run the decorated function on a given process index only. Can also be called using the
         `PartialState` class.
@@ -589,9 +606,14 @@ class Accelerator:
         "Printed on process 2"
         ```
         """
-        return self.state.on_process(function, process_index)
+        if not state.is_initialized():
+            raise ValueError(
+                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
+            )
+        return PartialState().on_process(function, process_index)
 
-    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
+    @staticmethod
+    def on_local_process(function: Callable[..., Any] = None, local_process_index: int = None):
         """
         A decorator that will run the decorated function on a given local process index only. Can also be called using
         the `PartialState` class.
@@ -622,10 +644,15 @@ class Accelerator:
         "Printed on process 2"
         ```
         """
-        return self.state.on_local_process(function, local_process_index)
+        if not state.is_initialized():
+            raise ValueError(
+                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
+            )
+        return PartialState().on_local_process(function, local_process_index)
 
+    @staticmethod
     @contextmanager
-    def main_process_first(self):
+    def main_process_first():
         """
         Lets the main process go first inside a with block.
 
@@ -645,10 +672,15 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.process_index}")
         ```
         """
-        yield self.state.main_process_first()
+        if not state.is_initialized():
+            raise ValueError(
+                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
+            )
+        yield PartialState().main_process_first()
 
+    @staticmethod
     @contextmanager
-    def local_main_process_first(self):
+    def local_main_process_first():
         """
         Lets the local main process go inside a with block.
 
@@ -668,7 +700,11 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.local_process_index}")
         ```
         """
-        yield self.state.local_main_process_first()
+        if not state.is_initialized():
+            raise ValueError(
+                "The `Accelerator` or `PartialState` object needs to be initialized before using this decorator."
+            )
+        yield PartialState().local_main_process_first()
 
     @contextmanager
     def no_sync(self, model):
