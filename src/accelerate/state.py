@@ -15,6 +15,8 @@
 import os
 import warnings
 from contextlib import contextmanager
+from functools import partial
+from typing import Any, Callable
 
 import torch
 
@@ -43,6 +45,11 @@ def is_initialized() -> bool:
     but works as a module method.
     """
     return AcceleratorState._shared_state != {}
+
+
+# Lambda function that does nothing
+def do_nothing(*args, **kwargs):
+    return None
 
 
 # Inspired by Alex Martelli's 'Borg'.
@@ -255,6 +262,27 @@ class PartialState:
         )
 
     def wait_for_everyone(self):
+        """
+        Will stop the execution of the current process until every other process has reached that point (so this does
+        nothing when the script is only run in one process). Useful to do before saving a model.
+
+        Example:
+
+        ```python
+        >>> # Assuming two GPU processes
+        >>> import time
+        >>> from accelerate.state import PartialState
+
+        >>> state = PartialState()
+        >>> if state.is_main_process:
+        ...     time.sleep(2)
+        >>> else:
+        ...     print("I'm waiting for the main process to finish its sleep...")
+        >>> state.wait_for_everyone()
+        >>> # Should print on every process at the same time
+        >>> print("Everyone is here")
+        ```
+        """
         if self.distributed_type in (
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_CPU,
@@ -280,6 +308,18 @@ class PartialState:
         Lets the main process go first inside a with block.
 
         The other processes will enter the with block after the main process exits.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> with accelerator.main_process_first():
+        ...     # This will be printed first by process 0 then in a seemingly
+        ...     # random order by the other processes.
+        ...     print(f"This will be printed by process {accelerator.process_index}")
+        ```
         """
         yield from self._goes_first(self.is_main_process)
 
@@ -289,10 +329,197 @@ class PartialState:
         Lets the local main process go inside a with block.
 
         The other processes will enter the with block after the main process exits.
+
+        Example:
+
+        ```python
+        >>> from accelerate.state import PartialState
+
+        >>> state = PartialState()
+        >>> with state.local_main_process_first():
+        ...     # This will be printed first by local process 0 then in a seemingly
+        ...     # random order by the other processes.
+        ...     print(f"This will be printed by process {state.local_process_index}")
+        ```
         """
         yield from self._goes_first(self.is_local_main_process)
 
+    def on_main_process(self, function: Callable[..., Any]):
+        """
+        Decorator that only runs the decorated function on the main process.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+
+        ```python
+        >>> from accelerate.state import PartialState
+
+        >>> state = PartialState()
+
+
+        >>> @state.on_main_process
+        ... def print_something():
+        ...     print("This will be printed by process 0 only.")
+
+
+        >>> print_something()
+        "This will be printed by process 0 only"
+        ```
+        """
+        if self.is_main_process or not self.use_distributed:
+            return function
+        return do_nothing
+
+    def on_local_main_process(self, function: Callable[..., Any]):
+        """
+        Decorator that only runs the decorated function on the local main process.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+        ```python
+        # Assume we have 2 servers with 4 processes each.
+        from accelerate.state import PartialState
+
+        state = PartialState()
+
+
+        @state.on_local_main_process
+        def print_something():
+            print("This will be printed by process 0 only on each server.")
+
+
+        print_something()
+        # On server 1:
+        "This will be printed by process 0 only"
+        # On server 2:
+        "This will be printed by process 0 only"
+        ```
+        """
+        if self.is_local_main_process or not self.use_distributed:
+            return function
+        return do_nothing
+
+    def on_last_process(self, function: Callable[..., Any]):
+        """
+        Decorator that only runs the decorated function on the last process.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+        ```python
+        # Assume we have 4 processes.
+        from accelerate.state import PartialState
+
+        state = PartialState()
+
+
+        @state.on_last_process
+        def print_something():
+            print(f"Printed on process {state.process_index}")
+
+
+        print_something()
+        "Printed on process 3"
+        ```
+        """
+        if self.is_last_process or not self.use_distributed:
+            return function
+        return do_nothing
+
+    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
+        """
+        Decorator that only runs the decorated function on the process with the given index.
+
+        Args:
+            function (`Callable`, `optional`):
+                The function to decorate.
+            process_index (`int`, `optional`):
+                The index of the process on which to run the function.
+
+        Example:
+        ```python
+        # Assume we have 4 processes.
+        from accelerate.state import PartialState
+
+        state = PartialState()
+
+
+        @state.on_process(process_index=2)
+        def print_something():
+            print(f"Printed on process {state.process_index}")
+
+
+        print_something()
+        "Printed on process 2"
+        ```
+        """
+        if function is None:
+            return partial(self.on_process, process_index=process_index)
+        if (self.process_index == process_index) or (not self.use_distributed):
+            return function
+        return do_nothing
+
+    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
+        """
+        Decorator that only runs the decorated function on the process with the given index on the current node.
+
+        Args:
+            function (`Callable`, *optional*):
+                The function to decorate.
+            local_process_index (`int`, *optional*):
+                The index of the local process on which to run the function.
+
+        Example:
+        ```python
+        # Assume we have 2 servers with 4 processes each.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_local_process(local_process_index=2)
+        def print_something():
+            print(f"Printed on process {accelerator.local_process_index}")
+
+
+        print_something()
+        # On server 1:
+        "Printed on process 2"
+        # On server 2:
+        "Printed on process 2"
+        ```
+        """
+        if function is None:
+            return partial(self.on_local_process, local_process_index=local_process_index)
+        if (self.local_process_index == local_process_index) or (not self.use_distributed):
+            return function
+        return do_nothing
+
+    @property
+    def use_distributed(self):
+        """
+        Whether the Accelerator is configured for distributed training
+        """
+        return self.distributed_type != DistributedType.NO and self.num_processes > 1
+
     def print(self, *args, **kwargs):
+        """
+        Drop in replacement of `print()` to only print once per server.
+
+        Example:
+
+        ```python
+        >>> from accelerate.state import PartialState
+
+        >>> state = PartialState()
+        >>> state.print("Hello world!")
+        ```
+        """
         if self.is_local_main_process:
             print(*args, **kwargs)
 
@@ -470,6 +697,44 @@ class AcceleratorState:
         The other processes will enter the with block after the main process exits.
         """
         yield PartialState().local_main_process_first()
+
+    def on_main_process(self, function):
+        """
+        Decorator that only runs the decorated function on the main process.
+
+        Args:
+            function (:obj:`Callable`): The function to decorate.
+        """
+        return PartialState().on_main_process(function)
+
+    def on_local_main_process(self, function):
+        """
+        Decorator that only runs the decorated function on the local main process.
+
+        Args:
+            function (:obj:`Callable`): The function to decorate.
+        """
+        return PartialState().on_local_main_process(function)
+
+    def on_process(self, function=None, process_index: int = None):
+        """
+        Decorator that only runs the decorated function on the specified process.
+
+        Args:
+            process_id (:obj:`int`): The id of the process on which to run the function.
+            function (:obj:`Callable`): The function to decorate.
+        """
+        return PartialState().on_process(process_index, function)
+
+    def on_local_process(self, function=None, process_index: int = None):
+        """
+        Decorator that only runs the decorated function on the specified local process.
+
+        Args:
+            process_id (:obj:`int`): The id of the process on which to run the function.
+            function (:obj:`Callable`): The function to decorate.
+        """
+        return PartialState().on_local_process(process_index, function)
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)

@@ -20,8 +20,7 @@ import sys
 import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
-from functools import wraps
-from typing import Callable, List, Optional, Union
+from typing import Any, Callable, List, Optional, Union
 
 import torch
 import torch.utils.hooks as hooks
@@ -478,71 +477,152 @@ class Accelerator:
     def mixed_precision(self):
         return self.state.mixed_precision
 
-    def on_main_process(func):
+    def on_main_process(self, function: Callable[..., Any]):
         """
-        A decorator that will run the decorated function on the main process only.
+        A decorator that will run the decorated function on the main process only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+
+
+        >>> @accelerator.on_main_process
+        ... def print_something():
+        ...     print("This will be printed by process 0 only.")
+
+
+        >>> print_something()
+        "This will be printed by process 0 only"
+        ```
         """
+        return self.state.on_main_process(function)
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if self.is_main_process or not self.use_distributed:
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    def on_local_main_process(func):
+    def on_local_main_process(self, function: Callable[..., Any]):
         """
-        A decorator that will run the decorated function on the local main process only.
+        A decorator that will run the decorated function on the local main process only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+        ```python
+        # Assume we have 2 servers with 4 processes each.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_local_main_process
+        def print_something():
+            print("This will be printed by process 0 only on each server.")
+
+
+        print_something()
+        # On server 1:
+        "This will be printed by process 0 only"
+        # On server 2:
+        "This will be printed by process 0 only"
+        ```
         """
+        return self.state.on_local_main_process(function)
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if self.is_local_main_process or not self.use_distributed:
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    def on_last_process(func):
+    def on_last_process(self, function: Callable[..., Any]):
         """
-        A decorator that will run the decorated function on the last process only.
+        A decorator that will run the decorated function on the last process only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+        ```python
+        # Assume we have 4 processes.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_last_process
+        def print_something():
+            print(f"Printed on process {accelerator.process_index}")
+
+
+        print_something()
+        "Printed on process 3"
+        ```
         """
+        return self.state.on_last_process(function)
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if self.is_last_process or not self.use_distributed:
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    def on_process(process_idx):
+    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
         """
-        A decorator that will run the decorated function on a given process index only.
+        A decorator that will run the decorated function on a given process index only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`, `optional`):
+                The function to decorate.
+            process_index (`int`, `optional`):
+                The index of the process on which to run the function.
+
+        Example:
+        ```python
+        # Assume we have 4 processes.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_process(process_index=2)
+        def print_something():
+            print(f"Printed on process {accelerator.process_index}")
+
+
+        print_something()
+        "Printed on process 2"
+        ```
         """
+        return self.state.on_process(function, process_index)
 
-        def decorator(func):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                if self.process_idx == process_idx or not self.use_distributed:
-                    return func(self, *args, **kwargs)
-
-            return wrapper
-
-        return decorator
-
-    def on_local_process(local_process_idx):
+    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
         """
-        A decorator that will run the decorated function on a given local process index only.
+        A decorator that will run the decorated function on a given local process index only. Can also be called using
+        the `PartialState` class.
+
+        Args:
+            function (`Callable`, *optional*):
+                The function to decorate.
+            local_process_index (`int`, *optional*):
+                The index of the local process on which to run the function.
+
+        Example:
+        ```python
+        # Assume we have 2 servers with 4 processes each.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_local_process(local_process_index=2)
+        def print_something():
+            print(f"Printed on process {accelerator.local_process_index}")
+
+
+        print_something()
+        # On server 1:
+        "Printed on process 2"
+        # On server 2:
+        "Printed on process 2"
+        ```
         """
-
-        def decorator(func):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                if self.local_process_idx == local_process_idx or not self.use_distributed:
-                    return func(self, *args, **kwargs)
-
-            return wrapper
-
-        return decorator
+        return self.state.on_local_process(function, local_process_index)
 
     @contextmanager
     def main_process_first(self):
@@ -550,6 +630,8 @@ class Accelerator:
         Lets the main process go first inside a with block.
 
         The other processes will enter the with block after the main process exits.
+
+        Can also be called using the `PartialState` class.
 
         Example:
 
@@ -571,6 +653,8 @@ class Accelerator:
         Lets the local main process go inside a with block.
 
         The other processes will enter the with block after the main process exits.
+
+        Can also be called using the `PartialState` class.
 
         Example:
 
@@ -764,7 +848,8 @@ class Accelerator:
 
     def print(self, *args, **kwargs):
         """
-        Drop in replacement of `print()` to only print once per server.
+        Drop in replacement of `print()` to only print once per server. Can also be called using the `PartialState`
+        class.
 
         Example:
 
@@ -1714,6 +1799,8 @@ class Accelerator:
         """
         Will stop the execution of the current process until every other process has reached that point (so this does
         nothing when the script is only run in one process). Useful to do before saving a model.
+
+        Can also be called using the `PartialState` class.
 
         Example:
 
