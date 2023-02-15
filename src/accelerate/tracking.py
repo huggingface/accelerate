@@ -18,6 +18,7 @@
 import json
 import os
 import time
+from functools import wraps
 from typing import Any, Dict, List, Optional, Union
 
 import yaml
@@ -65,22 +66,25 @@ if is_mlflow_available():
     _available_trackers.append(LoggerType.MLFLOW)
 
 logger = get_logger(__name__)
-state = PartialState()
 
 
-class on_main_process:
+def on_main_process(function):
     """
-    Decorator to selectively run the decorated function on the main process only.
+    Decorator to selectively run the decorated function on the main process only based on the `main_process_only`
+    attribute in a class.
+
+    Checks at function execution rather than initialization time, not triggering the initialization of the
+    `PartialState`.
     """
 
-    def __init__(self, function=None):
-        self.function = function
-
-    def __set_name__(self, owner, name):
+    @wraps(function)
+    def execute_on_main_process(self, *args, **kwargs):
         if getattr(self, "main_process_only", False):
-            setattr(owner, name, state.on_main_process(self.function))
+            return PartialState().on_main_process(function)(self, *args, **kwargs)
         else:
-            setattr(owner, name, self.function)
+            return function(self, *args, **kwargs)
+
+    return execute_on_main_process
 
 
 def get_available_trackers():
