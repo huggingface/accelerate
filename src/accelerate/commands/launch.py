@@ -1088,7 +1088,7 @@ def launch_command(args):
         if (
             not args.multi_gpu
             and not args.tpu
-            and not args.tpu_cluster
+            # and not args.tpu_cluster
             and not args.mps
             and not args.use_deepspeed
             and not args.use_fsdp
