@@ -18,12 +18,12 @@
 import json
 import os
 import time
-from abc import ABCMeta, abstractmethod, abstractproperty
 from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
 from .logging import get_logger
+from .state import PartialState
 from .utils import (
     LoggerType,
     is_aim_available,
@@ -65,6 +65,22 @@ if is_mlflow_available():
     _available_trackers.append(LoggerType.MLFLOW)
 
 logger = get_logger(__name__)
+state = PartialState()
+
+
+class on_main_process:
+    """
+    Decorator to selectively run the decorated function on the main process only.
+    """
+
+    def __init__(self, function=None):
+        self.function = function
+
+    def __set_name__(self, owner, name):
+        if getattr(self, "main_process_only", False):
+            setattr(owner, name, on_main_process(self.function))
+        else:
+            setattr(owner, name, self.function)
 
 
 def get_available_trackers():
@@ -72,27 +88,46 @@ def get_available_trackers():
     return _available_trackers
 
 
-class GeneralTracker(object, metaclass=ABCMeta):
+class GeneralTracker:
     """
     A base Tracker class to be used for all logging integration implementations.
 
     Each function should take in `**kwargs` that will automatically be passed in from a base dictionary provided to
-    [`Accelerator`]
+    [`Accelerator`].
+
+    Should implement `name`, `requires_logging_directory`, and `tracker` properties such that:
+
+    `name` (`str`): String representation of the tracker class name, such as "TensorBoard" `requires_logging_directory`
+    (`bool`): Whether the logger requires a directory to store their logs. `tracker` (`object`): Should return internal
+    tracking mechanism used by a tracker class (such as the `run` for wandb)
+
+    Implementations can also include a `main_process_only` (`bool`) attribute to toggle if relevent logging, init, and
+    other functions should occur on the main process or across all processes (by default will use `True`)
     """
 
-    @abstractproperty
-    def name(self):
-        "String representation of the python class name"
-        pass
+    main_process_only = True
 
-    @abstractproperty
-    def requires_logging_directory(self):
-        """
-        Whether the logger requires a directory to store their logs. Should either return `True` or `False`.
-        """
-        pass
+    def __init__(self):
+        err = ""
+        if not hasattr(self, "name"):
+            err += "`requires_logging_directory`"
+        if not hasattr(self, "requires_logging_directory"):
+            if len(err) > 0:
+                err += ", "
+            err += "`requires_logging_directory`"
 
-    @abstractmethod
+        # as tracker is a @property that relies on post-init
+        if "tracker" not in dir(self):
+            if len(err) > 0:
+                err += ", "
+            err += "`tracker`"
+        if len(err) > 0:
+            raise NotImplementedError(
+                f"The implementation for this tracker class is missing the following "
+                f"required attributes. Please define them in the class definition: "
+                f"{err}"
+            )
+
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Implementations should use the experiment configuration
@@ -103,9 +138,8 @@ class GeneralTracker(object, metaclass=ABCMeta):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
-        pass
+        raise NotImplementedError()
 
-    @abstractmethod
     def log(self, values: dict, step: Optional[int], **kwargs):
         """
         Logs `values` to the current run. Base `log` implementations of a tracking API should go in here, along with
@@ -117,21 +151,14 @@ class GeneralTracker(object, metaclass=ABCMeta):
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
-        pass
+        raise NotImplementedError()
 
     def finish(self):
         """
         Should run any finalizing functions within the tracking API. If the API should not have one, just don't
         overwrite that method.
         """
-        pass
-
-    @abstractproperty
-    def tracker(self):
-        """
-        Should return internal tracking mechanism used by a tracker class (such as the `run` for wandb)
-        """
-        pass
+        raise NotImplementedError()
 
 
 class TensorBoardTracker(GeneralTracker):
@@ -150,7 +177,9 @@ class TensorBoardTracker(GeneralTracker):
     name = "tensorboard"
     requires_logging_directory = True
 
+    @on_main_process
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = None, **kwargs):
+        super().__init__()
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
         self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
@@ -163,6 +192,7 @@ class TensorBoardTracker(GeneralTracker):
     def tracker(self):
         return self.writer
 
+    @on_main_process
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment. Stores the
@@ -186,6 +216,7 @@ class TensorBoardTracker(GeneralTracker):
                 raise
         logger.debug("Stored initial configuration hyperparameters to TensorBoard and hparams yaml file")
 
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
@@ -210,6 +241,7 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.flush()
         logger.debug("Successfully logged to TensorBoard")
 
+    @on_main_process
     def finish(self):
         """
         Closes `TensorBoard` writer
@@ -231,8 +263,11 @@ class WandBTracker(GeneralTracker):
 
     name = "wandb"
     requires_logging_directory = False
+    main_process_only = False
 
+    @on_main_process
     def __init__(self, run_name: str, **kwargs):
+        super().__init__()
         self.run_name = run_name
         self.run = wandb.init(project=self.run_name, **kwargs)
         logger.debug(f"Initialized WandB project {self.run_name}")
@@ -244,6 +279,7 @@ class WandBTracker(GeneralTracker):
     def tracker(self):
         return self.run
 
+    @on_main_process
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
@@ -256,6 +292,7 @@ class WandBTracker(GeneralTracker):
         wandb.config.update(values)
         logger.debug("Stored initial configuration hyperparameters to WandB")
 
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
@@ -272,6 +309,7 @@ class WandBTracker(GeneralTracker):
         self.run.log(values, step=step, **kwargs)
         logger.debug("Successfully logged to WandB")
 
+    @on_main_process
     def finish(self):
         """
         Closes `wandb` writer
@@ -296,7 +334,9 @@ class CometMLTracker(GeneralTracker):
     name = "comet_ml"
     requires_logging_directory = False
 
+    @on_main_process
     def __init__(self, run_name: str, **kwargs):
+        super().__init__()
         self.run_name = run_name
         self.writer = Experiment(project_name=run_name, **kwargs)
         logger.debug(f"Initialized CometML project {self.run_name}")
@@ -308,6 +348,7 @@ class CometMLTracker(GeneralTracker):
     def tracker(self):
         return self.writer
 
+    @on_main_process
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
@@ -320,6 +361,7 @@ class CometMLTracker(GeneralTracker):
         self.writer.log_parameters(values)
         logger.debug("Stored initial configuration hyperparameters to CometML")
 
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `values` to the current run.
@@ -345,6 +387,7 @@ class CometMLTracker(GeneralTracker):
                 self.writer.log_metrics(v, step=step, **kwargs)
         logger.debug("Successfully logged to CometML")
 
+    @on_main_process
     def finish(self):
         """
         Closes `comet-ml` writer
@@ -367,6 +410,7 @@ class AimTracker(GeneralTracker):
     name = "aim"
     requires_logging_directory = True
 
+    @on_main_process
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
         self.run_name = run_name
         self.writer = Run(repo=logging_dir, **kwargs)
@@ -380,6 +424,7 @@ class AimTracker(GeneralTracker):
     def tracker(self):
         return self.writer
 
+    @on_main_process
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
@@ -390,6 +435,7 @@ class AimTracker(GeneralTracker):
         """
         self.writer["hparams"] = values
 
+    @on_main_process
     def log(self, values: dict, step: Optional[int], **kwargs):
         """
         Logs `values` to the current run.
@@ -406,6 +452,7 @@ class AimTracker(GeneralTracker):
         for key, value in values.items():
             self.writer.track(value, name=key, step=step, **kwargs)
 
+    @on_main_process
     def finish(self):
         """
         Closes `aim` writer
@@ -444,6 +491,7 @@ class MLflowTracker(GeneralTracker):
     name = "mlflow"
     requires_logging_directory = True
 
+    @on_main_process
     def __init__(
         self,
         experiment_name: str = None,
@@ -486,6 +534,7 @@ class MLflowTracker(GeneralTracker):
     def tracker(self):
         return self.active_run
 
+    @on_main_process
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
@@ -512,6 +561,7 @@ class MLflowTracker(GeneralTracker):
 
         logger.debug("Stored initial configuration hyperparameters to MLflow")
 
+    @on_main_process
     def log(self, values: dict, step: Optional[int]):
         """
         Logs `values` to the current run.
@@ -535,6 +585,7 @@ class MLflowTracker(GeneralTracker):
         mlflow.log_metrics(metrics, step=step)
         logger.debug("Successfully logged to mlflow")
 
+    @on_main_process
     def finish(self):
         """
         End the active MLflow run.
