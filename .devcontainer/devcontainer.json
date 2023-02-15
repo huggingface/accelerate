@@ -1,25 +1,62 @@
-// File only needed for VSCode users to have proper Docker based interpreters
+// IMPORTANT: This file is used by Visual Studio Code Remote Containers extension to create 
+// a reproducible development environment inside a container.
 {
     "name": "accelerate_dev_environment",
     "build": {
-        // ACTION NEEDED: comment/uncomment the relevant line depending on whether you are in a CPU/GPU environment
-         "dockerfile": "../docker/accelerate-cpu/Dockerfile"
-//        "dockerfile": "../docker/accelerate-gpu/Dockerfile"
+      "dockerfile": "../Dockerfile",
+      "args": {
+        "BASE_REPOSITORY": "https://github.com/huggingface/accelerate#egg=accelerate[testing,test_trackers]",
+        "PYTHON_VERSION": "3.7.3",
+        
+        // ACTION NEEDED: uncomment if you have a local GPU
+        // "PYTORCH_COMPUTE_PLATFORM": "cu113",
+        // ACTION_NEEDED: uncomment if you want to use a CPU only image
+        "PYTORCH_COMPUTE_PLATFORM": "cpu",
+        
+        // ACTION NEEDED: uncomment if you have a local GPU
+        // "BASE_IMAGE": "nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04",
+        // ACTION_NEEDED: uncomment if you want to use a CPU only image
+        "BASE_IMAGE": "ubuntu:20.04",
+        
+        // ACTION NEEDED: uncomment if you plan to use Amazon SageMaker local mode
+        // "INSTALL_DOCKER": "1",
+        // "INSTALL_AWS_CLI": "1",
+        // "INSTALL_DOCKER_COMPOSE_V1": "1"
+      }
     },
     "runArgs": [
-        // ACTION NEEDED: uncomment the next line if your local machine has GPUs available
-//        "--gpus", "all",
-        // Enable the docker container to access system resources
-        "--ipc", "host"
+      // ACTION NEEDED: uncomment the next line if your local machine has GPUs available
+      // "--gpus=all",
+      // speeds up pytorch data loading
+      "--ipc=host"
+    ],
+    "mounts": [
+      // ACTION_NEEDED: uncomment if you want to use your local aws credentials
+      "source=${env:HOME}${env:USERPROFILE}/.aws,target=/root/.aws,type=bind",
+      // ACTION_NEEDED: uncomment if you want to use the host docker socket inside the container
+      "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
+      // ACTION_NEEDED: uncomment if you want to use Amazon SageMaker local mode which uses /tmp volume mounts on the host docker daemon
+      "source=/tmp,target=/tmp,type=bind"
     ],
     "remoteEnv": {
-        "PYTHONPATH": "${containerEnv:PATH}:${containerWorkspaceFolder}"
+      "PYTHONPATH": "${containerEnv:PATH}:${containerWorkspaceFolder}"
     },
-    "extensions": [
-        // Ensure we have IntelliSense in VSCode when running inside container
-        "ms-python.python"
-    ],
-    "workspaceFolder": "/workspaces/accelerate",
-    // Need git for VSCode to color code modifications. Only runs when building environment.
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          // python language support
+          "ms-python.python",
+          "ms-python.vscode-pylance",
+          // jupyter
+          "ms-toolsai.jupyter",
+          "ms-toolsai.vscode-jupyter-cell-tags",
+          "ms-toolsai.jupyter-renderers",
+          "ms-toolsai.vscode-jupyter-slideshow",
+          // yaml language support
+          "redhat.vscode-yaml"
+          // "add.your.own.favorites",
+        ]
+      }
+    },
     "onCreateCommand": "apt-get update && apt-get install -y git && pip install -e '.[dev]'"
-}
+  }
