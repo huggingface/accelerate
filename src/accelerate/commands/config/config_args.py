@@ -183,7 +183,7 @@ class ClusterConfig(BaseConfig):
 class SageMakerConfig(BaseConfig):
     ec2_instance_type: str
     iam_role_name: str
-    image_uri: str
+    image_uri: Optional[str] = None
     profile: Optional[str] = None
     region: str = "us-east-1"
     num_machines: int = 1
