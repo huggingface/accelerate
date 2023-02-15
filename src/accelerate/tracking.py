@@ -78,7 +78,7 @@ class on_main_process:
 
     def __set_name__(self, owner, name):
         if getattr(self, "main_process_only", False):
-            setattr(owner, name, on_main_process(self.function))
+            setattr(owner, name, state.on_main_process(self.function))
         else:
             setattr(owner, name, self.function)
 
