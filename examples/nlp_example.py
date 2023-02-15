@@ -23,6 +23,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_
 
 from accelerate import Accelerator, DistributedType
 
+
 ########################################################################
 # This is a fully working simple example to use Accelerate
 #
@@ -113,20 +114,7 @@ def training_function(config, args):
     set_seed(seed)
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    old_model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
-    if args.no_linear and args.no_ln:
-        model_cls = BertForSequenceClassification
-    elif args.no_linear:
-        model_cls = TEBertForSequenceClassificationNoLinear
-    elif args.no_ln:
-        model_cls = TEBertForSequenceClassificationNoLN
-    else:
-        model_cls = TEBertForSequenceClassification
-    model = model_cls(old_model.config)
-    state_dict = old_model.state_dict()
-    if not args.no_ln:
-        state_dict = {k.replace("LayerNorm.", "LayerNorm.layer_norm_"): v for k, v in state_dict.items()}
-    model.load_state_dict(state_dict, strict=False)
+    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
 
     # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
     # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
@@ -194,8 +182,6 @@ def main():
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
         "and an Nvidia Ampere GPU.",
     )
-    parser.add_argument("--no_linear", action="store_true", help="Don't use te linear layers.")
-    parser.add_argument("--no_ln", action="store_true", help="Don't use te layernorm layers.")
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
