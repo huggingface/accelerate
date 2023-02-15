@@ -1088,7 +1088,7 @@ def launch_command(args):
         if (
             not args.multi_gpu
             and not args.tpu
-            # and not args.tpu_cluster
+            and not args.tpu_cluster
             and not args.mps
             and not args.use_deepspeed
             and not args.use_fsdp
@@ -1097,7 +1097,7 @@ def launch_command(args):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
-            args.tpu_cluster = defaults.tpu_cluster and args.tpu
+            # args.tpu_cluster = defaults.tpu_cluster and args.tpu
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.mps = defaults.distributed_type == DistributedType.MPS
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
