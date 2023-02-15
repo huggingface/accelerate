@@ -114,7 +114,7 @@ class GeneralTracker:
     def __init__(self):
         err = ""
         if not hasattr(self, "name"):
-            err += "`requires_logging_directory`"
+            err += "`name`"
         if not hasattr(self, "requires_logging_directory"):
             if len(err) > 0:
                 err += ", "

@@ -1861,6 +1861,7 @@ class Accelerator:
         """
         wait_for_everyone()
 
+    @on_main_process
     def init_trackers(self, project_name: str, config: Optional[dict] = None, init_kwargs: Optional[dict] = {}):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
@@ -1935,6 +1936,7 @@ class Accelerator:
                 return tracker.tracker
         raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
 
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
         """
         Logs `values` to all stored trackers in `self.trackers` on the main process only.
@@ -1964,6 +1966,7 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
 
+    @on_main_process
     def end_training(self):
         """
         Runs any special end training behaviors, such as stopping trackers on the main process only. Should always be
