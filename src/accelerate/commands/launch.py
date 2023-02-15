@@ -1043,23 +1043,28 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
     # configure session
     print("Creating Estimator")
-    huggingface_estimator = HuggingFace(
-        image_uri=sagemaker_config.image_uri,
-        entry_point=entry_point,
-        source_dir=source_dir,
-        role=sagemaker_config.iam_role_name,
-        transformers_version=sagemaker_config.transformers_version,
-        pytorch_version=sagemaker_config.pytorch_version,
-        py_version=sagemaker_config.py_version,
-        base_job_name=sagemaker_config.base_job_name,
-        instance_count=sagemaker_config.num_machines,
-        instance_type=sagemaker_config.ec2_instance_type,
-        debugger_hook_config=False,
-        distribution=distribution,
-        hyperparameters=hyperparameters,
-        environment=environment,
-        metric_definitions=sagemaker_metrics,
-    )
+    args = {
+        "image_uri": sagemaker_config.image_uri,
+        "entry_point": entry_point,
+        "source_dir": source_dir,
+        "role": sagemaker_config.iam_role_name,
+        "transformers_version": sagemaker_config.transformers_version,
+        "pytorch_version": sagemaker_config.pytorch_version,
+        "py_version": sagemaker_config.py_version,
+        "base_job_name": sagemaker_config.base_job_name,
+        "instance_count": sagemaker_config.num_machines,
+        "instance_type": sagemaker_config.ec2_instance_type,
+        "debugger_hook_config": False,
+        "distribution": distribution,
+        "hyperparameters": hyperparameters,
+        "environment": environment,
+        "metric_definitions": sagemaker_metrics,
+    }
+
+    if sagemaker_config.additional_args is not None:
+        args = {**args, **sagemaker_config.additional_args}
+
+    huggingface_estimator = HuggingFace(**args)
 
     huggingface_estimator.fit(inputs=sagemaker_inputs)
     print(f"You can find your model data at: {huggingface_estimator.model_data}")
