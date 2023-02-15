@@ -160,16 +160,25 @@ use_cpu: false
 want to use different/other Python packages you can do this by adding them to the `requirements.txt`. These packages
 will be installed before your training script is started.
 
-### Remote scripts: Use scripts located on Github
+### Local Training: SageMaker Local mode
 
-*undecided if feature is needed. Contact us if you would like this feature.*
+The local mode in the SageMaker SDK allows you to run your training script locally inside the HuggingFace DLC (Deep Learning container) 
+or using your custom container image. This is useful for debugging and testing your training script inside the final container environment.
+Local mode uses Docker compose (*Note: Docker Compose V2 is not supported yet*). The SDK will handle the authentication against ECR
+to pull the DLC to your local environment. You can emulate CPU (single and multi-instance) and GPU (single instance) SageMaker training jobs.
+
+To use local mode, you need to set your `ec2_instance_type` to `local`.
+
+```yaml
+ec2_instance_type: local
+```
 
 ### Advanced configuration
 
 The configuration allows you to override parameters for the [Estimator](https://sagemaker.readthedocs.io/en/stable/api/training/estimators.html).
 These settings have to be applied in the config file and are not part of `accelerate config`. You can control many additional aspects of the training job, e.g. use Spot instances, enable network isolation and many more.
 
-```
+```yaml
 additional_args:
   # enable network isolation to restrict internet access for containers
   enable_network_isolation: True
@@ -180,10 +189,14 @@ You can find all available configuration [here](https://sagemaker.readthedocs.io
 ### Use Spot Instances
 
 You can use Spot Instances e.g. using (see [Advanced configuration](#advanced-configuration)):
-```
+```yaml
 additional_args:
   use_spot_instances: True
   max_wait: 86400
 ```
 
 *Note: Spot Instances are subject to be terminated and training to be continued from a checkpoint. This is not handled in 🤗 Accelerate out of the box. Contact us if you would like this feature.*
+
+### Remote scripts: Use scripts located on Github
+
+*undecided if feature is needed. Contact us if you would like this feature.*
