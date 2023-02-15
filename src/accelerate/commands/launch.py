@@ -1092,10 +1092,10 @@ def launch_command(args):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
-            args.tpu_cluster = defaults.tpu_cluster and args.tpu
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.mps = defaults.distributed_type == DistributedType.MPS
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
+            args.tpu_cluster = defaults.tpu_cluster if args.tpu else False
         if not args.mps:
             if args.gpu_ids is None:
                 if defaults.gpu_ids is not None:
