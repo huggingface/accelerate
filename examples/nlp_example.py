@@ -79,6 +79,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
+        max_length = 128 if accelerator.distributed_type == DistributedType.TPU else None
         # When using mixed precision we want round multiples of 8/16
         if accelerator.mixed_precision == "fp8":
             pad_to_multiple_of = 16
@@ -88,7 +89,11 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
             pad_to_multiple_of = None
 
         return tokenizer.pad(
-            examples, padding="longest", max_length=128, pad_to_multiple_of=pad_to_multiple_of, return_tensors="pt"
+            examples,
+            padding="longest",
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors="pt",
         )
 
     # Instantiate dataloaders.
