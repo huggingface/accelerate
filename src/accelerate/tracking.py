@@ -111,26 +111,27 @@ class GeneralTracker:
 
     main_process_only = True
 
-    def __init__(self):
-        err = ""
-        if not hasattr(self, "name"):
-            err += "`name`"
-        if not hasattr(self, "requires_logging_directory"):
-            if len(err) > 0:
-                err += ", "
-            err += "`requires_logging_directory`"
+    def __init__(self, _blank=False):
+        if not _blank:
+            err = ""
+            if not hasattr(self, "name"):
+                err += "`name`"
+            if not hasattr(self, "requires_logging_directory"):
+                if len(err) > 0:
+                    err += ", "
+                err += "`requires_logging_directory`"
 
-        # as tracker is a @property that relies on post-init
-        if "tracker" not in dir(self):
+            # as tracker is a @property that relies on post-init
+            if "tracker" not in dir(self):
+                if len(err) > 0:
+                    err += ", "
+                err += "`tracker`"
             if len(err) > 0:
-                err += ", "
-            err += "`tracker`"
-        if len(err) > 0:
-            raise NotImplementedError(
-                f"The implementation for this tracker class is missing the following "
-                f"required attributes. Please define them in the class definition: "
-                f"{err}"
-            )
+                raise NotImplementedError(
+                    f"The implementation for this tracker class is missing the following "
+                    f"required attributes. Please define them in the class definition: "
+                    f"{err}"
+                )
 
     def store_init_configuration(self, values: dict):
         """
@@ -142,7 +143,7 @@ class GeneralTracker:
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
-        raise NotImplementedError()
+        pass
 
     def log(self, values: dict, step: Optional[int], **kwargs):
         """
@@ -155,14 +156,14 @@ class GeneralTracker:
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
-        raise NotImplementedError()
+        pass
 
     def finish(self):
         """
         Should run any finalizing functions within the tracking API. If the API should not have one, just don't
         overwrite that method.
         """
-        raise NotImplementedError()
+        pass
 
 
 class TensorBoardTracker(GeneralTracker):
