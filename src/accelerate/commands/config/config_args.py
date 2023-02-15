@@ -202,3 +202,4 @@ class SageMakerConfig(BaseConfig):
     py_version: str = SAGEMAKER_PYTHON_VERSION
     sagemaker_inputs_file: str = None
     sagemaker_metrics_file: str = None
+    additional_args: dict = None

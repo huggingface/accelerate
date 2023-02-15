@@ -164,6 +164,26 @@ will be installed before your training script is started.
 
 *undecided if feature is needed. Contact us if you would like this feature.*
 
+### Advanced configuration
+
+The configuration allows you to override parameters for the [Estimator](https://sagemaker.readthedocs.io/en/stable/api/training/estimators.html).
+These settings have to be applied in the config file and are not part of `accelerate config`. You can control many additional aspects of the training job, e.g. use Spot instances, enable network isolation and many more.
+
+```
+additional_args:
+  # enable network isolation to restrict internet access for containers
+  enable_network_isolation: True
+```
+
+You can find all available configuration [here](https://sagemaker.readthedocs.io/en/stable/api/training/estimators.html).
+
 ### Use Spot Instances
 
-*undecided if feature is needed. Contact us if you would like this feature.*
+You can use Spot Instances e.g. using (see [Advanced configuration](#advanced-configuration)):
+```
+additional_args:
+  use_spot_instances: True
+  max_wait: 86400
+```
+
+*Note: Spot Instances are subject to be terminated and training to be continued from a checkpoint. This is not handled in 🤗 Accelerate out of the box. Contact us if you would like this feature.*
