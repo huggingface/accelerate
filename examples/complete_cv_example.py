@@ -173,7 +173,7 @@ def training_function(config, args):
     )
     # We need to keep track of how many total steps we have iterated over
     overall_step = 0
-    # We also need to keep track of the stating epoch so files are named properly
+    # We also need to keep track of the starting epoch so files are named properly
     starting_epoch = 0
 
     # Potentially load in the weights and states from a previous save
