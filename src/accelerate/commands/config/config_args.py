@@ -165,7 +165,7 @@ class ClusterConfig(BaseConfig):
     # args for megatron_lm
     megatron_lm_config: dict = None
     # args for TPU
-    tpu_downcast_bf16: bool = False
+    downcast_bf16: bool = False
 
     # args for TPU pods
     tpu_name: str = None
