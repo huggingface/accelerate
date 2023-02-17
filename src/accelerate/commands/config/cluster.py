@@ -505,7 +505,7 @@ def get_cluster_input():
         num_processes=num_processes,
         gpu_ids=gpu_ids,
         mixed_precision=mixed_precision,
-        tpu_downcast_bf16=tpu_downcast_bf16,
+        downcast_bf16=tpu_downcast_bf16,
         machine_rank=machine_rank,
         num_machines=num_machines,
         main_process_ip=main_process_ip,
