@@ -436,6 +436,9 @@ def reduce(tensor, reduction="mean"):
         elif state.distributed_type.value in CUDA_DISTRIBUTED_TYPES:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
             return cloned_tensor
+        elif state.distributed_type == DistributedType.MULTI_CPU:
+            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
+            return cloned_tensor
         else:
             if reduction == "sum":
                 return cloned_tensor.sum()
