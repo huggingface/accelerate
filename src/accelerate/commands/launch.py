@@ -28,6 +28,7 @@ from typing import Dict, List
 import psutil
 import torch
 
+from accelerate.commands.args import add_torchrun_arguments, add_xla_dist_arguments
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.commands.config.config_utils import DYNAMO_BACKENDS
@@ -48,6 +49,7 @@ from accelerate.utils import (
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
+from accelerate.utils.imports import is_tpu_available
 from accelerate.utils.launch import env_var_path_add
 
 
@@ -62,7 +64,7 @@ if is_rich_available():
 logger = logging.getLogger(__name__)
 
 options_to_group = {
-    "--multi-gpu": "Distributed GPUs",
+    "--multi_gpu": "Distributed GPUs",
     "--tpu": "TPU",
     "--mps": "MPS",
     "--use_deepspeed": "DeepSpeed Arguments",
@@ -236,9 +238,6 @@ def launch_command_parser(subparsers=None):
         help="Whether all machines used for multinode training exist on the same local network.",
     )
     distributed_args.add_argument(
-        "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
-    )
-    distributed_args.add_argument(
         "--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0."
     )
     distributed_args.add_argument(
@@ -247,36 +246,9 @@ def launch_command_parser(subparsers=None):
         default=None,
         help="The port to use to communicate with the machine of rank 0.",
     )
-    # Rendezvous related arguments
-    distributed_args.add_argument(
-        "--rdzv_conf",
-        type=str,
-        default="",
-        help="Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).",
-    )
-    distributed_args.add_argument(
-        "--max_restarts",
-        type=int,
-        default=0,
-        help="Maximum number of worker group restarts before failing.",
-    )
-    distributed_args.add_argument(
-        "--monitor_interval",
-        type=float,
-        default=5,
-        help="Interval, in seconds, to monitor the state of workers.",
-    )
-    parser.add_argument(
-        "-m",
-        "--module",
-        action="store_true",
-        help="Change each process to interpret the launch script as a Python module, executing with the same behavior as 'python -m'.",
-    )
-    parser.add_argument(
-        "--no_python",
-        action="store_true",
-        help="Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.",
-    )
+    # The other torchrun arguments
+    if is_torch_version(">=", "1.9.1"):
+        add_torchrun_arguments(distributed_args)
 
     # TPU arguments
     tpu_args = parser.add_argument_group("TPU", "Arguments related to TPU.")
@@ -296,21 +268,8 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether to use `sudo` when running the TPU training script in each pod.",
     )
-    tpu_args.add_argument(
-        "--vm",
-        type=str,
-        action="append",
-        help=(
-            "List of single Compute VM instance names. "
-            "If not provided we assume usage of instance groups. For TPU pods."
-        ),
-    )
-    tpu_args.add_argument(
-        "--env",
-        type=str,
-        action="append",
-        help="List of environment variables to set on the Compute VM instances. For TPU pods.",
-    )
+    if is_tpu_available(False):
+        add_xla_dist_arguments(tpu_args)
     tpu_args.add_argument(
         "--main_training_function",
         type=str,
