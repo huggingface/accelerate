@@ -247,7 +247,7 @@ def launch_command_parser(subparsers=None):
         help="The port to use to communicate with the machine of rank 0.",
     )
     # The other torchrun arguments
-    if is_torch_version(">=", "1.9.1"):
+    if is_torch_version(">=", "1.9.1" and torch.distributed.is_available()):
         add_torchrun_arguments(distributed_args)
 
     # TPU arguments
