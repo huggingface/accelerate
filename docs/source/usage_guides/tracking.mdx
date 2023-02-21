@@ -167,15 +167,25 @@ wandb_tracker = accelerator.get_tracker("wandb")
 
 From there you can interact with `wandb`'s `run` object like normal:
 
-<Tip warning={true}>
-  Make sure to only interact with trackers on the main process!
+```python
+wandb_run.log_artifact(some_artifact_to_log)
+```
+
+<Tip>
+  Trackers built in Accelerate will automatically execute on the correct process, 
+  so if a tracker is only meant to be ran on the main process it will do so 
+  automatically.
 </Tip>
 
+If you want to truly remove Accelerate's wrapping entirely, you can 
+achieve the same outcome with:
 
 ```python
-if accelerator.is_main_process:
-    wandb_run.log_artifact(some_artifact_to_log)
+wandb_tracker = accelerator.get_tracker("wandb", unwrap=True)
+with accelerator.on_main_process:
+    wandb_tracker.log_artifact(some_artifact_to_log)
 ```
+
 
 ## When a wrapper cannot work
 
