@@ -101,9 +101,9 @@ class GeneralTracker:
 
     Should implement `name`, `requires_logging_directory`, and `tracker` properties such that:
 
-    `name` (`str`): String representation of the tracker class name, such as "TensorBoard" `requires_logging_directory`
-    (`bool`): Whether the logger requires a directory to store their logs. `tracker` (`object`): Should return internal
-    tracking mechanism used by a tracker class (such as the `run` for wandb)
+    `name` (`str`): String representation of the tracker class name, such as "TensorBoard"
+    `requires_logging_directory` (`bool`): Whether the logger requires a directory to store their logs.
+    `tracker` (`object`): Should return internal tracking mechanism used by a tracker class (such as the `run` for wandb)
 
     Implementations can also include a `main_process_only` (`bool`) attribute to toggle if relevent logging, init, and
     other functions should occur on the main process or across all processes (by default will use `True`)
