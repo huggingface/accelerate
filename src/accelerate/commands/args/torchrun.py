@@ -15,7 +15,7 @@
 # limitations under the License.
 import argparse
 
-import torch.distributed.run as distrib_run
+from torch.distributed.run import get_args_parser
 
 
 ignored_params = [
@@ -34,7 +34,7 @@ changed_name = {
 
 
 def add_arguments(argument_group: argparse._ArgumentGroup):
-    distrib_parser = distrib_run.get_args_parser()
+    distrib_parser = get_args_parser()
     for action in distrib_parser._actions:
         if action.dest in ignored_params:
             continue
