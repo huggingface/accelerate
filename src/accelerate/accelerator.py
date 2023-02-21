@@ -1909,7 +1909,7 @@ class Accelerator:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
-    def get_tracker(self, name: str, unwrap:bool=False):
+    def get_tracker(self, name: str, unwrap: bool = False):
         """
         Returns a `tracker` from `self.trackers` based on `name` on the main process only.
 
@@ -1917,8 +1917,8 @@ class Accelerator:
             name (`str`):
                 The name of a tracker, corresponding to the `.name` property.
             unwrap (`bool`):
-                Whether to return the internal tracking mechanism or to return the wrapped
-                tracker instead (recommended).
+                Whether to return the internal tracking mechanism or to return the wrapped tracker instead
+                (recommended).
 
         Returns:
             `GeneralTracker`: The tracker corresponding to `name` if it exists.
