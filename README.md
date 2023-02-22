@@ -176,7 +176,7 @@ from accelerate import Accelerator, DeepSpeedPlugin
 # deepspeed needs to know your gradient accumulation steps before hand, so don't forget to pass it
 # Remember you still need to do gradient accumulation by yourself, just like you would have done without deepspeed
 deepspeed_plugin = DeepSpeedPlugin(zero_stage=2, gradient_accumulation_steps=2)
-accelerator = Accelerator(fp16=True, deepspeed_plugin=deepspeed_plugin)
+accelerator = Accelerator(mixed_precision='fp16', deepspeed_plugin=deepspeed_plugin)
 
 # How to save your 🤗 Transformer?
 accelerator.wait_for_everyone()
