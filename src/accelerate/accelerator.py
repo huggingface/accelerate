@@ -1909,14 +1909,16 @@ class Accelerator:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
-    @on_main_process
-    def get_tracker(self, name: str):
+    def get_tracker(self, name: str, unwrap: bool = False):
         """
         Returns a `tracker` from `self.trackers` based on `name` on the main process only.
 
         Args:
             name (`str`):
                 The name of a tracker, corresponding to the `.name` property.
+            unwrap (`bool`):
+                Whether to return the internal tracking mechanism or to return the wrapped tracker instead
+                (recommended).
 
         Returns:
             `GeneralTracker`: The tracker corresponding to `name` if it exists.
@@ -1931,10 +1933,13 @@ class Accelerator:
         >>> tensorboard_tracker = accelerator.get_tracker("tensorboard")
         ```
         """
-        for tracker in self.trackers:
-            if tracker.name == name:
-                return tracker.tracker
-        raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
+        if len(getattr(self, "trackers", [])) > 0:
+            for tracker in self.trackers:
+                if tracker.name == name:
+                    return tracker
+            raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
+        # Handle tracker only made on main process
+        return GeneralTracker(_blank=True)
 
     @on_main_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):

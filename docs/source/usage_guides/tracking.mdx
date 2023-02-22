@@ -111,9 +111,12 @@ Every tracker must implement three functions and have three properties:
     - This should be implemented as a `@property` function 
     - Should return the internal tracking mechanism the library uses, such as the `run` object for `wandb`.
 
-A brief example can be seen below with an integration with Weights and Biases, containing only the relevant information:
+Each method should also utilize the [`state.PartialState`] class if the logger should only be executed on the main process for instance.
+
+A brief example can be seen below with an integration with Weights and Biases, containing only the relevant information and logging just on 
+the main process:
 ```python
-from accelerate.tracking import GeneralTracker
+from accelerate.tracking import GeneralTracker, on_main_process
 from typing import Optional
 
 import wandb
@@ -123,6 +126,7 @@ class MyCustomTracker(GeneralTracker):
     name = "wandb"
     requires_logging_directory = False
 
+    @on_main_process
     def __init__(self, run_name: str):
         self.run_name = run_name
         run = wandb.init(self.run_name)
@@ -131,9 +135,11 @@ class MyCustomTracker(GeneralTracker):
     def tracker(self):
         return self.run.run
 
+    @on_main_process
     def store_init_configuration(self, values: dict):
         wandb.config(values)
 
+    @on_main_process
     def log(self, values: dict, step: Optional[int] = None):
         wandb.log(values, step=step)
 ```
@@ -167,15 +173,25 @@ wandb_tracker = accelerator.get_tracker("wandb")
 
 From there you can interact with `wandb`'s `run` object like normal:
 
-<Tip warning={true}>
-  Make sure to only interact with trackers on the main process!
+```python
+wandb_run.log_artifact(some_artifact_to_log)
+```
+
+<Tip>
+  Trackers built in Accelerate will automatically execute on the correct process, 
+  so if a tracker is only meant to be ran on the main process it will do so 
+  automatically.
 </Tip>
 
+If you want to truly remove Accelerate's wrapping entirely, you can 
+achieve the same outcome with:
 
 ```python
-if accelerator.is_main_process:
-    wandb_run.log_artifact(some_artifact_to_log)
+wandb_tracker = accelerator.get_tracker("wandb", unwrap=True)
+with accelerator.on_main_process:
+    wandb_tracker.log_artifact(some_artifact_to_log)
 ```
+
 
 ## When a wrapper cannot work
 
