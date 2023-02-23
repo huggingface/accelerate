@@ -31,6 +31,7 @@ from .versions import is_torch_version
 
 if torch.distributed.is_available():
     from torch.distributed import ReduceOp
+
     TORCH_DISTRIBUTED_AVAILABLE = True
 else:
     TORCH_DISTRIBUTED_AVAILABLE = False
