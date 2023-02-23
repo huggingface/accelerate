@@ -29,7 +29,7 @@ There's three reasons for this that this tutorial will cover:
 While this issue has not come up as much, make sure to use [`utils.set_seed`] to fully set the seed in all distributed cases so training will be reproducable:
 
 ```python
-from accelerate import set_seed
+from accelerate.utils import set_seed
 
 set_seed(42)
 ```
