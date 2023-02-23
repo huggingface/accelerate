@@ -25,20 +25,16 @@ import torch
 from ..state import PartialState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, TensorInformation
-from .imports import is_tpu_available
+from .imports import is_tpu_available, is_torch_distributed_available
 from .versions import is_torch_version
-
-
-if torch.distributed.is_available():
-    from torch.distributed import ReduceOp
-
-    TORCH_DISTRIBUTED_AVAILABLE = True
-else:
-    TORCH_DISTRIBUTED_AVAILABLE = False
 
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+
+
+if is_torch_distributed_available():
+    from torch.distributed import ReduceOp
 
 
 def is_torch_tensor(tensor):
@@ -226,7 +222,7 @@ def gather(tensor):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
-    if not TORCH_DISTRIBUTED_AVAILABLE:
+    if not is_torch_distributed_available():
         raise ModuleNotFoundError(
             "torch was compiled without distributed support (torch.distributed.is_available() = False). "
             "Please use a version which includes distributed support in order to call #gather()"
@@ -265,7 +261,7 @@ def gather_object(object: Any):
     Returns:
         The same data structure as `object` with all the objects sent to every device.
     """
-    if not TORCH_DISTRIBUTED_AVAILABLE:
+    if not is_torch_distributed_available():
         raise ModuleNotFoundError(
             "torch was compiled without distributed support (torch.distributed.is_available() = False). "
             "Please use a version which includes distributed support in order to call #gather_object()"
@@ -310,7 +306,7 @@ def broadcast(tensor, from_process: int = 0):
     Returns:
         The same data structure as `tensor` with all tensors broadcasted to the proper device.
     """
-    if not TORCH_DISTRIBUTED_AVAILABLE:
+    if not is_torch_distributed_available():
         raise ModuleNotFoundError(
             "torch was compiled without distributed support (torch.distributed.is_available() = False). "
             "Please use a version which includes distributed support in order to call #broadcast()"
@@ -339,7 +335,7 @@ def broadcast_object_list(object_list, from_process: int = 0):
     Returns:
         The same list containing the objects from process 0.
     """
-    if not TORCH_DISTRIBUTED_AVAILABLE:
+    if not is_torch_distributed_available():
         raise ModuleNotFoundError(
             "torch was compiled without distributed support (torch.distributed.is_available() = False). "
             "Please use a version which includes distributed support in order to call #broadcast_object_list()"
@@ -457,7 +453,7 @@ def reduce(tensor, reduction="mean"):
     Returns:
         The same data structure as `data` with all the tensors reduced.
     """
-    if not TORCH_DISTRIBUTED_AVAILABLE:
+    if not is_torch_distributed_available():
         raise ModuleNotFoundError(
             "torch was compiled without distributed support (torch.distributed.is_available() = False). "
             "Please use a version which includes distributed support in order to call #reduce()"
