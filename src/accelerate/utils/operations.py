@@ -25,7 +25,7 @@ import torch
 from ..state import PartialState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, TensorInformation
-from .imports import is_tpu_available, is_torch_distributed_available
+from .imports import is_torch_distributed_available, is_tpu_available
 from .versions import is_torch_version
 
 
