@@ -224,8 +224,8 @@ def gather(tensor):
     """
     if not is_torch_distributed_available():
         raise ModuleNotFoundError(
-            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
-            "Please use a version which includes distributed support in order to call #gather()"
+            "`torch` was compiled without distributed support (`torch.distributed.is_available() == False`). "
+            "Please install a version which includes distributed support in order to call gather."
         )
 
     if PartialState().distributed_type == DistributedType.TPU:
@@ -263,8 +263,8 @@ def gather_object(object: Any):
     """
     if not is_torch_distributed_available():
         raise ModuleNotFoundError(
-            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
-            "Please use a version which includes distributed support in order to call #gather_object()"
+            "`torch` was compiled without distributed support (`torch.distributed.is_available() == False`). "
+            "Please install a version which includes distributed support in order to call gather_object."
         )
 
     if PartialState().distributed_type == DistributedType.TPU:
@@ -308,8 +308,8 @@ def broadcast(tensor, from_process: int = 0):
     """
     if not is_torch_distributed_available():
         raise ModuleNotFoundError(
-            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
-            "Please use a version which includes distributed support in order to call #broadcast()"
+            "`torch` was compiled without distributed support (`torch.distributed.is_available() == False`). "
+            "Please install a version which includes distributed support in order to call broadcast."
         )
 
     if PartialState().distributed_type == DistributedType.TPU:
@@ -337,8 +337,8 @@ def broadcast_object_list(object_list, from_process: int = 0):
     """
     if not is_torch_distributed_available():
         raise ModuleNotFoundError(
-            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
-            "Please use a version which includes distributed support in order to call #broadcast_object_list()"
+            "`torch` was compiled without distributed support (`torch.distributed.is_available() == False`). "
+            "Please install a version which includes distributed support in order to call broadcast_object_list."
         )
 
     if PartialState().distributed_type == DistributedType.TPU:
@@ -455,8 +455,8 @@ def reduce(tensor, reduction="mean"):
     """
     if not is_torch_distributed_available():
         raise ModuleNotFoundError(
-            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
-            "Please use a version which includes distributed support in order to call #reduce()"
+            "`torch` was compiled without distributed support (`torch.distributed.is_available() == False`). "
+            "Please install a version which includes distributed support in order to call reduce."
         )
 
     def _reduce_across_processes(tensor, reduction="mean"):
