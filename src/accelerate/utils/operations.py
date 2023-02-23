@@ -21,13 +21,19 @@ from functools import update_wrapper
 from typing import Any, Mapping
 
 import torch
-from torch.distributed import ReduceOp
 
 from ..state import PartialState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, TensorInformation
 from .imports import is_tpu_available
 from .versions import is_torch_version
+
+
+if torch.distributed.is_available():
+    from torch.distributed import ReduceOp
+    TORCH_DISTRIBUTED_AVAILABLE = True
+else:
+    TORCH_DISTRIBUTED_AVAILABLE = False
 
 
 if is_tpu_available(check_device=False):
@@ -219,6 +225,12 @@ def gather(tensor):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
+    if not TORCH_DISTRIBUTED_AVAILABLE:
+        raise ModuleNotFoundError(
+            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
+            "Please use a version which includes distributed support in order to call #gather()"
+        )
+
     if PartialState().distributed_type == DistributedType.TPU:
         return _tpu_gather(tensor, name="accelerate.utils.gather")
     elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
@@ -252,6 +264,12 @@ def gather_object(object: Any):
     Returns:
         The same data structure as `object` with all the objects sent to every device.
     """
+    if not TORCH_DISTRIBUTED_AVAILABLE:
+        raise ModuleNotFoundError(
+            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
+            "Please use a version which includes distributed support in order to call #gather_object()"
+        )
+
     if PartialState().distributed_type == DistributedType.TPU:
         raise NotImplementedError("gather objects in TPU is not supported")
     elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
@@ -291,6 +309,12 @@ def broadcast(tensor, from_process: int = 0):
     Returns:
         The same data structure as `tensor` with all tensors broadcasted to the proper device.
     """
+    if not TORCH_DISTRIBUTED_AVAILABLE:
+        raise ModuleNotFoundError(
+            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
+            "Please use a version which includes distributed support in order to call #broadcast()"
+        )
+
     if PartialState().distributed_type == DistributedType.TPU:
         return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
     elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
@@ -314,6 +338,12 @@ def broadcast_object_list(object_list, from_process: int = 0):
     Returns:
         The same list containing the objects from process 0.
     """
+    if not TORCH_DISTRIBUTED_AVAILABLE:
+        raise ModuleNotFoundError(
+            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
+            "Please use a version which includes distributed support in order to call #broadcast_object_list()"
+        )
+
     if PartialState().distributed_type == DistributedType.TPU:
         for i, obj in enumerate(object_list):
             object_list[i] = xm.mesh_reduce("accelerate.utils.broadcast_object_list", obj, lambda x: x[from_process])
@@ -426,6 +456,11 @@ def reduce(tensor, reduction="mean"):
     Returns:
         The same data structure as `data` with all the tensors reduced.
     """
+    if not TORCH_DISTRIBUTED_AVAILABLE:
+        raise ModuleNotFoundError(
+            "torch was compiled without distributed support (torch.distributed.is_available() = False). "
+            "Please use a version which includes distributed support in order to call #reduce()"
+        )
 
     def _reduce_across_processes(tensor, reduction="mean"):
         state = PartialState()
