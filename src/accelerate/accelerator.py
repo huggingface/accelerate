@@ -1936,7 +1936,7 @@ class Accelerator:
         if len(getattr(self, "trackers", [])) > 0:
             for tracker in self.trackers:
                 if tracker.name == name:
-                    return tracker
+                    return tracker.tracker if unwrap else tracker
             raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
         # Handle tracker only made on main process
         return GeneralTracker(_blank=True)
