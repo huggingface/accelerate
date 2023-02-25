@@ -183,7 +183,7 @@ class TensorBoardTracker(GeneralTracker):
     requires_logging_directory = True
 
     @on_main_process
-    def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = None, **kwargs):
+    def __init__(self, run_name: str, logging_dir: Union[str, os.PathLike], **kwargs):
         super().__init__()
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
