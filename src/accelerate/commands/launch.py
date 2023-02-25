@@ -45,6 +45,7 @@ from accelerate.utils import (
     is_torch_version,
     patch_environment,
     prepare_tpu,
+    merge_dicts,
 )
 from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from accelerate.utils.dataclasses import SageMakerDistributedType
@@ -1062,7 +1063,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     }
 
     if sagemaker_config.additional_args is not None:
-        args = {**args, **sagemaker_config.additional_args}
+        args = merge_dicts(sagemaker_config.additional_args, args)
 
     huggingface_estimator = HuggingFace(**args)
 
