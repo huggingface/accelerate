@@ -51,6 +51,7 @@ RUN apt-get update && \
     ca-certificates \
     wget \
     unzip \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists
     
 RUN echo "source activate accelerate" >> ~/.profile
