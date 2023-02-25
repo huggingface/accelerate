@@ -122,11 +122,11 @@ from .memory import find_executable_batch_size, release_memory
 from .other import (
     extract_model_from_parallel,
     get_pretty_name,
+    merge_dicts,
     patch_environment,
     save,
     wait_for_everyone,
     write_basic_config,
-    merge_dicts,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
 from .torch_xla import install_xla
