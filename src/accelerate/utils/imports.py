@@ -40,7 +40,12 @@ try:
 except ImportError:
     _tpu_available = False
 
-
+try 
+    import intel_extension_for_pytorch as ipex
+    _xpu_available = True
+except ImportError:
+    _xpu_available = False
+    
 def is_ccl_available():
     return (
         importlib.util.find_spec("torch_ccl") is not None
@@ -69,6 +74,18 @@ def is_tpu_available(check_device=True):
     return _tpu_available
 
 
+@lru_cache()
+def is_xpu_available(check_device=True):
+    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
+    if _xpu_available and check_device:
+        try:
+            # Will raise a RuntimeError if no XPU  is found
+            _ = torch.xpu.device_count()
+            return True
+        except RuntimeError:
+            return False
+    return _xpu_available
+
 def is_deepspeed_available():
     package_exists = importlib.util.find_spec("deepspeed") is not None
     # Check we're not importing a "deepspeed" directory somewhere but the actual library by trying to grab the version
@@ -88,6 +105,8 @@ def is_bf16_available(ignore_tpu=False):
     if is_torch_version(">=", "1.10"):
         if torch.cuda.is_available():
             return torch.cuda.is_bf16_supported()
+        elif torch.xpu.available():
+            return torch.xpu.is_bf16_supported()
         return True
     return False
 

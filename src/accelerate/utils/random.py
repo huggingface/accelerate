@@ -21,14 +21,14 @@ import torch
 from ..state import AcceleratorState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, RNGType
-from .imports import is_tpu_available
+from .imports import is_tpu_available,is_xpu_available
 
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
-def set_seed(seed: int, device_specific: bool = False):
+def set_seed(seed: int,include_xpus: bool = False, device_specific: bool = False):
     """
     Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch`.
 
@@ -44,6 +44,8 @@ def set_seed(seed: int, device_specific: bool = False):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    if is_xpu_available:
+        torch.xpu.manuual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
     if is_tpu_available():
         xm.set_rng_state(seed)

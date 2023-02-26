@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from .imports import is_safetensors_available
+from .imports import is_safetensors_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 
 
@@ -317,21 +317,29 @@ def get_max_layer_size(
     return max_size, layer_names
 
 
-def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None):
+def get_max_memory(max_memory: Optional[Dict[Union[int, str],is_xpu_available: bool =False Union[int, str]]] = None):
     """
     Get the maximum memory available if nothing is passed, converts string to int otherwise.
     """
     import psutil
-
+     
     if max_memory is None:
         if not torch.cuda.is_available():
             max_memory = {}
+        elif is_xpu_available:
+            if not torch.xpu.is_available():
+                max_memory = {}
         else:
             # Make sure CUDA is initialized on each GPU to have the right memory info.
-            for i in range(torch.cuda.device_count()):
-                _ = torch.tensor([0], device=i)
-            max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
-        max_memory["cpu"] = psutil.virtual_memory().available
+            if is_xpu_available :
+                for i in range(torch.xpu.device_count()):
+                   _ = torch.tensor(0, device=torch.device("xpu", i))
+                max_memory = {i: torch.xpu.mem_get_info(i)[0] for i in range(torch.xpu.device_count())} 
+            else:
+                for i in range(torch.cuda.device_count()):
+                    _ = torch.tensor([0], device=i)
+                max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+            max_memory["cpu"] = psutil.virtual_memory().available
         return max_memory
 
     for key in max_memory:
@@ -388,6 +396,7 @@ def load_offloaded_weights(model, index, offload_folder):
 def get_balanced_memory(
     model: nn.Module,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
+    is_xpu_available : bool = False,
     no_split_module_classes: Optional[List[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     low_zero: bool = False,
@@ -417,14 +426,20 @@ def get_balanced_memory(
             Transformers generate function).
     """
     # Get default / clean up max_memory
-    max_memory = get_max_memory(max_memory)
+    max_memory = get_max_memory(max_memory,is_xpu_available)
 
     if not torch.cuda.is_available():
         return max_memory
-
+    elif is_xpu_available:
+        if not torch.xpu.available():
+            return max_memory
+            
     num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
+    if is_xpu_available:
+        num_devices = len([d for d in max_memory if torch.device(d).type == "xpu" and max_memory[d] > 0])
     module_sizes = compute_module_sizes(model, dtype=dtype)
     per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
+
 
     # We can't just set the memory to model_size // num_devices as it will end being too small: each GPU will get
     # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
@@ -464,7 +479,7 @@ def get_balanced_memory(
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
-    max_memory = get_max_memory(max_memory)
+    max_memory = get_max_memory(max_memory,include_xpus)
     last_gpu = max(i for i in max_memory if isinstance(i, int) and max_memory[i] > 0)
     # The last device is left with max_memory just in case the buffer is not enough.
     for i in range(last_gpu):
@@ -482,6 +497,7 @@ def infer_auto_device_map(
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
     no_split_module_classes: Optional[List[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
+    is_xpu_available: bool = False
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
@@ -512,7 +528,7 @@ def infer_auto_device_map(
             If provided, the weights will be converted to that type when loaded.
     """
     # Get default / clean up max_memory
-    max_memory = get_max_memory(max_memory)
+    max_memory = get_max_memory(max_memory,is_xpu_available)
     if no_split_module_classes is None:
         no_split_module_classes = []
     elif not isinstance(no_split_module_classes, (list, tuple)):
