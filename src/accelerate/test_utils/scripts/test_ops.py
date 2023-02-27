@@ -20,27 +20,25 @@ from accelerate import PartialState
 from accelerate.utils.operations import broadcast, gather, pad_across_processes, reduce
 
 
-state = PartialState()
 
-
-def create_tensor():
+def create_tensor(state):
     return (torch.arange(state.num_processes) + 1 + (state.num_processes * state.process_index)).to(state.device)
 
 
-def test_gather():
-    tensor = create_tensor()
+def test_gather(state):
+    tensor = create_tensor(state)
     gathered_tensor = gather(tensor)
     assert gathered_tensor.tolist() == list(range(1, state.num_processes**2 + 1))
 
 
-def test_broadcast():
-    tensor = create_tensor()
+def test_broadcast(state):
+    tensor = create_tensor(state)
     broadcasted_tensor = broadcast(tensor)
     assert broadcasted_tensor.shape == torch.Size([state.num_processes])
     assert broadcasted_tensor.tolist() == list(range(1, state.num_processes + 1))
 
 
-def test_pad_across_processes():
+def test_pad_across_processes(state):
     # We need to pad the tensor with one more element if we are the main process
     # to ensure that we can pad
     if state.is_main_process:
@@ -53,21 +51,21 @@ def test_pad_across_processes():
         assert padded_tensor.tolist() == list(range(0, state.num_processes)) + [0]
 
 
-def test_reduce_sum():
+def test_reduce_sum(state):
     # For now runs on only two processes
     if state.num_processes != 2:
         return
-    tensor = create_tensor()
+    tensor = create_tensor(state)
     reduced_tensor = reduce(tensor, "sum")
     truth_tensor = torch.tensor([4.0, 6]).to(state.device)
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
 
-def test_reduce_mean():
+def test_reduce_mean(state):
     # For now runs on only two processes
     if state.num_processes != 2:
         return
-    tensor = create_tensor()
+    tensor = create_tensor(state)
     reduced_tensor = reduce(tensor, "mean")
     truth_tensor = torch.tensor([2.0, 3]).to(state.device)
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
@@ -79,16 +77,17 @@ def _mp_fn(index):
 
 
 def main():
+    state = PartialState()
     state.print("testing gather")
-    test_gather()
+    test_gather(state)
     state.print("testing broadcast")
-    test_broadcast()
+    test_broadcast(state)
     state.print("testing pad_across_processes")
-    test_pad_across_processes()
+    test_pad_across_processes(state)
     state.print("testing reduce_sum")
-    test_reduce_sum()
+    test_reduce_sum(state)
     state.print("testing reduce_mean")
-    test_reduce_mean()
+    test_reduce_mean(state)
 
 
 if __name__ == "__main__":
