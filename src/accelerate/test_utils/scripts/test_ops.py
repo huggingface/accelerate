@@ -20,9 +20,8 @@ from accelerate import PartialState
 from accelerate.utils.operations import broadcast, gather, pad_across_processes, reduce
 
 
-
 def create_tensor(state):
-    return (torch.arange(state.num_processes) + 1. + (state.num_processes * state.process_index)).to(state.device)
+    return (torch.arange(state.num_processes) + 1.0 + (state.num_processes * state.process_index)).to(state.device)
 
 
 def test_gather(state):
