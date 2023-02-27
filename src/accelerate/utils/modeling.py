@@ -678,10 +678,10 @@ def load_state_dict(checkpoint_file, device_map=None):
             return safe_load_file(checkpoint_file)
         else:
             devices = [device for device in device_map.values() if device not in ["disk"]]
-            
+
             # if we only have one device we can load everything directly
             if len(devices) == 1:
-                return safe_load_file(checkpoint_file, device=devices[0]) 
+                return safe_load_file(checkpoint_file, device=devices[0])
             # cpu device should always exist as fallback option
             devices = set(devices + ["cpu"])
 
