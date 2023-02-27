@@ -30,7 +30,6 @@ def create_tensor():
 def test_gather():
     tensor = create_tensor()
     gathered_tensor = gather(tensor)
-    assert gathered_tensor.shape == torch.Size([state.num_processes**2])
     assert gathered_tensor.tolist() == list(range(1, state.num_processes**2 + 1))
 
 
