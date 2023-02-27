@@ -31,11 +31,19 @@ class MultiGPUTester(unittest.TestCase):
         self.data_loop_file_path = os.path.sep.join(
             mod_file.split(os.path.sep)[:-1] + ["scripts", "test_distributed_data_loop.py"]
         )
+        self.operation_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_ops.py"])
 
     @require_multi_gpu
     def test_multi_gpu(self):
         print(f"Found {torch.cuda.device_count()} devices.")
         cmd = get_launch_prefix() + [self.test_file_path]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd, env=os.environ.copy())
+
+    @require_multi_gpu
+    def test_multi_gpu_ops(self):
+        print(f"Found {torch.cuda.device_count()} devices.")
+        cmd = get_launch_prefix() + [self.operation_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
