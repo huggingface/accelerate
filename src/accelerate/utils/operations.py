@@ -232,7 +232,7 @@ def gather(tensor):
 def _gpu_gather_object(object: Any):
     def _gpu_gather_object_one(object: Any):
         output_objects = [None for _ in range(PartialState().num_processes)]
-        torch.distributed.all_gather_object(object, output_objects if PartialState().is_local_main_process else None)
+        torch.distributed.all_gather_object(output_objects, object)
         return output_objects
 
     return recursively_apply(_gpu_gather_object_one, object)
