@@ -232,7 +232,7 @@ def gather(tensor):
 def _gpu_gather_object(object: Any):
     def _gpu_gather_object_one(object: Any):
         output_objects = [None for _ in range(PartialState().num_processes)]
-        torch.distributed.all_gather_object(output_objects, object)
+        torch.distributed.all_gather_object(object, output_objects if PartialState().is_local_main_process else None)
         return output_objects
 
     return recursively_apply(_gpu_gather_object_one, object)
@@ -430,20 +430,20 @@ def reduce(tensor, reduction="mean"):
     def _reduce_across_processes(tensor, reduction="mean"):
         state = PartialState()
         cloned_tensor = tensor.clone()
-        if state.distributed_type == DistributedType.TPU:
-            xm.all_reduce("sum", cloned_tensor)
-            return cloned_tensor
-        elif state.distributed_type.value in CUDA_DISTRIBUTED_TYPES:
-            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
-            return cloned_tensor
-        elif state.distributed_type == DistributedType.MULTI_CPU:
-            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
-            return cloned_tensor
-        else:
+        if state.distributed_type == DistributedType.NO:
             if reduction == "sum":
                 return cloned_tensor.sum()
             else:
                 return cloned_tensor.mean()
+        if state.distributed_type == DistributedType.TPU:
+            xm.all_reduce("sum", cloned_tensor)
+        elif state.distributed_type.value in CUDA_DISTRIBUTED_TYPES:
+            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
+        elif state.distributed_type == DistributedType.MULTI_CPU:
+            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
+        if reduction == "mean":
+            cloned_tensor /= state.num_processes
+        return cloned_tensor
 
     return recursively_apply(_reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction)
 
