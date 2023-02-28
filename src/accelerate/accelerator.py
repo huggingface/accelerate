@@ -1102,10 +1102,6 @@ class Accelerator:
         self._models.append(model)
         if device_placement:
             model = model.to(self.device)
-        if self.state.dynamo_backend != DynamoBackend.NO:
-            import torch._dynamo as dynamo
-
-            model = dynamo.optimize(self.state.dynamo_backend.value.lower())(model)
         if self.distributed_type == DistributedType.MULTI_GPU:
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
@@ -1146,6 +1142,11 @@ class Accelerator:
             model.forward = convert_outputs_to_fp32(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
+        # torch.compile should be called last.
+        if self.state.dynamo_backend != DynamoBackend.NO:
+            import torch._dynamo as dynamo
+
+            model = dynamo.optimize(self.state.dynamo_backend.value.lower())(model)
         return model
 
     def _prepare_deepspeed(self, *args):

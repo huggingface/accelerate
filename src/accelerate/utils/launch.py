@@ -23,7 +23,7 @@ import torch
 
 from ..commands.config.config_args import SageMakerConfig
 from ..commands.config.config_utils import DYNAMO_BACKENDS
-from ..utils import DynamoBackend, PrecisionType, is_torch_version
+from ..utils import DynamoBackend, PrecisionType, is_torch_version, merge_dicts
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from .dataclasses import DistributedType, SageMakerDistributedType
 
@@ -448,7 +448,7 @@ def prepare_sagemager_args_inputs(
     }
 
     if sagemaker_config.additional_args is not None:
-        args = {**args, **sagemaker_config.additional_args}
+        args = merge_dicts(sagemaker_config.additional_args, args)
     return args, sagemaker_inputs
 
 

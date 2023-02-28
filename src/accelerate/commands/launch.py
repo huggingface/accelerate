@@ -568,6 +568,8 @@ def multi_gpu_launcher(args):
                 console = get_console()
                 console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
                 console.print_exception(suppress=[__file__], show_locals=False)
+            else:
+                raise
 
 
 def deepspeed_launcher(args):
@@ -610,6 +612,8 @@ def deepspeed_launcher(args):
                     console = get_console()
                     console.print("\n[bold red]Using --debug, `torch.distributed` Stack Trace:[/bold red]")
                     console.print_exception(suppress=[__file__], show_locals=False)
+                else:
+                    raise
 
 
 def tpu_launcher(args):
