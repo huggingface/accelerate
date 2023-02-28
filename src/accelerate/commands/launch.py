@@ -43,6 +43,7 @@ from accelerate.utils import (
     is_rich_available,
     is_sagemaker_available,
     is_torch_version,
+    merge_dicts,
     patch_environment,
     prepare_tpu,
 )
@@ -1066,7 +1067,7 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
     }
 
     if sagemaker_config.additional_args is not None:
-        args = {**args, **sagemaker_config.additional_args}
+        args = merge_dicts(sagemaker_config.additional_args, args)
 
     huggingface_estimator = HuggingFace(**args)
 

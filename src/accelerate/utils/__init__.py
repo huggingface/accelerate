@@ -122,6 +122,7 @@ from .memory import find_executable_batch_size, release_memory
 from .other import (
     extract_model_from_parallel,
     get_pretty_name,
+    merge_dicts,
     patch_environment,
     save,
     wait_for_everyone,
