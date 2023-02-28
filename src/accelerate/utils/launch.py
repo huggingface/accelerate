@@ -23,8 +23,9 @@ import torch
 
 from ..commands.config.config_args import SageMakerConfig
 from ..commands.config.config_utils import DYNAMO_BACKENDS
-from ..utils import DynamoBackend, PrecisionType, is_torch_version, merge_dicts
+from ..utils import DynamoBackend, PrecisionType, is_torch_version
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
+from ..utils.other import merge_dicts
 from .dataclasses import DistributedType, SageMakerDistributedType
 
 
