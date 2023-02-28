@@ -382,7 +382,6 @@ class Accelerator:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
-            DistributedType.FSDP,
             DistributedType.MEGATRON_LM,
         ):
             if self.device.type == "cpu":
