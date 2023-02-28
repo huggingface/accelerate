@@ -1151,7 +1151,8 @@ class Accelerator:
     def _prepare_deepspeed(self, *args):
         deepspeed_plugin = self.state.deepspeed_plugin
 
-        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto":
+        is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
+        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto" or is_dataloader_present:
             result = [
                 self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
                 for obj in args
