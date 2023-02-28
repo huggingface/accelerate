@@ -1112,8 +1112,9 @@ def launch_command(args):
                     args.gpu_ids = defaults.gpu_ids
                 else:
                     args.gpu_ids = "all"
-            if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and (args.gpu_ids != "all"):
-                args.multi_gpu = False
+            if args.multi_gpu and not args.num_machines > 1:
+                if len(args.gpu_ids.split(",")) < 2 and (args.gpu_ids != "all"):
+                    args.multi_gpu = False
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
