@@ -1112,8 +1112,8 @@ def launch_command(args):
                     args.gpu_ids = defaults.gpu_ids
                 else:
                     args.gpu_ids = "all"
-            if args.multi_gpu and not args.num_machines > 1:
-                if len(args.gpu_ids.split(",")) < 2 and (args.gpu_ids != "all"):
+            if len(args.gpu_ids.split(",")) < 2 and (args.gpu_ids != "all"):
+                if args.multi_gpu and not args.num_machines > 1:
                     raise ValueError(
                         "Less than two GPU ids were configured and tried to run on on multiple GPUs. "
                         "Please ensure at least two are specified for `--gpu_ids`, or use `--gpu_ids='all'`."
