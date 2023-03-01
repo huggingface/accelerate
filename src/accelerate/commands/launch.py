@@ -244,6 +244,19 @@ def launch_command_parser(subparsers=None):
         default=None,
         help="The port to use to communicate with the machine of rank 0.",
     )
+    distributed_args.add_argument(
+        "-t",
+        "--tee",
+        default="0",
+        type=str,
+        help="Tee std streams into a log file and also to console.",
+    )
+    distributed_args.add_argument(
+        "--role",
+        type=str,
+        default="default",
+        help="User-defined role for the workers.",
+    )
     # Rendezvous related arguments
     distributed_args.add_argument(
         "--rdzv_conf",
