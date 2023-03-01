@@ -815,7 +815,8 @@ def _validate_launch_command(args):
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
             if torch.cuda.device_count() > 1 and not args.multi_gpu:
                 warned.append(
-                    "\tMore than one GPU was found, enabling multi-GPU training. If this was unintended please pass in `--num_processes=1`."
+                    "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
+                    "\t\tIf this was unintended please pass in `--num_processes=1`."
                 )
                 args.multi_gpu = True
         if args.num_machines is None:
