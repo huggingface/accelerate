@@ -421,13 +421,15 @@ class ModelingUtilsTester(unittest.TestCase):
         from safetensors.torch import save_file
 
         state_dict = {k: torch.randn(4, 5) for k in ["a", "b", "c"]}
-        device_map = {"a": "cpu", "b": 0, "c": "disk"}
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            checkpoint_file = os.path.join(tmp_dir, "model.safetensors")
-            save_file(state_dict, checkpoint_file, metadata={"format": "pt"})
+        device_maps = [{"a": "cpu", "b": 0, "c": "disk"}, {"a": 0, "b": 0, "c": "disk"}, {"a": 0, "b": 0, "c": 0}]
 
-            loaded_state_dict = load_state_dict(checkpoint_file, device_map=device_map)
+        for device_map in device_maps:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                checkpoint_file = os.path.join(tmp_dir, "model.safetensors")
+                save_file(state_dict, checkpoint_file, metadata={"format": "pt"})
 
-        self.assertEqual(loaded_state_dict["a"].device, torch.device("cpu"))
-        self.assertEqual(loaded_state_dict["b"].device, torch.device(0))
-        self.assertEqual(loaded_state_dict["c"].device, torch.device("cpu"))
+                loaded_state_dict = load_state_dict(checkpoint_file, device_map=device_map)
+
+            for param, device in device_map.items():
+                device = device if device != "disk" else "cpu"
+                self.assertEqual(loaded_state_dict[param].device, torch.device(device))
