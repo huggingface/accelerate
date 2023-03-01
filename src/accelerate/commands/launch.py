@@ -776,8 +776,16 @@ def _validate_launch_command(args):
                     args.gpu_ids = defaults.gpu_ids
                 else:
                     args.gpu_ids = "all"
-            if len(args.gpu_ids.split(",")) < 2 and args.multi_gpu and (args.gpu_ids != "all"):
-                args.multi_gpu = False
+            if (
+                len(args.gpu_ids.split(",")) < 2
+                and (args.gpu_ids != "all")
+                and args.multi_gpu
+                and args.num_machines <= 1
+            ):
+                raise ValueError(
+                    "Less than two GPU ids were configured and tried to run on on multiple GPUs. "
+                    "Please ensure at least two are specified for `--gpu_ids`, or use `--gpu_ids='all'`."
+                )
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
