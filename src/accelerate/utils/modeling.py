@@ -684,7 +684,8 @@ def load_state_dict(checkpoint_file, device_map=None):
                 return safe_load_file(checkpoint_file, device=devices[0])
 
             # cpu device should always exist as fallback option
-            devices = set(devices + ["cpu"])
+            if "cpu" not in devices:
+                devices.append("cpu")
 
             # For each device, get the weights that go there
             device_weights = {device: [] for device in devices}
@@ -692,7 +693,7 @@ def load_state_dict(checkpoint_file, device_map=None):
                 if device in devices:
                     device_weights[device].extend([k for k in weight_names if k.startswith(module_name)])
 
-            # all weights that haven't defined a device sholud be loaded on CPU
+            # all weights that haven't defined a device should be loaded on CPU
             device_weights["cpu"].extend([k for k in weight_names if k not in sum(device_weights.values(), [])])
             tensors = {}
             for device in devices:

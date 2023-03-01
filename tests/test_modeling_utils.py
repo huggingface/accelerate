@@ -430,6 +430,6 @@ class ModelingUtilsTester(unittest.TestCase):
 
                 loaded_state_dict = load_state_dict(checkpoint_file, device_map=device_map)
 
-            for k, v in device_map.items():
-                v = v if v != "disk" else "cpu"
-                self.assertEqual(loaded_state_dict[k].device, torch.device(v))
+            for param, device in device_map.items():
+                device = device if device != "disk" else "cpu"
+                self.assertEqual(loaded_state_dict[param].device, torch.device(device))
