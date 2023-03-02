@@ -25,6 +25,8 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
     """
     Recursively converts the linear and layernorm layers of a model to their `transformers_engine` counterpart.
     """
+    if not is_fp8_available():
+        raise ImportError("Using `convert_model` requires transformer_engine to be installed.")
     for name, module in model.named_children():
         if isinstance(module, nn.Linear) and to_transformer_engine and _convert_linear:
             has_bias = module.bias is not None
