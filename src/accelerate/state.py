@@ -38,7 +38,7 @@ dist_backend="nccl"
 try:
     import oneccl_bindings_for_pytorch as torch_ccl
 
-    rank_zero_info(f"Using Intel(R) oneCCL Bindings for PyTorch* {torch_ccl.__version__}")
+    print(f"Using Intel(R) oneCCL Bindings for PyTorch* {torch_ccl.__version__}")
     dist_backend = "ccl"
 except ImportError:
     pass
@@ -116,7 +116,7 @@ class PartialState:
                     if self.device is None:
                         self.device = torch.device("cuda", self.local_process_index),
                     torch.cuda.set_device(self.device)
-                    elif self.device is None and  is_xpu_available():
+                    if self.device is None and  is_xpu_available():
                         self.device = torch.device("xpu", self.local_process_index),
                     torch.xpu.set_device(self.device)
                     
@@ -153,7 +153,7 @@ class PartialState:
                 if self.device is None:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-                elif self.device is None and  is_xpu_available():
+                if self.device is None and  is_xpu_available():
                     self.device = torch.device("xpu", self.local_process_index),
                 torch.xpu.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
@@ -172,7 +172,7 @@ class PartialState:
                 if self.device is None:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-                elif self.device is None and  is_xpu_available():
+                if self.device is None and  is_xpu_available():
                     self.device = torch.device("xpu", self.local_process_index),
                 torch.xpu.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:

@@ -36,6 +36,7 @@ from .imports import (
     is_sagemaker_available,
     is_tensorboard_available,
     is_tpu_available,
+    is_xpu_available,
     is_transformers_available,
     is_wandb_available,
 )
