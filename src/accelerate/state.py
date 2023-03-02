@@ -119,16 +119,7 @@ class PartialState:
                     is_deepspeed_available()
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
-                if not torch.distributed.is_initialized():
-                    from .utils import compare_versions
-
-                    self.backend = "nccl"
-                    if compare_versions("deepspeed", ">", "0.6.5"):
-                        from deepspeed import comm as dist
-
-                        dist.init_distributed(dist_backend=self.backend)
-                    else:
-                        torch.distributed.init_process_group(backend="nccl", **kwargs)
+                torch.distributed.init_process_group(backend="nccl", **kwargs)
 
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
