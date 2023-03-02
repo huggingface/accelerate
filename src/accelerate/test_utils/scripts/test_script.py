@@ -28,6 +28,7 @@ from accelerate.utils import (
     DistributedType,
     gather,
     is_bf16_available,
+    is_torch_version,
     set_seed,
     synchronize_rng_states,
 )
