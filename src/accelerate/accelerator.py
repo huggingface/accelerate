@@ -511,10 +511,10 @@ class Accelerator:
                     "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
 
-        def inner(function):
-            return PartialState().on_main_process(function)
+        def _inner(*args, **kwargs):
+            return PartialState().on_main_process(function)(*args, **kwargs)
 
-        return partial(inner, function=function)
+        return _inner
 
     def on_local_main_process(self, function: Callable[..., Any] = None):
         """
@@ -553,10 +553,10 @@ class Accelerator:
                     "The `on_local_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
 
-        def inner(function):
-            return PartialState().on_local_main_process(function)
+        def _inner(*args, **kwargs):
+            return PartialState().on_local_main_process(function)(*args, **kwargs)
 
-        return partial(inner, function=function)
+        return _inner
 
     def on_last_process(self, function: Callable[..., Any]):
         """
@@ -592,10 +592,10 @@ class Accelerator:
                     "The `on_last_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
 
-        def inner(function):
-            return PartialState().on_last_process(function)
+        def _inner(*args, **kwargs):
+            return PartialState().on_last_process(function)(*args, **kwargs)
 
-        return partial(inner, function=function)
+        return _inner
 
     def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
         """
@@ -637,10 +637,10 @@ class Accelerator:
                     "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
 
-        def inner(function, process_index):
-            return PartialState().on_process(function, process_index)
+        def _inner(*args, **kwargs):
+            return PartialState().on_process(function, process_index)(*args, **kwargs)
 
-        return partial(inner, function=function, process_index=process_index)
+        return _inner
 
     def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
         """
@@ -685,10 +685,10 @@ class Accelerator:
                     "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
 
-        def inner(function, local_process_index):
-            return PartialState().on_local_process(function, local_process_index)
+        def _inner(*args, **kwargs):
+            return PartialState().on_local_process(function, local_process_index)(*args, **kwargs)
 
-        return partial(inner, function=function, local_process_index=local_process_index)
+        return _inner
 
     @contextmanager
     def main_process_first(self):
