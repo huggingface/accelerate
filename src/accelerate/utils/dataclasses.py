@@ -302,6 +302,7 @@ class RNGType(BaseEnum):
     TORCH = "torch"
     CUDA = "cuda"
     XLA = "xla"
+    XPU = "xpu"
     GENERATOR = "generator"
 
 

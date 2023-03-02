@@ -29,11 +29,19 @@ from .utils import (
     is_deepspeed_available,
     is_mps_available,
     is_tpu_available,
+    is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
 )
 from .utils.dataclasses import SageMakerDistributedType
+dist_backend="nccl"
+try:
+    import oneccl_bindings_for_pytorch as torch_ccl
 
+    rank_zero_info(f"Using Intel(R) oneCCL Bindings for PyTorch* {torch_ccl.__version__}")
+    dist_backend = "ccl"
+except ImportError:
+    pass
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
@@ -106,8 +114,12 @@ class PartialState:
                     self.process_index = torch.distributed.get_rank()
                     self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                     if self.device is None:
-                        self.device = torch.device("cuda", self.local_process_index)
+                        self.device = torch.device("cuda", self.local_process_index),
                     torch.cuda.set_device(self.device)
+                    elif self.device is None and  is_xpu_available():
+                        self.device = torch.device("xpu", self.local_process_index),
+                    torch.xpu.set_device(self.device)
+                    
             elif is_tpu_available() and not cpu:
                 self.distributed_type = DistributedType.TPU
                 self.num_processes = xm.xrt_world_size()
@@ -121,14 +133,19 @@ class PartialState:
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
                     from .utils import compare_versions
-
-                    self.backend = "nccl"
+                    if dist_backend == "ccl":
+                        self.backend="ccl"
+                    else:
+                        self.backend = "nccl"
                     if compare_versions("deepspeed", ">", "0.6.5"):
                         from deepspeed import comm as dist
 
                         dist.init_distributed(dist_backend=self.backend)
                     else:
-                        torch.distributed.init_process_group(backend="nccl", **kwargs)
+                        if dist_backend == "ccl":
+                            torch.distributed.init_process_group(backend = "ccl",**kwargs)
+                        else:
+                            torch.distributed.init_process_group(backend="nccl", **kwargs)
 
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
@@ -136,18 +153,28 @@ class PartialState:
                 if self.device is None:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
+                elif self.device is None and  is_xpu_available():
+                    self.device = torch.device("xpu", self.local_process_index),
+                torch.xpu.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend="nccl", **kwargs)
-                    self.backend = "nccl"
+                    if dist_backend == "ccl":
+                        torch.distributed.init_process_group(backend="ccl", **kwargs)
+                        self.backend = "ccl"
+                    else:
+                        torch.distributed.init_process_group(backend="nccl", **kwargs)
+                        self.backend = "nccl"
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 if self.device is None:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
+                elif self.device is None and  is_xpu_available():
+                    self.device = torch.device("xpu", self.local_process_index),
+                torch.xpu.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
@@ -212,11 +239,13 @@ class PartialState:
                         )
 
                 if self.device is None:
-                    if cpu or not (torch.cuda.is_available() or is_mps_available()):
+                    if cpu or not (torch.cuda.is_available() or is_mps_available() or is_xpu_available()):
                         self.device = torch.device("cpu")
                     elif is_mps_available():
                         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                         self.device = torch.device("mps")
+                    elif is_xpu_available():
+                        self.device =  torch.device("xpu")
                     else:
                         self.device = torch.device("cuda")
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)

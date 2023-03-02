@@ -52,6 +52,10 @@ def release_memory(*objects):
         objects[i] = None
     gc.collect()
     torch.cuda.empty_cache()
+    try:
+        torch.xpu.empty_cache()
+    except AttributeError:
+        pass
     return objects
 
 
@@ -109,6 +113,10 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
         nonlocal batch_size
         gc.collect()
         torch.cuda.empty_cache()
+        try:
+            torch.xpu.empty_cache()
+        except AttributeError:
+            pass
         params = list(inspect.signature(function).parameters.keys())
         # Guard against user error
         if len(params) < (len(args) + 1):
@@ -126,6 +134,10 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
                 if should_reduce_batch_size(e):
                     gc.collect()
                     torch.cuda.empty_cache()
+                    try:
+                        torch.xpu.empty_cache()
+                    except AttributeError:
+                        pass
                     batch_size //= 2
                 else:
                     raise
