@@ -153,7 +153,7 @@ def get_dataloaders(batch_size: int = 64):
     random_perm = np.random.permutation(len(fnames))
     cut = int(0.8 * len(fnames))
     train_split = random_perm[:cut]
-    eval_split = random_perm[:cut]
+    eval_split = random_perm[cut:]
 
     # For training a simple RandomResizedCrop will be used
     train_tfm = Compose([RandomResizedCrop((224, 224), scale=(0.5, 1.0)), ToTensor()])
@@ -337,7 +337,7 @@ def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
     mean = torch.tensor(model.default_cfg["mean"])[None, :, None, None]
     std = torch.tensor(model.default_cfg["std"])[None, :, None, None]
 
-    # To make this constant available on the active device, set it to the accelerator device
+    # To make these constants available on the active device, set it to the accelerator device
     mean = mean.to(accelerator.device)
     std = std.to(accelerator.device)
 
