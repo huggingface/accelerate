@@ -331,7 +331,6 @@ class WandBTracker(GeneralTracker):
         logger.debug("Successfully logged to WandB")
 
     def log_images(self, values: dict, step: Optional[int] = None, **kwargs):
-
         """
         Logs `images` to the current run.
 
@@ -357,8 +356,8 @@ class WandBTracker(GeneralTracker):
         **kwargs,
     ):
         """
-        Log a Table containing any object type (text, image, audio, video, molecule, html, etc).
-        Can be defined either with `columns` and `data` or with `dataframe`.
+        Log a Table containing any object type (text, image, audio, video, molecule, html, etc). Can be defined either
+        with `columns` and `data` or with `dataframe`.
 
         Args:
             table_name (`str`):
