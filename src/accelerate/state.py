@@ -542,7 +542,7 @@ class AcceleratorState:
         self.__dict__ = self._shared_state
         if PartialState._shared_state == {} or (cpu != PartialState._shared_state.get("_cpu", False)):
             PartialState(cpu, **kwargs)
-            self.__dict__.update(PartialState._shared_state)
+        self.__dict__.update(PartialState._shared_state)
         self._check_initialized(mixed_precision)
         if not self.initialized:
             self.backend = None
