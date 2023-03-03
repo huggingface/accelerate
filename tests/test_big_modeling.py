@@ -18,9 +18,11 @@ from tempfile import TemporaryDirectory
 
 import torch
 import torch.nn as nn
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from accelerate.big_modeling import (
     cpu_offload,
+    cpu_offload_with_hook,
     disk_offload,
     dispatch_model,
     init_empty_weights,
@@ -30,7 +32,6 @@ from accelerate.big_modeling import (
 from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import require_cuda, require_mps, require_multi_gpu, require_torch_min_version, slow
 from accelerate.utils import offload_state_dict
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 class ModelForTest(nn.Module):
@@ -39,6 +40,17 @@ class ModelForTest(nn.Module):
         self.linear1 = nn.Linear(3, 4)
         self.batchnorm = nn.BatchNorm1d(4)
         self.linear2 = nn.Linear(4, 5)
+
+    def forward(self, x):
+        return self.linear2(self.batchnorm(self.linear1(x)))
+
+
+class ModelForTestTiedWeights(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = nn.Linear(4, 4)
+        self.batchnorm = nn.BatchNorm1d(4)
+        self.linear2 = nn.Linear(4, 4)
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
@@ -273,6 +285,15 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
+    @require_cuda
+    def test_dispatch_model_tied_weights(self):
+        model = ModelForTestTiedWeights()
+        model.linear1.weight = model.linear2.weight
+        device_map = {"linear1": 0, "batchnorm": 0, "linear2": 0}
+
+        dispatch_model(model, device_map)
+        self.assertIs(model.linear2.weight, model.linear1.weight)
+
     @require_multi_gpu
     def test_dispatch_model_multi_gpu(self):
         model = BiggerModelForTest()
@@ -298,7 +319,7 @@ class BigModelingTester(unittest.TestCase):
             "transformer.wte": 0,
             "transformer.wpe": 0,
             "transformer.ln_f": 1,
-            "lm_head": 1,
+            "lm_head": 0,
         }
         for i in range(12):
             device_map[f"transformer.h.{i}"] = 0 if i <= 5 else 1
@@ -464,3 +485,33 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
+    def test_cpu_offload_with_hook(self):
+        model1 = torch.nn.Linear(4, 5)
+        model1, hook1 = cpu_offload_with_hook(model1)
+        self.assertEqual(model1.weight.device, torch.device("cpu"))
+
+        inputs = torch.randn(3, 4)
+        outputs = model1(inputs)
+        self.assertEqual(outputs.device, torch.device(0))
+        self.assertEqual(model1.weight.device, torch.device(0))
+
+        hook1.offload()
+        self.assertEqual(model1.weight.device, torch.device("cpu"))
+
+        model2 = torch.nn.Linear(5, 5)
+        model2, hook2 = cpu_offload_with_hook(model2, prev_module_hook=hook1)
+        self.assertEqual(model2.weight.device, torch.device("cpu"))
+
+        outputs = model1(inputs)
+        self.assertEqual(outputs.device, torch.device(0))
+        self.assertEqual(model1.weight.device, torch.device(0))
+
+        outputs = model2(outputs)
+        self.assertEqual(outputs.device, torch.device(0))
+        self.assertEqual(model1.weight.device, torch.device("cpu"))
+        self.assertEqual(model2.weight.device, torch.device(0))
+
+        hook2.offload()
+        self.assertEqual(model2.weight.device, torch.device("cpu"))

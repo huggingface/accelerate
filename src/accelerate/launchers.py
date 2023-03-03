@@ -19,13 +19,20 @@ import tempfile
 import torch
 
 from .state import AcceleratorState
-from .utils import PrecisionType, PrepareForLaunch, patch_environment
+from .utils import PrecisionType, PrepareForLaunch, is_mps_available, patch_environment
 
 
 def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no", use_port="29500"):
     """
     Launches a training function, using several processes if it's possible in the current environment (TPU with
     multiple cores for instance).
+
+    <Tip warning={true}>
+
+    To use this function absolutely zero calls to a CUDA device must be made in the notebook session before calling. If
+    any have been made, you will need to restart the notebook and make sure no cells use any CUDA capability.
+
+    </Tip>
 
     Args:
         function (`Callable`):
@@ -40,6 +47,21 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
             If `fp16` or `bf16`, will use mixed precision training on multi-GPU.
         use_port (`str`, *optional*, defaults to `"29500"`):
             The port to use to communicate between processes when launching a multi-GPU training.
+
+    Example:
+
+    ```python
+    # Assume this is defined in a Jupyter Notebook on an instance with two GPUs
+    from accelerate import notebook_launcher
+
+
+    def train(*args):
+        # Your training function here
+        ...
+
+
+    notebook_launcher(train, args=(arg1, arg2), num_processes=2, mixed_precision="fp16")
+    ```
     """
     # Are we in a google colab or a Kaggle Kernel?
     in_colab = False
@@ -115,16 +137,14 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
 
         else:
             # No need for a distributed launch otherwise as it's either CPU, GPU or MPS.
-            use_mps_device = "false"
-            if torch.backends.mps.is_available():
+            if is_mps_available():
+                os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                 print("Launching training on MPS.")
-                use_mps_device = "true"
             elif torch.cuda.is_available():
                 print("Launching training on one GPU.")
             else:
                 print("Launching training on CPU.")
-            with patch_environment(use_mps_device=use_mps_device):
-                function(*args)
+            function(*args)
 
 
 def debug_launcher(function, args=(), num_processes=2):

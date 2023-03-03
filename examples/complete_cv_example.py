@@ -17,14 +17,14 @@ import os
 import re
 
 import numpy as np
+import PIL
 import torch
+from timm import create_model
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader, Dataset
-
-import PIL
-from accelerate import Accelerator
-from timm import create_model
 from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
+
+from accelerate import Accelerator
 
 
 ########################################################################
@@ -173,7 +173,7 @@ def training_function(config, args):
     )
     # We need to keep track of how many total steps we have iterated over
     overall_step = 0
-    # We also need to keep track of the stating epoch so files are named properly
+    # We also need to keep track of the starting epoch so files are named properly
     starting_epoch = 0
 
     # Potentially load in the weights and states from a previous save
@@ -203,12 +203,11 @@ def training_function(config, args):
         model.train()
         if args.with_tracking:
             total_loss = 0
-        for step, batch in enumerate(train_dataloader):
+        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
             # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == starting_epoch:
-                if resume_step is not None and step < resume_step:
-                    overall_step += 1
-                    continue
+            train_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            overall_step += resume_step
+        for batch in train_dataloader:
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
             inputs = (batch["image"] - mean) / std
@@ -272,7 +271,7 @@ def main():
     parser.add_argument(
         "--mixed_precision",
         type=str,
-        default="no",
+        default=None,
         choices=["no", "fp16", "bf16"],
         help="Whether to use mixed precision. Choose"
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."

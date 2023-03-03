@@ -16,11 +16,11 @@ import argparse
 import time
 
 import torch
-
 import transformers
-from accelerate.utils import compute_module_sizes
 from measures_util import end_measure, log_measures, start_measure
 from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
+
+from accelerate.utils import compute_module_sizes
 
 
 DEFAULT_MODELS = {

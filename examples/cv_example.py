@@ -17,14 +17,14 @@ import os
 import re
 
 import numpy as np
+import PIL
 import torch
+from timm import create_model
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader, Dataset
-
-import PIL
-from accelerate import Accelerator
-from timm import create_model
 from torchvision.transforms import Compose, RandomResizedCrop, Resize, ToTensor
+
+from accelerate import Accelerator
 
 
 ########################################################################
@@ -189,7 +189,7 @@ def main():
     parser.add_argument(
         "--mixed_precision",
         type=str,
-        default="no",
+        default=None,
         choices=["no", "fp16", "bf16"],
         help="Whether to use mixed precision. Choose"
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."

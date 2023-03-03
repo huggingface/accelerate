@@ -27,12 +27,13 @@ from unittest import mock
 
 import torch
 
-from ..state import AcceleratorState
+from ..state import AcceleratorState, PartialState
 from ..utils import (
     gather,
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_safetensors_available,
     is_tensorboard_available,
     is_torch_version,
     is_tpu_available,
@@ -126,6 +127,14 @@ def require_multi_gpu(test_case):
     GPUs.
     """
     return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
+
+
+def require_safetensors(test_case):
+    """
+    Decorator marking a test that requires safetensors installed. These tests are skipped when safetensors isn't
+    installed
+    """
+    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
 
 
 def require_deepspeed(test_case):
@@ -223,6 +232,20 @@ class TempDirTestCase(unittest.TestCase):
                     shutil.rmtree(path)
 
 
+class AccelerateTestCase(unittest.TestCase):
+    """
+    A TestCase class that will reset the accelerator state at the end of every test. Every test that checks or utilizes
+    the `AcceleratorState` class should inherit from this to avoid silent failures due to state being shared between
+    tests.
+    """
+
+    def tearDown(self):
+        super().tearDown()
+        # Reset the state of the AcceleratorState singleton.
+        AcceleratorState._reset_state()
+        PartialState._reset_state()
+
+
 class MockingTestCase(unittest.TestCase):
     """
     A TestCase class designed to dynamically add various mockers that should be used in every test, mimicking the
@@ -316,8 +339,8 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     # XXX: the timeout doesn't seem to make any difference here
     await asyncio.wait(
         [
-            _read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:")),
-            _read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:")),
+            asyncio.create_task(_read_stream(p.stdout, lambda l: tee(l, out, sys.stdout, label="stdout:"))),
+            asyncio.create_task(_read_stream(p.stderr, lambda l: tee(l, err, sys.stderr, label="stderr:"))),
         ],
         timeout=timeout,
     )
@@ -325,7 +348,6 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
 
 
 def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
-
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
         _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)

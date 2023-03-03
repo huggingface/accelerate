@@ -17,36 +17,38 @@
     title: Launching distributed training from Jupyter Notebooks
   title: Tutorials
 - sections:
-  - local: usage_guides/gradient_accumulation
-    title: Performing gradient accumulation
-  - local: usage_guides/fsdp
-    title: Fully Sharded Data Parallelism
-  - local: usage_guides/checkpoint
-    title: Saving and loading training states
-  - local: usage_guides/deepspeed
-    title: How to use DeepSpeed
-  - local: usage_guides/tracking
-    title: Using experiment trackers
+  - local: usage_guides/explore
+    title: Start Here!
+  - local: usage_guides/training_zoo
+    title: Example Zoo
   - local: usage_guides/big_modeling
     title: How perform inference on large models with small resources
+  - local: usage_guides/gradient_accumulation
+    title: Performing gradient accumulation
+  - local: usage_guides/checkpoint
+    title: Saving and loading training states
+  - local: usage_guides/tracking
+    title: Using experiment trackers
   - local: usage_guides/memory
     title: How to avoid CUDA Out-of-Memory
-  - local: usage_guides/sagemaker
-    title: Using 🤗 Accelerate on SageMaker
   - local: usage_guides/mps
     title: How to use Apple Silicon M1 GPUs
+  - local: usage_guides/deepspeed
+    title: How to use DeepSpeed
+  - local: usage_guides/fsdp
+    title: How to use Fully Sharded Data Parallelism
   - local: usage_guides/megatron_lm
     title: How to use Megatron-LM
-  - local: usage_guides/training_zoo
-    title: 🤗 Accelerate Example Zoo
+  - local: usage_guides/sagemaker
+    title: How to use 🤗 Accelerate with SageMaker
   title: How-To Guides
 - sections:
   - local: concept_guides/performance
     title: Comparing performance across distributed setups
-  - local: concept_guides/gradient_synchronization
-    title: Gradient synchronization
   - local: concept_guides/deferring_execution
     title: Executing and deferring jobs
+  - local: concept_guides/gradient_synchronization
+    title: Gradient synchronization
   - local: concept_guides/training_tpu
     title: TPU best practices
   title: Concepts and fundamentals

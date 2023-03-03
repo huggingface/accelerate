@@ -16,13 +16,13 @@ import argparse
 import gc
 import os
 
-import torch
-from torch.utils.data import DataLoader
-
 import evaluate
-from accelerate import Accelerator, DistributedType
+import torch
 from datasets import load_dataset
+from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
+
+from accelerate import Accelerator, DistributedType
 
 
 ########################################################################
@@ -330,7 +330,7 @@ def main():
     parser.add_argument(
         "--mixed_precision",
         type=str,
-        default="no",
+        default=None,
         choices=["no", "fp16", "bf16"],
         help="Whether to use mixed precision. Choose"
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."

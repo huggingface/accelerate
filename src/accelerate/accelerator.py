@@ -13,24 +13,25 @@
 # limitations under the License.
 
 import contextlib
-import gc
 import math
 import os
 import shutil
 import sys
 import warnings
+from collections import OrderedDict
 from contextlib import contextmanager
-from functools import wraps
-from typing import List, Optional, Union
+from functools import partial
+from typing import Any, Callable, List, Optional, Union
 
 import torch
+import torch.utils.hooks as hooks
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import DataLoaderDispatcher, prepare_data_loader
+from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, GradientState, parse_flag_from_env
+from .state import AcceleratorState, GradientState, PartialState, parse_flag_from_env
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
@@ -58,8 +59,10 @@ from .utils import (
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
+    parse_choice_from_env,
     recursively_apply,
     reduce,
+    release_memory,
     save,
     wait_for_everyone,
 )
@@ -98,10 +101,10 @@ if is_tpu_available(check_device=False):
     import torch_xla.distributed.xla_multiprocessing as xmp
 
 
-if is_torch_version("<=", "1.13.5"):
+try:
+    from torch.optim.lr_scheduler import LRScheduler
+except ImportError:
     from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
-else:
-    from torch.optim.lr_scheduler import LRScheduler as LRScheduler
 
 logger = get_logger(__name__)
 
@@ -126,7 +129,8 @@ class Accelerator:
             command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
         gradient_accumulation_steps (`int`, *optional*, default to 1):
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
-            `Accelerator.accumulate`.
+            `Accelerator.accumulate`. If not passed, will default to the value in the environment variable
+            `ACCELERATE_GRADIENT_ACCUMULATION_STEPS`.
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
@@ -344,8 +348,9 @@ class Accelerator:
                 raise NotImplementedError(
                     "Gradient accumulation on TPU is not supported. Pass in `gradient_accumulation_steps=1`"
                 )
-
-        self.gradient_accumulation_steps = gradient_accumulation_steps
+        self.gradient_accumulation_steps = int(
+            parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
+        )
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
@@ -377,7 +382,6 @@ class Accelerator:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
-            DistributedType.FSDP,
             DistributedType.MEGATRON_LM,
         ):
             if self.device.type == "cpu":
@@ -386,11 +390,6 @@ class Accelerator:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
-
-            # Only on the GPU do we care about scaling the gradients
-            if torch.cuda.is_available() and self.device.type != "cpu":
-                kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
-                self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
         # Start of internal step tracking
         self.step = 0
@@ -403,6 +402,10 @@ class Accelerator:
         self._dataloaders = []
         self._custom_objects = []
 
+        # Hooks
+        self._load_model_state_pre_hook = OrderedDict()
+        self._save_model_state_pre_hook = OrderedDict()
+
         # RNG Types
         self.rng_types = rng_types
         if self.rng_types is None:
@@ -413,7 +416,7 @@ class Accelerator:
         """
         Whether the Accelerator is configured for distributed training
         """
-        return self.distributed_type != DistributedType.NO and self.num_processes > 1
+        return self.state.use_distributed
 
     @property
     def distributed_type(self):
@@ -450,21 +453,20 @@ class Accelerator:
     @property
     def is_main_process(self):
         """True for one process only."""
-        return (
-            self.process_index == 0 if self.distributed_type != DistributedType.MEGATRON_LM else self.is_last_process
-        )
+        return self.state.is_main_process
 
     @property
     def is_local_main_process(self):
         """True for one process per server."""
-        return (
-            self.local_process_index == 0
-            if self.distributed_type != DistributedType.MEGATRON_LM
-            else self.is_last_process
-        )
+        return self.state.is_local_main_process
 
     @property
     def use_fp16(self):
+        warnings.warn(
+            "The `use_fp16` property is deprecated and will be removed in version 1.0 of Accelerate use "
+            "`Accelerator.mixed_precision == 'fp16'` instead.",
+            FutureWarning,
+        )
         return self.mixed_precision != "no"
 
     @property
@@ -475,80 +477,218 @@ class Accelerator:
     def mixed_precision(self):
         return self.state.mixed_precision
 
-    def on_main_process(func):
+    def on_main_process(self, function: Callable[..., Any] = None):
         """
-        A decorator that will run the decorated function on the main process only.
+        A decorator that will run the decorated function on the main process only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+
+
+        >>> @accelerator.on_main_process
+        ... def print_something():
+        ...     print("This will be printed by process 0 only.")
+
+
+        >>> print_something()
+        "This will be printed by process 0 only"
+        ```
         """
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if self.is_main_process or not self.use_distributed:
-                return func(self, *args, **kwargs)
+        def _inner(*args, **kwargs):
+            return PartialState().on_main_process(function)(*args, **kwargs)
 
-        return wrapper
+        return _inner
 
-    def on_local_main_process(func):
+    def on_local_main_process(self, function: Callable[..., Any] = None):
         """
-        A decorator that will run the decorated function on the local main process only.
+        A decorator that will run the decorated function on the local main process only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+        ```python
+        # Assume we have 2 servers with 4 processes each.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_local_main_process
+        def print_something():
+            print("This will be printed by process 0 only on each server.")
+
+
+        print_something()
+        # On server 1:
+        "This will be printed by process 0 only"
+        # On server 2:
+        "This will be printed by process 0 only"
+        ```
         """
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_local_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if self.is_local_main_process or not self.use_distributed:
-                return func(self, *args, **kwargs)
+        def _inner(*args, **kwargs):
+            return PartialState().on_local_main_process(function)(*args, **kwargs)
 
-        return wrapper
+        return _inner
 
-    def on_last_process(func):
+    def on_last_process(self, function: Callable[..., Any]):
         """
-        A decorator that will run the decorated function on the last process only.
+        A decorator that will run the decorated function on the last process only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`): The function to decorate.
+
+        Example:
+        ```python
+        # Assume we have 4 processes.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_last_process
+        def print_something():
+            print(f"Printed on process {accelerator.process_index}")
+
+
+        print_something()
+        "Printed on process 3"
+        ```
         """
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_last_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if self.is_last_process or not self.use_distributed:
-                return func(self, *args, **kwargs)
+        def _inner(*args, **kwargs):
+            return PartialState().on_last_process(function)(*args, **kwargs)
 
-        return wrapper
+        return _inner
 
-    def on_process(process_idx):
+    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
         """
-        A decorator that will run the decorated function on a given process index only.
+        A decorator that will run the decorated function on a given process index only. Can also be called using the
+        `PartialState` class.
+
+        Args:
+            function (`Callable`, `optional`):
+                The function to decorate.
+            process_index (`int`, `optional`):
+                The index of the process on which to run the function.
+
+        Example:
+        ```python
+        # Assume we have 4 processes.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_process(process_index=2)
+        def print_something():
+            print(f"Printed on process {accelerator.process_index}")
+
+
+        print_something()
+        "Printed on process 2"
+        ```
         """
+        # Initial construction of the decorator.
+        if (self is not None) and (process_index is not None) and (function is None):
+            return partial(self.on_process, process_index=process_index)
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
 
-        def decorator(func):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                if self.process_idx == process_idx or not self.use_distributed:
-                    return func(self, *args, **kwargs)
+        def _inner(*args, **kwargs):
+            return PartialState().on_process(function, process_index)(*args, **kwargs)
 
-            return wrapper
+        return _inner
 
-        return decorator
-
-    def on_local_process(local_process_idx):
+    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
         """
-        A decorator that will run the decorated function on a given local process index only.
+        A decorator that will run the decorated function on a given local process index only. Can also be called using
+        the `PartialState` class.
+
+        Args:
+            function (`Callable`, *optional*):
+                The function to decorate.
+            local_process_index (`int`, *optional*):
+                The index of the local process on which to run the function.
+
+        Example:
+        ```python
+        # Assume we have 2 servers with 4 processes each.
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+
+
+        @accelerator.on_local_process(local_process_index=2)
+        def print_something():
+            print(f"Printed on process {accelerator.local_process_index}")
+
+
+        print_something()
+        # On server 1:
+        "Printed on process 2"
+        # On server 2:
+        "Printed on process 2"
+        ```
         """
+        # Initial construction of the decorator.
+        if (self is not None) and (local_process_index is not None) and (function is None):
+            return partial(self.on_local_process, local_process_index=local_process_index)
+        # For times when the `Accelerator` object itself utilizes this decorator.
+        if function is None:
+            if "Accelerator." in self.__qualname__:
+                function = self
+            else:
+                raise ValueError(
+                    "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
+                )
 
-        def decorator(func):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                if self.local_process_idx == local_process_idx or not self.use_distributed:
-                    return func(self, *args, **kwargs)
+        def _inner(*args, **kwargs):
+            return PartialState().on_local_process(function, local_process_index)(*args, **kwargs)
 
-            return wrapper
-
-        return decorator
-
-    def _goes_first(self, is_main):
-        if not is_main:
-            self.wait_for_everyone()
-
-        yield
-
-        if is_main:
-            self.wait_for_everyone()
+        return _inner
 
     @contextmanager
     def main_process_first(self):
@@ -556,8 +696,20 @@ class Accelerator:
         Lets the main process go first inside a with block.
 
         The other processes will enter the with block after the main process exits.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> with accelerator.main_process_first():
+        ...     # This will be printed first by process 0 then in a seemingly
+        ...     # random order by the other processes.
+        ...     print(f"This will be printed by process {accelerator.process_index}")
+        ```
         """
-        yield from self._goes_first(self.is_main_process)
+        yield self.state.main_process_first()
 
     @contextmanager
     def local_main_process_first(self):
@@ -565,8 +717,20 @@ class Accelerator:
         Lets the local main process go inside a with block.
 
         The other processes will enter the with block after the main process exits.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> with accelerator.local_main_process_first():
+        ...     # This will be printed first by local process 0 then in a seemingly
+        ...     # random order by the other processes.
+        ...     print(f"This will be printed by process {accelerator.local_process_index}")
+        ```
         """
-        yield from self._goes_first(self.is_local_main_process)
+        yield self.state.local_main_process_first()
 
     @contextmanager
     def no_sync(self, model):
@@ -702,7 +866,6 @@ class Accelerator:
         ...         optimizer.step()
         ...         optimizer.zero_grad()
         ```
-
         """
         if is_torch_version("<", "1.10.0"):
             raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
@@ -747,10 +910,18 @@ class Accelerator:
 
     def print(self, *args, **kwargs):
         """
-        Use in replacement of `print()` to only print once per server.
+        Drop in replacement of `print()` to only print once per server.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> accelerator.print("Hello world!")
+        ```
         """
-        if self.is_local_main_process:
-            print(*args, **kwargs)
+        self.state.print(*args, **kwargs)
 
     def _prepare_one(self, obj, first_pass=False, device_placement=None):
         # First pass of preparation: DataLoader, model, optimizer
@@ -838,6 +1009,16 @@ class Accelerator:
           You don't need to prepare a model if you only use it for inference without any kind of mixed precision
 
         </Tip>
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume a model, optimizer, data_loader and scheduler are defined
+        >>> model, optimizer, data_loader, scheduler = accelerator.prepare(model, optimizer, data_loader, scheduler)
+        ```
         """
         if device_placement is None:
             device_placement = [None for _ in args]
@@ -924,16 +1105,22 @@ class Accelerator:
                 any kind of mixed precision
             device_placement (`bool`, *optional*):
                 Whether or not to place the model on the proper device. Will default to `self.device_placement`.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume a model is defined
+        >>> model = accelerator.prepare_model(model)
+        ```
         """
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
         if device_placement:
             model = model.to(self.device)
-        if self.state.dynamo_backend != DynamoBackend.NO:
-            import torch._dynamo as dynamo
-
-            model = dynamo.optimize(self.state.dynamo_backend.value.lower())(model)
         if self.distributed_type == DistributedType.MULTI_GPU:
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
@@ -974,13 +1161,18 @@ class Accelerator:
             model.forward = convert_outputs_to_fp32(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
+        # torch.compile should be called last.
+        if self.state.dynamo_backend != DynamoBackend.NO:
+            import torch._dynamo as dynamo
+
+            model = dynamo.optimize(self.state.dynamo_backend.value.lower())(model)
         return model
 
     def _prepare_deepspeed(self, *args):
-
         deepspeed_plugin = self.state.deepspeed_plugin
 
-        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto":
+        is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
+        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto" or is_dataloader_present:
             result = [
                 self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
                 for obj in args
@@ -1069,15 +1261,20 @@ class Accelerator:
                 )
 
         if model is not None:
-            if hasattr(model, "config") and hasattr(model.config, "hidden_size"):
-                hidden_size = model.config.hidden_size
-                config_kwargs.update(
-                    {
-                        "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
-                        "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
-                        "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
-                    }
+            if hasattr(model, "config"):
+                hidden_size = (
+                    max(model.config.hidden_sizes)
+                    if getattr(model.config, "hidden_sizes", None)
+                    else getattr(model.config, "hidden_size", None)
                 )
+                if hidden_size is not None:
+                    config_kwargs.update(
+                        {
+                            "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
+                            "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
+                            "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
+                        }
+                    )
 
             if isinstance(optimizer, (DummyOptim)):
                 config_kwargs.update(
@@ -1257,6 +1454,17 @@ class Accelerator:
             device_placement (`bool`, *optional*):
                 Whether or not to place the batches on the proper device in the prepared dataloader. Will default to
                 `self.device_placement`.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> data_loader = torch.utils.data.DataLoader(...)
+        >>> data_loader = accelerator.prepare_data_loader(data_loader, device_placement=True)
+        ```
         """
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
@@ -1284,6 +1492,17 @@ class Accelerator:
                 A vanilla PyTorch optimizer to prepare
             device_placement (`bool`, *optional*):
                 Whether or not to place the optimizer on the proper device. Will default to `self.device_placement`.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> optimizer = torch.optim.Adam(...)
+        >>> optimizer = accelerator.prepare_optimizer(optimizer, device_placement=True)
+        ```
         """
         if device_placement is None:
             device_placement = self.device_placement
@@ -1299,6 +1518,18 @@ class Accelerator:
         Args:
             scheduler (`torch.optim.lr_scheduler.LRScheduler`):
                 A vanilla PyTorch scheduler to prepare
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> optimizer = torch.optim.Adam(...)
+        >>> scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, ...)
+        >>> scheduler = accelerator.prepare_scheduler(scheduler)
+        ```
         """
         # We try to find the optimizer associated with `scheduler`, the default is the full list.
         optimizer = self._optimizers
@@ -1321,6 +1552,17 @@ class Accelerator:
         `backward()` based on the configuration.
 
         Should be used in lieu of `loss.backward()`.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(gradient_accumulation_steps=1)
+        >>> outputs = model(inputs)
+        >>> loss = loss_fn(outputs, labels)
+        >>> accelerator.backward(loss)
+        ```
         """
         if self.distributed_type != DistributedType.DEEPSPEED:
             # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
@@ -1338,12 +1580,27 @@ class Accelerator:
         """
         Unscale the gradients in mixed precision training with AMP. This is a noop in all other settings.
 
+        Likely should be called through [`Accelerator.clip_grad_norm_`] or [`Accelerator.clip_grad_value_`]
+
         Args:
             optimizer (`torch.optim.Optimizer` or `List[torch.optim.Optimizer]`, *optional*):
                 The optimizer(s) for which to unscale gradients. If not set, will unscale gradients on all optimizers
                 that were passed to [`~Accelerator.prepare`].
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer = accelerator.prepare(model, optimizer)
+        >>> outputs = model(inputs)
+        >>> loss = loss_fn(outputs, labels)
+        >>> accelerator.backward(loss)
+        >>> accelerator.unscale_gradients(optimizer=optimizer)
+        ```
         """
-        if self.use_fp16 and self.native_amp:
+        if self.native_amp and self.mixed_precision == "fp16":
             if optimizer is None:
                 # TODO: this unscales all optimizers where we should only unscale the one where parameters are.
                 optimizer = self._optimizers
@@ -1369,7 +1626,7 @@ class Accelerator:
         >>> accelerator = Accelerator(gradient_accumulation_steps=2)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
-        >>> for (input, target) in dataloader:
+        >>> for input, target in dataloader:
         ...     optimizer.zero_grad()
         ...     output = model(input)
         ...     loss = loss_func(output, target)
@@ -1386,7 +1643,7 @@ class Accelerator:
                 if parameters == [p for p in model.parameters()]:
                     return model.clip_grad_norm_(max_norm, norm_type)
         elif self.distributed_type == DistributedType.DEEPSPEED:
-            # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
+            # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
             return None
         self.unscale_gradients()
@@ -1404,7 +1661,7 @@ class Accelerator:
         >>> accelerator = Accelerator(gradient_accumulation_steps=2)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
-        >>> for (input, target) in dataloader:
+        >>> for input, target in dataloader:
         ...     optimizer.zero_grad()
         ...     output = model(input)
         ...     loss = loss_func(output, target)
@@ -1434,6 +1691,20 @@ class Accelerator:
         Returns:
             `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The gathered tensor(s). Note that the
             first dimension of the result is *num_processes* multiplied by the first dimension of the input tensors.
+
+        Example:
+
+        ```python
+        >>> # Assuming four processes
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> process_tensor = torch.tensor([accelerator.process_index])
+        >>> gathered_tensor = accelerator.gather(process_tensor)
+        >>> gathered_tensor
+        tensor([0, 1, 2, 3])
+        ```
         """
         return gather(tensor)
 
@@ -1445,6 +1716,22 @@ class Accelerator:
         Args:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors for calculating metrics across all processes.
+
+        Example:
+
+        ```python
+        >>> # Assuming two processes, with a batch size of 5 on a dataset with 9 samples
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> dataloader = torch.utils.data.DataLoader(range(9), batch_size=5)
+        >>> dataloader = accelerator.prepare(dataloader)
+        >>> batch = next(iter(dataloader))
+        >>> gathered_items = accelerator.gather_for_metrics(batch)
+        >>> len(gathered_items)
+        9
+        ```
         """
         tensor = self.gather(tensor)
         if self.use_distributed:
@@ -1455,7 +1742,7 @@ class Accelerator:
                 return tensor
             try:
                 # Then see if we're on the last batch of our eval dataloader
-                if self.gradient_state.end_of_dataloader:
+                if self.gradient_state.end_of_dataloader and self.gradient_state.remainder > 0:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
@@ -1464,7 +1751,7 @@ class Accelerator:
                 else:
                     # Not at the end of the dataloader, no need to adjust the tensors
                     return tensor
-            except:
+            except Exception:
                 # Dataset had no length or raised an error
                 return tensor
         return tensor
@@ -1483,7 +1770,23 @@ class Accelerator:
                 A reduction type, can be one of 'sum', 'mean', or 'none'. If 'none', will not perform any operation.
 
         Returns:
-            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`: The reduced tensor(s).
+            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`:
+                The reduced tensor(s).
+
+        Example:
+
+        ```python
+        >>> # Assuming two processes
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> process_tensor = torch.arange(accelerator.num_processes) + 1 + (2 * accelerator.process_index)
+        >>> process_tensor = process_tensor.to(accelerator.device)
+        >>> reduced_tensor = accelerator.reduce(process_tensor, reduction="sum")
+        >>> reduced_tensor
+        tensor([4, 6])
+        ```
         """
         return reduce(tensor, reduction)
 
@@ -1501,10 +1804,28 @@ class Accelerator:
                 The value with which to pad.
             pad_first (`bool`, *optional*, defaults to `False`):
                 Whether to pad at the beginning or the end.
+
+        Returns:
+            `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`:
+                The padded tensor(s).
+
+        Example:
+
+        ```python
+        >>> # Assuming two processes, with the first processes having a tensor of size 1 and the second of size 2
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> process_tensor = torch.arange(accelerator.process_index + 1).to(accelerator.device)
+        >>> padded_tensor = accelerator.pad_across_processes(process_tensor)
+        >>> padded_tensor.shape
+        torch.Size([2])
+        ```
         """
         return pad_across_processes(tensor, dim=dim, pad_index=pad_index, pad_first=pad_first)
 
-    def unwrap_model(self, model, keep_fp32_wrapper: bool = False):
+    def unwrap_model(self, model, keep_fp32_wrapper: bool = True):
         """
         Unwraps the `model` from the additional layer possible added by [`~Accelerator.prepare`]. Useful before saving
         the model.
@@ -1512,8 +1833,28 @@ class Accelerator:
         Args:
             model (`torch.nn.Module`):
                 The model to unwrap.
-            keep_fp32_wrapper (`bool`, *optional*, defaults to `False`):
+            keep_fp32_wrapper (`bool`, *optional*, defaults to `True`):
                 Whether to not remove the mixed precision hook if it was added.
+
+        Returns:
+            `torch.nn.Module`: The unwrapped model.
+
+        Example:
+
+        ```python
+        >>> # Assuming two GPU processes
+        >>> from torch.nn.parallel import DistributedDataParallel
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model = accelerator.prepare(MyModel())
+        >>> print(model.__class__.__name__)
+        DistributedDataParallel
+
+        >>> model = accelerator.unwrap_model(model)
+        >>> print(model.__class__.__name__)
+        MyModel
+        ```
         """
         return extract_model_from_parallel(model, keep_fp32_wrapper)
 
@@ -1521,6 +1862,23 @@ class Accelerator:
         """
         Will stop the execution of the current process until every other process has reached that point (so this does
         nothing when the script is only run in one process). Useful to do before saving a model.
+
+        Example:
+
+        ```python
+        >>> # Assuming two GPU processes
+        >>> import time
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> if accelerator.is_main_process:
+        ...     time.sleep(2)
+        >>> else:
+        ...     print("I'm waiting for the main process to finish its sleep...")
+        >>> accelerator.wait_for_everyone()
+        >>> # Should print on every process at the same time
+        >>> print("Everyone is here")
+        ```
         """
         wait_for_everyone()
 
@@ -1540,6 +1898,19 @@ class Accelerator:
                 ```python
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(log_with="tensorboard")
+        >>> accelerator.init_trackers(
+        ...     project_name="my_project",
+        ...     config={"learning_rate": 0.001, "batch_size": 32},
+        ...     init_kwargs={"tensorboard": {"flush_secs": 60}},
+        ... )
+        ```
         """
         self.trackers = []
         for tracker in self.log_with:
@@ -1559,19 +1930,37 @@ class Accelerator:
             for tracker in self.trackers:
                 tracker.store_init_configuration(config)
 
-    @on_main_process
-    def get_tracker(self, name: str):
+    def get_tracker(self, name: str, unwrap: bool = False):
         """
         Returns a `tracker` from `self.trackers` based on `name` on the main process only.
 
         Args:
             name (`str`):
                 The name of a tracker, corresponding to the `.name` property.
+            unwrap (`bool`):
+                Whether to return the internal tracking mechanism or to return the wrapped tracker instead
+                (recommended).
+
+        Returns:
+            `GeneralTracker`: The tracker corresponding to `name` if it exists.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(log_with="tensorboard")
+        >>> accelerator.init_trackers("my_project")
+        >>> tensorboard_tracker = accelerator.get_tracker("tensorboard")
+        ```
         """
-        for tracker in self.trackers:
-            if tracker.name == name:
-                return tracker.tracker
-        raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
+        if len(getattr(self, "trackers", [])) > 0:
+            for tracker in self.trackers:
+                if tracker.name == name:
+                    return tracker.tracker if unwrap else tracker
+            raise ValueError(f"{name} is not an available tracker stored inside the `Accelerator`.")
+        # Handle tracker only made on main process
+        return GeneralTracker(_blank=True)
 
     @on_main_process
     def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
@@ -1589,6 +1978,16 @@ class Accelerator:
                 ```python
                 {"wandb": {"tags": ["tag_a", "tag_b"]}}
                 ```
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(log_with="tensorboard")
+        >>> accelerator.init_trackers("my_project")
+        >>> accelerator.log({"loss": 0.5, "accuracy": 0.9})
+        ```
         """
         for tracker in self.trackers:
             tracker.log(values, step=step, **log_kwargs.get(tracker.name, {}))
@@ -1598,6 +1997,17 @@ class Accelerator:
         """
         Runs any special end training behaviors, such as stopping trackers on the main process only. Should always be
         called at the end of your script if using experiment tracking.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(log_with="tensorboard")
+        >>> accelerator.init_trackers("my_project")
+        >>> # Do training
+        >>> accelerator.end_training()
+        ```
         """
         for tracker in self.trackers:
             tracker.finish()
@@ -1607,13 +2017,54 @@ class Accelerator:
         Save the object passed to disk once per machine. Use in place of `torch.save`.
 
         Args:
-            obj: The object to save.
-            f (`str` or `os.PathLike`):
-                Where to save the content of `obj`.
+            obj (`object`): The object to save.
+            f (`str` or `os.PathLike`): Where to save the content of `obj`.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> arr = [0, 1, 2, 3]
+        >>> accelerator.save(arr, "array.pkl")
+        ```
         """
         save(obj, f)
 
-    def save_state(self, output_dir: str = None):
+    def register_save_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
+        """
+        Registers a pre hook to be run before `save_checkpoint` is called in [`Accelerator.save_state`].
+
+        Args:
+            hook (`Callable`):
+                A function to be called in [`Accelerator.save_state`] before `save_checkpoint`.
+
+        The hook should have the following signature:
+
+        `hook(models: List[torch.nn.Module], weights: List[Dict[str, torch.Tensor]], input_dir: str) -> None`
+
+        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, `weigths`
+        argument are the state dicts of the `models`, and the `input_dir` argument is the `input_dir` argument passed
+        to [`Accelerator.load_state`].
+
+        <Tip>
+
+        Should only be used in conjunction with [`Accelerator.register_load_state_pre_hook`]. Can be useful to save
+        configurations in addition to model weights. Can also be used to overwrite model saving with a customized
+        method. In this case, make sure to remove already loaded weights from the weights list.
+
+        </Tip>
+
+        Returns:
+            `torch.utils.hooks.RemovableHandle`: a handle that can be used to remove the added hook by calling
+            `handle.remove()`
+        """
+        handle = hooks.RemovableHandle(self._save_model_state_pre_hook)
+        self._save_model_state_pre_hook[handle.id] = hook
+        return handle
+
+    def save_state(self, output_dir: str = None, **save_model_func_kwargs):
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
 
@@ -1634,6 +2085,20 @@ class Accelerator:
         Args:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
+            save_model_func_kwargs (`dict`, *optional*):
+                Additional keyword arguments for saving model which can be passed to the underlying save function, such
+                as optional arguments for DeepSpeed's `save_checkpoint` function.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer, lr_scheduler = ...
+        >>> model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
+        >>> accelerator.save_state(output_dir="my_checkpoint")
+        ```
         """
         if self.project_configuration.automatic_checkpoint_naming:
             output_dir = os.path.join(self.project_dir, "checkpoints")
@@ -1667,7 +2132,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Saving DeepSpeed Model and Optimizer")
                 ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
-                model.save_checkpoint(output_dir, ckpt_id)
+                model.save_checkpoint(output_dir, ckpt_id, **save_model_func_kwargs)
                 logger.info(f"DeepSpeed Model and Optimizer saved to output dir {os.path.join(output_dir, ckpt_id)}")
             elif self.distributed_type == DistributedType.MEGATRON_LM:
                 logger.info("Saving Megatron-LM Model, Optimizer and Scheduler")
@@ -1696,6 +2161,11 @@ class Accelerator:
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
 
+        # Call model loading hooks that might have been registered with
+        # accelerator.register_model_state_hook
+        for hook in self._save_model_state_pre_hook.values():
+            hook(self._models, weights, output_dir)
+
         save_location = save_accelerator_state(
             output_dir, weights, optimizers, schedulers, self.state.process_index, self.scaler
         )
@@ -1704,7 +2174,38 @@ class Accelerator:
         self.project_configuration.iteration += 1
         return save_location
 
-    def load_state(self, input_dir: str):
+    def register_load_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
+        """
+        Registers a pre hook to be run before [`load_checkpoint`] is called in [`Accelerator.load_state`].
+
+        Args:
+            hook (`Callable`):
+                A function to be called in [`Accelerator.load_state`] before `load_checkpoint`.
+
+        The hook should have the following signature:
+
+        `hook(models: List[torch.nn.Module], input_dir: str) -> None`
+
+        The `models` argument are the models as saved in the accelerator state under `accelerator._models`, and the
+        `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
+
+        <Tip>
+
+        Should only be used in conjunction with [`Accelerator.register_save_state_pre_hook`]. Can be useful to load
+        configurations in addition to model weights. Can also be used to overwrite model loading with a customized
+        method. In this case, make sure to remove already loaded models from the models list.
+
+        </Tip>
+
+        Returns:
+            `torch.utils.hooks.RemovableHandle`: a handle that can be used to remove the added hook by calling
+            `handle.remove()`
+        """
+        handle = hooks.RemovableHandle(self._load_model_state_pre_hook)
+        self._load_model_state_pre_hook[handle.id] = hook
+        return handle
+
+    def load_state(self, input_dir: str, **load_model_func_kwargs):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
@@ -1717,6 +2218,20 @@ class Accelerator:
         Args:
             input_dir (`str` or `os.PathLike`):
                 The name of the folder all relevant weights and states were saved in.
+            load_model_func_kwargs (`dict`, *optional*):
+                Additional keyword arguments for loading model which can be passed to the underlying load function,
+                such as optional arguments for DeepSpeed's `load_checkpoint` function.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer, lr_scheduler = ...
+        >>> model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
+        >>> accelerator.load_state("my_checkpoint")
+        ```
         """
         # Check if folder exists
         input_dir = os.path.expanduser(input_dir)
@@ -1734,7 +2249,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Loading DeepSpeed Model and Optimizer")
                 ckpt_id = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
-                model.load_checkpoint(input_dir, ckpt_id)
+                model.load_checkpoint(input_dir, ckpt_id, **load_model_func_kwargs)
                 logger.info(f"DeepSpeed Model and Optimizer loaded from input dir {os.path.join(input_dir, ckpt_id)}")
             elif self.distributed_type == DistributedType.MEGATRON_LM:
                 logger.info("Loading Megatron-LM Model, Optimizer and Scheduler")
@@ -1763,7 +2278,14 @@ class Accelerator:
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
 
-        load_accelerator_state(input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler)
+        # Call model loading hooks that might have been registered with
+        # accelerator.register_model_state_hook
+        for hook in self._load_model_state_pre_hook.values():
+            hook(models, input_dir)
+
+        load_accelerator_state(
+            input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler, **load_model_func_kwargs
+        )
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
             err = "Warning! Number of found checkpoints does not match the number of registered objects:"
@@ -1779,19 +2301,42 @@ class Accelerator:
         """
         Will release all references to the internal objects stored and call the garbage collector. You should call this
         method between two trainings with different models/optimizers.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer, scheduler = ...
+        >>> model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+        >>> accelerator.free_memory()
+        >>> del model, optimizer, scheduler
+        ```
         """
         self._schedulers = []
         self._optimizers = []
         self._models = []
         self._dataloaders = []
         self.deepspeed_engine_wrapped = None
-        gc.collect()
-        torch.cuda.empty_cache()
+        release_memory()
 
     def clear(self):
         """
         Alias for [`Accelerate.free_memory`], releases all references to the internal objects stored and call the
         garbage collector. You should call this method between two trainings with different models/optimizers.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model, optimizer, scheduler = ...
+        >>> model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+        >>> accelerator.free_memory()
+        >>> del model, optimizer, scheduler
+        ```
         """
         self.free_memory()
 
@@ -1822,13 +2367,29 @@ class Accelerator:
 
     def get_state_dict(self, model, unwrap=True):
         """
-        Returns the state dictionary of a model sent through [`Accelerator.prepare`] in full precision
+        Returns the state dictionary of a model sent through [`Accelerator.prepare`] potentially without full
+        precision.
 
         Args:
             model (`torch.nn.Module`):
                 A PyTorch model sent through [`Accelerator.prepare`]
             unwrap (`bool`, *optional*, defaults to `True`):
                 Whether to return the original underlying state_dict of `model` or to return the wrapped state_dict
+
+        Returns:
+            `dict`: The state dictionary of the model potentially without full precision.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> net = torch.nn.Linear(2, 2)
+        >>> net = accelerator.prepare(net)
+        >>> state_dict = accelerator.get_state_dict(net)
+        ```
         """
         is_zero_3 = False
         if self.distributed_type == DistributedType.DEEPSPEED:
@@ -1861,13 +2422,25 @@ class Accelerator:
         Makes note of `objects` and will save or load them in during `save_state` or `load_state`.
 
         These should be utilized when the state is being loaded or saved in the same script. It is not designed to be
-        used in different scripts
+        used in different scripts.
 
         <Tip>
 
         Every `object` must have a `load_state_dict` and `state_dict` function to be stored.
 
         </Tip>
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume `CustomObject` has a `state_dict` and `load_state_dict` function.
+        >>> obj = CustomObject()
+        >>> accelerator.register_for_checkpointing(obj)
+        >>> accelerator.save_state("checkpoint.pt")
+        ```
         """
         invalid_objects = []
         for obj in objects:
@@ -1885,6 +2458,16 @@ class Accelerator:
         """
         Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
         different will happen otherwise.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(mixed_precision="fp16")
+        >>> with accelerator.autocast():
+        ...     train()
+        ```
         """
         if self.native_amp:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
@@ -1911,3 +2494,29 @@ class Accelerator:
             if optimizer.step_was_skipped:
                 return True
         return False
+
+    def skip_first_batches(self, dataloader, num_batches: int = 0):
+        """
+        Creates a new `torch.utils.data.DataLoader` that will efficiently skip the first `num_batches`.
+
+        Args:
+            dataloader (`torch.utils.data.DataLoader`): The data loader in which to skip batches.
+            num_batches (`int`, *optional*, defaults to 0): The number of batches to skip
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
+
+        >>> for input, target in accelerator.skip_first_batches(dataloader, num_batches=2):
+        ...     optimizer.zero_grad()
+        ...     output = model(input)
+        ...     loss = loss_func(output, target)
+        ...     accelerator.backward(loss)
+        ...     optimizer.step()
+        ```
+        """
+        return skip_first_batches(dataloader, num_batches=num_batches)

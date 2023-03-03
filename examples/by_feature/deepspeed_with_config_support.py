@@ -31,16 +31,12 @@ import random
 from itertools import chain
 from pathlib import Path
 
-import torch
-from torch.utils.data import DataLoader
-
 import datasets
+import torch
 import transformers
-from accelerate import Accelerator, DistributedType
-from accelerate.logging import get_logger
-from accelerate.utils import DummyOptim, DummyScheduler, set_seed
 from datasets import load_dataset
 from huggingface_hub import Repository
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from transformers import (
     CONFIG_MAPPING,
@@ -54,6 +50,10 @@ from transformers import (
 )
 from transformers.utils import get_full_repo_name
 from transformers.utils.versions import require_version
+
+from accelerate import Accelerator, DistributedType
+from accelerate.logging import get_logger
+from accelerate.utils import DummyOptim, DummyScheduler, set_seed
 
 
 logger = get_logger(__name__)

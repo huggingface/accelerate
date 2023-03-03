@@ -20,7 +20,6 @@ from distutils.util import strtobool
 from functools import lru_cache
 
 import torch
-
 from packaging.version import parse
 
 from .environment import parse_flag_from_env
@@ -156,3 +155,7 @@ def is_tqdm_available():
 
 def is_mlflow_available():
     return importlib.util.find_spec("mlflow") is not None
+
+
+def is_mps_available():
+    return is_torch_version(">=", "1.12") and torch.backends.mps.is_available() and torch.backends.mps.is_built()

@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
+import io
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -29,6 +32,71 @@ from accelerate.utils import (
     set_seed,
     synchronize_rng_states,
 )
+
+
+def print_main(state):
+    print(f"Printing from the main process {state.process_index}")
+
+
+def print_local_main(state):
+    print(f"Printing from the local main process {state.local_process_index}")
+
+
+def print_last(state):
+    print(f"Printing from the last process {state.process_index}")
+
+
+def print_on(state, process_idx):
+    print(f"Printing from process {process_idx}: {state.process_index}")
+
+
+def process_execution_check():
+    accelerator = Accelerator()
+    num_processes = accelerator.num_processes
+    with accelerator.main_process_first():
+        idx = torch.tensor(accelerator.process_index).to(accelerator.device)
+    idxs = accelerator.gather(idx)
+    assert idxs[0] == 0, "Main process was not first."
+
+    # Test the decorators
+    f = io.StringIO()
+    with contextlib.redirect_stdout(f):
+        accelerator.on_main_process(print_main)(accelerator.state)
+    result = f.getvalue().rstrip()
+    if accelerator.is_main_process:
+        assert result == "Printing from the main process 0", f"{result} != Printing from the main process 0"
+    else:
+        assert f.getvalue().rstrip() == "", f'{result} != ""'
+    f.truncate(0)
+    f.seek(0)
+
+    with contextlib.redirect_stdout(f):
+        accelerator.on_local_main_process(print_local_main)(accelerator.state)
+    if accelerator.is_local_main_process:
+        assert f.getvalue().rstrip() == "Printing from the local main process 0"
+    else:
+        assert f.getvalue().rstrip() == ""
+    f.truncate(0)
+    f.seek(0)
+
+    with contextlib.redirect_stdout(f):
+        accelerator.on_last_process(print_last)(accelerator.state)
+    if accelerator.is_last_process:
+        assert f.getvalue().rstrip() == f"Printing from the last process {accelerator.state.num_processes - 1}"
+    else:
+        assert f.getvalue().rstrip() == ""
+    f.truncate(0)
+    f.seek(0)
+
+    for process_idx in range(num_processes):
+        with contextlib.redirect_stdout(f):
+            accelerator.on_process(print_on, process_index=process_idx)(accelerator.state, process_idx)
+        if accelerator.process_index == process_idx:
+            assert f.getvalue().rstrip() == f"Printing from process {process_idx}: {accelerator.process_index}"
+        else:
+            assert f.getvalue().rstrip() == ""
+        f.truncate(0)
+        f.seek(0)
 
 
 def init_state_check():
@@ -307,6 +375,9 @@ def main():
     if state.local_process_index == 0:
         print("**Initialization**")
     init_state_check()
+    if state.local_process_index == 0:
+        print("\n**Test process execution**")
+    process_execution_check()
 
     if state.local_process_index == 0:
         print("\n**Test random number generator synchronization**")

@@ -15,9 +15,15 @@
 import random
 import unittest
 
-from torch.utils.data import BatchSampler, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
-from accelerate.data_loader import BatchSamplerShard, IterableDatasetShard
+from accelerate.data_loader import (
+    BatchSamplerShard,
+    IterableDatasetShard,
+    SkipBatchSampler,
+    SkipDataLoader,
+    skip_first_batches,
+)
 
 
 class RandomIterableDataset(IterableDataset):
@@ -354,3 +360,17 @@ class DataLoaderTester(unittest.TestCase):
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=False)
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=False, split_batches=True)
         self.check_iterable_dataset_shards(dataset, seed, batch_size=4, drop_last=True, split_batches=True)
+
+    def test_skip_batch_sampler(self):
+        batch_sampler = BatchSampler(range(16), batch_size=4, drop_last=False)
+        new_batch_sampler = SkipBatchSampler(batch_sampler, 2)
+        self.assertListEqual(list(new_batch_sampler), [[8, 9, 10, 11], [12, 13, 14, 15]])
+
+    def test_skip_data_loader(self):
+        dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2)
+        self.assertListEqual([t.tolist() for t in dataloader], [[8, 9, 10, 11], [12, 13, 14, 15]])
+
+    def test_skip_first_batches(self):
+        dataloader = DataLoader(list(range(16)), batch_size=4)
+        new_dataloader = skip_first_batches(dataloader, num_batches=2)
+        self.assertListEqual([t.tolist() for t in new_dataloader], [[8, 9, 10, 11], [12, 13, 14, 15]])

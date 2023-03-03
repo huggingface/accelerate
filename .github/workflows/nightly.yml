@@ -8,12 +8,15 @@ on:
 env:
   RUN_SLOW: "yes"
   IS_GITHUB_CI: "1"
+  SLACK_API_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+
 
 jobs:
   run_all_tests_single_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     env:
       CUDA_VISIBLE_DEVICES: "0"
+      TEST_TYPE: "single_gpu"
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
@@ -43,12 +46,14 @@ jobs:
       - name: Generate Report
         if: always()
         run: |
+          pip install slack_sdk
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     env:
       CUDA_VISIBLE_DEVICES: "0,1"
+      TEST_TYPE: "multi_gpu"
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
@@ -85,4 +90,5 @@ jobs:
       - name: Generate Report
         if: always()
         run: |
+          pip install slack_sdk
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY

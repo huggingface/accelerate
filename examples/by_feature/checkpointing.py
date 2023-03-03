@@ -15,14 +15,14 @@
 import argparse
 import os
 
+import evaluate
 import torch
+from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-
-import evaluate
-from accelerate import Accelerator, DistributedType
-from datasets import load_dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
+
+from accelerate import Accelerator, DistributedType
 
 
 ########################################################################
@@ -203,13 +203,12 @@ def training_function(config, args):
     # Now we train the model
     for epoch in range(starting_epoch, num_epochs):
         model.train()
+        # New Code #
+        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
+            # We need to skip steps until we reach the resumed step
+            train_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            overall_step += resume_step
         for step, batch in enumerate(train_dataloader):
-            # New Code #
-            # We need to skip steps until we reach the resumed step during the first epoch
-            if args.resume_from_checkpoint and epoch == starting_epoch:
-                if resume_step is not None and step < resume_step:
-                    overall_step += 1
-                    continue
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
@@ -269,7 +268,7 @@ def main():
     parser.add_argument(
         "--mixed_precision",
         type=str,
-        default="no",
+        default=None,
         choices=["no", "fp16", "bf16"],
         help="Whether to use mixed precision. Choose"
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."

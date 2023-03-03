@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all
-
 from .constants import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, SCHEDULER_NAME, TORCH_LAUNCH_PARAMS
 from .dataclasses import (
     ComputeEnvironment,
@@ -34,6 +30,7 @@ from .imports import (
     is_deepspeed_available,
     is_megatron_lm_available,
     is_mlflow_available,
+    is_mps_available,
     is_rich_available,
     is_safetensors_available,
     is_sagemaker_available,
@@ -54,7 +51,9 @@ from .modeling import (
     infer_auto_device_map,
     load_checkpoint_in_model,
     load_offloaded_weights,
+    load_state_dict,
     named_module_tensors,
+    retie_parameters,
     set_module_tensor_to_device,
 )
 from .offload import (
@@ -100,7 +99,16 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
-from .launch import PrepareForLaunch, _filter_args, get_launch_prefix
+from .launch import (
+    PrepareForLaunch,
+    _filter_args,
+    get_launch_prefix,
+    prepare_deepspeed_cmd_env,
+    prepare_multi_gpu_env,
+    prepare_sagemager_args_inputs,
+    prepare_simple_launcher_cmd_env,
+    prepare_tpu,
+)
 from .megatron_lm import (
     AbstractTrainStep,
     BertTrainStep,
@@ -119,10 +127,11 @@ from .megatron_lm import prepare_data_loader as megatron_lm_prepare_data_loader
 from .megatron_lm import prepare_model as megatron_lm_prepare_model
 from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
 from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
-from .memory import find_executable_batch_size
+from .memory import find_executable_batch_size, release_memory
 from .other import (
     extract_model_from_parallel,
     get_pretty_name,
+    merge_dicts,
     patch_environment,
     save,
     wait_for_everyone,

@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import io
 import json
+import os
 from copy import deepcopy
 
 from ..optimizer import AcceleratedOptimizer
@@ -38,16 +40,22 @@ class HfDeepSpeedConfig:
     """
 
     def __init__(self, config_file_or_dict):
-
         if isinstance(config_file_or_dict, dict):
             # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
             # modified it, it will not be accepted here again, since `auto` values would have been overridden
             config = deepcopy(config_file_or_dict)
-        elif isinstance(config_file_or_dict, str):
+        elif os.path.exists(config_file_or_dict):
             with io.open(config_file_or_dict, "r", encoding="utf-8") as f:
                 config = json.load(f)
         else:
-            raise ValueError("expecting either a path to a DeepSpeed config file or a pre-populated dict")
+            try:
+                config_decoded = base64.urlsafe_b64decode(config_file_or_dict).decode("utf-8")
+                config = json.loads(config_decoded)
+            except (UnicodeDecodeError, AttributeError):
+                raise ValueError(
+                    f"Expected a string path to an existing deepspeed config, or a dictionary, or a base64 encoded string. Received: {config}"
+                )
+
         self.config = config
 
         self.set_stage_and_offload()
@@ -154,18 +162,21 @@ class DeepSpeedEngineWrapper:
     def __init__(self, engine):
         self.engine = engine
 
-    def backward(self, loss):
+    def backward(self, loss, **kwargs):
         # runs backpropagation and handles mixed precision
-        self.engine.backward(loss)
+        self.engine.backward(loss, **kwargs)
 
-        # deepspeed `engine.step` performs following operations:
-        # gradient accumulation check
-        # gradient clipping
-        # optimizer step
-        # zero grad
-        # checking overflow
-        # lr_scheduler step
+        # Deepspeed's `engine.step` performs the following operations:
+        # - gradient accumulation check
+        # - gradient clipping
+        # - optimizer step
+        # - zero grad
+        # - checking overflow
+        # - lr_scheduler step (only if engine.lr_scheduler is not None)
         self.engine.step()
+        # and this plugin overrides the above calls with no-ops when Accelerate runs under
+        # Deepspeed, but allows normal functionality for non-Deepspeed cases thus enabling a simple
+        # training loop that works transparently under many training regimes.
 
 
 class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
@@ -181,10 +192,10 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
         super().__init__(optimizer, device_placement=False, scaler=None)
 
     def zero_grad(self, set_to_none=None):
-        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
+        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
 
     def step(self):
-        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
+        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
 
     @property
     def step_was_skipped(self):
@@ -206,7 +217,7 @@ class DeepSpeedSchedulerWrapper(AcceleratedScheduler):
         super().__init__(scheduler, optimizers)
 
     def step(self):
-        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, it's implementation is not needed
+        pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
 
 
 class DummyOptim:

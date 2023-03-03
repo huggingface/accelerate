@@ -15,14 +15,17 @@
 
 import inspect
 import os
-import unittest
 
 import torch
+from transformers import AutoModel
+from transformers.testing_utils import mockenv_context
+from transformers.trainer_utils import set_seed
 
 import accelerate
 from accelerate.accelerator import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import (
+    AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
     require_cuda,
@@ -38,9 +41,6 @@ from accelerate.utils.constants import (
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
 from accelerate.utils.other import patch_environment
-from transformers import AutoModel
-from transformers.testing_utils import mockenv_context
-from transformers.trainer_utils import set_seed
 
 
 set_seed(42)
@@ -53,7 +53,7 @@ dtypes = [FP16, BF16]
 
 @require_fsdp
 @require_cuda
-class FSDPPluginIntegration(unittest.TestCase):
+class FSDPPluginIntegration(AccelerateTestCase):
     def setUp(self):
         super().setUp()
 
@@ -65,10 +65,6 @@ class FSDPPluginIntegration(unittest.TestCase):
             LOCAL_RANK="0",
             WORLD_SIZE="1",
         )
-
-    def tearDown(self):
-        super().tearDown()
-        AcceleratorState._reset_state()
 
     def test_sharding_strategy(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
@@ -160,7 +156,7 @@ class FSDPPluginIntegration(unittest.TestCase):
                     self.assertTrue(isinstance(accelerator.scaler, ShardedGradScaler))
                 elif mp_dtype == BF16:
                     self.assertIsNone(accelerator.scaler)
-                AcceleratorState._reset_state()
+                AcceleratorState._reset_state(True)
 
     def test_cpu_offload(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload

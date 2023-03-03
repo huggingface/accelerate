@@ -18,18 +18,23 @@ import itertools
 import json
 import os
 import tempfile
-import unittest
 from copy import deepcopy
 from pathlib import Path
 
 import torch
+from parameterized import parameterized
 from torch.utils.data import DataLoader
+from transformers import AutoModel, AutoModelForCausalLM, get_scheduler
+from transformers.testing_utils import mockenv_context
+from transformers.trainer_utils import set_seed
+from transformers.utils import is_torch_bf16_available
 
 import accelerate
 from accelerate.accelerator import Accelerator
 from accelerate.scheduler import AcceleratedScheduler
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import (
+    AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
     require_cuda,
@@ -47,11 +52,6 @@ from accelerate.utils.deepspeed import (
     DummyScheduler,
 )
 from accelerate.utils.other import patch_environment
-from parameterized import parameterized
-from transformers import AutoModel, AutoModelForCausalLM, get_scheduler
-from transformers.testing_utils import mockenv_context
-from transformers.trainer_utils import set_seed
-from transformers.utils import is_torch_bf16_available
 
 
 set_seed(42)
@@ -94,7 +94,7 @@ optim_scheduler_params = list(itertools.product(optims, schedulers))
 
 @require_deepspeed
 @require_cuda
-class DeepSpeedConfigIntegration(unittest.TestCase):
+class DeepSpeedConfigIntegration(AccelerateTestCase):
     def setUp(self):
         super().setUp()
 
@@ -127,17 +127,12 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             WORLD_SIZE="1",
         )
 
-    def tearDown(self):
-        super().tearDown()
-        AcceleratorState._reset_state()
-
     def get_config_dict(self, stage):
         # As some tests modify the dict, always make a copy
         return deepcopy(self.ds_config_dict[stage])
 
     @parameterized.expand(stages, name_func=parameterized_custom_name_func)
     def test_deepspeed_plugin(self, stage):
-
         # Test zero3_init_flag will be set to False when ZeRO stage != 3
         deepspeed_plugin = DeepSpeedPlugin(
             gradient_accumulation_steps=1,
@@ -243,7 +238,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
     def test_accelerate_state_deepspeed(self, dtype):
-        AcceleratorState._reset_state()
+        AcceleratorState._reset_state(True)
         deepspeed_plugin = DeepSpeedPlugin(
             gradient_accumulation_steps=1,
             gradient_clipping=1.0,
@@ -627,7 +622,7 @@ class DeepSpeedConfigIntegration(unittest.TestCase):
             )
             self.assertTrue(deepspeed_plugin.deepspeed_config[dtype]["enabled"])
 
-        AcceleratorState._reset_state()
+        AcceleratorState._reset_state(True)
         diff_dtype = "bf16" if dtype == "fp16" else "fp16"
         with mockenv_context(**self.dist_env):
             with self.assertRaises(ValueError) as cm:

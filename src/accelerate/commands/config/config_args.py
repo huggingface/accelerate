@@ -41,8 +41,16 @@ else:
 
 
 def load_config_from_file(config_file):
-    config_file_exists = config_file is not None and os.path.isfile(config_file)
-    config_file = config_file if config_file_exists else default_config_file
+    if config_file is not None:
+        if not os.path.isfile(config_file):
+            raise FileNotFoundError(
+                f"The passed configuration file `{config_file}` does not exist. "
+                "Please pass an existing file to `accelerate launch`, or use the the default one "
+                "created through `accelerate config` and run `accelerate launch` "
+                "without the `--config_file` argument."
+            )
+    else:
+        config_file = default_config_file
     with open(config_file, "r", encoding="utf-8") as f:
         if config_file.endswith(".json"):
             if (
@@ -162,8 +170,12 @@ class ClusterConfig(BaseConfig):
     # args for TPU pods
     tpu_name: str = None
     tpu_zone: str = None
+    tpu_use_cluster: bool = False
+    tpu_use_sudo: bool = False
     command_file: str = None
     commands: List[str] = None
+    tpu_vm: List[str] = None
+    tpu_env: List[str] = None
 
     def __post_init__(self):
         if self.deepspeed_config is None:
@@ -179,7 +191,7 @@ class ClusterConfig(BaseConfig):
 class SageMakerConfig(BaseConfig):
     ec2_instance_type: str
     iam_role_name: str
-    image_uri: str
+    image_uri: Optional[str] = None
     profile: Optional[str] = None
     region: str = "us-east-1"
     num_machines: int = 1
@@ -190,3 +202,4 @@ class SageMakerConfig(BaseConfig):
     py_version: str = SAGEMAKER_PYTHON_VERSION
     sagemaker_inputs_file: str = None
     sagemaker_metrics_file: str = None
+    additional_args: dict = None

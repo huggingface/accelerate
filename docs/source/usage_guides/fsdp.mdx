@@ -73,6 +73,20 @@ Currently, `Accelerate` supports the following config through the CLI:
 `State Dict Type`: [1] FULL_STATE_DICT, [2] LOCAL_STATE_DICT, [3] SHARDED_STATE_DICT  
 ```
 
+## Saving and loading
+
+1. When using transformers `save_pretrained`, pass `state_dict=accelerator.get_state_dict(model)` to save the model state dict. 
+  Below is an example:
+
+```diff
+  unwrapped_model.save_pretrained(
+      args.output_dir,
+      is_main_process=accelerator.is_main_process,
+      save_function=accelerator.save,
++     state_dict=accelerator.get_state_dict(model),
+)
+```
+
 ## A few caveats to be aware of
 
 - PyTorch FSDP auto wraps sub-modules, flattens the parameters and shards the parameters in place.

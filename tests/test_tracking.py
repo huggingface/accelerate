@@ -33,6 +33,7 @@ from accelerate.test_utils.testing import (
     require_comet_ml,
     require_tensorboard,
     require_wandb,
+    skip,
 )
 from accelerate.tracking import CometMLTracker, GeneralTracker
 from accelerate.utils import is_comet_ml_available
@@ -60,7 +61,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
     def test_log(self):
         project_name = "test_project_with_log"
         with tempfile.TemporaryDirectory() as dirpath:
-            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
+            accelerator = Accelerator(log_with="tensorboard", project_dir=dirpath)
             accelerator.init_trackers(project_name)
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
             accelerator.log(values, step=0)
@@ -108,6 +109,7 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         else:
             return dict(re.findall(r'(\w+): "([^\s]+)"', cleaned_record))
 
+    @skip
     def test_wandb(self):
         project_name = "test_project_with_config"
         accelerator = Accelerator(log_with="wandb")

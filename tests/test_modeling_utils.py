@@ -20,7 +20,7 @@ import unittest
 import torch
 import torch.nn as nn
 
-from accelerate.test_utils import require_cuda, require_multi_gpu
+from accelerate.test_utils import require_cuda, require_multi_gpu, require_safetensors
 from accelerate.test_utils.testing import require_torch_min_version
 from accelerate.utils.modeling import (
     check_device_map,
@@ -30,6 +30,7 @@ from accelerate.utils.modeling import (
     get_balanced_memory,
     infer_auto_device_map,
     load_checkpoint_in_model,
+    load_state_dict,
     named_module_tensors,
     set_module_tensor_to_device,
 )
@@ -125,6 +126,11 @@ class ModelingUtilsTester(unittest.TestCase):
     def test_set_module_tensor_between_gpus(self):
         model = ModelForTest().to(0)
         self.check_set_module_tensor_for_device(model, 0, 1)
+
+    def test_set_module_tensor_sets_dtype(self):
+        model = ModelForTest()
+        set_module_tensor_to_device(model, "linear1.weight", "cpu", value=model.linear1.weight, dtype=torch.float16)
+        self.assertEqual(model.linear1.weight.dtype, torch.float16)
 
     def test_named_tensors(self):
         model = nn.BatchNorm1d(4)
@@ -408,3 +414,22 @@ class ModelingUtilsTester(unittest.TestCase):
         # If we set a device to 0, it's not counted.
         max_memory = get_balanced_memory(model, max_memory={0: 0, 1: 300, 2: 300})
         self.assertDictEqual({0: 0, 1: 215, 2: 300}, max_memory)
+
+    @require_cuda
+    @require_safetensors
+    def test_load_state_dict(self):
+        from safetensors.torch import save_file
+
+        state_dict = {k: torch.randn(4, 5) for k in ["a", "b", "c"]}
+        device_maps = [{"a": "cpu", "b": 0, "c": "disk"}, {"a": 0, "b": 0, "c": "disk"}, {"a": 0, "b": 0, "c": 0}]
+
+        for device_map in device_maps:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                checkpoint_file = os.path.join(tmp_dir, "model.safetensors")
+                save_file(state_dict, checkpoint_file, metadata={"format": "pt"})
+
+                loaded_state_dict = load_state_dict(checkpoint_file, device_map=device_map)
+
+            for param, device in device_map.items():
+                device = device if device != "disk" else "cpu"
+                self.assertEqual(loaded_state_dict[param].device, torch.device(device))

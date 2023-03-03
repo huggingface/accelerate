@@ -13,28 +13,32 @@
 # limitations under the License.
 
 import math
+import os
 from copy import deepcopy
-
-import torch
-from torch.utils.data import DataLoader
 
 import datasets
 import evaluate
+import torch
 import transformers
+from datasets import load_dataset
+from torch.utils.data import DataLoader
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 from accelerate import Accelerator
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import is_tpu_available, set_seed
-from datasets import load_dataset
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 
-def get_basic_setup(accelerator, num_samples=82):
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
+
+
+def get_basic_setup(accelerator, num_samples=82, batch_size=16):
     "Returns everything needed to perform basic training"
     set_seed(42)
     model = RegressionModel()
     ddp_model = deepcopy(model)
     dset = RegressionDataset(length=num_samples)
-    dataloader = DataLoader(dset, batch_size=16)
+    dataloader = DataLoader(dset, batch_size=batch_size)
     model.to(accelerator.device)
     ddp_model, dataloader = accelerator.prepare(ddp_model, dataloader)
     return model, ddp_model, dataloader
@@ -84,15 +88,17 @@ def generate_predictions(model, dataloader, accelerator):
             logit, target = accelerator.gather_for_metrics((logit, target))
             logits_and_targets.append((logit, target))
     logits, targs = [], []
-    for (logit, targ) in logits_and_targets:
+    for logit, targ in logits_and_targets:
         logits.append(logit)
         targs.append(targ)
     logits, targs = torch.cat(logits), torch.cat(targs)
     return logits, targs
 
 
-def test_torch_metrics(accelerator: Accelerator, num_samples=82, dispatch_batches=False, split_batches=False):
-    model, ddp_model, dataloader = get_basic_setup(accelerator, num_samples)
+def test_torch_metrics(
+    accelerator: Accelerator, num_samples=82, dispatch_batches=False, split_batches=False, batch_size=16
+):
+    model, ddp_model, dataloader = get_basic_setup(accelerator, num_samples, batch_size)
     logits, targs = generate_predictions(ddp_model, dataloader, accelerator)
     assert (
         len(logits) == num_samples
@@ -159,6 +165,11 @@ def main():
                 print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`, length=99")
             test_torch_metrics(accelerator, 99)
             accelerator.state._reset_state()
+    if accelerator.is_local_main_process:
+        print("**Test last batch is not dropped when perfectly divisible**")
+    accelerator = Accelerator()
+    test_torch_metrics(accelerator, 512)
+    accelerator.state._reset_state()
 
 
 def _mp_fn(index):

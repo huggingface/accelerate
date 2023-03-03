@@ -92,8 +92,10 @@ def offload_state_dict(save_dir: Union[str, os.PathLike], state_dict: Dict[str, 
     Offload a state dict in a given folder.
 
     Args:
-        save_dir (`str` or `os.PathLike`): The directory in which to offload the state dict.
-        state_dict (`Dict[str, torch.Tensor]`): The dictionary of tensors to offload.
+        save_dir (`str` or `os.PathLike`):
+            The directory in which to offload the state dict.
+        state_dict (`Dict[str, torch.Tensor]`):
+            The dictionary of tensors to offload.
     """
     os.makedirs(save_dir, exist_ok=True)
     index = {}

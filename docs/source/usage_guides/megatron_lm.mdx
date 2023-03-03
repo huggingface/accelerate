@@ -290,6 +290,7 @@ You will implement the `accelerate.utils.AbstractTrainStep` or inherit from thei
 ```python
 from accelerate.utils import MegatronLMDummyScheduler, GPTTrainStep, avg_losses_across_data_parallel_group
 
+
 # Custom loss function for the Megatron model
 class GPTTrainStepWithCustomLoss(GPTTrainStep):
     def __init__(self, megatron_args, **kwargs):

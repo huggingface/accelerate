@@ -19,15 +19,24 @@ from typing import Dict, List, Optional, Union
 import torch
 import torch.nn as nn
 
-from .hooks import AlignDevicesHook, add_hook_to_module, attach_align_device_hook, attach_align_device_hook_on_blocks
+from .hooks import (
+    AlignDevicesHook,
+    CpuOffload,
+    UserCpuOffloadHook,
+    add_hook_to_module,
+    attach_align_device_hook,
+    attach_align_device_hook_on_blocks,
+)
 from .utils import (
     OffloadedWeightsLoader,
     check_device_map,
     extract_submodules_state_dict,
+    find_tied_parameters,
     get_balanced_memory,
     infer_auto_device_map,
     load_checkpoint_in_model,
     offload_state_dict,
+    retie_parameters,
 )
 from .utils.versions import is_torch_version
 
@@ -182,6 +191,50 @@ def cpu_offload(
     return model
 
 
+def cpu_offload_with_hook(
+    model: torch.nn.Module,
+    execution_device: Optional[Union[int, str, torch.device]] = None,
+    prev_module_hook: Optional[UserCpuOffloadHook] = None,
+):
+    """
+    Offloads a model on the CPU and puts it back to an execution device when executed. The difference with
+    [`cpu_offload`] is that the model stays on the execution device after the forward and is only offloaded again when
+    the `offload` method of the returned `hook` is called. Useful for pipelines running a model in a loop.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to offload.
+        execution_device(`str`, `int` or `torch.device`, *optional*):
+            The device on which the model should be executed. Will default to the MPS device if it's available, then
+            GPU 0 if there is a GPU, and finally to the CPU.
+        prev_module_hook (`UserCpuOffloadHook`, *optional*):
+            The hook sent back by this function for a previous model in the pipeline you are running. If passed, its
+            offload method will be called just before the forward of the model to which this hook is attached.
+
+    Example:
+
+    ```py
+    model_1, hook_1 = cpu_offload_with_hook(model_1, cuda_device)
+    model_2, hook_2 = cpu_offload_with_hook(model_2, cuda_device, prev_module_hook=hook_1)
+    model_3, hook_3 = cpu_offload_with_hook(model_3, cuda_device, prev_module_hook=hook_2)
+
+    hid_1 = model_1(input)
+    for i in range(50):
+        # model1 is offloaded on the CPU at the first iteration, model 2 stays on the GPU for this whole loop.
+        hid_2 = model_2(hid_1)
+    # model2 is offloaded to the CPU just before this forward.
+    hid_3 = model_3(hid_3)
+
+    # For model3, you need to manually call the hook offload method.
+    hook_3.offload()
+    ```
+    """
+    hook = CpuOffload(execution_device=execution_device, prev_module_hook=prev_module_hook)
+    add_hook_to_module(model, hook, append=True)
+    user_hook = UserCpuOffloadHook(model, hook)
+    return model, user_hook
+
+
 def disk_offload(
     model: nn.Module,
     offload_dir: Union[str, os.PathLike],
@@ -301,6 +354,7 @@ def dispatch_model(
     execution_device = {
         name: main_device if device in ["cpu", "disk"] else device for name, device in device_map.items()
     }
+    execution_device[""] = main_device
     offloaded_devices = ["disk"] if main_device == "cpu" else ["cpu", "disk"]
     offload = {name: device in offloaded_devices for name, device in device_map.items()}
     save_folder = offload_dir if len(disk_modules) > 0 else None
@@ -312,6 +366,7 @@ def dispatch_model(
     else:
         weights_map = None
 
+    tied_params = find_tied_parameters(model)
     attach_align_device_hook_on_blocks(
         model,
         execution_device=execution_device,
@@ -320,6 +375,8 @@ def dispatch_model(
         weights_map=weights_map,
         preload_module_classes=preload_module_classes,
     )
+    # Attaching the hook may break tied weights, so we retie them
+    retie_parameters(model, tied_params)
     model.hf_device_map = device_map
     return model
 
@@ -375,6 +432,28 @@ def load_checkpoint_and_dispatch(
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+
+    Example:
+
+    ```python
+    >>> from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+    >>> from huggingface_hub import hf_hub_download
+    >>> from transformers import AutoConfig, AutoModelForCausalLM
+
+    >>> # Download the Weights
+    >>> checkpoint = "EleutherAI/gpt-j-6B"
+    >>> weights_location = hf_hub_download(checkpoint, "pytorch_model.bin")
+
+    >>> # Create a model and initialize it with empty weights
+    >>> config = AutoConfig.from_pretrained(checkpoint)
+    >>> with init_empty_weights():
+    ...     model = AutoModelForCausalLM.from_config(config)
+
+    >>> # Load the checkpoint and dispatch it to the right devices
+    >>> model = load_checkpoint_and_dispatch(
+    ...     model, weights_location, device_map="auto", no_split_module_classes=["GPTJBlock"]
+    ... )
+    ```
     """
     if not is_torch_version(">=", "1.9.0"):
         raise NotImplementedError("Loading and dispatching requires torch >= 1.9.0")

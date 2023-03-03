@@ -18,7 +18,7 @@ from contextlib import contextmanager
 import torch
 
 from ..commands.config.default import write_basic_config  # noqa: F401
-from ..state import AcceleratorState
+from ..state import PartialState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
 
@@ -30,7 +30,7 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
-def extract_model_from_parallel(model, keep_fp32_wrapper: bool = False):
+def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
     """
     Extract a model from its distributed containers.
 
@@ -72,15 +72,7 @@ def wait_for_everyone():
 
     </Tip>
     """
-    if (
-        AcceleratorState().distributed_type == DistributedType.MULTI_GPU
-        or AcceleratorState().distributed_type == DistributedType.MULTI_CPU
-        or AcceleratorState().distributed_type == DistributedType.DEEPSPEED
-        or AcceleratorState().distributed_type == DistributedType.FSDP
-    ):
-        torch.distributed.barrier()
-    elif AcceleratorState().distributed_type == DistributedType.TPU:
-        xm.rendezvous("accelerate.utils.wait_for_everyone")
+    PartialState().wait_for_everyone()
 
 
 def save(obj, f):
@@ -91,9 +83,9 @@ def save(obj, f):
         obj: The data to save
         f: The file (or file-like object) to use to save the data
     """
-    if AcceleratorState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
-    elif AcceleratorState().local_process_index == 0:
+    elif PartialState().local_process_index == 0:
         torch.save(obj, f)
 
 
@@ -103,6 +95,17 @@ def patch_environment(**kwargs):
     A context manager that will add each keyword argument passed to `os.environ` and remove them when exiting.
 
     Will convert the values in `kwargs` to strings and upper-case all the keys.
+
+    Example:
+
+    ```python
+    >>> import os
+    >>> from accelerate.utils import patch_environment
+
+    >>> with patch_environment(FOO="bar"):
+    ...     print(os.environ["FOO"])  # prints "bar"
+    >>> print(os.environ["FOO"])  # raises KeyError
+    ```
     """
     for key, value in kwargs.items():
         os.environ[key.upper()] = str(value)
@@ -124,3 +127,21 @@ def get_pretty_name(obj):
     if hasattr(obj, "__name__"):
         return obj.__name__
     return str(obj)
+
+
+def merge_dicts(source, destination):
+    """
+    Recursively merges two dictionaries.
+
+    Args:
+        source (`dict`): The dictionary to merge into `destination`.
+        destination (`dict`): The dictionary to merge `source` into.
+    """
+    for key, value in source.items():
+        if isinstance(value, dict):
+            node = destination.setdefault(key, {})
+            merge_dicts(value, node)
+        else:
+            destination[key] = value
+
+    return destination

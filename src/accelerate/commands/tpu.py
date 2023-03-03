@@ -18,8 +18,9 @@ import argparse
 import os
 import subprocess
 
-from accelerate.commands.config.config_args import default_config_file, load_config_from_file
 from packaging.version import Version, parse
+
+from accelerate.commands.config.config_args import default_config_file, load_config_from_file
 
 
 _description = "Run commands across TPU VMs for initial setup before running `accelerate launch`."
@@ -51,6 +52,11 @@ def tpu_command_parser(subparsers=None):
         help="The zone of the TPU to use. If not specified, will use the zone specified in the config file.",
     )
     pod_args = parser.add_argument_group("TPU Arguments", "Arguments for options ran inside the TPU.")
+    pod_args.add_argument(
+        "--use_alpha",
+        action="store_true",
+        help="Whether to use `gcloud alpha` when running the TPU training script instead of `gcloud`.",
+    )
     pod_args.add_argument(
         "--command_file",
         default=None,
@@ -121,8 +127,10 @@ def tpu_command_launcher(args):
 
     # Then send it to gcloud
     # Eventually try to use google-api-core to do this instead of subprocess
-    cmd = [
-        "gcloud",
+    cmd = ["gcloud"]
+    if args.use_alpha:
+        cmd += ["alpha"]
+    cmd += [
         "compute",
         "tpus",
         "tpu-vm",
