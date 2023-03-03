@@ -591,6 +591,7 @@ class AcceleratorState:
                 and self.device.type == "cuda"
             ):
                 torch.backends.cuda.matmul.allow_tf32 = True
+            PartialState._shared_state["distributed_type"] = self.distributed_type
 
     @property
     def initialized(self) -> bool:
