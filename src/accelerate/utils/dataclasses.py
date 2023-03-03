@@ -731,16 +731,19 @@ class FullyShardedDataParallelPlugin:
         if self.auto_wrap_policy is None:
             auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", "NO_WRAP")
             if auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[0]:
-                transformer_cls_to_wrap = os.environ.get("FSDP_TRANSFORMER_CLS_TO_WRAP", "")
-                transformer_cls_to_wrap = FullyShardedDataParallelPlugin.get_module_class_from_name(
-                    model, transformer_cls_to_wrap
-                )
-                if transformer_cls_to_wrap is None:
-                    raise Exception("Could not find the transformer layer class to wrap in the model.")
+                transformer_cls_names_to_wrap = os.environ.get("FSDP_TRANSFORMER_CLS_TO_WRAP", "").split(",")
+                transformer_cls_to_wrap = set()
+                for layer_class in transformer_cls_names_to_wrap:
+                    transformer_cls = FullyShardedDataParallelPlugin.get_module_class_from_name(model, layer_class)
+                    if transformer_cls is None:
+                        raise Exception("Could not find the transformer layer class to wrap in the model.")
+                    else:
+                        transformer_cls_to_wrap.add(transformer_cls)
+
                 self.auto_wrap_policy = functools.partial(
                     transformer_auto_wrap_policy,
                     # Transformer layer class to wrap
-                    transformer_layer_cls={transformer_cls_to_wrap},
+                    transformer_layer_cls=transformer_cls_to_wrap,
                 )
             elif auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[1]:
                 min_num_params = int(os.environ.get("FSDP_MIN_NUM_PARAMS", 0))

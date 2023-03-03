@@ -269,8 +269,8 @@ class Accelerator:
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
             fsdp_plugin, FullyShardedDataParallelPlugin
         ):
-            if is_torch_version("<", "1.13.0"):
-                raise ValueError("FSDP requires PyTorch >= 1.13.0")
+            if is_torch_version("<", "1.12.0"):
+                raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
@@ -1135,17 +1135,18 @@ class Accelerator:
             if type(model) != FSDP:
                 self.state.fsdp_plugin.set_auto_wrap_policy(model)
                 fsdp_plugin = self.state.fsdp_plugin
-                model = FSDP(
-                    model,
-                    sharding_strategy=fsdp_plugin.sharding_strategy,
-                    cpu_offload=fsdp_plugin.cpu_offload,
-                    auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
-                    backward_prefetch=fsdp_plugin.backward_prefetch,
-                    mixed_precision=fsdp_plugin.mixed_precision_policy,
-                    ignored_modules=fsdp_plugin.ignored_modules,
-                    device_id=self.device,
-                    limit_all_gathers=fsdp_plugin.limit_all_gathers,
-                )
+                kwargs = {
+                    "sharding_strategy": fsdp_plugin.sharding_strategy,
+                    "cpu_offload": fsdp_plugin.cpu_offload,
+                    "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
+                    "backward_prefetch": fsdp_plugin.backward_prefetch,
+                    "mixed_precision": fsdp_plugin.mixed_precision_policy,
+                    "ignored_modules": fsdp_plugin.ignored_modules,
+                    "device_id": self.device,
+                }
+                if is_torch_version(">=", "1.13.0"):
+                    kwargs["limit_all_gathers"] = fsdp_plugin.limit_all_gathers
+                model = FSDP(model, **kwargs)
             self._models[-1] = model
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
