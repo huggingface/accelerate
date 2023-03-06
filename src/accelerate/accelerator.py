@@ -1119,8 +1119,27 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
-        if device_placement:
+        if getattr(model, "is_loaded_in_8bit", False):
+            model_devices = set(model.hf_device_map.values())
+            if len(model_devices) > 1:
+                raise ValueError(
+                    "You can't train a model that has been loaded in 8-bit precision on multiple devices."
+                )
+
+            current_device_index = list(model_devices)[0]
+            if torch.device(current_device_index) != self.device:
+                # if on the first device (GPU 0) we don't care
+                if (self.device.index is not None) or (current_device_index != 0):
+                    raise ValueError(
+                        "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
+                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}"
+                    )
+
+            if "cpu" in model_devices or "disk" in model_devices:
+                raise ValueError("You can't train a model that has been loaded in 8-bit precision on CPU or disk.")
+        elif device_placement:
             model = model.to(self.device)
+
         if self.distributed_type == DistributedType.MULTI_GPU:
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
