@@ -183,9 +183,8 @@ class Accelerator:
         kwargs_handlers (`List[KwargHandler]`, *optional*)
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
-        dynamo_plugin (`TorchDynamoPlugin`, *optional*):
-            Tweak your Torch Dynamo related args using this argument. This argument is optional and can be configured
-            directly using *accelerate config*
+        dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
+            Set to one of the possible dynamo backends to optimize your training with torch dynamo.
 
     **Available attributes:**
 
@@ -222,7 +221,7 @@ class Accelerator:
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
-        dynamo_plugin: TorchDynamoPlugin = None,
+        dynamo_backend: Union[DynamoBackend, str] = None,
     ):
         if project_config is not None:
             self.project_configuration = project_config
@@ -244,11 +243,7 @@ class Accelerator:
                     f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
                 )
 
-        if dynamo_plugin is None:
-            dynamo_plugin = TorchDynamoPlugin()
-        else:
-            if not isinstance(dynamo_plugin, TorchDynamoPlugin):
-                raise ValueError("dynamo_plugin must be an object of `accelerate.utils.TorchDynamoPlugin`")
+        dynamo_plugin = TorchDynamoPlugin() if dynamo_backend is None else TorchDynamoPlugin(backend=dynamo_backend)
 
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = (

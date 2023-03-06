@@ -582,7 +582,7 @@ class AcceleratorState:
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
             if (
-                self.dynamo_backend != DynamoBackend.NO
+                self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"
                 and self.device.type == "cuda"
             ):
