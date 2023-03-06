@@ -78,7 +78,7 @@ class BaseConfig:
     distributed_type: Union[DistributedType, SageMakerDistributedType]
     mixed_precision: str
     use_cpu: bool
-    dynamo_config: None
+    dynamo_config: dict = None
 
     def to_dict(self):
         result = self.__dict__
