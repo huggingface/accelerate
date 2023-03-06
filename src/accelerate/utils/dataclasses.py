@@ -371,7 +371,8 @@ class TorchDynamoPlugin(KwargsHandler):
     def __post_init__(self):
         prefix = "ACCELERATE_DYNAMO_"
         if self.backend is None:
-            self.backend = DynamoBackend(os.environ.get(prefix + "BACKEND", "no").upper())
+            self.backend = os.environ.get(prefix + "BACKEND", "no").upper()
+        self.backend = DynamoBackend(self.backend)
         if self.mode is None:
             self.mode = os.environ.get(prefix + "MODE", "default")
         if self.fullgraph is None:

@@ -1163,8 +1163,8 @@ class Accelerator:
             model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO:
-            if is_torch_version("<", "2.0.0"):
-                raise ValueError("Torch Dynamo requires PyTorch >= 2.0.0")
+            if not hasattr(torch, "compile"):
+                raise ValueError("Using torch.compile requires a nightly install of PyTorch.")
             model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
