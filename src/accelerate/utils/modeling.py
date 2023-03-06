@@ -672,11 +672,11 @@ def load_state_dict(checkpoint_file, device_map=None):
             metadata = f.metadata()
             weight_names = f.keys()
 
-        if "format" not in metadata:
+        if metadata is None:
             logger.warn(
                 f"The safetensors archive passed at {checkpoint_file} does not contain metadata. Make sure to save your model with the `save_pretrained` method. Defaulting to 'pt' metadata."
             )
-            metadata["format"] = "pt"
+            metadata = {"format": "pt"}
 
         if metadata.get("format") not in ["pt", "tf", "flax"]:
             raise OSError(
