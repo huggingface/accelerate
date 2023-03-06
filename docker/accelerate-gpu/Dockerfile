@@ -25,6 +25,8 @@ RUN source activate accelerate && \
     git+https://github.com/huggingface/accelerate#egg=accelerate[testing,test_trackers] \
     --extra-index-url https://download.pytorch.org/whl/cu113
 
+RUN python3 -m pip install --no-cache-dir bitsandbytes
+
 # Stage 2
 FROM nvidia/cuda:11.2.2-cudnn8-devel-ubuntu20.04 AS build-image
 COPY --from=compile-image /opt/conda /opt/conda
