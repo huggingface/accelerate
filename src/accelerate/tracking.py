@@ -330,6 +330,7 @@ class WandBTracker(GeneralTracker):
         self.run.log(values, step=step, **kwargs)
         logger.debug("Successfully logged to WandB")
 
+    @on_main_process
     def log_images(self, values: dict, step: Optional[int] = None, **kwargs):
         """
         Logs `images` to the current run.
@@ -346,6 +347,7 @@ class WandBTracker(GeneralTracker):
             self.log({k: [wandb.Image(image) for image in v]}, step=step, **kwargs)
         logger.debug("Successfully logged images to WandB")
 
+    @on_main_process
     def log_table(
         self,
         table_name: str,
