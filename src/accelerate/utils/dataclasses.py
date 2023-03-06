@@ -382,7 +382,7 @@ class TorchDynamoPlugin(KwargsHandler):
 
     def to_dict(self):
         dynamo_config = copy.deepcopy(self.__dict__)
-        dynamo_config["backend"] = dynamo_config["backend"].value
+        dynamo_config["backend"] = dynamo_config["backend"].value.lower()
         return dynamo_config
 
 
