@@ -78,7 +78,6 @@ class BaseConfig:
     distributed_type: Union[DistributedType, SageMakerDistributedType]
     mixed_precision: str
     use_cpu: bool
-    dynamo_config: dict = None
 
     def to_dict(self):
         result = self.__dict__
@@ -172,6 +171,9 @@ class ClusterConfig(BaseConfig):
     tpu_vm: List[str] = None
     tpu_env: List[str] = None
 
+    # args for dynamo
+    dynamo_config: dict = None
+
     def __post_init__(self):
         if self.deepspeed_config is None:
             self.deepspeed_config = {}
@@ -198,3 +200,4 @@ class SageMakerConfig(BaseConfig):
     sagemaker_inputs_file: str = None
     sagemaker_metrics_file: str = None
     additional_args: dict = None
+    dynamo_config: dict = None
