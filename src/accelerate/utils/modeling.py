@@ -674,7 +674,8 @@ def load_state_dict(checkpoint_file, device_map=None):
 
         if metadata is None:
             logger.warn(
-                f"The safetensors archive passed at {checkpoint_file} does not contain metadata. Make sure to save your model with the `save_pretrained` method. Defaulting to 'pt' metadata."
+                f"The safetensors archive passed at {checkpoint_file} does not contain metadata. "
+                "Make sure to save your model with the `save_pretrained` method. Defaulting to 'pt' metadata."
             )
             metadata = {"format": "pt"}
 
