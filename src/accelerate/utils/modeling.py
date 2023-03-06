@@ -14,6 +14,7 @@
 
 import gc
 import json
+import logging
 import os
 import re
 import shutil
@@ -33,6 +34,9 @@ if is_safetensors_available():
     from safetensors.torch import load_file as safe_load_file
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+
+
+logger = logging.getLogger(__name__)
 
 
 def convert_file_size_to_int(size: Union[int, str]):
@@ -667,6 +671,14 @@ def load_state_dict(checkpoint_file, device_map=None):
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
             weight_names = f.keys()
+
+        if metadata is None:
+            logger.warn(
+                f"The safetensors archive passed at {checkpoint_file} does not contain metadata. "
+                "Make sure to save your model with the `save_pretrained` method. Defaulting to 'pt' metadata."
+            )
+            metadata = {"format": "pt"}
+
         if metadata.get("format") not in ["pt", "tf", "flax"]:
             raise OSError(
                 f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
