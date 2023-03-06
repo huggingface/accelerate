@@ -128,7 +128,7 @@ def get_cluster_input():
                 "Which mode do you want to use?",
                 TORCH_DYNAMO_MODES,
                 lambda x: TORCH_DYNAMO_MODES[int(x)],
-                default=1,
+                default=0,
             )
             dynamo_config[prefix + "use_fullgraph"] = _ask_field(
                 "Do you want the fullgraph mode or it is ok to break model into several subgraphs? [yes/NO]: ",
