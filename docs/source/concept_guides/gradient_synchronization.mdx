@@ -117,3 +117,37 @@ for batch in dataloader:
 ```
 
 As a result, you should either use *`accelerator.accumulate` or `accelerator.no_sync`* when it comes to API choice. 
+
+## Just how much of a slowdown is there, and easy mistakes you can make
+
+To setup a realistic example, consider the following setup:
+
+* Two single-GPU T4 nodes and one node with two GPUs
+* Each GPU is a T4, and are hosted on GCP
+* The script used is a modification of the [NLP Example](https://github.com/muellerzr/timing_experiments/blob/main/baseline.py) script
+* Batch size per GPU is 16, and gradients are accumulated every 4 steps
+
+All scripts are available in [this repository](https://github.com/muellerzr/timing_experiments).
+
+If not careful about gradient synchronization and GPU communication, a *large* amount of time can be wasted 
+from when these GPUs communicate to each other during unnessisary periods.
+
+By how much?
+
+Reference:
+- Baseline: uses no synchronization practices discussed here
+- `no_sync` improperly: `no_sync` only around the `backward` call, not the `forward`
+- `no_sync`: using the `no_sync` pattern properly
+- `accumulate`: using [`~Accelerator.accumulate`] properly
+
+Below are the average seconds per batch iterating over 29 batches of data for each setup on both a single node and on the dual-node setup:
+
+|             | Baseline  | `no_sync` improperly | `no_sync` | `accumulate`| 
+| :---------: | :-------: | :------------------: | :-------: | :---------: |
+| Multi-Node  | 2±0.01s    | 2.13±0.08s | **0.91±0.11s** | **0.91±0.11s** |
+| Single Node | 0.50±0.01s | 0.50±0.01s | **0.41±0.015s** | **0.41±0.015s** |
+
+As you can see, if you are not careful about how you setup your gradient synchronization, you can get upwards of more than a 2x slowdown during training!
+
+If you are worried about making sure everything is done properly, we highly recommend utilizing the [`~Accelerator.accumulate`] function and passing in
+`gradient_accumulation_steps` to the [`Accelerator`] object so Accelerate can handle this for you.
