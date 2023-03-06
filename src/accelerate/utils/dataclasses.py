@@ -376,9 +376,9 @@ class TorchDynamoPlugin(KwargsHandler):
         if self.mode is None:
             self.mode = os.environ.get(prefix + "MODE", "default")
         if self.fullgraph is None:
-            self.fullgraph = strtobool(os.environ.get(prefix + "FULLGRAPH", "False")) == 1
+            self.fullgraph = strtobool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
         if self.dynamic is None:
-            self.dynamic = strtobool(os.environ.get(prefix + "DYNAMIC", "False")) == 1
+            self.dynamic = strtobool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
 
     def to_dict(self):
         dynamo_config = copy.deepcopy(self.__dict__)
