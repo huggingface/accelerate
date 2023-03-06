@@ -48,6 +48,7 @@ from .utils import (
     PrecisionType,
     ProjectConfiguration,
     RNGType,
+    TorchDynamoPlugin,
     compare_versions,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
@@ -182,8 +183,9 @@ class Accelerator:
         kwargs_handlers (`List[KwargHandler]`, *optional*)
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
-        dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
-            Set to one of the possible dynamo backends to optimize your training with torch dynamo.
+        dynamo_plugin (`TorchDynamoPlugin`, *optional*):
+            Tweak your Torch Dynamo related args using this argument. This argument is optional and can be configured
+            directly using *accelerate config*
 
     **Available attributes:**
 
@@ -220,7 +222,7 @@ class Accelerator:
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
-        dynamo_backend: Union[DynamoBackend, str] = None,
+        dynamo_plugin: TorchDynamoPlugin = None,
     ):
         if project_config is not None:
             self.project_configuration = project_config
@@ -242,8 +244,11 @@ class Accelerator:
                     f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
                 )
 
-        if dynamo_backend is not None:
-            dynamo_backend = DynamoBackend(dynamo_backend.upper())
+        if dynamo_plugin is None:
+            dynamo_plugin = TorchDynamoPlugin()
+        else:
+            if not isinstance(dynamo_plugin, TorchDynamoPlugin):
+                raise ValueError("dynamo_plugin must be an object of `accelerate.utils.TorchDynamoPlugin`")
 
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = (
@@ -323,7 +328,7 @@ class Accelerator:
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
             cpu=cpu,
-            dynamo_backend=dynamo_backend,
+            dynamo_plugin=dynamo_plugin,
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
@@ -1162,10 +1167,10 @@ class Accelerator:
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
-        if self.state.dynamo_backend != DynamoBackend.NO:
-            import torch._dynamo as dynamo
-
-            model = dynamo.optimize(self.state.dynamo_backend.value.lower())(model)
+        if self.state.dynamo_plugin.backend != DynamoBackend.NO:
+            if is_torch_version("<", "2.0.0"):
+                raise ValueError("Torch Dynamo requires PyTorch >= 2.0.0")
+            model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
     def _prepare_deepspeed(self, *args):

@@ -16,6 +16,7 @@ from .dataclasses import (
     RNGType,
     SageMakerDistributedType,
     TensorInformation,
+    TorchDynamoPlugin,
 )
 from .environment import get_int_from_env, parse_choice_from_env, parse_flag_from_env
 from .imports import (

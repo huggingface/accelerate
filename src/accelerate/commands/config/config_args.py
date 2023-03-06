@@ -22,7 +22,7 @@ from typing import List, Optional, Union
 
 import yaml
 
-from ...utils import ComputeEnvironment, DistributedType, DynamoBackend, SageMakerDistributedType
+from ...utils import ComputeEnvironment, DistributedType, SageMakerDistributedType
 from ...utils.constants import SAGEMAKER_PYTHON_VERSION, SAGEMAKER_PYTORCH_VERSION, SAGEMAKER_TRANSFORMERS_VERSION
 
 
@@ -78,7 +78,7 @@ class BaseConfig:
     distributed_type: Union[DistributedType, SageMakerDistributedType]
     mixed_precision: str
     use_cpu: bool
-    dynamo_backend: DynamoBackend
+    dynamo_config: None
 
     def to_dict(self):
         result = self.__dict__
@@ -102,8 +102,6 @@ class BaseConfig:
             del config_dict["fp16"]
         if "use_cpu" not in config_dict:
             config_dict["use_cpu"] = False
-        if "dynamo_backend" not in config_dict:
-            config_dict["dynamo_backend"] = DynamoBackend.NO
         return cls(**config_dict)
 
     def to_json_file(self, json_file):
@@ -125,9 +123,6 @@ class BaseConfig:
             del config_dict["fp16"]
         if "use_cpu" not in config_dict:
             config_dict["use_cpu"] = False
-        if "dynamo_backend" not in config_dict:
-            config_dict["dynamo_backend"] = DynamoBackend.NO
-
         return cls(**config_dict)
 
     def to_yaml_file(self, yaml_file):
@@ -142,8 +137,8 @@ class BaseConfig:
                 self.distributed_type = SageMakerDistributedType(self.distributed_type)
             else:
                 self.distributed_type = DistributedType(self.distributed_type)
-        if isinstance(self.dynamo_backend, str):
-            self.dynamo_backend = DynamoBackend(self.dynamo_backend.upper())
+        if self.dynamo_config is None:
+            self.dynamo_config = {}
 
 
 @dataclass

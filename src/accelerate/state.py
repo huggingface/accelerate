@@ -532,7 +532,7 @@ class AcceleratorState:
         self,
         mixed_precision: str = None,
         cpu: bool = False,
-        dynamo_backend=None,
+        dynamo_plugin=None,
         deepspeed_plugin=None,
         fsdp_plugin=None,
         megatron_lm_plugin=None,
@@ -545,17 +545,13 @@ class AcceleratorState:
         self.__dict__.update(PartialState._shared_state)
         self._check_initialized(mixed_precision)
         if not self.initialized:
-            self.backend = None
             self.deepspeed_plugin = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
                 else mixed_precision.lower()
             )
-            dynamo_backend = (
-                parse_choice_from_env("ACCELERATE_DYNAMO_BACKEND", "no") if dynamo_backend is None else dynamo_backend
-            )
-            self.dynamo_backend = DynamoBackend(dynamo_backend.upper())
+            self.dynamo_plugin = dynamo_plugin
             if not _from_accelerator:
                 raise ValueError(
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "

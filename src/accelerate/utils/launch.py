@@ -100,6 +100,9 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     except ValueError:
         raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
     current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
+    current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
+    current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
+    current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     return cmd, current_env
@@ -151,6 +154,9 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     except ValueError:
         raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
     current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
+    current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
+    current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
+    current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
 
     if args.use_fsdp:
         current_env["ACCELERATE_USE_FSDP"] = "true"
@@ -391,6 +397,9 @@ def prepare_sagemager_args_inputs(
         "ACCELERATE_USE_SAGEMAKER": "true",
         "ACCELERATE_MIXED_PRECISION": str(mixed_precision),
         "ACCELERATE_DYNAMO_BACKEND": dynamo_backend.value,
+        "ACCELERATE_DYNAMO_MODE": args.dynamo_mode,
+        "ACCELERATE_DYNAMO_USE_FULLGRAPH": str(args.dynamo_use_fullgraph),
+        "ACCELERATE_DYNAMO_USE_DYNAMIC": str(args.dynamo_use_dynamic),
         "ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE": sagemaker_config.distributed_type.value,
     }
     # configure distribution set up

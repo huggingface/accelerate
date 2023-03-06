@@ -348,6 +348,40 @@ class ProjectConfiguration:
 
 
 @dataclass
+class TorchDynamoPlugin(KwargsHandler):
+    """
+    This plugin is used to compile a model with PyTorch 2.0
+    """
+
+    backend: DynamoBackend = field(
+        default="no",
+        metadata={
+            "help": "Possible options are 'no', 'eager', 'aot_eager', 'inductor', 'nvfuser', 'aot_nvfuser', "
+            "'aot_cudagraphs', 'ofi', 'fx2trt', 'onnxrt', 'ipex'"
+        },
+    )
+    mode: str = field(
+        default="default", metadata={"help": "Possible options are 'default', 'reduce-overhead' or 'max-autotune'"}
+    )
+    fullgraph: bool = field(default=False, metadata={"help": "Whether it is ok to break model into several subgraphs"})
+    dynamic: bool = field(default=False, metadata={"help": "Whether to use dynamic shape for tracing"})
+    options: Any = field(default=None, metadata={"help": "A dictionary of options to pass to the backend."})
+    disable: bool = field(default=False, metadata={"help": "Turn torch.compile() into a no-op for testing"})
+
+    def __post_init__(self):
+        prefix = "ACCELERATE_DYNAMO_"
+        self.backend = DynamoBackend(os.environ.get(prefix + "BACKEND", self.backend).upper())
+        self.mode = os.environ.get(prefix + "MODE", self.mode)
+        self.fullgraph = strtobool(os.environ.get(prefix + "FULLGRAPH", str(self.fullgraph))) == 1
+        self.dynamic = strtobool(os.environ.get(prefix + "DYNAMIC", str(self.dynamic))) == 1
+
+    def to_dict(self):
+        dynamo_config = copy.deepcopy(self.__dict__)
+        dynamo_config["backend"] = dynamo_config["backend"].value
+        return dynamo_config
+
+
+@dataclass
 class DeepSpeedPlugin:
     """
     This plugin is used to integrate DeepSpeed.
