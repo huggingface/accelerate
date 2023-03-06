@@ -189,4 +189,4 @@ def load_custom_state(obj, path, index: int = 0):
     """
     load_location = f"{path}/custom_checkpoint_{index}.pkl"
     logger.info(f"Loading the state of {get_pretty_name(obj)} from {load_location}")
-    obj.load_state_dict(torch.load(load_location))
+    obj.load_state_dict(torch.load(load_location, map_location="cpu"))
