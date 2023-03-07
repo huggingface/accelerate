@@ -243,11 +243,17 @@ def test_dataloader_break():
             if iteration == 1:
                 for batch_num, _ in enumerate(second_dataloader):
                     if batch_num < len(second_dataloader) - 1:
-                        assert id(accelerator.gradient_state.active_dataloader) == id(second_dataloader), f"First dataloader: {id(first_dataloader)}\nSecond dataloader: {id(second_dataloader)}\nActive dataloader: {id(accelerator.gradient_state.active_dataloader)}\n"
+                        assert id(accelerator.gradient_state.active_dataloader) == id(
+                            second_dataloader
+                        ), f"First dataloader: {id(first_dataloader)}\nSecond dataloader: {id(second_dataloader)}\nActive dataloader: {id(accelerator.gradient_state.active_dataloader)}\n"
                     else:
-                        assert id(accelerator.gradient_state.active_dataloader) == id(first_dataloader), f"First dataloader: {id(first_dataloader)}\nSecond dataloader: {id(second_dataloader)}\nActive dataloader: {id(accelerator.gradient_state.active_dataloader)}\n"
+                        assert id(accelerator.gradient_state.active_dataloader) == id(
+                            first_dataloader
+                        ), f"First dataloader: {id(first_dataloader)}\nSecond dataloader: {id(second_dataloader)}\nActive dataloader: {id(accelerator.gradient_state.active_dataloader)}\n"
         else:
-            assert accelerator.gradient_state.active_dataloader == None
+            assert accelerator.gradient_state.active_dataloader is None
+
+
 def main():
     accelerator = Accelerator()
     state = accelerator.state
