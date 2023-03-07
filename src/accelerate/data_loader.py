@@ -367,6 +367,7 @@ class DataLoaderShard(DataLoader):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
+        self.gradient_state._add_dataloader(self)
         self.gradient_state._set_end_of_dataloader(False)
         # We can safely pass because the default is -1
         with suppress(Exception):
@@ -392,6 +393,7 @@ class DataLoaderShard(DataLoader):
                 current_batch = next_batch
             except StopIteration:
                 self.gradient_state._set_end_of_dataloader(True)
+                self.gradient_state._remove_dataloader(self)
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
@@ -502,6 +504,7 @@ class DataLoaderDispatcher(DataLoader):
         return batch, batch_info
 
     def __iter__(self):
+        self.gradient_state._add_dataloader(self)
         self.gradient_state._set_end_of_dataloader(False)
         main_iterator = None
         if self.state.process_index == 0:
@@ -550,6 +553,7 @@ class DataLoaderDispatcher(DataLoader):
             if stop_iteration:
                 self.gradient_state._set_remainder(observed_batch_size)
                 self.gradient_state._set_end_of_dataloader(True)
+                self.gradient_state._remove_dataloader(self)
             if batch_index >= self.skip_batches:
                 yield batch
             batch_index += 1
