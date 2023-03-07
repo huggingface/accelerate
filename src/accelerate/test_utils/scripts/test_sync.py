@@ -257,6 +257,9 @@ def test_dataloader_break():
 def main():
     accelerator = Accelerator()
     state = accelerator.state
+    if state.local_process_index == 0:
+        print("**Test `accumulate` gradient accumulation with dataloader break**")
+    test_dataloader_break()
     if state.distributed_type == DistributedType.NO:
         if state.local_process_index == 0:
             print("**Test NOOP `no_sync` context manager**")
@@ -291,9 +294,6 @@ def main():
                         f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
                     )
                 test_gradient_accumulation_with_opt_and_scheduler(split_batch, dispatch_batches)
-    if state.local_process_index == 0:
-        print("**Test `accumulate` gradient accumulation with dataloader break**")
-    test_dataloader_break()
 
 
 def _mp_fn(index):
