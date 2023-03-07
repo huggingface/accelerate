@@ -1164,7 +1164,7 @@ class Accelerator:
         # torch.compile should be called last.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO:
             if not hasattr(torch, "compile"):
-                raise ValueError("Using torch.compile requires a nightly install of PyTorch.")
+                raise ValueError("Using torch.compile requires PyTorch 2.0 or higher.")
             model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
