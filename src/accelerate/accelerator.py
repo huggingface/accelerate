@@ -1136,7 +1136,7 @@ class Accelerator:
                     )
 
             if "cpu" in model_devices or "disk" in model_devices:
-                raise ValueError("You can't train a model that has been loaded in 8-bit precision on CPU or disk.")
+                raise ValueError("You can't train a model that has been loaded in 8-bit precision with CPU or disk offload.")
         elif device_placement:
             model = model.to(self.device)
 
