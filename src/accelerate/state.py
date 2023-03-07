@@ -707,6 +707,8 @@ class GradientState:
             self.sync_gradients = True
             self.end_of_dataloader = False
             self.remainder = -1
+            self.active_dataloader = None
+            self.dataloader_references = [None]
 
     @property
     def initialized(self) -> bool:
@@ -731,3 +733,20 @@ class GradientState:
     def _set_remainder(self, remainder):
         "Private function that sets the number of remaining samples at the end of the dataloader. Users should not have to call this."
         self.remainder = remainder
+
+    def _add_dataloader(self, dataloader):
+        "Private function that adds a dataloader to `self.dataloader_references` and sets `in_dataloader` to `True`. Users should not have to call this."
+        self.active_dataloader = dataloader
+        self.dataloader_references.append(self.active_dataloader)
+        self._set_end_of_dataloader(False)
+
+    def _remove_dataloader(self, dataloader):
+        "Private function that removes a dataloader from `self.dataloader_references` and sets `in_dataloader` to `False` if there are no more dataloaders. Users should not have to call this."
+        self.dataloader_references.remove(dataloader)
+        self.active_dataloader = self.dataloader_references[-1]
+        self._set_end_of_dataloader(True)
+
+    @property
+    def in_dataloader(self) -> bool:
+        "Returns whether the current process is in a dataloader"
+        return self.active_dataloader is not None
