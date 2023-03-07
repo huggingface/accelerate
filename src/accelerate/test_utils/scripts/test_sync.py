@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 
 from accelerate.accelerator import Accelerator
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import set_seed
+from accelerate.utils import DistributedType, set_seed
 
 
 def check_model_parameters(model_a, model_b, did_step, iteration):
@@ -257,40 +257,40 @@ def test_dataloader_break():
 def main():
     accelerator = Accelerator()
     state = accelerator.state
-    # if state.distributed_type == DistributedType.NO:
-    #     if state.local_process_index == 0:
-    #         print("**Test NOOP `no_sync` context manager**")
-    #     test_noop_sync(accelerator)
-    # if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_CPU):
-    #     if state.local_process_index == 0:
-    #         print("**Test Distributed `no_sync` context manager**")
-    #     test_distributed_sync(accelerator)
-    # if state.distributed_type == DistributedType.MULTI_GPU:
-    #     for split_batch in [True, False]:
-    #         for dispatch_batches in [True, False]:
-    #             if state.local_process_index == 0:
-    #                 print(
-    #                     "**Test `accumulate` gradient accumulation, ",
-    #                     f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
-    #                 )
-    #             test_gradient_accumulation(split_batch, dispatch_batches)
-    # if state.local_process_index == 0:
-    #     print(
-    #         "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
-    #         "`split_batches=False`, `dispatch_batches=False`**",
-    #     )
-    # test_gradient_accumulation_with_opt_and_scheduler()
-    # if state.distributed_type == DistributedType.MULTI_GPU:
-    #     for split_batch in [True, False]:
-    #         for dispatch_batches in [True, False]:
-    #             if not split_batch and not dispatch_batches:
-    #                 continue
-    #             if state.local_process_index == 0:
-    #                 print(
-    #                     "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
-    #                     f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
-    #                 )
-    #             test_gradient_accumulation_with_opt_and_scheduler(split_batch, dispatch_batches)
+    if state.distributed_type == DistributedType.NO:
+        if state.local_process_index == 0:
+            print("**Test NOOP `no_sync` context manager**")
+        test_noop_sync(accelerator)
+    if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_CPU):
+        if state.local_process_index == 0:
+            print("**Test Distributed `no_sync` context manager**")
+        test_distributed_sync(accelerator)
+    if state.distributed_type == DistributedType.MULTI_GPU:
+        for split_batch in [True, False]:
+            for dispatch_batches in [True, False]:
+                if state.local_process_index == 0:
+                    print(
+                        "**Test `accumulate` gradient accumulation, ",
+                        f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
+                    )
+                test_gradient_accumulation(split_batch, dispatch_batches)
+    if state.local_process_index == 0:
+        print(
+            "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
+            "`split_batches=False`, `dispatch_batches=False`**",
+        )
+    test_gradient_accumulation_with_opt_and_scheduler()
+    if state.distributed_type == DistributedType.MULTI_GPU:
+        for split_batch in [True, False]:
+            for dispatch_batches in [True, False]:
+                if not split_batch and not dispatch_batches:
+                    continue
+                if state.local_process_index == 0:
+                    print(
+                        "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
+                        f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
+                    )
+                test_gradient_accumulation_with_opt_and_scheduler(split_batch, dispatch_batches)
     if state.local_process_index == 0:
         print("**Test `accumulate` gradient accumulation with dataloader break**")
     test_dataloader_break()
