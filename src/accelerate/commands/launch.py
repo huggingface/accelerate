@@ -45,7 +45,7 @@ from accelerate.utils import (
     prepare_simple_launcher_cmd_env,
     prepare_tpu,
 )
-from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
+from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS, TORCH_DYNAMO_MODES
 
 
 if is_rich_available():
@@ -169,13 +169,6 @@ def launch_command_parser(subparsers=None):
         "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
     )
     resource_args.add_argument(
-        "--dynamo_backend",
-        type=str,
-        choices=["no"] + [b.lower() for b in DYNAMO_BACKENDS],
-        help="Choose a backend to optimize your training with dynamo, see more at "
-        "https://github.com/pytorch/torchdynamo.",
-    )
-    resource_args.add_argument(
         "--mixed_precision",
         type=str,
         choices=["no", "fp16", "bf16"],
@@ -194,6 +187,34 @@ def launch_command_parser(subparsers=None):
         type=int,
         default=None,
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
+    )
+
+    # Dynamo arguments
+    resource_args.add_argument(
+        "--dynamo_backend",
+        type=str,
+        choices=["no"] + [b.lower() for b in DYNAMO_BACKENDS],
+        help="Choose a backend to optimize your training with dynamo, see more at "
+        "https://github.com/pytorch/torchdynamo.",
+    )
+    resource_args.add_argument(
+        "--dynamo_mode",
+        type=str,
+        default="default",
+        choices=TORCH_DYNAMO_MODES,
+        help="Choose a mode to optimize your training with dynamo.",
+    )
+    resource_args.add_argument(
+        "--dynamo_use_fullgraph",
+        default=False,
+        action="store_true",
+        help="Whether to use full graph mode for dynamo or it is ok to break model into several subgraphs",
+    )
+    resource_args.add_argument(
+        "--dynamo_use_dynamic",
+        default=False,
+        action="store_true",
+        help="Whether to enable dynamic shape tracing.",
     )
 
     # Training Paradigm arguments
@@ -799,6 +820,8 @@ def _validate_launch_command(args):
                         setattr(args, arg_to_set, defaults.fsdp_config[k])
                     for k in defaults.megatron_lm_config:
                         setattr(args, k, defaults.megatron_lm_config[k])
+                    for k in defaults.dynamo_config:
+                        setattr(args, k, defaults.dynamo_config[k])
                     continue
 
                 # Those args are handled separately

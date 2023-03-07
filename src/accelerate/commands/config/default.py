@@ -51,7 +51,6 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
     config = {
         "compute_environment": "LOCAL_MACHINE",
         "mixed_precision": mixed_precision,
-        "dynamo_backend": dynamo_backend,
     }
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()

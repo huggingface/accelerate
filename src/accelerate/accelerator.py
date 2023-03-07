@@ -49,6 +49,7 @@ from .utils import (
     PrecisionType,
     ProjectConfiguration,
     RNGType,
+    TorchDynamoPlugin,
     compare_versions,
     convert_model,
     convert_outputs_to_fp32,
@@ -252,8 +253,7 @@ class Accelerator:
                     f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
                 )
 
-        if dynamo_backend is not None:
-            dynamo_backend = DynamoBackend(dynamo_backend.upper())
+        dynamo_plugin = TorchDynamoPlugin() if dynamo_backend is None else TorchDynamoPlugin(backend=dynamo_backend)
 
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = (
@@ -339,7 +339,7 @@ class Accelerator:
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
             cpu=cpu,
-            dynamo_backend=dynamo_backend,
+            dynamo_plugin=dynamo_plugin,
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
@@ -1198,10 +1198,10 @@ class Accelerator:
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
-        if self.state.dynamo_backend != DynamoBackend.NO:
-            import torch._dynamo as dynamo
-
-            model = dynamo.optimize(self.state.dynamo_backend.value.lower())(model)
+        if self.state.dynamo_plugin.backend != DynamoBackend.NO:
+            if not hasattr(torch, "compile"):
+                raise ValueError("Using torch.compile requires PyTorch 2.0 or higher.")
+            model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
     def _prepare_deepspeed(self, *args):

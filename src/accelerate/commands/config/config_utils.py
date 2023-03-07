@@ -71,7 +71,7 @@ def _convert_distributed_mode(value):
 
 def _convert_dynamo_backend(value):
     value = int(value)
-    return DynamoBackend(DYNAMO_BACKENDS[value])
+    return DynamoBackend(DYNAMO_BACKENDS[value]).value
 
 
 def _convert_mixed_precision(value):

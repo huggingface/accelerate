@@ -16,11 +16,12 @@
 import json
 import os
 
-from ...utils.constants import SAGEMAKER_PARALLEL_EC2_INSTANCES
-from ...utils.dataclasses import ComputeEnvironment, DynamoBackend, SageMakerDistributedType
+from ...utils.constants import SAGEMAKER_PARALLEL_EC2_INSTANCES, TORCH_DYNAMO_MODES
+from ...utils.dataclasses import ComputeEnvironment, SageMakerDistributedType
 from ...utils.imports import is_boto3_available
 from .config_args import SageMakerConfig
 from .config_utils import (
+    DYNAMO_BACKENDS,
     _ask_field,
     _ask_options,
     _convert_dynamo_backend,
@@ -170,6 +171,7 @@ def get_sagemaker_input():
         ["No distributed training", "Data parallelism"],
         _convert_sagemaker_distributed_mode,
     )
+    dynamo_config = {}
     use_dynamo = _ask_field(
         "Do you wish to optimize your script with torch dynamo?[yes/NO]:",
         _convert_yes_no_to_bool,
@@ -177,25 +179,39 @@ def get_sagemaker_input():
         error_message="Please enter yes or no.",
     )
     if use_dynamo:
-        dynamo_backend = _ask_options(
+        prefix = "dynamo_"
+        dynamo_config[prefix + "backend"] = _ask_options(
             "Which dynamo backend would you like to use?",
-            [
-                "eager",
-                "aot_eager",
-                "inductor",
-                "nvfuser",
-                "aot_nvfuser",
-                "aot_cudagraphs",
-                "ofi",
-                "fx2trt",
-                "onnxrt",
-                "ipex",
-            ],
+            [x.lower() for x in DYNAMO_BACKENDS],
             _convert_dynamo_backend,
             default=2,
         )
-    else:
-        dynamo_backend = DynamoBackend.NO
+        use_custom_options = _ask_field(
+            "Do you want to customize the defaults sent to torch.compile? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+
+        if use_custom_options:
+            dynamo_config[prefix + "mode"] = _ask_options(
+                "Which mode do you want to use?",
+                TORCH_DYNAMO_MODES,
+                lambda x: TORCH_DYNAMO_MODES[int(x)],
+                default="default",
+            )
+            dynamo_config[prefix + "use_fullgraph"] = _ask_field(
+                "Do you want the fullgraph mode or it is ok to break model into several subgraphs? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            dynamo_config[prefix + "use_dynamic"] = _ask_field(
+                "Do you want to enable dynamic shape tracing? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
     ec2_instance_query = "Which EC2 instance type you want to use for your training?"
     if distributed_type != SageMakerDistributedType.NO:
         ec2_instance_type = _ask_options(
@@ -229,7 +245,7 @@ def get_sagemaker_input():
         compute_environment=ComputeEnvironment.AMAZON_SAGEMAKER,
         distributed_type=distributed_type,
         use_cpu=False,
-        dynamo_backend=dynamo_backend,
+        dynamo_config=dynamo_config,
         ec2_instance_type=ec2_instance_type,
         profile=aws_profile,
         region=aws_region,
