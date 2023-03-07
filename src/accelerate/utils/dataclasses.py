@@ -355,10 +355,7 @@ class TorchDynamoPlugin(KwargsHandler):
 
     backend: DynamoBackend = field(
         default=None,
-        metadata={
-            "help": "Possible options are 'no', 'eager', 'aot_eager', 'inductor', 'nvfuser', 'aot_nvfuser', "
-            "'aot_cudagraphs', 'ofi', 'fx2trt', 'onnxrt', 'ipex'"
-        },
+        metadata={"help": f"Possible options are {[b.value.lower() for b in DynamoBackend]}"},
     )
     mode: str = field(
         default=None, metadata={"help": "Possible options are 'default', 'reduce-overhead' or 'max-autotune'"}
