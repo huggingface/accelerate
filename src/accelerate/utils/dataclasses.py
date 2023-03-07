@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from distutils.util import strtobool
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 
@@ -139,6 +139,38 @@ class InitProcessGroupKwargs(KwargsHandler):
 
     init_method: Optional[str] = None
     timeout: timedelta = timedelta(seconds=1800)
+
+
+@dataclass
+class FP8RecipeKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
+    training. Please refer to the documentation of this
+    [class](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html#transformer_engine.common.recipe.DelayedScaling)
+    for more information on each argument.
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import FP8RecipeKwargs
+
+    kwargs = FP8RecipeKwargs(fp8_format="HYBRID")
+    accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
+    ```
+    """
+
+    margin: int = 0
+    interval: int = 1
+    fp8_format: str = "E4M3"
+    amax_history_len: int = 1
+    amax_compute_algo: str = "most_recent"
+    override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
+
+    def __post_init__(self):
+        self.fp8_format = self.fp8_format.upper()
+        if self.fp8_format not in ["E4M3", "HYBRID"]:
+            raise ValueError("`fp8_format` must be 'E4M3' or 'HYBRID'.")
+        if self.amax_compute_algo not in ["max", "most_recent"]:
+            raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
 
 
 class DistributedType(str, enum.Enum):
@@ -294,6 +326,7 @@ class PrecisionType(BaseEnum):
     """
 
     NO = "no"
+    FP8 = "fp8"
     FP16 = "fp16"
     BF16 = "bf16"
 

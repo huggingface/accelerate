@@ -39,6 +39,7 @@ from .utils import (
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
+    FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
@@ -49,12 +50,15 @@ from .utils import (
     ProjectConfiguration,
     RNGType,
     compare_versions,
+    convert_model,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
     get_pretty_name,
+    has_transformer_engine_layers,
     is_bf16_available,
     is_deepspeed_available,
+    is_fp8_available,
     is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
@@ -78,6 +82,11 @@ if is_deepspeed_available():
         DummyOptim,
         DummyScheduler,
     )
+
+if is_fp8_available():
+    import transformer_engine.common.recipe as te_recipe
+    from transformer_engine.pytorch import fp8_autocast
+
 
 if is_megatron_lm_available():
     from .utils import (
@@ -123,10 +132,11 @@ class Accelerator:
             round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
             in your script multiplied by the number of processes.
         mixed_precision (`str`, *optional*):
-            Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'. Will
-            default to the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default
-            value in the accelerate config of the current system or the flag passed with the `accelerate.launch`
-            command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+            Whether or not to use mixed precision training. Choose from 'no','fp16','bf16 or 'fp8'. Will default to the
+            value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
+            accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
+            requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher. 'fp8' requires the installation of
+            transformers-engine.
         gradient_accumulation_steps (`int`, *optional*, default to 1):
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
             `Accelerator.accumulate`. If not passed, will default to the value in the environment variable
@@ -298,6 +308,7 @@ class Accelerator:
         self.ddp_handler = None
         self.scaler_handler = None
         self.init_handler = None
+        self.fp8_recipe_handler = None
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
                 assert isinstance(
@@ -318,6 +329,11 @@ class Accelerator:
                         raise ValueError("You can only pass one `InitProcessGroupKwargs` in `kwargs_handler`.")
                     else:
                         self.init_handler = handler
+                elif isinstance(handler, FP8RecipeKwargs):
+                    if self.fp8_recipe_handler is not None:
+                        raise ValueError("You can only pass one `FP8RecipeKwargs` in `kwargs_handler`.")
+                    else:
+                        self.fp8_recipe_handler = handler
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -1065,7 +1081,7 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
-        if tpu_should_fix_optimizer:
+        if tpu_should_fix_optimizer or self.mixed_precision == "fp8":
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
@@ -1079,7 +1095,7 @@ class Accelerator:
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-        if tpu_should_fix_optimizer:
+        if tpu_should_fix_optimizer or self.mixed_precision == "fp8":
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
@@ -1160,6 +1176,25 @@ class Accelerator:
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
+        elif self.mixed_precision == "fp8":
+            if not has_transformer_engine_layers(model):
+                with torch.no_grad():
+                    convert_model(model)
+                model._converted_to_transformer_engine = True
+            model._original_forward = model.forward
+
+            kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
+            if "fp8_format" in kwargs:
+                kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
+            fp8_recipe = te_recipe.DelayedScaling(**kwargs)
+            fp8_enabled = torch.cuda.get_device_capability()[0] >= 9
+            if not fp8_enabled:
+                logger.warn(
+                    f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
+                    "insufficient for FP8 mixed precision training (requires a GPU Hopper or higher, compute "
+                    "capability of 9 or higher). Will use FP16 instead."
+                )
+            model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
