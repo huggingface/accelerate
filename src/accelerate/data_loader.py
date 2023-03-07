@@ -548,8 +548,8 @@ class DataLoaderDispatcher(DataLoader):
             batch = slice_tensors(batch, data_slice)
 
             if stop_iteration:
-                self.gradient_state._set_remainder(observed_batch_size)
                 self.gradient_state._remove_dataloader(self)
+                self.gradient_state._set_remainder(observed_batch_size)
             if batch_index >= self.skip_batches:
                 yield batch
             batch_index += 1

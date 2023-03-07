@@ -713,6 +713,7 @@ class GradientState:
             self.remainder = -1
             self.active_dataloader = None
             self.dataloader_references = [None]
+            self.remainder_references = [-1]
 
     @property
     def initialized(self) -> bool:
@@ -733,7 +734,6 @@ class GradientState:
     def _set_end_of_dataloader(self, end_of_dataloader):
         "Private function that sets whether the end of the current dataloader has been reached. Users should not have to call this."
         self.end_of_dataloader = end_of_dataloader
-        self.remainder = -1
 
     def _set_remainder(self, remainder):
         "Private function that sets the number of remaining samples at the end of the dataloader. Users should not have to call this."

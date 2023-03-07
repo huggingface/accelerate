@@ -260,7 +260,6 @@ def main():
     if state.local_process_index == 0:
         print("**Test `accumulate` gradient accumulation with dataloader break**")
     test_dataloader_break()
-    accelerator.gradient_state._shared_state = {}
     if state.distributed_type == DistributedType.NO:
         if state.local_process_index == 0:
             print("**Test NOOP `no_sync` context manager**")
