@@ -713,7 +713,6 @@ class GradientState:
             self.remainder = -1
             self.active_dataloader = None
             self.dataloader_references = [None]
-            self.remainder_references = [-1]
 
     @property
     def initialized(self) -> bool:
