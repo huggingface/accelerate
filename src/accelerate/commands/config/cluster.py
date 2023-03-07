@@ -117,7 +117,7 @@ def get_cluster_input():
             default=2,
         )
         use_custom_options = _ask_field(
-            "Do you want to customize the defaults? [yes/NO]: ",
+            "Do you want to customize the defaults sent to torch.compile? [yes/NO]: ",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
