@@ -1119,7 +1119,8 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
-        if getattr(model, "is_loaded_in_8bit", False):
+        # We check only for models loaded with `accelerate`
+        if getattr(model, "is_loaded_in_8bit", False) and getattr(model, "hf_device_map", False):
             model_devices = set(model.hf_device_map.values())
             if len(model_devices) > 1:
                 raise ValueError(
