@@ -164,9 +164,8 @@ should be calculated through the [`~Accelerator.gather_for_metrics`] method to a
 
 ## Launching your distributed script
 
-You can use the regular commands to launch your distributed training (like `torch.distributed.launch` for
-PyTorch), they are fully compatible with 🤗 Accelerate. The only caveat here is that 🤗 Accelerate uses the environment
-to determine all useful information, so `torch.distributed.launch` should be used with the flag `--use_env`.
+You can use the regular commands to launch your distributed training (like `torch.distributed.run` for
+PyTorch), they are fully compatible with 🤗 Accelerate.
 
 🤗 Accelerate also provides a CLI tool that unifies all launchers, so you only have to remember one command. To use it,
 just run:
