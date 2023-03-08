@@ -2167,7 +2167,11 @@ class Accelerator:
             if self.project_configuration.total_limit is not None and (
                 len(folders) + 1 > self.project_configuration.total_limit
             ):
-                folders.sort(key=lambda x: list(map(int, re.findall(r"\d+", x)))[0])
+
+                def _inner(folder):
+                    return list(map(int, re.findall(r"\d+", folder)))[0]
+
+                folders.sort(key=_inner)
                 logger.warning(
                     f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} checkpoints to make room for new checkpoint."
                 )
