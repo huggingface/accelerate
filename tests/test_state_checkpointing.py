@@ -243,8 +243,8 @@ class CheckpointTest(unittest.TestCase):
             accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
             model = accelerator.prepare(model)
             # Save 3 states:
-            for _ in range(3):
+            for _ in range(11):
                 accelerator.save_state()
             self.assertTrue(not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0")))
-            self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_1")))
-            self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_2")))
+            self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9")))
+            self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10")))
