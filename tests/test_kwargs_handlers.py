@@ -62,7 +62,7 @@ class DataLoaderTester(unittest.TestCase):
     @require_multi_gpu
     def test_ddp_kwargs(self):
         distributed_args = f"""
-            -m torch.distributed.launch
+            -m torch.distributed.run
             --nproc_per_node={torch.cuda.device_count()}
             --use_env
             {inspect.getfile(self.__class__)}

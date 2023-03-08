@@ -66,7 +66,7 @@ To run it in each of these various modes, use the following commands:
         ```
     * With traditional PyTorch launcher
         ```bash
-        python -m torch.distributed.launch --nproc_per_node 2 --use_env ./nlp_example.py
+        python -m torchrun --nproc_per_node 2 --use_env ./nlp_example.py
         ```
 - multi GPUs, multi node (several machines, using PyTorch distributed mode)
     * With Accelerate config and launcher, on each machine:
@@ -76,12 +76,12 @@ To run it in each of these various modes, use the following commands:
         ```
     * With PyTorch launcher only
         ```bash
-        python -m torch.distributed.launch --nproc_per_node 2 \
+        python -m torchrun --nproc_per_node 2 \
             --use_env \
             --node_rank 0 \
             --master_addr master_node_ip_address \
             ./nlp_example.py  # On the first server
-        python -m torch.distributed.launch --nproc_per_node 2 \
+        python -m torchrun --nproc_per_node 2 \
             --use_env \
             --node_rank 1 \
             --master_addr master_node_ip_address \
@@ -154,7 +154,7 @@ To run it in each of these various modes, use the following commands:
         ```
     * With traditional PyTorch launcher
         ```bash
-        python -m torch.distributed.launch --nproc_per_node 2 --use_env ./cv_example.py --data_dir path_to_data
+        python -m torchrun --nproc_per_node 2 --use_env ./cv_example.py --data_dir path_to_data
         ```
 - multi GPUs, multi node (several machines, using PyTorch distributed mode)
     * With Accelerate config and launcher, on each machine:
@@ -164,12 +164,12 @@ To run it in each of these various modes, use the following commands:
         ```
     * With PyTorch launcher only
         ```bash
-        python -m torch.distributed.launch --nproc_per_node 2 \
+        python -m torchrun --nproc_per_node 2 \
             --use_env \
             --node_rank 0 \
             --master_addr master_node_ip_address \
             ./cv_example.py --data_dir path_to_data  # On the first server
-        python -m torch.distributed.launch --nproc_per_node 2 \
+        python -m torchrun --nproc_per_node 2 \
             --use_env \
             --node_rank 1 \
             --master_addr master_node_ip_address \
