@@ -233,3 +233,18 @@ class CheckpointTest(unittest.TestCase):
             # Load everything back in and make sure all states work
             accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
             self.assertEqual(scheduler_state, scheduler.state_dict())
+
+    def test_checkpoint_deletion(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True, total_limit=2)
+            # Train baseline
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model = accelerator.prepare(model)
+            # Save 3 states:
+            for _ in range(11):
+                accelerator.save_state()
+            self.assertTrue(not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0")))
+            self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9")))
+            self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10")))

@@ -15,6 +15,7 @@
 import contextlib
 import math
 import os
+import re
 import shutil
 import sys
 import warnings
@@ -2166,7 +2167,11 @@ class Accelerator:
             if self.project_configuration.total_limit is not None and (
                 len(folders) + 1 > self.project_configuration.total_limit
             ):
-                folders.sort()
+
+                def _inner(folder):
+                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
+
+                folders.sort(key=_inner)
                 logger.warning(
                     f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} checkpoints to make room for new checkpoint."
                 )
