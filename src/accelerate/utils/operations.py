@@ -21,17 +21,20 @@ from functools import update_wrapper
 from typing import Any, Mapping
 
 import torch
-from torch.distributed import ReduceOp
 
 from ..state import PartialState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, TensorInformation
-from .imports import is_tpu_available
+from .imports import is_torch_distributed_available, is_tpu_available
 from .versions import is_torch_version
 
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+
+
+if is_torch_distributed_available():
+    from torch.distributed import ReduceOp
 
 
 def is_torch_tensor(tensor):
