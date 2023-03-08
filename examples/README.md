@@ -64,7 +64,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on your server
         accelerate launch ./nlp_example.py  # This will run the script on your server
         ```
-    * With traditional PyTorch launcher
+    * With traditional PyTorch launcher (`torch.distributed.launch` can be used with older versions of PyTorch)
         ```bash
         python -m torchrun --nproc_per_node 2 --use_env ./nlp_example.py
         ```
@@ -74,7 +74,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on each server
         accelerate launch ./nlp_example.py  # This will run the script on each server
         ```
-    * With PyTorch launcher only
+    * With PyTorch launcher only (`torch.distributed.launch` can be used in older versions of PyTorch)
         ```bash
         python -m torchrun --nproc_per_node 2 \
             --use_env \
@@ -152,7 +152,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on your server
         accelerate launch ./cv_example.py --data_dir path_to_data  # This will run the script on your server
         ```
-    * With traditional PyTorch launcher
+    * With traditional PyTorch launcher (`torch.distributed.launch` can be used with older versions of PyTorch)
         ```bash
         python -m torchrun --nproc_per_node 2 --use_env ./cv_example.py --data_dir path_to_data
         ```
@@ -162,7 +162,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on each server
         accelerate launch ./cv_example.py --data_dir path_to_data  # This will run the script on each server
         ```
-    * With PyTorch launcher only
+    * With PyTorch launcher only (`torch.distributed.launch` can be used with older versions of PyTorch)
         ```bash
         python -m torchrun --nproc_per_node 2 \
             --use_env \
