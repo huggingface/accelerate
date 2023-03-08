@@ -2169,7 +2169,7 @@ class Accelerator:
             ):
 
                 def _inner(folder):
-                    return list(map(int, re.findall(r"\d+", folder)))[0]
+                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
 
                 folders.sort(key=_inner)
                 logger.warning(
