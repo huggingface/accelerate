@@ -99,6 +99,9 @@ class BaseConfig:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
+        if "dynamo_backend" in config_dict:  # Convert the config to the new format.
+            dynamo_backend = config_dict.pop("dynamo_backend")
+            config_dict["dynamo_config"] = {} if dynamo_backend == "NO" else {"dynamo_backend": dynamo_backend}
         if "use_cpu" not in config_dict:
             config_dict["use_cpu"] = False
         return cls(**config_dict)
@@ -120,6 +123,9 @@ class BaseConfig:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
+        if "dynamo_backend" in config_dict:  # Convert the config to the new format.
+            dynamo_backend = config_dict.pop("dynamo_backend")
+            config_dict["dynamo_config"] = {} if dynamo_backend == "NO" else {"dynamo_backend": dynamo_backend}
         if "use_cpu" not in config_dict:
             config_dict["use_cpu"] = False
         return cls(**config_dict)
