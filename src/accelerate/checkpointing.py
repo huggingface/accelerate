@@ -29,6 +29,7 @@ from .utils import (
     SCHEDULER_NAME,
     get_pretty_name,
     is_tpu_available,
+    is_xpu_available
     save,
 )
 
@@ -100,6 +101,8 @@ def save_accelerator_state(
     states["numpy_random_seed"] = np.random.get_state()
     states["torch_manual_seed"] = torch.get_rng_state()
     states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
+    if is_xpu_available():
+        states["torch_cuda_manual_seed"] = torch.xpu.get_rng_state_all()
     # ^^ safe to call this function even if cuda is not available
     if is_tpu_available():
         states["xm_seed"] = xm.get_rng_state()
@@ -165,6 +168,8 @@ def load_accelerator_state(
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])
         torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
+        if is_xpu_available():
+            torch.xpu.set_rng_state_all(states["torch_cuda_manual_seed"])
         # ^^ safe to call this function even if cuda is not available
         if is_tpu_available():
             xm.set_rng_state(states["xm_seed"])

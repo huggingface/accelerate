@@ -24,7 +24,7 @@ from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 
 from ..optimizer import AcceleratedOptimizer
 from ..scheduler import AcceleratedScheduler
-from .imports import is_megatron_lm_available, is_transformers_available
+from .imports import is_megatron_lm_available, is_transformers_available, is_xpu_available
 from .operations import recursively_apply, send_to_device
 
 
@@ -300,8 +300,12 @@ class MegatronLMDummyDataLoader:
             do_test = test_dataloader is not None and args.eval_iters > 0
             # Need to broadcast num_tokens and num_type_tokens.
             flags = torch.cuda.LongTensor([int(do_train), int(do_valid), int(do_test)])
+            if is_xpu_available():
+                flags = torch.xpu.LongTensor([int(do_train), int(do_valid), int(do_test)])
         else:
             flags = torch.cuda.LongTensor([0, 0, 0])
+            if is_xpu_available():
+                flags = torch.xpu.LongTensor([0, 0, 0])
 
         # Broadcast num tokens.
         torch.distributed.broadcast(
@@ -512,6 +516,8 @@ class BertTrainStep(AbstractTrainStep):
             """Build the batch."""
             data = next(data_iterator)
             data = send_to_device(data, torch.cuda.current_device())
+            if is_xpu_available():
+                data = send_to_device(data,torch.xpu.current_device())
 
             # Unpack.
             tokens = data["input_ids"].long()
@@ -649,6 +655,8 @@ class GPTTrainStep(AbstractTrainStep):
             data = next(data_iterator)
             data = {"input_ids": data["input_ids"]}
             data = send_to_device(data, torch.cuda.current_device())
+            if is_xpu_available():
+                data = send_to_device(data, torch.xpu.current_device()) 
 
             tokens_ = data["input_ids"].long()
             padding = torch.zeros((tokens_.shape[0], 1), dtype=tokens_.dtype, device=tokens_.device) + self.eod_token
@@ -779,6 +787,8 @@ class T5TrainStep(AbstractTrainStep):
             """Build the batch."""
             data = next(data_iterator)
             data = send_to_device(data, torch.cuda.current_device())
+            if is_xpu_available():
+                data = send_to_device(data, torch.xpu.current_device())
 
             tokens_enc = data["input_ids"].long()
             labels = data["labels"].long()
@@ -835,6 +845,8 @@ class T5TrainStep(AbstractTrainStep):
 # intialize megatron setup
 def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     accelerator.print("Initializing Megatron-LM")
+    if is_xpu_available():
+        assert torch.xpu.is_available(), "Megatron requires XPU."
     assert torch.cuda.is_available(), "Megatron requires CUDA."
 
     # Parse arguments
@@ -868,6 +880,8 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
         args = get_args()
         # Pytorch distributed.
         device_count = torch.cuda.device_count()
+        if is_xpu_available():
+            device_count = torch.xpu.device_count()
         args.rank = torch.distributed.get_rank()
         args.world_size = torch.distributed.get_world_size()
         if device_count > 0:
@@ -1018,6 +1032,10 @@ class MegatronEngine(torch.nn.Module):
         # Empty unused memory.
         if args.empty_unused_memory_level >= 1:
             torch.cuda.empty_cache()
+            try:
+                torch.xpu.empty_cache()
+            except AttributeError:
+                pass
 
         # Reduce gradients.
         timers("backward-reduce-model-grads").start()
@@ -1049,6 +1067,10 @@ class MegatronEngine(torch.nn.Module):
         # Empty unused memory.
         if args.empty_unused_memory_level >= 2:
             torch.cuda.empty_cache()
+            try:
+                torch.xpu.empty_cache()
+            except AttributeError:
+                pass
 
         args.consumed_train_samples += (
             mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
@@ -1100,6 +1122,10 @@ class MegatronEngine(torch.nn.Module):
         # Empty unused memory
         if args.empty_unused_memory_level >= 1:
             torch.cuda.empty_cache()
+            try:
+                torch.xpu.empty_cache()
+            except AttributeError:
+                pass
 
         args.consumed_valid_samples += (
             mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
@@ -1165,6 +1191,14 @@ class MegatronEngine(torch.nn.Module):
                     self.eval_total_loss_dict[key + "_num_iters"] = self.eval_total_loss_dict.get(
                         key + "_num_iters", torch.cuda.FloatTensor([0.0])
                     ) + torch.cuda.FloatTensor([1.0])
+                    if is_xpu_available():
+                        self.eval_total_loss_dict[key] = (
+                        self.eval_total_loss_dict.get(key, torch.xpu.FloatTensor([0.0])) + loss_dict[key]
+                        )
+                        self.eval_total_loss_dict[key + "_num_iters"] = self.eval_total_loss_dict.get(
+                        key + "_num_iters", torch.xpu.FloatTensor([0.0])
+                        ) + torch.xpu.FloatTensor([1.0])
+  
 
         loss = torch.tensor(0.0, device=args.local_rank)
         for key in loss_dict:
@@ -1334,9 +1368,13 @@ class MegatronEngine(torch.nn.Module):
             # Get the prompts length.
             if attention_mask is None:
                 prompts_length_tensor = torch.cuda.LongTensor([inputs.shape[1]] * inputs.shape[0])
+                if is_xpu_available():
+                    prompts_length_tensor = torch.xpu.LongTensor([inputs.shape[1]] * inputs.shape[0])    
             else:
                 prompts_length_tensor = attention_mask.sum(axis=-1).cuda()
-
+                if is_xpu_available():
+                    prompts_length_tensor = attention_mask.sum(axis=-1).xpu()
+                    
             if max_new_tokens is None:
                 max_new_tokens = max_length - inputs.shape[1]
             if max_new_tokens <= 0:
@@ -1351,6 +1389,11 @@ class MegatronEngine(torch.nn.Module):
                 prompts_tokens_tensor = torch.concat(
                     [torch.unsqueeze(padding[:, 0], axis=-1), inputs.cuda(), padding], axis=-1
                 )
+                if is_xpu_available():
+                    padding = torch.xpu.LongTensor([[tokenizer.eod] * max_new_tokens] * inputs.shape[0])
+                    prompts_tokens_tensor = torch.concat(
+                    [torch.unsqueeze(padding[:, 0], axis=-1), inputs.xpu(), padding], axis=-1
+                    )
             else:
                 # making sure that `max_length` is a multiple of 4 to leverage fused kernels
                 max_length = max_new_tokens + inputs.shape[1]
@@ -1358,6 +1401,9 @@ class MegatronEngine(torch.nn.Module):
                 max_new_tokens = max_length - inputs.shape[1]
                 padding = torch.cuda.LongTensor([[tokenizer.eod] * max_new_tokens] * inputs.shape[0])
                 prompts_tokens_tensor = torch.concat([inputs.cuda(), padding], axis=-1)
+                if is_xpu_available():
+                    padding = torch.xpu.LongTensor([[tokenizer.eod] * max_new_tokens] * inputs.shape[0])
+                    prompts_tokens_tensor = torch.concat([inputs.xpu(), padding], axis=-1)
 
             # We need the sizes of these tensors for the boradcast
             sizes_list = [

@@ -47,6 +47,15 @@ except ImportError:
     _xpu_available = False
     
 def is_ccl_available():
+    try:
+        import sys
+        import oneccl_bindings_for_pytorch
+    except ImportError:
+        rank_zero_info(
+            "Intel(R) oneCCL Bindings for PyTorch* is required to run DDP on Intel(R) GPUs, but it is not"
+            " detected. If you see \"ValueError: Invalid backend: 'ccl'\" error, please install Intel(R) oneCCL"
+            " Bindings for PyTorch*."
+        )
     return (
         importlib.util.find_spec("torch_ccl") is not None
         or importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None

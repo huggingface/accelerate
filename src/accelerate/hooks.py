@@ -22,6 +22,7 @@ from .utils import (
     PrefixedDataset,
     find_device,
     is_mps_available,
+    is_xpu_available,
     named_module_tensors,
     send_to_device,
     set_module_tensor_to_device,
@@ -531,6 +532,8 @@ class CpuOffload(ModelHook):
             self.execution_device = torch.device("mps")
         elif torch.cuda.is_available():
             self.execution_device = torch.device(0)
+        elif is_xpu_available():
+            self.execution_device = torch.device("xpu")
         else:
             self.execution_device = torch.device("cpu")
 
