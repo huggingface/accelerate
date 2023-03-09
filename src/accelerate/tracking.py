@@ -245,7 +245,8 @@ class TensorBoardTracker(GeneralTracker):
                 self.writer.add_scalars(k, v, global_step=step, **kwargs)
         self.writer.flush()
         logger.debug("Successfully logged to TensorBoard")
-
+        
+    @on_main_process
     def log_images(self, values: dict, step: Optional[int], **kwargs):
         """
         Logs `images` to the current run.
