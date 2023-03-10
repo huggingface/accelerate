@@ -707,7 +707,7 @@ def tpu_pod_launcher(args):
         str(1),
         "--mixed_precision",
         "no",
-        "--dynmo_backend",
+        "--dynamo_backend",
         "no",
         "--num_processes",
         str(args.num_processes),
