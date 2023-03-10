@@ -40,7 +40,7 @@ class AcceleratorTester(AccelerateTestCase):
         _ = Accelerator()
         assert PartialState._shared_state["_cpu"] is False
         assert PartialState._shared_state["device"].type == "cuda"
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
     def test_prepared_objects_are_referenced(self):
