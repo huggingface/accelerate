@@ -238,6 +238,13 @@ class AlignDevicesHook(ModelHook):
         self.param_original_devices = {}
         self.buffer_original_devices = {}
 
+    def __repr__(self):
+        return (
+            f"AlignDeviceHook(execution_device={self.execution_device}, offload={self.offload}, "
+            f"io_same_device={self.io_same_device}, offload_buffers={self.offload_buffers}, "
+            f"place_submodules={self.place_submodules})"
+        )
+
     def init_hook(self, module):
         if not self.offload and self.execution_device is not None:
             for name, _ in named_module_tensors(module, recurse=self.place_submodules):
