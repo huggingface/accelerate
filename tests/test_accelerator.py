@@ -234,9 +234,9 @@ class AcceleratorTester(AccelerateTestCase):
         accelerator = Accelerator(cpu=True)
         _ = accelerator.prepare(sgd)
 
-    # @require_cuda
-    # def test_accelerator_cpu_flag(self):
-    #     """Tests that the AcceleratorState will raise the right error when trying to use the cpu flag."""
-    #     _ = Accelerator(cpu=True)
-    #     with self.assertRaises(AssertionError):
-    #         _ = Accelerator(cpu=False)
+    @require_cuda
+    def test_accelerator_cpu_flag(self):
+        """Tests that the AcceleratorState will raise the right error when trying to use the cpu flag."""
+        _ = Accelerator(cpu=False)
+        with self.assertRaises(ValueError):
+            _ = Accelerator(cpu=True)

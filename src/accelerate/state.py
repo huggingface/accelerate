@@ -598,7 +598,7 @@ class AcceleratorState:
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
         if self.initialized:
             err = "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `Accelerator()`."
-            if cpu != (self.device.type == "cpu"):
+            if cpu and self.device.type != "cpu":
                 raise ValueError(err.format(flag="cpu=True"))
             if (
                 mixed_precision is not None
