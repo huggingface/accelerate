@@ -88,6 +88,22 @@ Currently, `Accelerate` supports the following config through the CLI:
 )
 ```
 
+### State Dict
+
+`accelerator.get_state_dict` will call the underlying `model.state_dict` implementation.  With a model wrapped by FSDP, the default behavior of `state_dict` is to gather all of the state in the rank 0 device.  This can cause CUDA out of memory errors if the parameters don't fit on a single GPU.
+
+To avoid this, PyTorch provides a context manager that adjusts the behavior of `state_dict`.  To offload some of the state dict onto CPU, you can use the following code:
+
+```
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
+
+full_state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+with FSDP.state_dict_type(unwrapped_model, StateDictType.FULL_STATE_DICT, full_state_dict_config):
+    state = accelerator.get_state_dict(unwrapped_model)
+```
+
+You can then pass `state` into the `save_pretrained` method.  There are several modes for `StateDictType` and `FullStateDictConfig` that you can use to control the behavior of `state_dict`.  For more information, see the [PyTorch documentation](https://pytorch.org/docs/stable/fsdp.html).
+
 ## A few caveats to be aware of
 
 - PyTorch FSDP auto wraps sub-modules, flattens the parameters and shards the parameters in place.
