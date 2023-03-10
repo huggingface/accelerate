@@ -65,6 +65,9 @@ class AccelerateLauncherTester(unittest.TestCase):
                     self.base_cmd + ["--config_file", str(config), self.test_file_path], env=os.environ.copy()
                 )
 
+    def test_accelerate_test(self):
+        execute_subprocess_async(["accelerate", "test"], env=os.environ.copy())
+
 
 class TpuConfigTester(unittest.TestCase):
     """
