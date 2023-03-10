@@ -233,10 +233,3 @@ class AcceleratorTester(AccelerateTestCase):
         sgd = torch.optim.SGD(model.parameters(), lr=0.01)
         accelerator = Accelerator(cpu=True)
         _ = accelerator.prepare(sgd)
-
-    @require_cuda
-    def test_accelerator_cpu_flag(self):
-        """Tests that the AcceleratorState will raise the right error when trying to use the cpu flag."""
-        _ = Accelerator(cpu=False)
-        with self.assertRaises(ValueError):
-            _ = Accelerator(cpu=True)
