@@ -40,7 +40,7 @@ class AcceleratorTester(AccelerateTestCase):
         _ = Accelerator()
         assert PartialState._shared_state["_cpu"] is False
         assert PartialState._shared_state["device"].type == "cuda"
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
     def test_prepared_objects_are_referenced(self):
@@ -226,3 +226,10 @@ class AcceleratorTester(AccelerateTestCase):
         # This should not work and get value error
         with self.assertRaises(ValueError):
             _ = accelerator.prepare(model)
+
+    @require_cuda
+    def test_accelerator_cpu_flag_prepare(self):
+        model = torch.nn.Linear(10, 10)
+        sgd = torch.optim.SGD(model.parameters(), lr=0.01)
+        accelerator = Accelerator(cpu=True)
+        _ = accelerator.prepare(sgd)
