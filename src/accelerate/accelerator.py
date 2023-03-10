@@ -1138,7 +1138,7 @@ class Accelerator:
         self._models.append(model)
         # We check only for models loaded with `accelerate`
 
-        # recursively check for the attribute - some models wraps models that are loaded with `accelerate`.
+        # Checks if any of the child module has the attribute `hf_device_map`.
         has_hf_device_map = False
         for m in model.modules():
             if hasattr(m, "hf_device_map"):
