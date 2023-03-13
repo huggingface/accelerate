@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import contextlib
+import inspect
 import math
 import os
 import shutil
@@ -1160,8 +1161,11 @@ class Accelerator:
                     "ignored_modules": fsdp_plugin.ignored_modules,
                     "device_id": self.device,
                 }
-                if is_torch_version(">=", "1.13.0"):
+                signature = inspect.signature(FSDP.__init__).parameters.keys()[1:]
+                if "limit_all_gathers" in signature:
                     kwargs["limit_all_gathers"] = fsdp_plugin.limit_all_gathers
+                if "use_orig_params" in signature:
+                    kwargs["use_orig_params"] = fsdp_plugin.use_orig_params
                 model = FSDP(model, **kwargs)
             self._models[-1] = model
         elif self.distributed_type == DistributedType.MULTI_CPU:
