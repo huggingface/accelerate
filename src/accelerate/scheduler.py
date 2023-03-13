@@ -73,18 +73,7 @@ class AcceleratedScheduler:
             gradient_accumulation_steps (`int`, *optional*, defaults to 1):
                 The number of gradient accumulation steps.
         """
-        if hasattr(self.scheduler, "total_iters"):
-            print(f'Adjusting scheduler total_iters from {self.scheduler.total_iters} to {self.scheduler.total_iters // gradient_accumulation_steps}')
-            self.scheduler.total_iters = self.scheduler.total_iters // gradient_accumulation_steps
-        elif hasattr(self.scheduler, "total_steps"):
-            print(f'Adjusting scheduler total_steps from {self.scheduler.total_steps} to {self.scheduler.total_steps // gradient_accumulation_steps}')
-            self.scheduler.total_steps = self.scheduler.total_steps // gradient_accumulation_steps
-        elif hasattr(self.scheduler, "T_max"):
-            print(f'Adjusting scheduler T_max from {self.scheduler.T_max} to {self.scheduler.T_max // gradient_accumulation_steps}')
-            self.scheduler.T_max = self.scheduler.T_max // gradient_accumulation_steps
-        elif hasattr(self.scheduler, "T_0"):
-            print(f'Adjusting scheduler T_0 from {self.scheduler.T_0} to {self.scheduler.T_0 // gradient_accumulation_steps}')
-            self.scheduler.T_0 = self.scheduler.T_0 // gradient_accumulation_steps
+        self.scheduler.last_epoch = self.scheduler.last_epoch // gradient_accumulation_steps
 
     def step(self, *args, **kwargs):
         if not self.step_with_optimizer:
