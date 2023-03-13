@@ -30,9 +30,8 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
     for name, module in model.named_children():
         if isinstance(module, nn.Linear) and to_transformer_engine and _convert_linear:
             # Return early if the linear layer weights are not multiples of 16
-            for p in module.weight.shape:
-                if p % 16 != 0:
-                    return
+            if any(p % 16 != 0 for p in module.weight.shape):
+                return
             has_bias = module.bias is not None
             te_module = te.Linear(module.in_features, module.out_features, bias=has_bias)
             te_module.weight.data = module.weight.data.clone()
