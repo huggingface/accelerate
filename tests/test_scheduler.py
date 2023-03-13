@@ -119,7 +119,7 @@ class SchedulerTester(unittest.TestCase):
     def test_one_cycle_scheduler_not_step_with_optimizer_multiprocess(self):
         AcceleratorState._reset_state(True)
         debug_launcher(partial(one_cycle_test, step_scheduler_with_optimizer=False))
-    
+
     @require_huggingface_suite
     def test_accumulation(self):
         AcceleratorState._reset_state(True)
