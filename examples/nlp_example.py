@@ -98,10 +98,10 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
     # Instantiate dataloaders.
     train_dataloader = DataLoader(
-        tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size
+        tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size, drop_last=True
     )
     eval_dataloader = DataLoader(
-        tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE
+        tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE, drop_last=True
     )
 
     return train_dataloader, eval_dataloader
