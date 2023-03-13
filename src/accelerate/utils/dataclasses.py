@@ -744,6 +744,11 @@ class FullyShardedDataParallelPlugin:
         },
     )
 
+    use_orig_params: bool = field(
+        default=False,
+        metadata={"help": "If True, enables parameter-efficient fine-tuning"},
+    )
+
     def __post_init__(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             BackwardPrefetch,
