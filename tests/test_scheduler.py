@@ -66,7 +66,6 @@ def lambda_test(num_processes=2, step_scheduler_with_optimizer=True, split_batch
     ), f"Wrong lr found at second step, expected {expected_lr}, got {scheduler.get_last_lr()[0]}"
 
 
-@require_huggingface_suite
 def accumulation_test():
     from transformers import get_linear_schedule_with_warmup
 
@@ -120,7 +119,8 @@ class SchedulerTester(unittest.TestCase):
     def test_one_cycle_scheduler_not_step_with_optimizer_multiprocess(self):
         AcceleratorState._reset_state(True)
         debug_launcher(partial(one_cycle_test, step_scheduler_with_optimizer=False))
-
+    
+    @require_huggingface_suite
     def test_accumulation(self):
         AcceleratorState._reset_state(True)
         debug_launcher(accumulation_test)
