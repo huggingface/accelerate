@@ -19,7 +19,7 @@ import torch
 
 from accelerate import Accelerator, debug_launcher
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import require_cpu
+from accelerate.test_utils import require_cpu, require_huggingface_suite
 
 
 def one_cycle_test(num_processes=2, step_scheduler_with_optimizer=True, split_batches=False):
@@ -66,6 +66,27 @@ def lambda_test(num_processes=2, step_scheduler_with_optimizer=True, split_batch
     ), f"Wrong lr found at second step, expected {expected_lr}, got {scheduler.get_last_lr()[0]}"
 
 
+@require_huggingface_suite
+def accumulation_test():
+    from transformers import get_linear_schedule_with_warmup
+
+    accelerator = Accelerator(
+        gradient_accumulation_steps=2,
+        adjust_scheduler_to_accumulation=True,
+    )
+    model = torch.nn.Linear(2, 4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=4.0)
+    scheduler = get_linear_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=0, num_training_steps=10)
+    model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+    for _ in range(20):
+        with accelerator.accumulate(model):
+            optimizer.step()
+            scheduler.step()
+    assert (
+        scheduler.get_last_lr()[0] == 0
+    ), f"Wrong lr found at last step, expected 0, got {scheduler.get_last_lr()[0]}"
+
+
 @require_cpu
 class SchedulerTester(unittest.TestCase):
     def test_lambda_scheduler_steps_with_optimizer_single_process(self):
@@ -99,3 +120,7 @@ class SchedulerTester(unittest.TestCase):
     def test_one_cycle_scheduler_not_step_with_optimizer_multiprocess(self):
         AcceleratorState._reset_state(True)
         debug_launcher(partial(one_cycle_test, step_scheduler_with_optimizer=False))
+
+    def test_accumulation(self):
+        AcceleratorState._reset_state(True)
+        debug_launcher(accumulation_test)
