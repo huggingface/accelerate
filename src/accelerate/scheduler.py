@@ -58,22 +58,12 @@ class AcceleratedScheduler:
         gradient_accumulation_steps: int = 1,
     ):
         self.scheduler = scheduler
-        if adjust_scheduler_to_accumulation:
-            self.adjust_scheduler(gradient_accumulation_steps=gradient_accumulation_steps)
+        self.adjust_scheduler_to_accumulation = adjust_scheduler_to_accumulation
+        self.gradient_accumulation_steps = gradient_accumulation_steps
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
         self.step_with_optimizer = step_with_optimizer
         self.gradient_state = GradientState()
-
-    def adjust_scheduler(self, gradient_accumulation_steps: int = 1):
-        """
-        Adjusts the scheduler to the gradient accumulation steps inplace.
-
-        Args:
-            gradient_accumulation_steps (`int`, *optional*, defaults to 1):
-                The number of gradient accumulation steps.
-        """
-        self.scheduler.last_epoch = self.scheduler.last_epoch // gradient_accumulation_steps
 
     def step(self, *args, **kwargs):
         if not self.step_with_optimizer:
@@ -83,6 +73,8 @@ class AcceleratedScheduler:
 
         # Otherwise, first make sure the optimizer was stepped.
         if not self.gradient_state.sync_gradients:
+            if self.adjust_scheduler_to_accumulation:
+                self.scheduler._step_count += 1
             return
 
         for opt in self.optimizers:
