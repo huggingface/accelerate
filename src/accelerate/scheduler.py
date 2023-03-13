@@ -42,14 +42,45 @@ class AcceleratedScheduler:
             Whether or not the dataloaders split one batch across the different processes (so batch size is the same
             regardless of the number of processes) or create batches on each process (so batch size is the original
             batch size multiplied by the number of processes).
+        adjust_scheduler_to_accumulation (`bool`, *optional*, defaults to `False`):
+            Whether or not the scheduler should be adjusted to the gradient accumulation steps.
+        gradient_accumulation_steps (`int`, *optional*, defaults to 1):
+            The number of gradient accumulation steps.
     """
 
-    def __init__(self, scheduler, optimizers, step_with_optimizer: bool = True, split_batches: bool = False):
+    def __init__(
+        self,
+        scheduler,
+        optimizers,
+        step_with_optimizer: bool = True,
+        split_batches: bool = False,
+        adjust_scheduler_to_accumulation: bool = False,
+        gradient_accumulation_steps: int = 1,
+    ):
         self.scheduler = scheduler
+        if adjust_scheduler_to_accumulation:
+            self.adjust_scheduler(gradient_accumulation_steps=gradient_accumulation_steps)
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
         self.step_with_optimizer = step_with_optimizer
         self.gradient_state = GradientState()
+
+    def adjust_scheduler(self, gradient_accumulation_steps: int = 1):
+        """
+        Adjusts the scheduler to the gradient accumulation steps inplace.
+
+        Args:
+            gradient_accumulation_steps (`int`, *optional*, defaults to 1):
+                The number of gradient accumulation steps.
+        """
+        if hasattr(self.scheduler, "total_iters"):
+            self.scheduler.total_iters = self.scheduler.total_iters // gradient_accumulation_steps
+        elif hasattr(self.scheduler, "total_steps"):
+            self.scheduler.total_steps = self.scheduler.total_steps // gradient_accumulation_steps
+        elif hasattr(self.scheduler, "T_max"):
+            self.scheduler.T_max = self.scheduler.T_max // gradient_accumulation_steps
+        elif hasattr(self.scheduler, "T_0"):
+            self.scheduler.T_0 = self.scheduler.T_0 // gradient_accumulation_steps
 
     def step(self, *args, **kwargs):
         if not self.step_with_optimizer:

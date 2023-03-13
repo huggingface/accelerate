@@ -143,6 +143,10 @@ class Accelerator:
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
             `Accelerator.accumulate`. If not passed, will default to the value in the environment variable
             `ACCELERATE_GRADIENT_ACCUMULATION_STEPS`.
+        adjust_scheduler_to_accumulation (`bool`, *optional*, defaults to `False`):
+            Whether or not the scheduler should be adjusted to the number of gradient accumulation steps. If `True`,
+            the scheduler's length will be reduced by `gradient_accumulation_steps`. If the scheduler already accounts
+            for the number of gradient accumulation steps, this should be set to `False`.
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
@@ -219,6 +223,7 @@ class Accelerator:
         split_batches: bool = False,
         mixed_precision: Union[PrecisionType, str] = None,
         gradient_accumulation_steps: int = 1,
+        adjust_scheduler_to_accumulation: bool = False,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
@@ -368,6 +373,7 @@ class Accelerator:
         self.gradient_accumulation_steps = int(
             parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
         )
+        self.adjust_scheduler_to_accumulation = adjust_scheduler_to_accumulation
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
@@ -1601,6 +1607,8 @@ class Accelerator:
             optimizer,
             step_with_optimizer=self.step_scheduler_with_optimizer,
             split_batches=self.split_batches,
+            adjust_scheduler_to_accumulation=self.adjust_scheduler_to_accumulation,
+            gradient_accumulation_steps=self.gradient_accumulation_steps,
         )
         self._schedulers.append(scheduler)
         return scheduler
