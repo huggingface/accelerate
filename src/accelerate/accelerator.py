@@ -1161,7 +1161,7 @@ class Accelerator:
                     "ignored_modules": fsdp_plugin.ignored_modules,
                     "device_id": self.device,
                 }
-                signature = inspect.signature(FSDP.__init__).parameters.keys()[1:]
+                signature = inspect.signature(FSDP.__init__).parameters.keys()
                 if "limit_all_gathers" in signature:
                     kwargs["limit_all_gathers"] = fsdp_plugin.limit_all_gathers
                 if "use_orig_params" in signature:
