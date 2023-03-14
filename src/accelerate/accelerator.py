@@ -217,7 +217,6 @@ class Accelerator:
         split_batches: bool = False,
         mixed_precision: Union[PrecisionType, str] = None,
         gradient_accumulation_steps: int = None,
-        adjust_scheduler_to_accumulation: bool = False,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
@@ -373,7 +372,6 @@ class Accelerator:
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
-        self.adjust_scheduler_to_accumulation = adjust_scheduler_to_accumulation
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
@@ -830,7 +828,7 @@ class Accelerator:
         >>> from accelerate import Accelerator
         >>> from accelerate.utils import GradientAccumulationPlugin
 
-        >>> plugin = GradientAccumulationPlugin(gradient_accumulation_steps=2)
+        >>> plugin = GradientAccumulationPlugin(num_steps=2)
         >>> accelerator = Accelerator(gradient_accumulation_plugin=plugin)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
@@ -1632,7 +1630,7 @@ class Accelerator:
         >>> from accelerate import Accelerator
         >>> from accelerate.utils import GradientAccumulationPlugin
 
-        >>> plugin = GradientAccumulationPlugin(gradient_accumulation_steps=2)
+        >>> plugin = GradientAccumulationPlugin(num_steps=2)
         >>> accelerator = Accelerator(gradient_accumulation_plugin=plugin)
         >>> outputs = model(inputs)
         >>> loss = loss_fn(outputs, labels)
@@ -1697,8 +1695,10 @@ class Accelerator:
 
         ```python
         >>> from accelerate import Accelerator
+        >>> from accelerate.utils import GradientAccumulationPlugin
 
-        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
+        >>> plugin = GradientAccumulationPlugin(num_steps=2)
+        >>> accelerator = Accelerator(gradient_accumulation_plugin=plugin)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
         >>> for input, target in dataloader:
@@ -1732,8 +1732,10 @@ class Accelerator:
 
         ```python
         >>> from accelerate import Accelerator
+        >>> from accelerate.utils import GradientAccumulationPlugin
 
-        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
+        >>> plugin = GradientAccumulationPlugin(num_steps=2)
+        >>> accelerator = Accelerator(gradient_accumulation_plugin=plugin)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
         >>> for input, target in dataloader:
