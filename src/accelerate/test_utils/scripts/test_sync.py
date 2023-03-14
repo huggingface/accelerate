@@ -21,8 +21,9 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from accelerate.accelerator import Accelerator
+from accelerate.state import GradientState
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import DistributedType, set_seed
+from accelerate.utils import DistributedType, GradientAccumulationPlugin, set_seed
 
 
 def check_model_parameters(model_a, model_b, did_step, iteration):
@@ -150,8 +151,10 @@ def test_distributed_sync(accelerator):
 
 
 def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
+    plugin = GradientAccumulationPlugin(gradient_accumulation_steps=2, adjust_scheduler=True)
+    GradientState._reset_state()
     accelerator = Accelerator(
-        gradient_accumulation_steps=2, split_batches=split_batches, dispatch_batches=dispatch_batches
+        split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_plugin=plugin
     )
     # Test that context manager behaves properly
     model, ddp_model, dataloader = get_training_setup(accelerator)
@@ -187,8 +190,10 @@ def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
 
 
 def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False, dispatch_batches=False):
+    plugin = GradientAccumulationPlugin(num_steps=2, adjust_scheduler=True)
+    GradientState._reset_state()
     accelerator = Accelerator(
-        gradient_accumulation_steps=2, split_batches=split_batches, dispatch_batches=dispatch_batches
+        split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_plugin=plugin
     )
     # Test that context manager behaves properly
     model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
