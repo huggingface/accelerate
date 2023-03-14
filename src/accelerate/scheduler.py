@@ -42,24 +42,10 @@ class AcceleratedScheduler:
             Whether or not the dataloaders split one batch across the different processes (so batch size is the same
             regardless of the number of processes) or create batches on each process (so batch size is the original
             batch size multiplied by the number of processes).
-        adjust_scheduler_to_accumulation (`bool`, *optional*, defaults to `False`):
-            Whether or not the scheduler should be adjusted to the gradient accumulation steps.
-        gradient_accumulation_steps (`int`, *optional*, defaults to 1):
-            The number of gradient accumulation steps.
     """
 
-    def __init__(
-        self,
-        scheduler,
-        optimizers,
-        step_with_optimizer: bool = True,
-        split_batches: bool = False,
-        adjust_scheduler_to_accumulation: bool = False,
-        gradient_accumulation_steps: int = 1,
-    ):
+    def __init__(self, scheduler, optimizers, step_with_optimizer: bool = True, split_batches: bool = False):
         self.scheduler = scheduler
-        self.adjust_scheduler_to_accumulation = adjust_scheduler_to_accumulation
-        self.gradient_accumulation_steps = gradient_accumulation_steps
         self.optimizers = optimizers if isinstance(optimizers, (list, tuple)) else [optimizers]
         self.split_batches = split_batches
         self.step_with_optimizer = step_with_optimizer
@@ -73,7 +59,8 @@ class AcceleratedScheduler:
 
         # Otherwise, first make sure the optimizer was stepped.
         if not self.gradient_state.sync_gradients:
-            if self.adjust_scheduler_to_accumulation:
+            if self.gradient_state.adjust_scheduler:
+                # Check if this is what's needed here, if not the num accumulation steps
                 self.scheduler._step_count += 1
             return
 

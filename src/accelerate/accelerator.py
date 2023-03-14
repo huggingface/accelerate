@@ -42,6 +42,7 @@ from .utils import (
     DynamoBackend,
     FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
+    GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
     KwargsHandler,
@@ -65,7 +66,6 @@ from .utils import (
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
-    parse_choice_from_env,
     recursively_apply,
     reduce,
     release_memory,
@@ -139,14 +139,6 @@ class Accelerator:
             accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
             requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher. 'fp8' requires the installation of
             transformers-engine.
-        gradient_accumulation_steps (`int`, *optional*, default to 1):
-            The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
-            `Accelerator.accumulate`. If not passed, will default to the value in the environment variable
-            `ACCELERATE_GRADIENT_ACCUMULATION_STEPS`.
-        adjust_scheduler_to_accumulation (`bool`, *optional*, defaults to `False`):
-            Whether or not the scheduler should be adjusted to the number of gradient accumulation steps. If `True`,
-            the scheduler's length will be reduced by `gradient_accumulation_steps`. If the scheduler already accounts
-            for the number of gradient accumulation steps, this should be set to `False`.
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
@@ -184,6 +176,8 @@ class Accelerator:
         project_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing data such as logs of locally-compatible loggers and potentially saved
             checkpoints.
+        gradient_accumulation_plugin (`GradientAccumulationPlugin`, *optional*):
+            A configuration for how gradient accumulation should be handled.
         dispatch_batches (`bool`, *optional*):
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
@@ -222,7 +216,7 @@ class Accelerator:
         device_placement: bool = True,
         split_batches: bool = False,
         mixed_precision: Union[PrecisionType, str] = None,
-        gradient_accumulation_steps: int = 1,
+        gradient_accumulation_steps: int = None,
         adjust_scheduler_to_accumulation: bool = False,
         cpu: bool = False,
         deepspeed_plugin: DeepSpeedPlugin = None,
@@ -233,6 +227,7 @@ class Accelerator:
         project_dir: Optional[Union[str, os.PathLike]] = None,
         project_config: Optional[ProjectConfiguration] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
+        gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None,
         dispatch_batches: Optional[bool] = None,
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
@@ -310,6 +305,19 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
+        if gradient_accumulation_steps is not None:
+            warnings.warn(
+                "`gradient_accumulation_steps` is deprecated and will be removed in version 0.18.0 of 🤗 Accelerate. Use `gradient_accumulation_plugin` instead.",
+                FutureWarning,
+            )
+            if gradient_accumulation_plugin is not None:
+                raise ValueError(
+                    "You can only pass one of `gradient_accumulation_steps` and `gradient_accumulation_plugin`."
+                )
+            gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=gradient_accumulation_steps)
+        elif gradient_accumulation_plugin is None:
+            gradient_accumulation_plugin = GradientAccumulationPlugin()
+
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -365,14 +373,6 @@ class Accelerator:
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
-        if gradient_accumulation_steps > 1:
-            if self.state.distributed_type == DistributedType.TPU:
-                raise NotImplementedError(
-                    "Gradient accumulation on TPU is not supported. Pass in `gradient_accumulation_steps=1`"
-                )
-        self.gradient_accumulation_steps = int(
-            parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
-        )
         self.adjust_scheduler_to_accumulation = adjust_scheduler_to_accumulation
         self.device_placement = device_placement
         self.split_batches = split_batches
@@ -416,7 +416,9 @@ class Accelerator:
 
         # Start of internal step tracking
         self.step = 0
-        self.gradient_state = GradientState()
+        self.gradient_state = GradientState(
+            gradient_accumulation_plugin=gradient_accumulation_plugin,
+        )
 
         # Internal references to the training objects
         self._optimizers = []
@@ -803,7 +805,7 @@ class Accelerator:
             self.gradient_state._set_sync_gradients(True)
         else:
             self.step += 1
-            self.gradient_state._set_sync_gradients((self.step % self.gradient_accumulation_steps) == 0)
+            self.gradient_state._set_sync_gradients((self.step % self.gradient_state.num_steps) == 0)
 
     @property
     def sync_gradients(self):
@@ -822,11 +824,13 @@ class Accelerator:
 
         ```python
         >>> from accelerate import Accelerator
+        >>> from accelerate.utils import GradientAccumulationPlugin
 
-        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
+        >>> plugin = GradientAccumulationPlugin(gradient_accumulation_steps=2)
+        >>> accelerator = Accelerator(gradient_accumulation_plugin=plugin)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
-        >>> with accelerator.accumulate():
+        >>> with accelerator.accumulate(model):
         ...     for input, output in dataloader:
         ...         outputs = model(input)
         ...         loss = loss_func(outputs)
@@ -1607,16 +1611,14 @@ class Accelerator:
             optimizer,
             step_with_optimizer=self.step_scheduler_with_optimizer,
             split_batches=self.split_batches,
-            adjust_scheduler_to_accumulation=self.adjust_scheduler_to_accumulation,
-            gradient_accumulation_steps=self.gradient_accumulation_steps,
         )
         self._schedulers.append(scheduler)
         return scheduler
 
     def backward(self, loss, **kwargs):
         """
-        Scales the gradients in accordance to `Accelerator.gradient_accumulation_steps` and calls the correct
-        `backward()` based on the configuration.
+        Scales the gradients in accordance to the `GradientAccumulationPlugin` and calls the correct `backward()` based
+        on the configuration.
 
         Should be used in lieu of `loss.backward()`.
 
@@ -1624,8 +1626,10 @@ class Accelerator:
 
         ```python
         >>> from accelerate import Accelerator
+        >>> from accelerate.utils import GradientAccumulationPlugin
 
-        >>> accelerator = Accelerator(gradient_accumulation_steps=1)
+        >>> plugin = GradientAccumulationPlugin(gradient_accumulation_steps=2)
+        >>> accelerator = Accelerator(gradient_accumulation_plugin=plugin)
         >>> outputs = model(inputs)
         >>> loss = loss_fn(outputs, labels)
         >>> accelerator.backward(loss)

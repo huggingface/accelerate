@@ -18,8 +18,9 @@ from functools import partial
 import torch
 
 from accelerate import Accelerator, debug_launcher
-from accelerate.state import AcceleratorState
+from accelerate.state import AcceleratorState, GradientState
 from accelerate.test_utils import require_cpu, require_huggingface_suite
+from accelerate.utils import GradientAccumulationPlugin
 
 
 def one_cycle_test(num_processes=2, step_scheduler_with_optimizer=True, split_batches=False):
@@ -67,23 +68,37 @@ def lambda_test(num_processes=2, step_scheduler_with_optimizer=True, split_batch
 
 
 def accumulation_test():
+    """
+    With this test, an observed batch size of 64 should result in neglible
+    differences in the scheduler after going through the correct number of steps.
+
+    Uses single, two, and four steps to test.
+    """
     from transformers import get_linear_schedule_with_warmup
 
-    accelerator = Accelerator(
-        gradient_accumulation_steps=2,
-        adjust_scheduler_to_accumulation=True,
-    )
-    model = torch.nn.Linear(2, 4)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=4.0)
-    scheduler = get_linear_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=0, num_training_steps=10)
-    model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
-    for _ in range(20):
-        with accelerator.accumulate(model):
-            optimizer.step()
-            scheduler.step()
-    assert (
-        scheduler.get_last_lr()[0] == 0
-    ), f"Wrong lr found at last step, expected 0, got {scheduler.get_last_lr()[0]}"
+    # steps = [1,2,4]
+    steps = [1, 2, 4]
+    for num_steps in steps:
+        plugin = GradientAccumulationPlugin(num_steps=num_steps, adjust_scheduler=num_steps > 1)
+        accelerator = Accelerator(gradient_accumulation_plugin=plugin)
+        model = torch.nn.Linear(2, 4)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=4.0)
+        scheduler = get_linear_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=0, num_training_steps=10)
+
+        model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
+
+        for i in range(10 * num_steps):
+            with accelerator.accumulate(model):
+                optimizer.step()
+                scheduler.step()
+            if i == (10 * num_steps - 2):
+                assert (
+                    scheduler.get_last_lr()[0] != 0
+                ), f"Wrong lr found at second-to-last step, expected non-zero, got {scheduler.get_last_lr()[0]}. num_steps: {num_steps}"
+        assert (
+            scheduler.get_last_lr()[0] == 0
+        ), f"Wrong lr found at last step, expected 0, got {scheduler.get_last_lr()[0]}"
+        GradientState._reset_state()
 
 
 @require_cpu
@@ -123,4 +138,4 @@ class SchedulerTester(unittest.TestCase):
     @require_huggingface_suite
     def test_accumulation(self):
         AcceleratorState._reset_state(True)
-        debug_launcher(accumulation_test)
+        debug_launcher(accumulation_test, num_processes=1)
