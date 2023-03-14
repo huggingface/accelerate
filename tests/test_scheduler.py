@@ -67,7 +67,7 @@ def lambda_test(num_processes=2, step_scheduler_with_optimizer=True, split_batch
     ), f"Wrong lr found at second step, expected {expected_lr}, got {scheduler.get_last_lr()[0]}"
 
 
-def accumulation_test():
+def accumulation_test(num_processes: int = 2):
     """
     With this test, an observed batch size of 64 should result in neglible
     differences in the scheduler after going through the correct number of steps.
@@ -76,14 +76,13 @@ def accumulation_test():
     """
     from transformers import get_linear_schedule_with_warmup
 
-    # steps = [1,2,4]
     steps = [1, 2, 4]
     for num_steps in steps:
         plugin = GradientAccumulationPlugin(num_steps=num_steps, adjust_scheduler=num_steps > 1)
         accelerator = Accelerator(gradient_accumulation_plugin=plugin)
         model = torch.nn.Linear(2, 4)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=4.0)
-        scheduler = get_linear_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=0, num_training_steps=10)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=10.0)
+        scheduler = get_linear_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=0, num_training_steps=20)
 
         model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
 
@@ -91,6 +90,7 @@ def accumulation_test():
             with accelerator.accumulate(model):
                 optimizer.step()
                 scheduler.step()
+
             if i == (10 * num_steps - 2):
                 assert (
                     scheduler.get_last_lr()[0] != 0
@@ -138,4 +138,5 @@ class SchedulerTester(unittest.TestCase):
     @require_huggingface_suite
     def test_accumulation(self):
         AcceleratorState._reset_state(True)
-        debug_launcher(accumulation_test, num_processes=1)
+        debug_launcher(partial(accumulation_test, num_processes=1))
+        debug_launcher(accumulation_test)
