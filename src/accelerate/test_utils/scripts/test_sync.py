@@ -151,7 +151,7 @@ def test_distributed_sync(accelerator):
 
 
 def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
-    plugin = GradientAccumulationPlugin(gradient_accumulation_steps=2, adjust_scheduler=True)
+    plugin = GradientAccumulationPlugin(num_steps=2, adjust_scheduler=True)
     GradientState._reset_state()
     accelerator = Accelerator(
         split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_plugin=plugin
