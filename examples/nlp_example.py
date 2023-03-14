@@ -105,7 +105,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
         shuffle=False,
         collate_fn=collate_fn,
         batch_size=EVAL_BATCH_SIZE,
-        drop_last=True,
+        drop_last=(accelerator.mixed_precision == "fp8"),
     )
 
     return train_dataloader, eval_dataloader
