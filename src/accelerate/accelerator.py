@@ -310,18 +310,6 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
-        gradient_accumulation_steps = int(
-            parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
-        )
-
-        if gradient_accumulation_plugin is not None:
-            if gradient_accumulation_steps != 1:
-                raise ValueError(
-                    "You can only pass one of `gradient_accumulation_steps` and `gradient_accumulation_plugin`. Please only pass in the created `GradientAccumulationPlugin` object."
-                )
-        else:
-            gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=gradient_accumulation_steps)
-
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -383,6 +371,20 @@ class Accelerator:
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
+        if gradient_accumulation_plugin is not None:
+            if gradient_accumulation_steps != 1:
+                raise ValueError(
+                    "You can only pass one of `gradient_accumulation_steps` and `gradient_accumulation_plugin`. Please only pass in the created `GradientAccumulationPlugin` object."
+                )
+        else:
+            gradient_accumulation_steps = int(
+                parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
+            )
+            gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=gradient_accumulation_steps)
+        self.gradient_state = GradientState(
+            gradient_accumulation_plugin=gradient_accumulation_plugin,
+        )
+
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
@@ -425,9 +427,6 @@ class Accelerator:
 
         # Start of internal step tracking
         self.step = 0
-        self.gradient_state = GradientState(
-            gradient_accumulation_plugin=gradient_accumulation_plugin,
-        )
 
         # Internal references to the training objects
         self._optimizers = []
