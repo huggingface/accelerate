@@ -23,7 +23,7 @@ from .update import update_command_parser
 
 
 def get_config_parser(subparsers=None):
-    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     # The main config parser
     config_parser = config_command_parser(subparsers)
     # The subparser to add commands to

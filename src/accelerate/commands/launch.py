@@ -124,9 +124,9 @@ class _CustomHelpAction(argparse._HelpAction):
 
 def launch_command_parser(subparsers=None):
     if subparsers is not None:
-        parser = subparsers.add_parser("launch", add_help=False)
+        parser = subparsers.add_parser("launch", add_help=False, allow_abbrev=False)
     else:
-        parser = argparse.ArgumentParser("Accelerate launch command", add_help=False)
+        parser = argparse.ArgumentParser("Accelerate launch command", add_help=False, allow_abbrev=False)
 
     parser.register("action", "help", _CustomHelpAction)
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
