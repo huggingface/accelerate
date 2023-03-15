@@ -59,6 +59,8 @@ class AcceleratedScheduler:
 
         # Otherwise, first make sure the optimizer was stepped.
         if not self.gradient_state.sync_gradients:
+            if self.gradient_state.adjust_scheduler:
+                self.scheduler._step_count += 1
             return
 
         for opt in self.optimizers:

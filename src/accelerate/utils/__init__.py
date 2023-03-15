@@ -7,6 +7,7 @@ from .dataclasses import (
     DynamoBackend,
     FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
+    GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
     KwargsHandler,

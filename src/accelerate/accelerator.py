@@ -43,6 +43,7 @@ from .utils import (
     DynamoBackend,
     FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
+    GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
     KwargsHandler,
@@ -143,7 +144,7 @@ class Accelerator:
         gradient_accumulation_steps (`int`, *optional*, default to 1):
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
             `Accelerator.accumulate`. If not passed, will default to the value in the environment variable
-            `ACCELERATE_GRADIENT_ACCUMULATION_STEPS`.
+            `ACCELERATE_GRADIENT_ACCUMULATION_STEPS`. Can also be configured through a `GradientAccumulationPlugin`.
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
@@ -197,6 +198,9 @@ class Accelerator:
             are created. See [kwargs](kwargs) for more information.
         dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
+        gradient_accumulation_plugin (`GradientAccumulationPlugin`, *optional*):
+            A configuration for how gradient accumulation should be handled, if more tweaking than just the
+            `gradient_accumulation_steps` is needed.
 
     **Available attributes:**
 
@@ -229,6 +233,7 @@ class Accelerator:
         project_dir: Optional[Union[str, os.PathLike]] = None,
         project_config: Optional[ProjectConfiguration] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
+        gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None,
         dispatch_batches: Optional[bool] = None,
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
@@ -349,6 +354,12 @@ class Accelerator:
             **kwargs,
         )
 
+        if self.state.distributed_type == DistributedType.TPU:
+            if gradient_accumulation_plugin.num_steps != 1:
+                raise ValueError(
+                    "Gradient accumulation is not supported on TPU. Please set `gradient_accumulation_steps` to 1 and don't pass in a `GradientAccumulationPlugin` object."
+                )
+
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
             warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
@@ -361,14 +372,20 @@ class Accelerator:
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
-        if gradient_accumulation_steps > 1:
-            if self.state.distributed_type == DistributedType.TPU:
-                raise NotImplementedError(
-                    "Gradient accumulation on TPU is not supported. Pass in `gradient_accumulation_steps=1`"
+        if gradient_accumulation_plugin is not None:
+            if gradient_accumulation_steps != 1:
+                raise ValueError(
+                    "You can only pass one of `gradient_accumulation_steps` and `gradient_accumulation_plugin`. Please only pass in the created `GradientAccumulationPlugin` object."
                 )
-        self.gradient_accumulation_steps = int(
-            parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
+        else:
+            gradient_accumulation_steps = int(
+                parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
+            )
+            gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=gradient_accumulation_steps)
+        self.gradient_state = GradientState(
+            gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
+
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
@@ -411,7 +428,6 @@ class Accelerator:
 
         # Start of internal step tracking
         self.step = 0
-        self.gradient_state = GradientState()
 
         # Internal references to the training objects
         self._optimizers = []
@@ -798,11 +814,15 @@ class Accelerator:
             self.gradient_state._set_sync_gradients(True)
         else:
             self.step += 1
-            self.gradient_state._set_sync_gradients((self.step % self.gradient_accumulation_steps) == 0)
+            self.gradient_state._set_sync_gradients((self.step % self.gradient_state.num_steps) == 0)
 
     @property
     def sync_gradients(self):
         return self.gradient_state.sync_gradients
+
+    @property
+    def gradient_accumulation_steps(self):
+        return self.gradient_state.num_steps
 
     @contextmanager
     def accumulate(self, model):
@@ -818,10 +838,10 @@ class Accelerator:
         ```python
         >>> from accelerate import Accelerator
 
-        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
+        >>> accelerator = Accelerator(gradient_accumulation_steps=1)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
-        >>> with accelerator.accumulate():
+        >>> with accelerator.accumulate(model):
         ...     for input, output in dataloader:
         ...         outputs = model(input)
         ...         loss = loss_func(outputs)
@@ -1619,8 +1639,8 @@ class Accelerator:
 
     def backward(self, loss, **kwargs):
         """
-        Scales the gradients in accordance to `Accelerator.gradient_accumulation_steps` and calls the correct
-        `backward()` based on the configuration.
+        Scales the gradients in accordance to the `GradientAccumulationPlugin` and calls the correct `backward()` based
+        on the configuration.
 
         Should be used in lieu of `loss.backward()`.
 
@@ -1629,7 +1649,7 @@ class Accelerator:
         ```python
         >>> from accelerate import Accelerator
 
-        >>> accelerator = Accelerator(gradient_accumulation_steps=1)
+        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
         >>> outputs = model(inputs)
         >>> loss = loss_fn(outputs, labels)
         >>> accelerator.backward(loss)

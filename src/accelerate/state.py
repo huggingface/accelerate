@@ -16,13 +16,14 @@ import os
 import warnings
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import torch
 
 from .utils import (
     DistributedType,
     DynamoBackend,
+    GradientAccumulationPlugin,
     get_ccl_version,
     get_int_from_env,
     is_ccl_available,
@@ -694,11 +695,17 @@ class GradientState:
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
         - **remainder** (`int`) -- The number of extra samples that were added from padding the dataloader
         - **sync_gradients** (`bool`) -- Whether the gradients should be synced across all devices
+        - **active_dataloader** (`Optional[DataLoader]`) -- The dataloader that is currently being iterated over
+        - **dataloader_references** (`List[Optional[DataLoader]]`) -- A list of references to the dataloaders that are
+          being iterated over
+        - **num_steps** (`int`) -- The number of steps to accumulate over
+        - **adjust_scheduler** (`bool`) -- Whether the scheduler should be adjusted to account for the gradient
+          accumulation
     """
 
     _shared_state = {}
 
-    def __init__(self):
+    def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True
@@ -706,6 +713,21 @@ class GradientState:
             self.remainder = -1
             self.active_dataloader = None
             self.dataloader_references = [None]
+            self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
+
+        # Plugin args are different and can be updated
+        if gradient_accumulation_plugin is not None and self.plugin_kwargs != gradient_accumulation_plugin.to_kwargs():
+            self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
+
+    @property
+    def num_steps(self) -> int:
+        "Returns the number of steps to accumulate over"
+        return self.plugin_kwargs.get("num_steps", 1)
+
+    @property
+    def adjust_scheduler(self) -> bool:
+        "Returns whether the scheduler should be adjusted"
+        return self.plugin_kwargs.get("adjust_scheduler", False)
 
     @property
     def initialized(self) -> bool:
@@ -716,7 +738,8 @@ class GradientState:
         return (
             f"Sync Gradients: {self.sync_gradients}\n"
             f"At end of current dataloader: {self.end_of_dataloader}\n"
-            f"Extra samples added: {self.remainder}"
+            f"Extra samples added: {self.remainder}\n"
+            f"Gradient accumulation plugin: {self.plugin_kwargs}\n"
         )
 
     def _set_sync_gradients(self, sync_gradients):
@@ -747,3 +770,8 @@ class GradientState:
     def in_dataloader(self) -> bool:
         "Returns whether the current process is in a dataloader"
         return self.active_dataloader is not None
+
+    @staticmethod
+    def _reset_state():
+        "Resets `_shared_state`, is used internally and should not be called"
+        GradientState._shared_state = {}

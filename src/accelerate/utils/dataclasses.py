@@ -381,6 +381,21 @@ class ProjectConfiguration:
 
 
 @dataclass
+class GradientAccumulationPlugin(KwargsHandler):
+    """
+    A plugin to configure gradient accumulation behavior.
+    """
+
+    num_steps: int = field(default=None, metadata={"help": "The number of steps to accumulate gradients for."})
+    adjust_scheduler: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to adjust the scheduler steps to account for the number of steps being accumulated. Should be `True` if the used scheduler was not adjusted for gradient accumulation."
+        },
+    )
+
+
+@dataclass
 class TorchDynamoPlugin(KwargsHandler):
     """
     This plugin is used to compile a model with PyTorch 2.0
