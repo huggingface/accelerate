@@ -27,6 +27,8 @@ from typing import Any, Callable, List, Optional, Union
 import torch
 import torch.utils.hooks as hooks
 
+from accelerate.utils.environment import parse_choice_from_env
+
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -308,6 +310,10 @@ class Accelerator:
         if megatron_lm_plugin:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
+
+        gradient_accumulation_steps = int(
+            parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
+        )
 
         if gradient_accumulation_plugin is not None:
             if gradient_accumulation_steps != 1:

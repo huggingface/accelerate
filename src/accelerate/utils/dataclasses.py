@@ -394,10 +394,6 @@ class GradientAccumulationPlugin(KwargsHandler):
         },
     )
 
-    def __post_init__(self):
-        if self.num_steps is None:
-            self.num_steps = int(os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", 1))
-
 
 @dataclass
 class TorchDynamoPlugin(KwargsHandler):
