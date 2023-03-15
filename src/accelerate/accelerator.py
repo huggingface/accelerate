@@ -27,8 +27,6 @@ from typing import Any, Callable, List, Optional, Union
 import torch
 import torch.utils.hooks as hooks
 
-from accelerate.utils.environment import parse_choice_from_env
-
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
@@ -68,6 +66,7 @@ from .utils import (
     is_torch_version,
     is_tpu_available,
     pad_across_processes,
+    parse_choice_from_env,
     recursively_apply,
     reduce,
     release_memory,
