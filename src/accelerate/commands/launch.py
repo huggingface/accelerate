@@ -314,12 +314,13 @@ def launch_command_parser(subparsers=None):
     tpu_args.add_argument(
         "--tpu_cluster",
         action="store_true",
+        dest="tpu_use_cluster",
         help="Whether to use a GCP TPU pod for training.",
     )
     tpu_args.add_argument(
         "--no_tpu_cluster",
         action="store_false",
-        dest="tpu_cluster",
+        dest="tpu_use_cluster",
         help="Should not be passed explicitly, this is for internal use only.",
     )
     tpu_args.add_argument(
@@ -778,7 +779,7 @@ def _validate_launch_command(args):
         if (
             not args.multi_gpu
             and not args.tpu
-            and not args.tpu_cluster
+            and not args.tpu_use_cluster
             and not args.mps
             and not args.use_deepspeed
             and not args.use_fsdp
@@ -790,7 +791,7 @@ def _validate_launch_command(args):
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.mps = defaults.distributed_type == DistributedType.MPS
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
-            args.tpu_cluster = defaults.tpu_cluster if args.tpu else False
+            args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
         if not args.mps:
             if args.gpu_ids is None:
                 if defaults.gpu_ids is not None:
@@ -905,7 +906,7 @@ def launch_command(args):
     elif args.multi_gpu and not args.cpu:
         multi_gpu_launcher(args)
     elif args.tpu and not args.cpu:
-        if args.tpu_cluster:
+        if args.tpu_use_cluster:
             tpu_pod_launcher(args)
         else:
             tpu_launcher(args)
