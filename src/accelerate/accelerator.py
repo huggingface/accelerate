@@ -1138,6 +1138,14 @@ class Accelerator:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
         # We check only for models loaded with `accelerate`
+
+        # Checks if any of the child module has the attribute `hf_device_map`.
+        has_hf_device_map = False
+        for m in model.modules():
+            if hasattr(m, "hf_device_map"):
+                has_hf_device_map = True
+                break
+
         if getattr(model, "is_loaded_in_8bit", False) and getattr(model, "hf_device_map", False):
             model_devices = set(model.hf_device_map.values())
             if len(model_devices) > 1:
@@ -1158,7 +1166,7 @@ class Accelerator:
                 raise ValueError(
                     "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
                 )
-        elif device_placement:
+        elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
 
         if self.distributed_type == DistributedType.MULTI_GPU:
