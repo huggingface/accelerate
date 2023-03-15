@@ -695,6 +695,12 @@ class GradientState:
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
         - **remainder** (`int`) -- The number of extra samples that were added from padding the dataloader
         - **sync_gradients** (`bool`) -- Whether the gradients should be synced across all devices
+        - **active_dataloader** (`Optional[DataLoader]`) -- The dataloader that is currently being iterated over
+        - **dataloader_references** (`List[Optional[DataLoader]]`) -- A list of references to the dataloaders that are
+          being iterated over
+        - **num_steps** (`int`) -- The number of steps to accumulate over
+        - **adjust_scheduler** (`bool`) -- Whether the scheduler should be adjusted to account for the gradient
+          accumulation
     """
 
     _shared_state = {}
@@ -709,6 +715,7 @@ class GradientState:
             self.dataloader_references = [None]
             self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
 
+        # Plugin args are different and can be updated
         if gradient_accumulation_plugin is not None and self.plugin_kwargs != gradient_accumulation_plugin.to_kwargs():
             self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
 
