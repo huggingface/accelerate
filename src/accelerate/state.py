@@ -709,6 +709,9 @@ class GradientState:
             self.dataloader_references = [None]
             self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
 
+        if gradient_accumulation_plugin is not None and self.plugin_kwargs != gradient_accumulation_plugin.to_kwargs():
+            self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
+
     @property
     def num_steps(self) -> int:
         "Returns the number of steps to accumulate over"

@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import DistributedType, GradientAccumulationPlugin, set_seed
+from accelerate.utils import DistributedType, set_seed
 
 
 def check_model_parameters(model_a, model_b, did_step, iteration):
@@ -151,10 +151,8 @@ def test_distributed_sync(accelerator):
 
 
 def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
-    plugin = GradientAccumulationPlugin(num_steps=2, adjust_scheduler=True)
-    GradientState._reset_state()
     accelerator = Accelerator(
-        split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_plugin=plugin
+        split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_steps=2
     )
     # Test that context manager behaves properly
     model, ddp_model, dataloader = get_training_setup(accelerator)
@@ -187,13 +185,12 @@ def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(len(ddp_input))]
+    GradientState._reset_state()
 
 
 def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False, dispatch_batches=False):
-    plugin = GradientAccumulationPlugin(num_steps=2, adjust_scheduler=True)
-    GradientState._reset_state()
     accelerator = Accelerator(
-        split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_plugin=plugin
+        split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_steps=2
     )
     # Test that context manager behaves properly
     model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
@@ -231,6 +228,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False, dispa
             check_model_parameters(model, ddp_model, did_step, iteration)
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
+    GradientState._reset_state()
 
 
 def test_dataloader_break():
