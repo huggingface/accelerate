@@ -585,7 +585,8 @@ def multi_gpu_launcher(args):
         import torch.distributed.run as distrib_run
     else:
         raise NotImplementedError(
-            "Native multi-GPU training through `accelerate launch` requires pytorch>=1.9.1. Please call `torch.distributed.launch` directly instead."
+            "Native multi-GPU training through `accelerate launch` requires pytorch>=1.9.1. "
+            "Please call `torch.distributed.launch` directly instead."
         )
 
     current_env = prepare_multi_gpu_env(args)
