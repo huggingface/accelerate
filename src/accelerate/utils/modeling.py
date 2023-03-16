@@ -784,6 +784,7 @@ def load_checkpoint_in_model(
         offload_buffers (`bool`, *optional*, defaults to `False):
             Whether or not to include the buffers in the weights offloaded to disk.
     """
+    tied_params = find_tied_parameters(model)
     if offload_folder is None and device_map is not None and "disk" in device_map.values():
         raise ValueError(
             "At least one of the model submodule will be offloaded to disk, please pass along an `offload_folder`."
@@ -871,3 +872,5 @@ def load_checkpoint_in_model(
     if offload_state_dict:
         load_offloaded_weights(model, state_dict_index, state_dict_folder)
         shutil.rmtree(state_dict_folder)
+
+    retie_parameters(model, tied_params)
