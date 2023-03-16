@@ -67,7 +67,7 @@ doc-builder preview {package_name} {path_to_docs}
 For example:
 
 ```bash
-doc-builder preview transformers docs/source/en/
+doc-builder preview accelerate docs/source/
 ```
 
 The docs will be viewable at [http://localhost:3000](http://localhost:3000). You can also preview the docs once you have opened a PR. You will see a bot add a comment to a link where the documentation with your changes lives.

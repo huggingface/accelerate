@@ -190,6 +190,14 @@ To run it in each of these various modes, use the following commands:
 
 ### Using AWS SageMaker integration
 - [Examples showcasing AWS SageMaker integration of 🤗 Accelerate.](https://github.com/pacman100/accelerate-aws-sagemaker)
+
+
+## Simple Multi-GPU Hardware Launcher
+
+[multigpu_hardware_launcher.py](./multigpu_hardware_launcher.py) is a minimal script to demonstrating an alternative way to launch
+accelerate on multiple GPUs. You can easily customize the training function used, training arguments, hyperparameters, and type of
+compute hardware, and then run the script to automatically launch multi GPU training on your remote hardware.
+
     
 ## Finer Examples
 
