@@ -428,9 +428,8 @@ def get_balanced_memory(
 
     if not torch.cuda.is_available():
         return max_memory
-    elif is_xpu_available():
-        if not torch.xpu.available():
-            return max_memory
+    if not is_xpu_available():
+        return max_memory
             
     num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
     if is_xpu_available():
@@ -477,7 +476,7 @@ def get_balanced_memory(
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
-    max_memory = get_max_memory(max_memory,include_xpus)
+    max_memory = get_max_memory(max_memory)
     last_gpu = max(i for i in max_memory if isinstance(i, int) and max_memory[i] > 0)
     # The last device is left with max_memory just in case the buffer is not enough.
     for i in range(last_gpu):

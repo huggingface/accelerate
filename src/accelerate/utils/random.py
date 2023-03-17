@@ -45,7 +45,7 @@ def set_seed(seed: int, device_specific: bool = False):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     if is_xpu_available:
-        torch.xpu.manuual_seed_all(seed)
+        torch.xpu.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
     if is_tpu_available():
         xm.set_rng_state(seed)
