@@ -29,7 +29,7 @@ from .utils import (
     SCHEDULER_NAME,
     get_pretty_name,
     is_tpu_available,
-    is_xpu_available
+    is_xpu_available,
     save,
 )
 
