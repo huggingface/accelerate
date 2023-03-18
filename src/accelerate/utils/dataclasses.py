@@ -749,6 +749,13 @@ class FullyShardedDataParallelPlugin:
         },
     )
 
+    optim_state_dict_config: "typing.Any" = field(
+        default=None,
+        metadata={
+            "help": "FSDP Optimizer State Dict Config of type `torch.distributed.fsdp.fully_sharded_data_parallel.OptimStateDictConfig`"
+        },
+    )
+
     limit_all_gathers: bool = field(
         default=False,
         metadata={
@@ -769,6 +776,7 @@ class FullyShardedDataParallelPlugin:
             BackwardPrefetch,
             CPUOffload,
             FullStateDictConfig,
+            FullOptimStateDictConfig,
             ShardingStrategy,
             StateDictType,
         )
@@ -793,6 +801,9 @@ class FullyShardedDataParallelPlugin:
 
             if self.state_dict_type == StateDictType.FULL_STATE_DICT and self.state_dict_config is None:
                 self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+
+            if self.state_dict_type == StateDictType.FULL_STATE_DICT and self.optim_state_dict_config is None:
+                self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
 
     @staticmethod
     def get_module_class_from_name(module, name):
@@ -861,7 +872,7 @@ class FullyShardedDataParallelPlugin:
             with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config):
                 state_dict = model.state_dict()
         else:
-            FSDP.set_state_dict_type(model, self.state_dict_type, self.state_dict_config)
+            FSDP.set_state_dict_type(model, self.state_dict_type, self.state_dict_config, self.optim_state_dict_config)
             state_dict = model.state_dict()
 
         if self.state_dict_type == StateDictType.FULL_STATE_DICT:
@@ -912,10 +923,15 @@ class FullyShardedDataParallelPlugin:
             FSDP.set_state_dict_type(model, self.state_dict_type, self.state_dict_config)
             model.load_state_dict(state_dict)
 
-    def save_optimizer(self, accelerator, optimizer, model, output_dir, optimizer_index=0, optim_input=None):
+    def save_optimizer(self, accelerator, optimizer, model, output_dir, optimizer_index=0):
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
-        optim_state = FSDP.full_optim_state_dict(model, optimizer, optim_input=optim_input)
+        if is_torch_version("<=", "1.13.5"):
+            optim_state = FSDP.full_optim_state_dict(model, optimizer)
+        else:
+            FSDP.set_state_dict_type(model, self.state_dict_type, self.state_dict_config, self.optim_state_dict_config)
+            optim_state = FSDP.optim_state_dict(model, optimizer)
+
         if accelerator.process_index == 0:
             optim_state_name = (
                 f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
@@ -939,7 +955,11 @@ class FullyShardedDataParallelPlugin:
             full_osd = torch.load(input_optimizer_file)
             print(f"Optimizer state loaded from {input_optimizer_file}")
         # called from all ranks, though only rank0 has a valid param for full_osd
-        sharded_osd = FSDP.scatter_full_optim_state_dict(full_osd, model)
+        if is_torch_version("<=", "1.13.5"):
+            sharded_osd = FSDP.scatter_full_optim_state_dict(full_osd, model)
+        else:
+            FSDP.set_state_dict_type(model, self.state_dict_type, self.state_dict_config, self.optim_state_dict_config)
+            sharded_osd = FSDP.optim_state_dict_to_load(full_osd, model, optimizer)
         optimizer.load_state_dict(sharded_osd)
 
 
