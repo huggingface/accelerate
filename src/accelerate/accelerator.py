@@ -1399,7 +1399,7 @@ class Accelerator:
                         from deepspeed.ops.adam import DeepSpeedCPUAdam
 
                         defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
-                        optimizer = DeepSpeedCPUAdam(optimizer.param_groups[0], **defaults)
+                        optimizer = DeepSpeedCPUAdam(optimizer.param_groups, **defaults)
                     kwargs["optimizer"] = optimizer
                     if scheduler is not None:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
