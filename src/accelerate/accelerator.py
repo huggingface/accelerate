@@ -841,8 +841,8 @@ class Accelerator:
         >>> accelerator = Accelerator(gradient_accumulation_steps=1)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
-        >>> with accelerator.accumulate(model):
-        ...     for input, output in dataloader:
+        >>> for input, output in dataloader:
+        ...     with accelerator.accumulate(model):
         ...         outputs = model(input)
         ...         loss = loss_func(outputs)
         ...         loss.backward()
