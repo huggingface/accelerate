@@ -354,12 +354,6 @@ class Accelerator:
             **kwargs,
         )
 
-        if self.state.distributed_type == DistributedType.TPU:
-            if gradient_accumulation_plugin.num_steps != 1:
-                raise ValueError(
-                    "Gradient accumulation is not supported on TPU. Please set `gradient_accumulation_steps` to 1 and don't pass in a `GradientAccumulationPlugin` object."
-                )
-
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
             warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
@@ -385,6 +379,11 @@ class Accelerator:
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
+        if self.state.distributed_type == DistributedType.TPU:
+            if self.gradient_state.num_steps != 1:
+                raise ValueError(
+                    "Gradient accumulation is not supported on TPU. Please set `gradient_accumulation_steps` to 1 and don't pass in a `GradientAccumulationPlugin` object."
+                )
 
         self.device_placement = device_placement
         self.split_batches = split_batches
