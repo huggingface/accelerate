@@ -2385,8 +2385,17 @@ class Accelerator:
         for hook in self._load_model_state_pre_hook.values():
             hook(models, input_dir)
 
+        optimizer_device = "cpu" if self.num_processes < 2 else self.device
+
         load_accelerator_state(
-            input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler, **load_model_func_kwargs
+            input_dir,
+            models,
+            optimizers,
+            schedulers,
+            self.state.process_index,
+            self.scaler,
+            optimizer_device,
+            **load_model_func_kwargs,
         )
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):

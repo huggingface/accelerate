@@ -110,7 +110,14 @@ def save_accelerator_state(
 
 
 def load_accelerator_state(
-    input_dir, models, optimizers, schedulers, process_index, scaler=None, **load_model_func_kwargs
+    input_dir,
+    models,
+    optimizers,
+    schedulers,
+    process_index,
+    scaler=None,
+    optimizer_map_location="cpu",
+    **load_model_func_kwargs,
 ):
     """
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
@@ -128,6 +135,8 @@ def load_accelerator_state(
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
             An optional *GradScaler* instance to load
+        optimizer_map_location (`torch.device`, *optional*):
+            What device to load the optimizer state onto. By default uses "cpu".
         load_model_func_kwargs (`dict`, *optional*):
             Additional arguments that can be passed to the model's `load_state_dict` method.
     """
@@ -142,7 +151,7 @@ def load_accelerator_state(
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = os.path.join(input_dir, optimizer_name)
-        optimizers[i].load_state_dict(torch.load(input_optimizer_file, map_location="cpu"))
+        optimizers[i].load_state_dict(torch.load(input_optimizer_file, map_location=optimizer_map_location))
     logger.info("All optimizer states loaded successfully")
 
     # Scheduler states
