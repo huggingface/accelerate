@@ -266,23 +266,35 @@ class IntelPyTorchExtensionPlugin:
             if dataloader is None:
                 warnings.warn("failed to use PyTorch jit mode due to current dataloader is none.")
                 return model
-            jit_inputs = []
             example_batch = next(iter(dataloader))
-            for key in example_batch:
-                example_tensor = torch.ones_like(example_batch[key])
-                jit_inputs.append(example_tensor)
-            jit_inputs = tuple(jit_inputs)
             try:
                 jit_model = model.eval()
-                with torch.no_grad():
-                    with torch.cpu.amp.autocast(dtype=self.dtype):
+                with torch.cpu.amp.autocast(dtype=self.dtype), torch.no_grad():
+                    if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.14.0"):
+                        if isinstance(example_batch, dict):
+                            jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
+                        else:
+                            jit_model = torch.jit.trace(
+                                jit_model,
+                                example_kwarg_inputs={key: example_batch[key] for key in example_batch},
+                                strict=False,
+                            )
+                    else:
+                        jit_inputs = []
+                        for key in example_batch:
+                            example_tensor = torch.ones_like(example_batch[key])
+                            jit_inputs.append(example_tensor)
+                        jit_inputs = tuple(jit_inputs)
                         jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
-                        jit_model = torch.jit.freeze(jit_model)
-                jit_model(**example_batch)
+                jit_model = torch.jit.freeze(jit_model)
+                with torch.no_grad():
+                    jit_model(**example_batch)
+                    jit_model(**example_batch)
                 model = jit_model
-            except (RuntimeError, TypeError) as e:
+            except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
                 warnings.warn(f"failed to use PyTorch jit mode due to: {e}.")
         return model
+
 
 
 @dataclass
