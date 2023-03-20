@@ -21,7 +21,6 @@ import numpy as np
 import torch
 from torch.cuda.amp import GradScaler
 
-from .state import PartialState
 from .utils import (
     MODEL_NAME,
     OPTIMIZER_NAME,
@@ -38,6 +37,7 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 from .logging import get_logger
+from .state import PartialState
 
 
 logger = get_logger(__name__)
