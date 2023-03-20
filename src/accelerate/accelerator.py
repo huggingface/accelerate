@@ -2385,7 +2385,7 @@ class Accelerator:
         for hook in self._load_model_state_pre_hook.values():
             hook(models, input_dir)
 
-        optimizer_map_location = "cpu" if self.num_processes < 2 else self.device
+        optimizer_map_location = "on_device" if self.num_processes > 1 else "cpu"
 
         load_accelerator_state(
             input_dir,

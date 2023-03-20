@@ -21,6 +21,7 @@ import numpy as np
 import torch
 from torch.cuda.amp import GradScaler
 
+from .state import PartialState
 from .utils import (
     MODEL_NAME,
     OPTIMIZER_NAME,
@@ -116,7 +117,7 @@ def load_accelerator_state(
     schedulers,
     process_index,
     scaler=None,
-    optimizer_map_location="cpu",
+    optimizer_map_location=None,
     **load_model_func_kwargs,
 ):
     """
@@ -135,8 +136,8 @@ def load_accelerator_state(
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
             An optional *GradScaler* instance to load
-        optimizer_map_location (`torch.device`, *optional*):
-            What device to load the optimizer state onto. By default uses "cpu".
+        optimizer_map_location (`str`, *optional*):
+            What device to load the optimizer state onto. Should be one of either "cpu" or "on_device".
         load_model_func_kwargs (`dict`, *optional*):
             Additional arguments that can be passed to the model's `load_state_dict` method.
     """
@@ -148,6 +149,14 @@ def load_accelerator_state(
     logger.info("All model weights loaded successfully")
 
     # Optimizer states
+    if optimizer_map_location not in [None, "cpu", "on_device"]:
+        raise TypeError(
+            "Unsupported optimizer map location passed, please choose one of `None`, `cpu`, or `on_device`"
+        )
+    if optimizer_map_location is None:
+        optimizer_map_location = "cpu"
+    elif optimizer_map_location == "on_device":
+        optimizer_map_location = PartialState().device
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = os.path.join(input_dir, optimizer_name)
