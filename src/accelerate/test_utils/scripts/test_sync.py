@@ -23,7 +23,6 @@ from torch.utils.data import DataLoader
 from accelerate import Accelerator
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, set_seed
-import intel_extension_for_pytorch as ipex
 
 def check_model_parameters(model_a, model_b, did_step, iteration):
     for param, grad_param in zip(model_a.parameters(), model_b.parameters()):

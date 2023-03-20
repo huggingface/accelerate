@@ -54,7 +54,6 @@ def print_on(state, process_idx):
 def process_execution_check():
     accelerator = Accelerator()
     num_processes = accelerator.num_processes
-    print(num_processes,'num_process')
     with accelerator.main_process_first():
         idx = torch.tensor(accelerator.process_index).to(accelerator.device)
     idxs = accelerator.gather(idx)

@@ -24,7 +24,6 @@ from torch.utils.data import DataLoader, IterableDataset, TensorDataset
 
 from accelerate.accelerator import Accelerator
 from accelerate.utils.dataclasses import DistributedType
-import intel_extension_for_pytorch as ipex
 
 class DummyIterableDataset(IterableDataset):
     def __init__(self, data):
