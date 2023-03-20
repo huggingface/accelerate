@@ -801,6 +801,10 @@ def _validate_launch_command(args):
                     args.gpu_ids = defaults.gpu_ids
                 else:
                     args.gpu_ids = "all"
+
+            if (args.multi_gpu and args.num_machines is None):
+                args.num_machines = defaults.num_machines
+
             if (
                 len(args.gpu_ids.split(",")) < 2
                 and (args.gpu_ids != "all")
