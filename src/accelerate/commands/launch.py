@@ -211,10 +211,7 @@ def launch_command_parser(subparsers=None):
         help="Whether to use full graph mode for dynamo or it is ok to break model into several subgraphs",
     )
     resource_args.add_argument(
-        "--dynamo_use_dynamic",
-        default=False,
-        action="store_true",
-        help="Whether to enable dynamic shape tracing.",
+        "--dynamo_use_dynamic", default=False, action="store_true", help="Whether to enable dynamic shape tracing.",
     )
 
     # Training Paradigm arguments
@@ -222,22 +219,13 @@ def launch_command_parser(subparsers=None):
         "Training Paradigm Arguments", "Arguments for selecting which training paradigm to be used."
     )
     paradigm_args.add_argument(
-        "--use_deepspeed",
-        default=False,
-        action="store_true",
-        help="Whether to use deepspeed.",
+        "--use_deepspeed", default=False, action="store_true", help="Whether to use deepspeed.",
     )
     paradigm_args.add_argument(
-        "--use_fsdp",
-        default=False,
-        action="store_true",
-        help="Whether to use fsdp.",
+        "--use_fsdp", default=False, action="store_true", help="Whether to use fsdp.",
     )
     paradigm_args.add_argument(
-        "--use_megatron_lm",
-        default=False,
-        action="store_true",
-        help="Whether to use Megatron-LM.",
+        "--use_megatron_lm", default=False, action="store_true", help="Whether to use Megatron-LM.",
     )
 
     # distributed GPU training arguments
@@ -266,17 +254,10 @@ def launch_command_parser(subparsers=None):
         help="The port to use to communicate with the machine of rank 0.",
     )
     distributed_args.add_argument(
-        "-t",
-        "--tee",
-        default="0",
-        type=str,
-        help="Tee std streams into a log file and also to console.",
+        "-t", "--tee", default="0", type=str, help="Tee std streams into a log file and also to console.",
     )
     distributed_args.add_argument(
-        "--role",
-        type=str,
-        default="default",
-        help="User-defined role for the workers.",
+        "--role", type=str, default="default", help="User-defined role for the workers.",
     )
     # Rendezvous related arguments
     distributed_args.add_argument(
@@ -286,16 +267,10 @@ def launch_command_parser(subparsers=None):
         help="Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).",
     )
     distributed_args.add_argument(
-        "--max_restarts",
-        type=int,
-        default=0,
-        help="Maximum number of worker group restarts before failing.",
+        "--max_restarts", type=int, default=0, help="Maximum number of worker group restarts before failing.",
     )
     distributed_args.add_argument(
-        "--monitor_interval",
-        type=float,
-        default=5,
-        help="Interval, in seconds, to monitor the state of workers.",
+        "--monitor_interval", type=float, default=5, help="Interval, in seconds, to monitor the state of workers.",
     )
     parser.add_argument(
         "-m",
@@ -358,10 +333,7 @@ def launch_command_parser(subparsers=None):
     # DeepSpeed arguments
     deepspeed_args = parser.add_argument_group("DeepSpeed Arguments", "Arguments related to DeepSpeed.")
     deepspeed_args.add_argument(
-        "--deepspeed_config_file",
-        default=None,
-        type=str,
-        help="DeepSpeed config file.",
+        "--deepspeed_config_file", default=None, type=str, help="DeepSpeed config file.",
     )
     deepspeed_args.add_argument(
         "--zero_stage",
@@ -802,10 +774,7 @@ def _validate_launch_command(args):
                 else:
                     args.gpu_ids = "all"
 
-            if (
-                args.multi_gpu
-                and args.num_machines is None
-            ):
+            if args.multi_gpu and args.num_machines is None:
                 args.num_machines = defaults.num_machines
 
             if (
