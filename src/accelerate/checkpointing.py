@@ -27,6 +27,7 @@ from .utils import (
     RNG_STATE_NAME,
     SCALER_NAME,
     SCHEDULER_NAME,
+    DistributedType,
     get_pretty_name,
     is_tpu_available,
     save,
@@ -153,10 +154,14 @@ def load_accelerator_state(
         raise TypeError(
             "Unsupported optimizer map location passed, please choose one of `None`, `cpu`, or `on_device`"
         )
+    current_device = PartialState().device
     if optimizer_map_location is None:
-        optimizer_map_location = "cpu"
+        if PartialState().distributed_type == DistributedType.MULTI_GPU:
+            optimizer_map_location = current_device
+        else:
+            optimizer_map_location = "cpu"
     elif optimizer_map_location == "on_device":
-        optimizer_map_location = PartialState().device
+        optimizer_map_location = current_device
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = os.path.join(input_dir, optimizer_name)
