@@ -845,8 +845,8 @@ def _validate_launch_command(args):
                 args.mixed_precision = defaults.mixed_precision
                 mp_from_config_flag = True
 
+        # Silently set the default here
         if args.dynamo_backend is None:
-            warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
             args.dynamo_backend = "no"
     else:
         if args.num_processes is None:
