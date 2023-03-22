@@ -53,6 +53,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert state.sync_gradients is True
         accelerator.sync_gradients = False
         assert state.sync_gradients is False
+        GradientState._reset_state()
 
     def test_prepared_objects_are_referenced(self):
         accelerator = Accelerator()
