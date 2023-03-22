@@ -819,9 +819,17 @@ class Accelerator:
     def sync_gradients(self):
         return self.gradient_state.sync_gradients
 
+    @sync_gradients.setter
+    def sync_gradients(self, sync_gradients):
+        self.gradient_state.sync_gradients = sync_gradients
+
     @property
     def gradient_accumulation_steps(self):
         return self.gradient_state.num_steps
+
+    @gradient_accumulation_steps.setter
+    def gradient_accumulation_steps(self, gradient_accumulation_steps):
+        self.gradient_state.plugin_kwargs.update({"num_steps": gradient_accumulation_steps})
 
     @contextmanager
     def accumulate(self, model):
