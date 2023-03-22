@@ -116,7 +116,8 @@ def patch_environment(**kwargs):
     yield
 
     for key in kwargs:
-        del os.environ[key.upper()]
+        if key.upper() in os.environ:
+            del os.environ[key.upper()]
 
 
 def get_pretty_name(obj):
