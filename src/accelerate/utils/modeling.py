@@ -170,7 +170,11 @@ def set_module_tensor_to_device(
                 and module.bias is not None
             ):
                 # quantize only if necessary
-                if module.bias.device.type != "meta" and not getattr(module.weight, "SCB", None):
+                if (
+                    module.bias.device.type != "meta"
+                    and not getattr(module.weight, "SCB", None)
+                    and isinstance(device, int)
+                ):
                     module = module.cuda(device)
 
 
