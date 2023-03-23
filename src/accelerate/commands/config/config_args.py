@@ -85,6 +85,8 @@ class BaseConfig:
         for key, value in result.items():
             if isinstance(value, Enum):
                 result[key] = value.value
+            if isinstance(value, dict) and not bool(value):
+                result[key] = None
         result = {k: v for k, v in result.items() if v is not None}
         return result
 
