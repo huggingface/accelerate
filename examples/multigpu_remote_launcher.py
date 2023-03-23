@@ -19,14 +19,17 @@ def launch_train(*args):
 
 if __name__ == "__main__":
     # Refer to https://runhouse-docs.readthedocs-hosted.com/en/main/rh_primitives/cluster.html#hardware-setup
-    # for cloud access setup instructions, if using on-demand hardware
+    # for cloud access setup instructions (if using on-demand hardware), and for API specifications.
 
-    # single GPU
-    # gpu = rh.cluster(name='rh-cluster', instance_type='V100:1', provider='cheapest', use_spot=False)
-
-    # multi GPU
-    gpu = rh.cluster(name="rh-cluster", instance_type="V100:4", provider="cheapest", use_spot=False)
+    # on-demand GPU
+    # gpu = rh.cluster(name='rh-cluster', instance_type='V100:1', provider='cheapest', use_spot=False)  # single GPU
+    gpu = rh.cluster(name="rh-cluster", instance_type="V100:4", provider="cheapest", use_spot=False)  # multi GPU
     gpu.up_if_not()
+
+    # on-prem GPU
+    # gpu = rh.cluster(
+    #           ips=["ip_addr"], ssh_creds={ssh_user:"<username>", ssh_private_key:"<key_path>"}, name="rh-cluster"
+    #       )
 
     # Set up remote function
     reqs = [
