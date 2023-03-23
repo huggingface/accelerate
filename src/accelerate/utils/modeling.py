@@ -171,7 +171,7 @@ def set_module_tensor_to_device(
             ):
                 # quantize only if necessary
                 if module.bias.device.type != "meta" and not getattr(module.weight, "SCB", None):
-                    module = module.cuda()
+                    module = module.cuda(device)
 
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
