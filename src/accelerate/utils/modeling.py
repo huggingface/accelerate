@@ -156,10 +156,22 @@ def set_module_tensor_to_device(
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
             if param_cls.__name__ == "Int8Params":
+                # downcast to fp16 if any
+                if new_value.dtype == torch.float32:
+                    new_value = new_value.to(torch.float16)
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
             module._parameters[tensor_name] = new_value
+
+            if (
+                module.__class__.__name__ == "Linear8bitLt"
+                and getattr(module.weight, "SCB", None) is None
+                and module.bias is not None
+            ):
+                # quantize only if necessary
+                if module.bias.device.type != "meta" and not getattr(module.weight, "SCB", None):
+                    module = module.cuda()
 
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
