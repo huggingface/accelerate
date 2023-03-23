@@ -526,6 +526,17 @@ class DeepSpeedPlugin:
             for key in kwargs.keys():
                 self.fill_match(key, **kwargs, must_match=False)
             self.hf_ds_config.set_stage_and_offload()
+
+            # filling the missing values in the class attributes from the DeepSpeed config
+            # when using the DeepSpeed config file.
+            self.gradient_accumulation_steps = self.hf_ds_config.get_value("gradient_accumulation_steps")
+            self.gradient_clipping = self.hf_ds_config.get_value("gradient_clipping")
+            self.zero_stage = self.hf_ds_config.get_value("zero_optimization.stage")
+            self.offload_optimizer_device = self.hf_ds_config.get_value("zero_optimization.offload_optimizer.device")
+            self.offload_param_device = self.hf_ds_config.get_value("zero_optimization.offload_param.device")
+            self.zero3_save_16bit_model = self.hf_ds_config.get_value(
+                "zero_optimization.stage3_gather_16bit_weights_on_model_save"
+            )
         else:
             config = {
                 "train_batch_size": "auto",
