@@ -41,6 +41,10 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
             setattr(model, name, te_module)
         elif isinstance(module, nn.LayerNorm) and to_transformer_engine and _convert_ln:
             te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps)
+            if not hasattr(te_module, "weight"):
+                setattr(te_module, "weight", te_module.layer_norm_weight)
+            if not hasattr(te_module, "bias"):
+                setattr(te_module, "bias", te_module.layer_norm_bias)
             te_module.weight.data = module.weight.data.clone()
             te_module.bias.data = module.bias.data.clone()
 
@@ -55,6 +59,10 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
             setattr(model, name, new_module)
         elif isinstance(module, te.LayerNorm) and not to_transformer_engine and _convert_ln:
             new_module = nn.LayerNorm(module.normalized_shape[0], eps=module.eps)
+            if not hasattr(module, "weight"):
+                setattr(module, "weight", module.layer_norm_weight)
+            if not hasattr(module, "bias"):
+                setattr(module, "bias", module.layer_norm_bias)
             new_module.weight.data = module.weight.data.clone()
             new_module.bias.data = module.bias.data.clone()
 
