@@ -656,6 +656,14 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 in str(cm.exception)
             )
 
+    @parameterized.expand(stages, name_func=parameterized_custom_name_func)
+    def test_ds_config(self, stage):
+        deepspeed_plugin = DeepSpeedPlugin(
+            hf_ds_config=self.ds_config_file[stage],
+            zero3_init_flag=True,
+        )
+        self.assertEqual(deepspeed_plugin.zero_stage, int(stage.replace("zero", "")))
+
     def test_basic_run(self):
         mod_file = inspect.getfile(accelerate.test_utils)
         test_file_path = os.path.sep.join(

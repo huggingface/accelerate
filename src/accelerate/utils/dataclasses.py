@@ -515,17 +515,25 @@ class DeepSpeedPlugin:
                 raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config.")
 
             self._deepspeed_config_checks()
-            kwargs = {
-                "gradient_accumulation_steps": self.gradient_accumulation_steps,
-                "gradient_clipping": self.gradient_clipping if self.gradient_clipping else 1.0,
-                "zero_optimization.stage": self.zero_stage,
-                "zero_optimization.offload_optimizer.device": self.offload_optimizer_device,
-                "zero_optimization.offload_param.device": self.offload_param_device,
-                "zero_optimization.stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
+            plugin_to_config_mapping = {
+                "gradient_accumulation_steps": "gradient_accumulation_steps",
+                "gradient_clipping": "gradient_clipping",
+                "zero_stage": "zero_optimization.stage",
+                "offload_optimizer_device": "zero_optimization.offload_optimizer.device",
+                "offload_param_device": "zero_optimization.offload_param.device",
+                "zero3_save_16bit_model": "zero_optimization.stage3_gather_16bit_weights_on_model_save",
             }
+            kwargs = {v: getattr(self, k) for k, v in plugin_to_config_mapping.items() if getattr(self, k) is not None}
             for key in kwargs.keys():
                 self.fill_match(key, **kwargs, must_match=False)
             self.hf_ds_config.set_stage_and_offload()
+
+            # filling the missing values in the class attributes from the DeepSpeed config
+            # when using the DeepSpeed config file.
+            for key, value in plugin_to_config_mapping.items():
+                config_value = self.hf_ds_config.get_value(value)
+                if config_value is not None and config_value != "auto":
+                    setattr(self, key, config_value)
         else:
             config = {
                 "train_batch_size": "auto",
