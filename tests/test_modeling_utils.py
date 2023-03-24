@@ -16,11 +16,13 @@ import json
 import os
 import tempfile
 import unittest
+from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 
-from accelerate.test_utils import require_cuda, require_multi_gpu, require_safetensors
+from accelerate import init_empty_weights
+from accelerate.test_utils import require_cuda, require_huggingface_suite, require_multi_gpu, require_safetensors
 from accelerate.test_utils.testing import require_torch_min_version
 from accelerate.utils.modeling import (
     check_device_map,
@@ -32,6 +34,7 @@ from accelerate.utils.modeling import (
     load_checkpoint_in_model,
     load_state_dict,
     named_module_tensors,
+    retie_parameters,
     set_module_tensor_to_device,
 )
 
@@ -45,6 +48,11 @@ class ModelForTest(nn.Module):
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
+
+
+def sequential_model(num_layers):
+    layers = OrderedDict([(f"linear{i}", nn.Linear(1000, 1000)) for i in range(1, num_layers + 1)])
+    return nn.Sequential(layers)
 
 
 @require_torch_min_version(version="1.9.0")
@@ -170,10 +178,52 @@ class ModelingUtilsTester(unittest.TestCase):
         )
 
     def test_find_tied_parameters(self):
-        model = ModelForTest()
-        self.assertDictEqual(find_tied_parameters(model), {})
+        model = sequential_model(4)
+        self.assertListEqual(find_tied_parameters(model), [])
+
         model.linear2.weight = model.linear1.weight
-        self.assertDictEqual(find_tied_parameters(model), {"linear1.weight": "linear2.weight"})
+        self.assertListEqual(find_tied_parameters(model), [["linear1.weight", "linear2.weight"]])
+
+        model.linear4.weight = model.linear1.weight
+        self.assertListEqual(find_tied_parameters(model), [["linear1.weight", "linear2.weight", "linear4.weight"]])
+
+        model = sequential_model(5)
+        model.linear1.weight = model.linear4.weight
+        model.linear2.weight = model.linear3.weight
+        model.linear5.weight = model.linear2.weight
+        tied_params = sorted(find_tied_parameters(model), key=lambda x: len(x))
+        self.assertListEqual(
+            tied_params, [["linear1.weight", "linear4.weight"], ["linear2.weight", "linear3.weight", "linear5.weight"]]
+        )
+
+        model = nn.Sequential(OrderedDict([("block1", sequential_model(4)), ("block2", sequential_model(4))]))
+        model.block1.linear1.weight = model.block2.linear1.weight
+        self.assertListEqual(find_tied_parameters(model), [["block1.linear1.weight", "block2.linear1.weight"]])
+
+    def test_retie_parameters(self):
+        model = sequential_model(2)
+        retie_parameters(model, [["linear1.weight", "linear2.weight"]])
+        self.assertIs(model.linear1.weight, model.linear2.weight)
+
+        model = sequential_model(3)
+        retie_parameters(model, [["linear1.weight", "linear2.weight", "linear3.weight"]])
+
+        self.assertIs(model.linear1.weight, model.linear2.weight)
+        self.assertIs(model.linear1.weight, model.linear3.weight)
+
+        model = sequential_model(5)
+        retie_parameters(
+            model, [["linear1.weight", "linear4.weight"], ["linear2.weight", "linear3.weight", "linear5.weight"]]
+        )
+
+        self.assertIs(model.linear1.weight, model.linear4.weight)
+        self.assertIs(model.linear2.weight, model.linear3.weight)
+        self.assertIs(model.linear2.weight, model.linear5.weight)
+
+        model = nn.Sequential(OrderedDict([("block1", sequential_model(4)), ("block2", sequential_model(4))]))
+        retie_parameters(model, [["block1.linear1.weight", "block2.linear1.weight"]])
+
+        self.assertIs(model.block1.linear1.weight, model.block2.linear1.weight)
 
     def test_compute_module_sizes(self):
         model = ModelForTest()
@@ -384,14 +434,66 @@ class ModelingUtilsTester(unittest.TestCase):
         )
         self.assertDictEqual(device_map, {"0": 0, "1": 1, "2": 1})
 
-        # Now if we have weights tied inside submodules, tied weights are on the same device.
-        model = nn.Sequential(ModelForTest(), ModelForTest(), ModelForTest())
-        layer0 = getattr(model, "0")
-        layer2 = getattr(model, "2")
-        layer0.linear2.weight = layer2.linear2.weight
+    def test_infer_auto_device_map_with_tied_weights(self):
+        model = nn.Sequential(
+            OrderedDict([("layer1", ModelForTest()), ("layer2", ModelForTest()), ("layer3", ModelForTest())])
+        )
+        model.layer3.linear2.weight = model.layer1.linear2.weight
         device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
-        expected = {"0": 0, "2.linear2": 0, "1": 1, "2.linear1": 1, "2.batchnorm": 1}
+        expected = {"layer1": 0, "layer3.linear2": 0, "layer2": 1, "layer3.linear1": 1, "layer3.batchnorm": 1}
         self.assertDictEqual(device_map, expected)
+
+        # With three weights tied together
+        model.layer2.linear2.weight = model.layer1.linear2.weight
+        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
+        expected = {
+            "layer1": 0,
+            "layer2.linear2": 0,
+            "layer3.linear2": 0,
+            "layer2.linear1": 1,
+            "layer2.batchnorm": 1,
+            "layer3.linear1": 1,
+            "layer3.batchnorm": 1,
+        }
+        self.assertDictEqual(device_map, expected)
+
+        # With two groups of weights tied together
+        model.layer2.linear1.weight = model.layer1.linear1.weight
+        device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
+        expected = {
+            "layer1": 0,
+            "layer2.linear1": 0,
+            "layer2.linear2": 0,
+            "layer3.linear2": 0,
+            "layer2.batchnorm": 1,
+            "layer3.linear1": 1,
+            "layer3.batchnorm": 1,
+        }
+        self.assertDictEqual(device_map, expected)
+
+    @require_huggingface_suite
+    def test_infer_auto_device_map_on_t0pp(self):
+        from transformers import AutoConfig, AutoModelForSeq2SeqLM
+
+        config = AutoConfig.from_pretrained("bigscience/T0pp")
+        with init_empty_weights():
+            model = AutoModelForSeq2SeqLM.from_config(config)
+        model.tie_weights()
+
+        special_dtypes = {n: torch.float32 for n, _ in model.named_parameters() if "wo" in n}
+        max_memory = {0: 10**10, 1: 10**10, "cpu": 10**10}
+        device_map = infer_auto_device_map(
+            model,
+            no_split_module_classes=["T5Block"],
+            dtype=torch.float16,
+            max_memory=max_memory,
+            special_dtypes=special_dtypes,
+        )
+
+        # The 3 tied weights should all be on device 0
+        self.assertEqual(device_map["shared"], 0)
+        self.assertEqual(device_map["encoder.embed_tokens"], 0)
+        self.assertEqual(device_map["decoder.embed_tokens"], 0)
 
     @require_cuda
     def test_get_balanced_memory(self):
