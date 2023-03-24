@@ -183,6 +183,20 @@ def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurs
             yield named_buffer
 
 
+class FindTiedParametersResult(list):
+    """
+    This is a subclass of a list to handle backward compatibility for Transformers. Do not rely on the fact this is not
+    a list or on the `values` method as in the future this will be removed.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def values(self):
+        # TODO: at the next Transformers release (4.28.0) issue a deprecation warning here.
+        return sum([x[1:] for x in self], [])
+
+
 def find_tied_parameters(model: nn.Module, **kwargs):
     """
     Find the tied parameters in a given model.
@@ -238,7 +252,7 @@ def find_tied_parameters(model: nn.Module, **kwargs):
         child_name = name if prefix == "" else f"{prefix}.{name}"
         find_tied_parameters(child, named_parameters=named_parameters, prefix=child_name, result=result)
 
-    return [sorted([weight] + list(set(tied))) for weight, tied in result.items()]
+    return FindTiedParametersResult([sorted([weight] + list(set(tied))) for weight, tied in result.items()])
 
 
 def retie_parameters(model, tied_params):
