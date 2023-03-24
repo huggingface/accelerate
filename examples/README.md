@@ -190,7 +190,22 @@ To run it in each of these various modes, use the following commands:
 
 ### Using AWS SageMaker integration
 - [Examples showcasing AWS SageMaker integration of 🤗 Accelerate.](https://github.com/pacman100/accelerate-aws-sagemaker)
-    
+
+
+## Simple Multi-GPU Hardware Launcher
+
+[multigpu_remote_launcher.py](./multigpu_remote_launcher.py) is a minimal script that demonstrates launching accelerate
+on multiple remote GPUs, and with automatic hardware environment and dependency setup for reproducibility. You can
+easily customize the training function used, training arguments, hyperparameters, and type of compute hardware, and then
+run the script to automatically launch multi GPU training on remote hardware.
+
+This script uses [Runhouse](https://github.com/run-house/runhouse) to launch on self-hosted hardware (e.g. in your own
+cloud account or on-premise cluster) but there are other options for running remotely as well. Runhouse can be installed
+with `pip install runhouse`, and you can refer to
+[hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/main/rh_primitives/cluster.html#hardware-setup)
+for hardware setup instructions, or this
+[Colab tutorial](https://colab.research.google.com/drive/1qVwYyLTCPYPSdz9ZX7BZl9Qm0A3j7RJe) for a more in-depth walkthrough.
+
 ## Finer Examples
 
 While the first two scripts are extremely barebones when it comes to what you can do with accelerate, more advanced features are documented in two other locations.
