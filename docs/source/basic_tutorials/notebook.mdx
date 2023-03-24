@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Launching Multi-Node Training from a Jupyter Environment
+# Launching Multi-GPU Training from a Jupyter Environment
 
 This tutorial teaches you how to fine tune a computer vision model with 🤗 Accelerate from a Jupyter Notebook on a distributed system.
 You will also learn how to setup a few requirements needed for ensuring your environment is configured properly, your data has been prepared properly, and finally how to launch training.
@@ -35,7 +35,7 @@ The following code will restart Jupyter after writing the configuration, as CUDA
 
 <Tip warning={true}>
 
-    CUDA can't be initialized more than once on a multi-node system. It's fine to debug in the notebook and have calls to CUDA, but in order to finally train a full cleanup and restart will need to be performed.
+    CUDA can't be initialized more than once on a multi-GPU system. It's fine to debug in the notebook and have calls to CUDA, but in order to finally train a full cleanup and restart will need to be performed.
     
 </Tip>
 
