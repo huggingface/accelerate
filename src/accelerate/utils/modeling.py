@@ -262,7 +262,7 @@ def retie_parameters(model, tied_params):
     Args:
         model (`torch.nn.Module`):
             The model in which to retie parameters.
-        tied_params (`List[[str]]`):
+        tied_params (`List[List[str]]`):
             A mapping parameter name to tied parameter name as obtained by `find_tied_parameters`.
     """
     for tied_group in tied_params:
