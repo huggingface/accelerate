@@ -16,7 +16,7 @@ limitations under the License.
 
 <p align="center">
     <br>
-    <img src="docs/source/imgs/accelerate_logo.png" width="400"/>
+    <img src="https://raw.githubusercontent.com/huggingface/accelerate/main/docs/source/imgs/accelerate_logo.png" width="400"/>
     <br>
 <p>
 
