@@ -20,10 +20,9 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
-from transformers import AutoConfig, AutoModelForSeq2SeqLM
 
 from accelerate import init_empty_weights
-from accelerate.test_utils import require_cuda, require_multi_gpu, require_safetensors
+from accelerate.test_utils import require_cuda, require_huggingface_suite, require_multi_gpu, require_safetensors
 from accelerate.test_utils.testing import require_torch_min_version
 from accelerate.utils.modeling import (
     check_device_map,
@@ -472,7 +471,10 @@ class ModelingUtilsTester(unittest.TestCase):
         }
         self.assertDictEqual(device_map, expected)
 
+    @require_huggingface_suite
     def test_infer_auto_device_map_on_t0pp(self):
+        from transformers import AutoConfig, AutoModelForSeq2SeqLM
+
         config = AutoConfig.from_pretrained("bigscience/T0pp")
         with init_empty_weights():
             model = AutoModelForSeq2SeqLM.from_config(config)
