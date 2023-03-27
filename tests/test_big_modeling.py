@@ -529,7 +529,7 @@ class BigModelingTester(unittest.TestCase):
 
         model = replace_8bit_linear(model)
 
-        # For some reason replace_8bit_linear creates parameters with requires_grad=True but it's irrelevant rn
+        # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
             p.requires_grad = False
 
@@ -560,7 +560,7 @@ class BigModelingTester(unittest.TestCase):
 
         model = replace_8bit_linear(model)
 
-        # For some reason replace_8bit_linear creates parameters with requires_grad=True but it's irrelevant rn
+        # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
             p.requires_grad = False
 
@@ -599,6 +599,7 @@ class BigModelingTester(unittest.TestCase):
 
         model = replace_8bit_linear(model)
 
+        # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
             p.requires_grad = False
 
