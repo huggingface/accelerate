@@ -46,6 +46,7 @@ from .utils import (
     GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
+    IntelPyTorchExtensionPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
@@ -63,6 +64,7 @@ from .utils import (
     is_bf16_available,
     is_deepspeed_available,
     is_fp8_available,
+    is_ipex_available,
     is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
@@ -157,6 +159,9 @@ class Accelerator:
         megatron_lm_plugin (`MegatronLMPlugin`, *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
+        ipex_plugin (`IntelExtensionPlugin`, *optional*):
+            Tweak your Intel Extension for PyTorch related args using this argument. This argument is optional and can
+            be configured directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -228,6 +233,7 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin = None,
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
         megatron_lm_plugin: MegatronLMPlugin = None,
+        ipex_plugin: IntelPyTorchExtensionPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         project_dir: Optional[Union[str, os.PathLike]] = None,
@@ -311,6 +317,12 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
+        if ipex_plugin is None:  # init from env variables
+            ipex_plugin = IntelPyTorchExtensionPlugin() if os.environ.get("IPEX_ENABLED", "false") == "true" else None
+        else:
+            if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
+                raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
+
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -350,6 +362,7 @@ class Accelerator:
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
+            ipex_plugin=ipex_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -1114,6 +1127,9 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
+        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
+            if self.device.type == "cpu" and self.state.ipex_plugin is not None:
+                args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1136,7 +1152,6 @@ class Accelerator:
 
         if self.distributed_type == DistributedType.FSDP and model_count == 1 and optimizer_present:
             result = self._prepare_fsdp(*result)
-
         return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model: torch.nn.Module, device_placement=None):
@@ -1554,6 +1569,44 @@ class Accelerator:
             raise AssertionError(
                 "You can't use same `Accelerator()` instance with multiple models when using Megatron-LM"
             )
+        return tuple(result)
+
+    def _prepare_ipex(self, *args):
+        ipex_plugin = self.state.ipex_plugin
+        if not is_ipex_available():
+            raise ImportError(
+                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
+            )
+        import intel_extension_for_pytorch as ipex
+
+        model = None
+        optimizer = None
+        dataloader = None
+        result = [obj for obj in args]
+        for obj in result:
+            if isinstance(obj, torch.utils.data.DataLoader) and dataloader is None:
+                dataloader = obj
+            elif isinstance(obj, torch.nn.Module):
+                model = obj
+            elif isinstance(obj, (torch.optim.Optimizer)):
+                optimizer = obj
+        if ipex_plugin.do_fusion and optimizer is None:
+            model.eval()
+            model = ipex.optimize(model, dtype=ipex_plugin.dtype, level="O1")
+            model = ipex_plugin.torch_jit_model_eval(model, dataloader, training=False)
+        else:
+            if not model.training:
+                model.train()
+            model, optimizer = ipex.optimize(
+                model, dtype=ipex_plugin.dtype, optimizer=optimizer, inplace=True, level="O1"
+            )
+        model.forward = torch.cpu.amp.autocast(dtype=ipex_plugin.dtype)(model.forward)
+        for i in range(len(result)):
+            if isinstance(result[i], torch.nn.Module):
+                result[i] = model
+            elif isinstance(result[i], (torch.optim.Optimizer)):
+                result[i] = optimizer
         return tuple(result)
 
     def prepare_data_loader(self, data_loader: torch.utils.data.DataLoader, device_placement=None):

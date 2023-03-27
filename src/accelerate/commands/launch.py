@@ -561,6 +561,21 @@ def launch_command_parser(subparsers=None):
         ),
     )
 
+    # ipex args
+    ipex_args = parser.add_argument_group("IPEX Arguments", "Arguments related to IPEX.")
+    ipex_args.add_argument(
+        "--ipex_enabled",
+        default=False,
+        action="store_true",
+        help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU?",
+    )
+    ipex_args.add_argument(
+        "--ipex_fusion_enabled",
+        default=False,
+        action="store_true",
+        help="Do you want to enable graph level optimization through operator fusion (Only applicable for Inference)?",
+    )
+
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
 
@@ -830,6 +845,8 @@ def _validate_launch_command(args):
                         setattr(args, k, defaults.megatron_lm_config[k])
                     for k in defaults.dynamo_config:
                         setattr(args, k, defaults.dynamo_config[k])
+                    for k in defaults.ipex_config:
+                        setattr(args, k, defaults.ipex_config[k])
                     continue
 
                 # Those args are handled separately
@@ -875,7 +892,7 @@ def _validate_launch_command(args):
     )
     if is_aws_env_disabled and args.num_cpu_threads_per_process is None:
         args.num_cpu_threads_per_process = 1
-        if args.use_cpu and args.num_processes > 1:
+        if args.use_cpu and args.num_processes >= 1:
             local_size = get_int_from_env(
                 ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
             )

@@ -1324,3 +1324,65 @@ class MegatronLMPlugin:
                 self.megatron_lm_default_args[key] = True
             elif key.startswith("no_log_"):
                 self.megatron_lm_default_args[key.replace("no_", "")] = True
+
+
+@dataclass
+class IntelPyTorchExtensionPlugin:
+    """
+    This plugin is used to enable Intel PyTorch Extension (IPEX).
+    """
+
+    use_ipex: bool = field(default=None, metadata={"help": "Enable Intel PyTorch Extension (IPEX)"})
+    do_fusion: bool = field(default=None, metadata={"help": "Enable fusion in IPEX"})
+    dtype: torch.dtype = field(default=torch.float32, metadata={"help": "Enable mixed precision in IPEX"})
+
+    def __post_init__(self):
+        prefix = "IPEX_"
+        if self.use_ipex is None:
+            self.use_ipex = strtobool(os.environ.get(prefix + "ENABLED", "False")) == 1
+
+        if self.use_ipex:
+            if self.do_fusion is None:
+                self.do_fusion = strtobool(os.environ.get(prefix + "FUSION_ENABLED", "False")) == 1
+        else:
+            self.do_fusion = False
+
+    def set_mixed_precision(self, mixed_precision):
+        if mixed_precision == "fp16":
+            raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+        elif mixed_precision == "bf16":
+            self.dtype = torch.bfloat16
+
+    def torch_jit_model_eval(self, model, dataloader, training=False):
+        if not training:
+            if dataloader is None:
+                warnings.warn("failed to use PyTorch jit mode due to current dataloader is none.")
+                return model
+            example_batch = next(iter(dataloader))
+            try:
+                jit_model = model.eval()
+                with torch.cpu.amp.autocast(dtype=self.dtype), torch.no_grad():
+                    if is_torch_version(">=", "1.14.0"):
+                        if isinstance(example_batch, dict):
+                            jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
+                        else:
+                            jit_model = torch.jit.trace(
+                                jit_model,
+                                example_kwarg_inputs={key: example_batch[key] for key in example_batch},
+                                strict=False,
+                            )
+                    else:
+                        jit_inputs = []
+                        for key in example_batch:
+                            example_tensor = torch.ones_like(example_batch[key])
+                            jit_inputs.append(example_tensor)
+                        jit_inputs = tuple(jit_inputs)
+                        jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                jit_model = torch.jit.freeze(jit_model)
+                with torch.no_grad():
+                    jit_model(**example_batch)
+                    jit_model(**example_batch)
+                model = jit_model
+            except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
+                warnings.warn(f"failed to use PyTorch jit mode due to: {e}.")
+        return model
