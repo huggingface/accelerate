@@ -166,14 +166,14 @@ def set_module_tensor_to_device(
 
             if module.__class__.__name__ == "Linear8bitLt" and getattr(module.weight, "SCB", None) is None:
                 # quantize only if necessary
-                if not getattr(module.weight, "SCB", None) and isinstance(device, int):
+                device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
+                if not getattr(module.weight, "SCB", None) and device_index is not None:
                     if module.bias is not None and module.bias.device.type != "meta":
                         # if a bias exists, we need to wait until the bias is set on the correct device
-                        module = module.cuda(device)
+                        module = module.cuda(device_index)
                     elif module.bias is None:
                         # if no bias exists, we can quantize right away
-                        module = module.cuda(device)
-
+                        module = module.cuda(device_index)
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
     """
