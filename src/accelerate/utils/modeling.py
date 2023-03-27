@@ -175,6 +175,7 @@ def set_module_tensor_to_device(
                         # if no bias exists, we can quantize right away
                         module = module.cuda(device_index)
 
+
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
     """
     A helper function that gathers all the tensors (parameters + buffers) of a given module. If `include_buffers=True`
