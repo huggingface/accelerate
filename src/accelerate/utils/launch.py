@@ -109,8 +109,6 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if args.cpu or args.use_cpu:
         if args.ipex_enabled:
             current_env["IPEX_ENABLED"] = str(args.ipex_enabled).lower()
-            if args.ipex_fusion_enabled:
-                current_env["IPEX_FUSION_ENABLED"] = str(args.ipex_fusion_enabled).lower()
 
     return cmd, current_env
 

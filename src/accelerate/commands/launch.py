@@ -569,12 +569,6 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU?",
     )
-    ipex_args.add_argument(
-        "--ipex_fusion_enabled",
-        default=False,
-        action="store_true",
-        help="Do you want to enable graph level optimization through operator fusion (Only applicable for Inference)?",
-    )
 
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")

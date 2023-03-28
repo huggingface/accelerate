@@ -109,12 +109,6 @@ def get_cluster_input():
             default=False,
             error_message="Please enter yes or no.",
         )
-        ipex_config["ipex_fusion_enabled"] = _ask_field(
-            "Do you want to enable graph level optimization through operator fusion (Only applicable for Inference)? [yes/NO]:",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
-        )
 
     dynamo_config = {}
     use_dynamo = _ask_field(

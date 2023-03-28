@@ -1152,6 +1152,7 @@ class Accelerator:
 
         if self.distributed_type == DistributedType.FSDP and model_count == 1 and optimizer_present:
             result = self._prepare_fsdp(*result)
+
         return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model: torch.nn.Module, device_placement=None):
@@ -1275,7 +1276,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
-        if self.state.dynamo_plugin and self.state.dynamo_plugin.backend != DynamoBackend.NO:
+        if self.state.dynamo_plugin.backend != DynamoBackend.NO:
             if not hasattr(torch, "compile"):
                 raise ValueError("Using torch.compile requires PyTorch 2.0 or higher.")
             model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
@@ -1582,26 +1583,19 @@ class Accelerator:
 
         model = None
         optimizer = None
-        dataloader = None
         result = [obj for obj in args]
         for obj in result:
-            if isinstance(obj, torch.utils.data.DataLoader) and dataloader is None:
-                dataloader = obj
-            elif isinstance(obj, torch.nn.Module):
+            if isinstance(obj, torch.nn.Module):
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
-        if ipex_plugin.do_fusion and optimizer is None:
-            model.eval()
-            model = ipex.optimize(model, dtype=ipex_plugin.dtype, level="O1")
-            model = ipex_plugin.torch_jit_model_eval(model, dataloader, training=False)
-        else:
+        if optimizer is not None:
             if not model.training:
                 model.train()
             model, optimizer = ipex.optimize(
                 model, dtype=ipex_plugin.dtype, optimizer=optimizer, inplace=True, level="O1"
             )
-        model.forward = torch.cpu.amp.autocast(dtype=ipex_plugin.dtype)(model.forward)
+            model.forward = torch.cpu.amp.autocast(dtype=ipex_plugin.dtype)(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
