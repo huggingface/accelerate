@@ -190,6 +190,7 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
 
     def __init__(self, optimizer):
         super().__init__(optimizer, device_placement=False, scaler=None)
+        self.__has_overflow__ = hasattr(self.optimizer, 'overflow')
 
     def zero_grad(self, set_to_none=None):
         pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
@@ -200,7 +201,9 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
     @property
     def step_was_skipped(self):
         """Whether or not the optimizer step was done, or skipped because of gradient overflow."""
-        return self.optimizer.overflow
+        if self.__has_overflow__:
+            return self.optimizer.overflow
+        return False
 
 
 class DeepSpeedSchedulerWrapper(AcceleratedScheduler):
