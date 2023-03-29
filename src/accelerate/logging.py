@@ -14,6 +14,7 @@
 
 import logging
 import os
+import torch
 
 from .state import PartialState
 
@@ -40,11 +41,27 @@ class MultiProcessAdapter(logging.LoggerAdapter):
 
         Accepts a new kwarg of `main_process_only`, which will dictate whether it will be logged across all processes
         or only the main executed one. Default is `True` if not passed
+        
+        Also accepts "in_order", which if `True` makes the processes log one by one, in order.
+        This is much easier to read, but comes at the cost of sometimes needing to wait for 
+        the other processes. Default is `False` to not break with the previous behavior.
+        
+        `in_order` is ignored if `main_process_only` is passed.
         """
         main_process_only = kwargs.pop("main_process_only", True)
+        in_order = kwargs.pop("in_order", False)
+        
         if self.isEnabledFor(level) and self._should_log(main_process_only):
             msg, kwargs = self.process(msg, kwargs)
             self.logger.log(level, msg, *args, **kwargs)
+        elif self.isEnabledFor(level) and in_order:
+            state = PartialState()
+            for i in range(state.num_processes):
+                if i == state.process_index:
+                    msg, kwargs = self.process(msg, kwargs)
+                    self.logger.log(level, msg, *args, **kwargs)
+                torch.distributed.barrier()
+            
 
 
 def get_logger(name: str, log_level: str = None):
@@ -52,6 +69,8 @@ def get_logger(name: str, log_level: str = None):
     Returns a `logging.Logger` for `name` that can handle multiprocessing.
 
     If a log should be called on all processes, pass `main_process_only=False`
+
+    If a lot should be called on all processes in order, also pass `in_order=True`
 
     Args:
         name (`str`):
@@ -72,6 +91,13 @@ def get_logger(name: str, log_level: str = None):
     >>> logger = get_logger(__name__, log_level="DEBUG")
     >>> logger.info("My log")
     >>> logger.debug("My second log")
+    
+    >>> from accelerate import Accelerator
+    >>> accelerator = Accelerator()
+    >>> array = ["a", "b", "c", "d"]
+    >>> letter_at_rank = array[accelerator.process_index]
+    >>> logger.info(letter_at_rank, in_order=True)
+    
     ```
     """
     if log_level is None:
