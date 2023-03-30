@@ -530,6 +530,7 @@ class AcceleratorState:
         deepspeed_plugin=None,
         fsdp_plugin=None,
         megatron_lm_plugin=None,
+        ipex_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -542,6 +543,7 @@ class AcceleratorState:
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
             self.deepspeed_plugin = None
+            self.ipex_plugin = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
@@ -577,6 +579,11 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
+            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
+                if self.device.type == "cpu" and ipex_plugin is not None:
+                    self.ipex_plugin = ipex_plugin if ipex_plugin.use_ipex else None
+                    if self.ipex_plugin is not None:
+                        self.ipex_plugin.set_mixed_precision(mixed_precision)
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"

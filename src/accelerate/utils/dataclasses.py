@@ -1324,3 +1324,24 @@ class MegatronLMPlugin:
                 self.megatron_lm_default_args[key] = True
             elif key.startswith("no_log_"):
                 self.megatron_lm_default_args[key.replace("no_", "")] = True
+
+
+@dataclass
+class IntelPyTorchExtensionPlugin:
+    """
+    This plugin is used to enable Intel PyTorch Extension (IPEX).
+    """
+
+    use_ipex: bool = field(default=None, metadata={"help": "Enable Intel PyTorch Extension (IPEX)"})
+    dtype: torch.dtype = field(default=torch.float32, metadata={"help": "Enable mixed precision in IPEX"})
+
+    def __post_init__(self):
+        prefix = "IPEX_"
+        if self.use_ipex is None:
+            self.use_ipex = strtobool(os.environ.get(prefix + "ENABLED", "False")) == 1
+
+    def set_mixed_precision(self, mixed_precision):
+        if mixed_precision == "fp16":
+            raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+        elif mixed_precision == "bf16":
+            self.dtype = torch.bfloat16
