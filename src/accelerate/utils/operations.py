@@ -100,7 +100,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
     elif test_type(data):
         return func(data, *args, **kwargs)
     elif error_on_other_type:
-        raise TypeError(
+        raise ValueError(
             f"Can't apply {func.__name__} on object of type {type(data)}, only of nested list/tuple/dicts of objects "
             f"that satisfy {test_type.__name__}."
         )
