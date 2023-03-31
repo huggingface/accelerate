@@ -41,6 +41,8 @@
     title: How to use Megatron-LM
   - local: usage_guides/sagemaker
     title: How to use 🤗 Accelerate with SageMaker
+  - local: usage_guides/ipex
+    title: How to use 🤗 Accelerate with Intel® Extension for PyTorch for cpu
   title: How-To Guides
 - sections:
   - local: concept_guides/performance
