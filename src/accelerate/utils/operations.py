@@ -434,10 +434,7 @@ def reduce(tensor, reduction="mean"):
         state = PartialState()
         cloned_tensor = tensor.clone()
         if state.distributed_type == DistributedType.NO:
-            if reduction == "sum":
-                return cloned_tensor.sum()
-            else:
-                return cloned_tensor.mean()
+            return cloned_tensor
         if state.distributed_type == DistributedType.TPU:
             xm.all_reduce("sum", cloned_tensor)
         elif state.distributed_type.value in CUDA_DISTRIBUTED_TYPES:
