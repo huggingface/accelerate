@@ -22,7 +22,6 @@ import torch
 from accelerate.test_utils.testing import require_cuda
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
-    TypedApplyException,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     find_device,
@@ -76,8 +75,14 @@ class UtilsTester(unittest.TestCase):
         self.assertEqual(result4["c"], 1)
 
     def test_honor_type(self):
-        with self.assertRaises(TypedApplyException):
+        with self.assertRaises(TypeError) as cm:
             _ = recursively_apply(torch.tensor, (torch.tensor(1), 1), error_on_other_type=True)
+        for substring in [
+            "Can't apply",
+            "on object of type",
+            "only of nested list/tuple/dicts of objects that satisfy",
+        ]:
+            assert substring in str(cm.exception)
 
     def test_patch_environment(self):
         with patch_environment(aa=1, BB=2):
