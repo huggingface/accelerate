@@ -231,7 +231,7 @@ def get_sagemaker_input():
 
     mixed_precision = _ask_options(
         "Do you wish to use FP16 or BF16 (mixed precision)?",
-        ["no", "fp16", "bf16"],
+        ["no", "fp16", "bf16", "fp8"],
         _convert_mixed_precision,
     )
 
