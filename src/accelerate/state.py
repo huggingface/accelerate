@@ -28,6 +28,7 @@ from .utils import (
     get_int_from_env,
     is_ccl_available,
     is_deepspeed_available,
+    is_fp8_available,
     is_mps_available,
     is_tpu_available,
     parse_choice_from_env,
@@ -549,6 +550,8 @@ class AcceleratorState:
                 if mixed_precision is None
                 else mixed_precision.lower()
             )
+            if mixed_precision == "fp8" and not is_fp8_available():
+                raise ValueError("Using `fp8` precision requires `transformer_engine` to be installed.")
             self.dynamo_plugin = dynamo_plugin
             if not _from_accelerator:
                 raise ValueError(
