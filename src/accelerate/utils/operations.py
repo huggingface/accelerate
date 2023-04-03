@@ -45,25 +45,30 @@ def is_tensor_information(tensor_info):
     return isinstance(tensor_info, TensorInformation)
 
 
+def is_namedtuple(data):
+    """
+    Checks if `x` is a `namedtuple` or not. Can have false positives, but only if a user is trying to mimic a
+    `namedtuple` perfectly.
+    """
+    data_type = type(data)
+    bases = data_type.__bases__
+    if len(bases) != 1 or bases[0] != tuple:
+        return False
+    fields = getattr(data_type, "_fields", None)
+    if not isinstance(fields, tuple):
+        return False
+    return all(isinstance(member, str) for member in fields)
+
+
 def honor_type(obj, generator):
     """
     Cast a generator to the same type as obj (list, tuple, or namedtuple)
     """
-    try:
-        return type(obj)(generator)
-    except TypeError as e:
-        # Check for initial error
-        if all(
-            substring in str(e)
-            for substring in [
-                "Can't apply",
-                "on object of type",
-                "only of nested list/tuple/dicts of objects that satisfy",
-            ]
-        ):
-            raise
-        # Some objects may not be able to instantiate from a generator directly
+    # Some objects may not be able to instantiate from a generator directly
+    if is_namedtuple(obj):
         return type(obj)(*list(generator))
+    else:
+        return type(obj)(generator)
 
 
 def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_other_type=False, **kwargs):

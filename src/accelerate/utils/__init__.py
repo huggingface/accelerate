@@ -84,6 +84,7 @@ from .operations import (
     get_data_structure,
     honor_type,
     initialize_tensors,
+    is_namedtuple,
     is_tensor_information,
     is_torch_tensor,
     pad_across_processes,
