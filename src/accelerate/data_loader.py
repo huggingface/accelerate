@@ -397,7 +397,13 @@ class DataLoaderShard(DataLoader):
                 break
 
     @property
-    def total_batch_size(self):
+    def batch_size(self) -> int:
+        batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
+        return batch_sampler.batch_size
+
+
+    @property
+    def total_batch_size(self) -> int:
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
         return (
             batch_sampler.batch_size
@@ -406,7 +412,7 @@ class DataLoaderShard(DataLoader):
         )
 
     @property
-    def total_dataset_length(self):
+    def total_dataset_length(self) -> int:
         if hasattr("total_length", self.dataset):
             return self.dataset.total_length
         else:
