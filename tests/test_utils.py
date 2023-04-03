@@ -22,10 +22,12 @@ import torch
 from accelerate.test_utils.testing import require_cuda
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
+    TypedApplyException,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     find_device,
     patch_environment,
+    recursively_apply,
     send_to_device,
 )
 
@@ -72,6 +74,10 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(torch.equal(result4["b"][0].cpu(), tensor))
         self.assertTrue(torch.equal(result4["b"][1].cpu(), tensor))
         self.assertEqual(result4["c"], 1)
+
+    def test_honor_type(self):
+        with self.assertRaises(TypedApplyException):
+            _ = recursively_apply(torch.tensor, (torch.tensor(1), 1), error_on_other_type=True)
 
     def test_patch_environment(self):
         with patch_environment(aa=1, BB=2):

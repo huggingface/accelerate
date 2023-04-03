@@ -25,6 +25,7 @@ import torch
 from ..state import PartialState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, TensorInformation
+from .exceptions import TypedApplyException
 from .imports import is_torch_distributed_available, is_tpu_available
 from .versions import is_torch_version
 
@@ -100,7 +101,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
     elif test_type(data):
         return func(data, *args, **kwargs)
     elif error_on_other_type:
-        raise ValueError(
+        raise TypedApplyException(
             f"Can't apply {func.__name__} on object of type {type(data)}, only of nested list/tuple/dicts of objects "
             f"that satisfy {test_type.__name__}."
         )
