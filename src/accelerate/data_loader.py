@@ -401,8 +401,8 @@ class DataLoaderShard(DataLoader):
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
         return (
             batch_sampler.batch_size
-            if batch_sampler.split_batches
-            else (batch_sampler.batch_size * batch_sampler.num_processes)
+            if getattr(batch_sampler, "split_batches", False)
+            else (batch_sampler.batch_size * getattr(batch_sampler, "num_processes", 1))
         )
 
     @property
