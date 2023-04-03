@@ -26,6 +26,7 @@ from accelerate.utils import (
     extract_model_from_parallel,
     find_device,
     patch_environment,
+    recursively_apply,
     send_to_device,
 )
 
@@ -72,6 +73,16 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(torch.equal(result4["b"][0].cpu(), tensor))
         self.assertTrue(torch.equal(result4["b"][1].cpu(), tensor))
         self.assertEqual(result4["c"], 1)
+
+    def test_honor_type(self):
+        with self.assertRaises(TypeError) as cm:
+            _ = recursively_apply(torch.tensor, (torch.tensor(1), 1), error_on_other_type=True)
+        for substring in [
+            "Can't apply",
+            "on object of type",
+            "only of nested list/tuple/dicts of objects that satisfy",
+        ]:
+            assert substring in str(cm.exception)
 
     def test_patch_environment(self):
         with patch_environment(aa=1, BB=2):
