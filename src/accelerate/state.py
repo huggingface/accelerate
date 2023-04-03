@@ -552,8 +552,7 @@ class AcceleratorState:
             )
             if mixed_precision == "fp8" and not is_fp8_available():
                 raise ValueError(
-                    "Using `fp8` precision requires `transformer_engine` to be installed and utilizing supported hardware. "
-                    "Currently your system is not supported."
+                    "Using `fp8` precision requires `transformer_engine` to be installed and utilizing supported hardware."
                 )
             self.dynamo_plugin = dynamo_plugin
             if not _from_accelerator:
