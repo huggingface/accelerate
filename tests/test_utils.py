@@ -77,12 +77,10 @@ class UtilsTester(unittest.TestCase):
     def test_honor_type(self):
         with self.assertRaises(TypeError) as cm:
             _ = recursively_apply(torch.tensor, (torch.tensor(1), 1), error_on_other_type=True)
-        for substring in [
-            "Can't apply",
-            "on object of type",
-            "only of nested list/tuple/dicts of objects that satisfy",
-        ]:
-            assert substring in str(cm.exception)
+        self.assertEqual(
+            str(cm.exception),
+            "Unsupported types (<class 'int'>) passed to `tensor`. Only nested list/tuple/dicts of objects that are valid for `is_torch_tensor` should be passed.",
+        )
 
     def test_patch_environment(self):
         with patch_environment(aa=1, BB=2):

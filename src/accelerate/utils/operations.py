@@ -116,8 +116,8 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
         return func(data, *args, **kwargs)
     elif error_on_other_type:
         raise TypeError(
-            f"Can't apply {func.__name__} on object of type {type(data)}, only of nested list/tuple/dicts of objects "
-            f"that satisfy {test_type.__name__}."
+            f"Unsupported types ({type(data)}) passed to `{func.__name__}`. Only nested list/tuple/dicts of "
+            f"objects that are valid for `{test_type.__name__}` should be passed."
         )
     return data
 
@@ -206,7 +206,9 @@ def _tpu_gather(tensor, name="gather tensor"):
     elif isinstance(tensor, Mapping):
         return type(tensor)({k: _tpu_gather(v, name=f"{name}_{k}") for k, v in tensor.items()})
     elif not isinstance(tensor, torch.Tensor):
-        raise TypeError(f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors.")
+        raise TypeError(
+            f"Can't gather the values of type {type(tensor)}, only nested list/tuple/dicts of tensors are supported."
+        )
     if tensor.ndim == 0:
         tensor = tensor.clone()[None]
     return xm.mesh_reduce(name, tensor, torch.cat)
