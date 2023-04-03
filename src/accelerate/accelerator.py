@@ -2576,7 +2576,7 @@ class Accelerator:
 
         if state_dict is not None:
             for k in state_dict:
-                if state_dict[k].dtype == torch.float16:
+                if getattr(state_dict[k], "dtype", None) == torch.float16:
                     state_dict[k] = state_dict[k].float()
 
         return state_dict
