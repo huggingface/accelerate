@@ -17,6 +17,7 @@ import sys
 import tempfile
 
 import torch
+from torch.multiprocessing.spawn import ProcessRaisedException
 
 from .state import AcceleratorState
 from .utils import PrecisionType, PrepareForLaunch, is_mps_available, patch_environment
@@ -133,7 +134,15 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                 launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
 
                 print(f"Launching training on {num_processes} GPUs.")
-                start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
+                try:
+                    start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
+                except ProcessRaisedException as e:
+                    if "Cannot re-initialize CUDA in forked subprocess" in e.args[0]:
+                        raise RuntimeError(
+                            "CUDA has been initialized before the `notebook_launcher` could create a forked subprocess. "
+                            "Please make sure no code ran initializes CUDA by checking `import torch; torch.cuda.is_initialized()`, "
+                            "and ensure that no outside imports are causing issues once the `notebook_launcher()` is called."
+                        ) from e
 
         else:
             # No need for a distributed launch otherwise as it's either CPU, GPU or MPS.
