@@ -17,7 +17,6 @@ import sys
 import tempfile
 
 import torch
-from torch.multiprocessing.spawn import ProcessRaisedException
 
 from .state import AcceleratorState
 from .utils import PrecisionType, PrepareForLaunch, is_mps_available, patch_environment
@@ -111,6 +110,7 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
         if num_processes > 1:
             # Multi-GPU launch
             from torch.multiprocessing import start_processes
+            from torch.multiprocessing.spawn import ProcessRaisedException
 
             if len(AcceleratorState._shared_state) > 0:
                 raise ValueError(
@@ -132,7 +132,6 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                 world_size=num_processes, master_addr="127.0.01", master_port=use_port, mixed_precision=mixed_precision
             ):
                 launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
-
                 print(f"Launching training on {num_processes} GPUs.")
                 try:
                     start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
