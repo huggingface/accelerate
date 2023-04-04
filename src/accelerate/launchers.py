@@ -140,8 +140,9 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                     if "Cannot re-initialize CUDA in forked subprocess" in e.args[0]:
                         raise RuntimeError(
                             "CUDA has been initialized before the `notebook_launcher` could create a forked subprocess. "
-                            "Please make sure no code ran initializes CUDA by checking `import torch; torch.cuda.is_initialized()`, "
-                            "and ensure that no outside imports are causing issues once the `notebook_launcher()` is called."
+                            "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
+                            "Please review your imports and test them when running the `notebook_launcher()` to identify "
+                            "which one is problematic."
                         ) from e
 
         else:
