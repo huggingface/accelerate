@@ -106,12 +106,12 @@ class PartialState:
                     self.process_index = torch.distributed.get_rank()
                     self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                     if self.device is None:
-                        self.device = torch.device("cuda", self.local_process_index)
                         if is_xpu_available():
-                            self.device = torch.device("xpu", self.local_process_index)
-                    torch.cuda.set_device(self.device)
-                    if is_xpu_available():
-                        torch.xpu.set_device(self.device)
+                            self.device = torch.device("xpu", self.local_process_index)  
+                            torch.xpu.set_device(self.device)
+                        else:
+                            self.device = torch.device("cuda", self.local_process_index)
+                            torch.cuda.set_device(self.device)
             elif is_tpu_available() and not cpu:
                 self.distributed_type = DistributedType.TPU
                 self.num_processes = xm.xrt_world_size()
@@ -139,12 +139,12 @@ class PartialState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 if self.device is None:
-                    self.device = torch.device("cuda", self.local_process_index)
                     if is_xpu_available():
                         self.device = torch.device("xpu", self.local_process_index)
-                torch.cuda.set_device(self.device)
-                if is_xpu_available():
-                    torch.xpu.set_device(self.device)
+                        torch.xpu.set_device(self.device)
+                    else:
+                        self.device = torch.device("cuda", self.local_process_index)
+                        torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
@@ -158,12 +158,12 @@ class PartialState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 if self.device is None:
-                    self.device = torch.device("cuda", self.local_process_index)
                     if is_xpu_available():
-                        self.device= torch.device("xpu",self.local_process_index)
-                torch.cuda.set_device(self.device)
-                if is_xpu_available():
-                    torch.xpu.set_device(self.device)
+                        self.device = torch.device("xpu", self.local_process_index)
+                        torch.xpu.set_device(self.device)
+                    else:
+                        self.device = torch.device("cuda", self.local_process_index)
+                        torch.cuda.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
