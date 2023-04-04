@@ -69,16 +69,17 @@ def get_raw_chars():
         encoding = "mbcs"
         # Flush the keyboard buffer
         while msvcrt.kbhit():
-            msvcrt.getwch()
+            msvcrt.getch()
         if len(WIN_CH_BUFFER) == 0:
             # Read the keystroke
-            ch = msvcrt.getwch()
+            ch = msvcrt.getch()
+
             # If it is a prefix char, get second part
-            if ch.encode(encoding) in (b"\x00", b"\xe0"):
-                ch2 = ch + msvcrt.getwch()
+            if ch in (b"\x00", b"\xe0"):
+                ch2 = ch + msvcrt.getch()
                 # Translate actual Win chars to bullet char types
                 try:
-                    chx = chr(WIN_KEYMAP[ch2.encode(encoding)])
+                    chx = chr(WIN_KEYMAP[ch2])
                     WIN_CH_BUFFER.append(chr(KEYMAP["mod_int"]))
                     WIN_CH_BUFFER.append(chx)
                     if ord(chx) in (
@@ -92,7 +93,7 @@ def get_raw_chars():
                 except KeyError:
                     ch = ch2[1]
             else:
-                pass
+                ch = ch.decode(encoding)
         else:
             ch = WIN_CH_BUFFER.pop(0)
     elif os.name == "posix":

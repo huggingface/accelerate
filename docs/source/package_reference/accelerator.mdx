@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 # Accelerator
 
 The [`Accelerator`] is the main class provided by 🤗 Accelerate. 
-It serves at the main entrypoint for the API. 
+It serves at the main entry point for the API. 
 
 ## Quick adaptation of your code
 
@@ -45,7 +45,7 @@ you should search for and replace by the corresponding methods of your `accelera
 
 ### Printing
 
-`print` statements should be replaced by [`~Accelerator.print`] to be printed once per process
+`print` statements should be replaced by [`~Accelerator.print`] to be printed once per process:
 
 ```diff
 - print("My thing I want to print!")
@@ -113,7 +113,7 @@ def do_my_thing():
 
 ### Synchronicity control
 
-Use [`~Accelerator.wait_for_everyone`] to make sure all processes join that point before continuing. (Useful before a model save for instance)
+Use [`~Accelerator.wait_for_everyone`] to make sure all processes join that point before continuing. (Useful before a model save for instance).
 
 ### Saving and loading
 

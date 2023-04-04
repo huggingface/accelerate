@@ -20,6 +20,7 @@ from distutils.util import strtobool
 from functools import lru_cache
 
 import torch
+from packaging import version
 from packaging.version import parse
 
 from .environment import parse_flag_from_env
@@ -46,6 +47,15 @@ try:
 except ImportError:
     _xpu_available = False
     
+
+# Cache this result has it's a C FFI call which can be pretty time-consuming
+_torch_distributed_available = torch.distributed.is_available()
+
+
+def is_torch_distributed_available() -> bool:
+    return _torch_distributed_available
+
+
 def is_ccl_available():
     try:
         import oneccl_bindings_for_pytorch
@@ -69,6 +79,10 @@ def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
+def is_fp8_available():
+    return importlib.util.find_spec("transformer_engine") is not None
+
+
 @lru_cache()
 def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
@@ -84,7 +98,7 @@ def is_tpu_available(check_device=True):
 
 @lru_cache()
 def is_xpu_available(check_device=True):
-    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
+    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
     if _xpu_available and check_device:
         try:
             # Will raise a RuntimeError if no XPU  is found
@@ -186,3 +200,26 @@ def is_mlflow_available():
 
 def is_mps_available():
     return is_torch_version(">=", "1.12") and torch.backends.mps.is_available() and torch.backends.mps.is_built()
+
+
+def is_ipex_available():
+    def get_major_and_minor_from_version(full_version):
+        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
+
+    _torch_version = importlib_metadata.version("torch")
+    if importlib.util.find_spec("intel_extension_for_pytorch") is None:
+        return False
+    _ipex_version = "N/A"
+    try:
+        _ipex_version = importlib_metadata.version("intel_extension_for_pytorch")
+    except importlib_metadata.PackageNotFoundError:
+        return False
+    torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
+    ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
+    if torch_major_and_minor != ipex_major_and_minor:
+        warnings.warn(
+            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
+            f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
+        )
+        return False
+    return True

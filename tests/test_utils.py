@@ -26,6 +26,7 @@ from accelerate.utils import (
     extract_model_from_parallel,
     find_device,
     patch_environment,
+    recursively_apply,
     send_to_device,
 )
 
@@ -72,6 +73,14 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(torch.equal(result4["b"][0].cpu(), tensor))
         self.assertTrue(torch.equal(result4["b"][1].cpu(), tensor))
         self.assertEqual(result4["c"], 1)
+
+    def test_honor_type(self):
+        with self.assertRaises(TypeError) as cm:
+            _ = recursively_apply(torch.tensor, (torch.tensor(1), 1), error_on_other_type=True)
+        self.assertEqual(
+            str(cm.exception),
+            "Unsupported types (<class 'int'>) passed to `tensor`. Only nested list/tuple/dicts of objects that are valid for `is_torch_tensor` should be passed.",
+        )
 
     def test_patch_environment(self):
         with patch_environment(aa=1, BB=2):

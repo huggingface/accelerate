@@ -69,7 +69,7 @@ def get_logger(name: str, log_level: str = None):
     >>> logger.info("My log", main_process_only=False)
     >>> logger.debug("My log", main_process_only=True)
 
-    >>> logger = get_logger(__name__, accelerate_log_level="DEBUG")
+    >>> logger = get_logger(__name__, log_level="DEBUG")
     >>> logger.info("My log")
     >>> logger.debug("My second log")
     ```

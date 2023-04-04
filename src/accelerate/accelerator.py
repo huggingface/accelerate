@@ -13,8 +13,10 @@
 # limitations under the License.
 
 import contextlib
+import inspect
 import math
 import os
+import re
 import shutil
 import sys
 import warnings
@@ -39,22 +41,30 @@ from .utils import (
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
+    FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
+    GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
+    IntelPyTorchExtensionPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
     PrecisionType,
     ProjectConfiguration,
     RNGType,
+    TorchDynamoPlugin,
     compare_versions,
+    convert_model,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
     get_pretty_name,
+    has_transformer_engine_layers,
     is_bf16_available,
     is_deepspeed_available,
+    is_fp8_available,
+    is_ipex_available,
     is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
@@ -80,6 +90,11 @@ if is_deepspeed_available():
         DummyScheduler,
     )
 
+if is_fp8_available():
+    import transformer_engine.common.recipe as te_recipe
+    from transformer_engine.pytorch import fp8_autocast
+
+
 if is_megatron_lm_available():
     from .utils import (
         MegatronEngine,
@@ -103,9 +118,9 @@ if is_tpu_available(check_device=False):
 
 
 try:
-    from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
+    from torch.optim.lr_scheduler import LRScheduler
 except ImportError:
-    from torch.optim.lr_scheduler import LRScheduler as LRScheduler
+    from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 
 logger = get_logger(__name__)
 
@@ -124,14 +139,15 @@ class Accelerator:
             round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
             in your script multiplied by the number of processes.
         mixed_precision (`str`, *optional*):
-            Whether or not to use mixed precision training (fp16 or bfloat16). Choose from 'no','fp16','bf16'. Will
-            default to the value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default
-            value in the accelerate config of the current system or the flag passed with the `accelerate.launch`
-            command. 'fp16' requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher.
+            Whether or not to use mixed precision training. Choose from 'no','fp16','bf16 or 'fp8'. Will default to the
+            value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
+            accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
+            requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher. 'fp8' requires the installation of
+            transformers-engine.
         gradient_accumulation_steps (`int`, *optional*, default to 1):
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
             `Accelerator.accumulate`. If not passed, will default to the value in the environment variable
-            `ACCELERATE_GRADIENT_ACCUMULATION_STEPS`.
+            `ACCELERATE_GRADIENT_ACCUMULATION_STEPS`. Can also be configured through a `GradientAccumulationPlugin`.
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
@@ -144,6 +160,9 @@ class Accelerator:
         megatron_lm_plugin (`MegatronLMPlugin`, *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
+        ipex_plugin (`IntelExtensionPlugin`, *optional*):
+            Tweak your Intel Extension for PyTorch related args using this argument. This argument is optional and can
+            be configured directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -185,6 +204,9 @@ class Accelerator:
             are created. See [kwargs](kwargs) for more information.
         dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
+        gradient_accumulation_plugin (`GradientAccumulationPlugin`, *optional*):
+            A configuration for how gradient accumulation should be handled, if more tweaking than just the
+            `gradient_accumulation_steps` is needed.
 
     **Available attributes:**
 
@@ -212,11 +234,13 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin = None,
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
         megatron_lm_plugin: MegatronLMPlugin = None,
+        ipex_plugin: IntelPyTorchExtensionPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         project_dir: Optional[Union[str, os.PathLike]] = None,
         project_config: Optional[ProjectConfiguration] = None,
         logging_dir: Optional[Union[str, os.PathLike]] = None,
+        gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None,
         dispatch_batches: Optional[bool] = None,
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
@@ -243,8 +267,7 @@ class Accelerator:
                     f"Unknown mixed_precision mode: {mixed_precision}. Choose between {PrecisionType.list()}"
                 )
 
-        if dynamo_backend is not None:
-            dynamo_backend = DynamoBackend(dynamo_backend.upper())
+        dynamo_plugin = TorchDynamoPlugin() if dynamo_backend is None else TorchDynamoPlugin(backend=dynamo_backend)
 
         if deepspeed_plugin is None:  # init from env variables
             deepspeed_plugin = (
@@ -295,10 +318,17 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
+        if ipex_plugin is None:  # init from env variables
+            ipex_plugin = IntelPyTorchExtensionPlugin() if os.environ.get("IPEX_ENABLED", "false") == "true" else None
+        else:
+            if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
+                raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
+
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
         self.init_handler = None
+        self.fp8_recipe_handler = None
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
                 assert isinstance(
@@ -319,15 +349,21 @@ class Accelerator:
                         raise ValueError("You can only pass one `InitProcessGroupKwargs` in `kwargs_handler`.")
                     else:
                         self.init_handler = handler
+                elif isinstance(handler, FP8RecipeKwargs):
+                    if self.fp8_recipe_handler is not None:
+                        raise ValueError("You can only pass one `FP8RecipeKwargs` in `kwargs_handler`.")
+                    else:
+                        self.fp8_recipe_handler = handler
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
             cpu=cpu,
-            dynamo_backend=dynamo_backend,
+            dynamo_plugin=dynamo_plugin,
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
+            ipex_plugin=ipex_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -344,14 +380,25 @@ class Accelerator:
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
-        if gradient_accumulation_steps > 1:
-            if self.state.distributed_type == DistributedType.TPU:
-                raise NotImplementedError(
-                    "Gradient accumulation on TPU is not supported. Pass in `gradient_accumulation_steps=1`"
+        if gradient_accumulation_plugin is not None:
+            if gradient_accumulation_steps != 1:
+                raise ValueError(
+                    "You can only pass one of `gradient_accumulation_steps` and `gradient_accumulation_plugin`. Please only pass in the created `GradientAccumulationPlugin` object."
                 )
-        self.gradient_accumulation_steps = int(
-            parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
+        else:
+            gradient_accumulation_steps = int(
+                parse_choice_from_env("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", gradient_accumulation_steps)
+            )
+            gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=gradient_accumulation_steps)
+        self.gradient_state = GradientState(
+            gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
+        if self.state.distributed_type == DistributedType.TPU:
+            if self.gradient_state.num_steps != 1:
+                raise ValueError(
+                    "Gradient accumulation is not supported on TPU. Please set `gradient_accumulation_steps` to 1 and don't pass in a `GradientAccumulationPlugin` object."
+                )
+
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
@@ -387,7 +434,6 @@ class Accelerator:
                 
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
-            DistributedType.FSDP,
             DistributedType.MEGATRON_LM,
         ):
             if self.device.type == "cpu":
@@ -399,7 +445,6 @@ class Accelerator:
 
         # Start of internal step tracking
         self.step = 0
-        self.gradient_state = GradientState()
 
         # Internal references to the training objects
         self._optimizers = []
@@ -516,7 +561,11 @@ class Accelerator:
                 raise ValueError(
                     "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-        return PartialState().on_main_process(function)
+
+        def _inner(*args, **kwargs):
+            return PartialState().on_main_process(function)(*args, **kwargs)
+
+        return _inner
 
     def on_local_main_process(self, function: Callable[..., Any] = None):
         """
@@ -554,7 +603,11 @@ class Accelerator:
                 raise ValueError(
                     "The `on_local_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-        return PartialState().on_local_main_process(function)
+
+        def _inner(*args, **kwargs):
+            return PartialState().on_local_main_process(function)(*args, **kwargs)
+
+        return _inner
 
     def on_last_process(self, function: Callable[..., Any]):
         """
@@ -589,7 +642,11 @@ class Accelerator:
                 raise ValueError(
                     "The `on_last_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-        return PartialState().on_last_process(function)
+
+        def _inner(*args, **kwargs):
+            return PartialState().on_last_process(function)(*args, **kwargs)
+
+        return _inner
 
     def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
         """
@@ -630,7 +687,11 @@ class Accelerator:
                 raise ValueError(
                     "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-        return PartialState().on_process(function, process_index)
+
+        def _inner(*args, **kwargs):
+            return PartialState().on_process(function, process_index)(*args, **kwargs)
+
+        return _inner
 
     def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
         """
@@ -674,7 +735,11 @@ class Accelerator:
                 raise ValueError(
                     "The `on_main_process` decorator must be called with a function on an instantiated `Accelerator` object."
                 )
-        return PartialState().on_local_process(function, local_process_index)
+
+        def _inner(*args, **kwargs):
+            return PartialState().on_local_process(function, local_process_index)(*args, **kwargs)
+
+        return _inner
 
     @contextmanager
     def main_process_first(self):
@@ -766,11 +831,23 @@ class Accelerator:
             self.gradient_state._set_sync_gradients(True)
         else:
             self.step += 1
-            self.gradient_state._set_sync_gradients((self.step % self.gradient_accumulation_steps) == 0)
+            self.gradient_state._set_sync_gradients((self.step % self.gradient_state.num_steps) == 0)
 
     @property
     def sync_gradients(self):
         return self.gradient_state.sync_gradients
+
+    @sync_gradients.setter
+    def sync_gradients(self, sync_gradients):
+        self.gradient_state.sync_gradients = sync_gradients
+
+    @property
+    def gradient_accumulation_steps(self):
+        return self.gradient_state.num_steps
+
+    @gradient_accumulation_steps.setter
+    def gradient_accumulation_steps(self, gradient_accumulation_steps):
+        self.gradient_state.plugin_kwargs.update({"num_steps": gradient_accumulation_steps})
 
     @contextmanager
     def accumulate(self, model):
@@ -786,11 +863,11 @@ class Accelerator:
         ```python
         >>> from accelerate import Accelerator
 
-        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
+        >>> accelerator = Accelerator(gradient_accumulation_steps=1)
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
 
-        >>> with accelerator.accumulate():
-        ...     for input, output in dataloader:
+        >>> for input, output in dataloader:
+        ...     with accelerator.accumulate(model):
         ...         outputs = model(input)
         ...         loss = loss_func(outputs)
         ...         loss.backward()
@@ -1051,10 +1128,13 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
-        if tpu_should_fix_optimizer:
+        if tpu_should_fix_optimizer or self.mixed_precision == "fp8":
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
+        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
+            if self.device.type == "cpu" and self.state.ipex_plugin is not None:
+                args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1065,7 +1145,7 @@ class Accelerator:
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-        if tpu_should_fix_optimizer:
+        if tpu_should_fix_optimizer or self.mixed_precision == "fp8":
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
@@ -1105,12 +1185,38 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
-        if device_placement:
-            model = model.to(self.device)
-        if self.state.dynamo_backend != DynamoBackend.NO:
-            import torch._dynamo as dynamo
+        # We check only for models loaded with `accelerate`
 
-            model = dynamo.optimize(self.state.dynamo_backend.value.lower())(model)
+        # Checks if any of the child module has the attribute `hf_device_map`.
+        has_hf_device_map = False
+        for m in model.modules():
+            if hasattr(m, "hf_device_map"):
+                has_hf_device_map = True
+                break
+
+        if getattr(model, "is_loaded_in_8bit", False) and getattr(model, "hf_device_map", False):
+            model_devices = set(model.hf_device_map.values())
+            if len(model_devices) > 1:
+                raise ValueError(
+                    "You can't train a model that has been loaded in 8-bit precision on multiple devices."
+                )
+
+            current_device_index = list(model_devices)[0]
+            if torch.device(current_device_index) != self.device:
+                # if on the first device (GPU 0) we don't care
+                if (self.device.index is not None) or (current_device_index != 0):
+                    raise ValueError(
+                        "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
+                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}"
+                    )
+
+            if "cpu" in model_devices or "disk" in model_devices:
+                raise ValueError(
+                    "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
+                )
+        elif device_placement and not has_hf_device_map:
+            model = model.to(self.device)
+
         if self.distributed_type == DistributedType.MULTI_GPU:
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
@@ -1125,17 +1231,21 @@ class Accelerator:
             if type(model) != FSDP:
                 self.state.fsdp_plugin.set_auto_wrap_policy(model)
                 fsdp_plugin = self.state.fsdp_plugin
-                model = FSDP(
-                    model,
-                    sharding_strategy=fsdp_plugin.sharding_strategy,
-                    cpu_offload=fsdp_plugin.cpu_offload,
-                    auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
-                    backward_prefetch=fsdp_plugin.backward_prefetch,
-                    mixed_precision=fsdp_plugin.mixed_precision_policy,
-                    ignored_modules=fsdp_plugin.ignored_modules,
-                    device_id=self.device,
-                    limit_all_gathers=fsdp_plugin.limit_all_gathers,
-                )
+                kwargs = {
+                    "sharding_strategy": fsdp_plugin.sharding_strategy,
+                    "cpu_offload": fsdp_plugin.cpu_offload,
+                    "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
+                    "backward_prefetch": fsdp_plugin.backward_prefetch,
+                    "mixed_precision": fsdp_plugin.mixed_precision_policy,
+                    "ignored_modules": fsdp_plugin.ignored_modules,
+                    "device_id": self.device,
+                }
+                signature = inspect.signature(FSDP.__init__).parameters.keys()
+                if "limit_all_gathers" in signature:
+                    kwargs["limit_all_gathers"] = fsdp_plugin.limit_all_gathers
+                if "use_orig_params" in signature:
+                    kwargs["use_orig_params"] = fsdp_plugin.use_orig_params
+                model = FSDP(model, **kwargs)
             self._models[-1] = model
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
@@ -1149,14 +1259,39 @@ class Accelerator:
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
             model.forward = convert_outputs_to_fp32(model.forward)
+        elif self.mixed_precision == "fp8":
+            if not has_transformer_engine_layers(model):
+                with torch.no_grad():
+                    convert_model(model)
+                model._converted_to_transformer_engine = True
+            model._original_forward = model.forward
+
+            kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
+            if "fp8_format" in kwargs:
+                kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
+            fp8_recipe = te_recipe.DelayedScaling(**kwargs)
+            fp8_enabled = torch.cuda.get_device_capability()[0] >= 9
+            if not fp8_enabled:
+                logger.warn(
+                    f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
+                    "insufficient for FP8 mixed precision training (requires a GPU Hopper or higher, compute "
+                    "capability of 9 or higher). Will use FP16 instead."
+                )
+            model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
+        # torch.compile should be called last.
+        if self.state.dynamo_plugin.backend != DynamoBackend.NO:
+            if not hasattr(torch, "compile"):
+                raise ValueError("Using torch.compile requires PyTorch 2.0 or higher.")
+            model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
     def _prepare_deepspeed(self, *args):
         deepspeed_plugin = self.state.deepspeed_plugin
 
-        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto":
+        is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
+        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto" or is_dataloader_present:
             result = [
                 self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
                 for obj in args
@@ -1165,6 +1300,13 @@ class Accelerator:
             batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
             if self.split_batches:
                 batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
+
+            if any(bs is None for bs in batch_sizes):
+                raise ValueError(
+                    "At least one of the dataloaders passed to `accelerate.prepare()` has `None` as batch size."
+                    "Please set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file"
+                    "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
+                )
             if len(batch_sizes) == 0:
                 raise ValueError(
                     "When using DeepSpeed `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
@@ -1285,6 +1427,14 @@ class Accelerator:
                 if isinstance(optimizer, (DummyOptim)):
                     kwargs["model_parameters"] = optimizer.params
                 else:
+                    if (
+                        self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get("device", "none")
+                        != "none"
+                    ):
+                        from deepspeed.ops.adam import DeepSpeedCPUAdam
+
+                        defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
+                        optimizer = DeepSpeedCPUAdam(optimizer.param_groups, **defaults)
                     kwargs["optimizer"] = optimizer
                     if scheduler is not None:
                         if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
@@ -1427,6 +1577,37 @@ class Accelerator:
             )
         return tuple(result)
 
+    def _prepare_ipex(self, *args):
+        ipex_plugin = self.state.ipex_plugin
+        if not is_ipex_available():
+            raise ImportError(
+                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
+            )
+        import intel_extension_for_pytorch as ipex
+
+        model = None
+        optimizer = None
+        result = [obj for obj in args]
+        for obj in result:
+            if isinstance(obj, torch.nn.Module):
+                model = obj
+            elif isinstance(obj, (torch.optim.Optimizer)):
+                optimizer = obj
+        if optimizer is not None:
+            if not model.training:
+                model.train()
+            model, optimizer = ipex.optimize(
+                model, dtype=ipex_plugin.dtype, optimizer=optimizer, inplace=True, level="O1"
+            )
+            model.forward = torch.cpu.amp.autocast(dtype=ipex_plugin.dtype)(model.forward)
+        for i in range(len(result)):
+            if isinstance(result[i], torch.nn.Module):
+                result[i] = model
+            elif isinstance(result[i], (torch.optim.Optimizer)):
+                result[i] = optimizer
+        return tuple(result)
+
     def prepare_data_loader(self, data_loader: torch.utils.data.DataLoader, device_placement=None):
         """
         Prepares a PyTorch DataLoader for training in any distributed setup. It is recommended to use
@@ -1532,8 +1713,8 @@ class Accelerator:
 
     def backward(self, loss, **kwargs):
         """
-        Scales the gradients in accordance to `Accelerator.gradient_accumulation_steps` and calls the correct
-        `backward()` based on the configuration.
+        Scales the gradients in accordance to the `GradientAccumulationPlugin` and calls the correct `backward()` based
+        on the configuration.
 
         Should be used in lieu of `loss.backward()`.
 
@@ -1542,7 +1723,7 @@ class Accelerator:
         ```python
         >>> from accelerate import Accelerator
 
-        >>> accelerator = Accelerator(gradient_accumulation_steps=1)
+        >>> accelerator = Accelerator(gradient_accumulation_steps=2)
         >>> outputs = model(inputs)
         >>> loss = loss_fn(outputs, labels)
         >>> accelerator.backward(loss)
@@ -2092,7 +2273,11 @@ class Accelerator:
             if self.project_configuration.total_limit is not None and (
                 len(folders) + 1 > self.project_configuration.total_limit
             ):
-                folders.sort()
+
+                def _inner(folder):
+                    return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
+
+                folders.sort(key=_inner)
                 logger.warning(
                     f"Deleting {len(folders) + 1 - self.project_configuration.total_limit} checkpoints to make room for new checkpoint."
                 )
@@ -2396,7 +2581,7 @@ class Accelerator:
 
         if state_dict is not None:
             for k in state_dict:
-                if state_dict[k].dtype == torch.float16:
+                if getattr(state_dict[k], "dtype", None) == torch.float16:
                     state_dict[k] = state_dict[k].float()
 
         return state_dict

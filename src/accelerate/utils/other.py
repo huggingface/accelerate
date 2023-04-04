@@ -21,6 +21,7 @@ from ..commands.config.default import write_basic_config  # noqa: F401
 from ..state import PartialState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
+from .transformer_engine import convert_model
 
 
 if is_deepspeed_available():
@@ -59,6 +60,8 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
                 if forward == original_forward:
                     break
             model.forward = forward
+        if getattr(model, "_converted_to_transformer_engine", False):
+            convert_model(model, to_transformer_engine=False)
     return model
 
 
@@ -113,7 +116,8 @@ def patch_environment(**kwargs):
     yield
 
     for key in kwargs:
-        del os.environ[key.upper()]
+        if key.upper() in os.environ:
+            del os.environ[key.upper()]
 
 
 def get_pretty_name(obj):
@@ -127,3 +131,21 @@ def get_pretty_name(obj):
     if hasattr(obj, "__name__"):
         return obj.__name__
     return str(obj)
+
+
+def merge_dicts(source, destination):
+    """
+    Recursively merges two dictionaries.
+
+    Args:
+        source (`dict`): The dictionary to merge into `destination`.
+        destination (`dict`): The dictionary to merge `source` into.
+    """
+    for key, value in source.items():
+        if isinstance(value, dict):
+            node = destination.setdefault(key, {})
+            merge_dicts(value, node)
+        else:
+            destination[key] = value
+
+    return destination

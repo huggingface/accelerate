@@ -19,7 +19,6 @@ import os
 from ...utils import (
     ComputeEnvironment,
     DistributedType,
-    DynamoBackend,
     is_deepspeed_available,
     is_mps_available,
     is_transformers_available,
@@ -30,9 +29,11 @@ from ...utils.constants import (
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
     FSDP_STATE_DICT_TYPE,
+    TORCH_DYNAMO_MODES,
 )
 from .config_args import ClusterConfig
 from .config_utils import (
+    DYNAMO_BACKENDS,
     _ask_field,
     _ask_options,
     _convert_distributed_mode,
@@ -100,6 +101,16 @@ def get_cluster_input():
     else:
         use_cpu = False
 
+    ipex_config = {}
+    if use_cpu:
+        ipex_config["ipex_enabled"] = _ask_field(
+            "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU? [yes/NO]:",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+
+    dynamo_config = {}
     use_dynamo = _ask_field(
         "Do you wish to optimize your script with torch dynamo?[yes/NO]:",
         _convert_yes_no_to_bool,
@@ -107,25 +118,39 @@ def get_cluster_input():
         error_message="Please enter yes or no.",
     )
     if use_dynamo:
-        dynamo_backend = _ask_options(
+        prefix = "dynamo_"
+        dynamo_config[prefix + "backend"] = _ask_options(
             "Which dynamo backend would you like to use?",
-            [
-                "eager",
-                "aot_eager",
-                "inductor",
-                "nvfuser",
-                "aot_nvfuser",
-                "aot_cudagraphs",
-                "ofi",
-                "fx2trt",
-                "onnxrt",
-                "ipex",
-            ],
+            [x.lower() for x in DYNAMO_BACKENDS],
             _convert_dynamo_backend,
             default=2,
         )
-    else:
-        dynamo_backend = DynamoBackend.NO
+        use_custom_options = _ask_field(
+            "Do you want to customize the defaults sent to torch.compile? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+
+        if use_custom_options:
+            dynamo_config[prefix + "mode"] = _ask_options(
+                "Which mode do you want to use?",
+                TORCH_DYNAMO_MODES,
+                lambda x: TORCH_DYNAMO_MODES[int(x)],
+                default=0,
+            )
+            dynamo_config[prefix + "use_fullgraph"] = _ask_field(
+                "Do you want the fullgraph mode or it is ok to break model into several subgraphs? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            dynamo_config[prefix + "use_dynamic"] = _ask_field(
+                "Do you want to enable dynamic shape tracing? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
 
     use_mps = not use_cpu and is_mps_available()
     deepspeed_config = {}
@@ -282,7 +307,8 @@ def get_cluster_input():
             )
             if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
                 fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
-                    "What is the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ...? : ",
+                    "Specify the comma-separated list of transformer layer class names (case-sensitive) to wrap ,e.g, :"
+                    "`BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput` ...? : ",
                     str,
                 )
             elif fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[1]:
@@ -485,7 +511,7 @@ def get_cluster_input():
         else:
             mixed_precision = _ask_options(
                 "Do you wish to use FP16 or BF16 (mixed precision)?",
-                ["no", "fp16", "bf16"],
+                ["no", "fp16", "bf16", "fp8"],
                 _convert_mixed_precision,
             )
 
@@ -514,6 +540,7 @@ def get_cluster_input():
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
         megatron_lm_config=megatron_lm_config,
+        ipex_config=ipex_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
         same_network=same_network,
@@ -525,5 +552,5 @@ def get_cluster_input():
         tpu_zone=tpu_zone,
         tpu_use_sudo=tpu_use_sudo,
         tpu_use_cluster=tpu_use_cluster,
-        dynamo_backend=dynamo_backend,
+        dynamo_config=dynamo_config,
     )

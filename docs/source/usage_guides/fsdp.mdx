@@ -67,7 +67,8 @@ Currently, `Accelerate` supports the following config through the CLI:
 `Sharding Strategy`: [1] FULL_SHARD (shards optimizer states, gradients and parameters), [2] SHARD_GRAD_OP (shards optimizer states and gradients), [3] NO_SHARD
 `Offload Params`: Decides Whether to offload parameters and gradients to CPU
 `Auto Wrap Policy`: [1] TRANSFORMER_BASED_WRAP, [2] SIZE_BASED_WRAP, [3] NO_WRAP 
-`Transformer Layer Class to Wrap`: When using `TRANSFORMER_BASED_WRAP`, user specifies transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block`...
+`Transformer Layer Class to Wrap`: When using `TRANSFORMER_BASED_WRAP`, user specifies comma-separated string of transformer layer class names (case-sensitive) to wrap ,e.g, 
+`BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput`...
 `Min Num Params`: minimum number of parameters when using `SIZE_BASED_WRAP`
 `Backward Prefetch`: [1] BACKWARD_PRE, [2] BACKWARD_POST, [3] NO_PREFETCH
 `State Dict Type`: [1] FULL_STATE_DICT, [2] LOCAL_STATE_DICT, [3] SHARDED_STATE_DICT  
@@ -86,6 +87,22 @@ Currently, `Accelerate` supports the following config through the CLI:
 +     state_dict=accelerator.get_state_dict(model),
 )
 ```
+
+### State Dict
+
+`accelerator.get_state_dict` will call the underlying `model.state_dict` implementation.  With a model wrapped by FSDP, the default behavior of `state_dict` is to gather all of the state in the rank 0 device.  This can cause CUDA out of memory errors if the parameters don't fit on a single GPU.
+
+To avoid this, PyTorch provides a context manager that adjusts the behavior of `state_dict`.  To offload some of the state dict onto CPU, you can use the following code:
+
+```
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
+
+full_state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+with FSDP.state_dict_type(unwrapped_model, StateDictType.FULL_STATE_DICT, full_state_dict_config):
+    state = accelerator.get_state_dict(unwrapped_model)
+```
+
+You can then pass `state` into the `save_pretrained` method.  There are several modes for `StateDictType` and `FullStateDictConfig` that you can use to control the behavior of `state_dict`.  For more information, see the [PyTorch documentation](https://pytorch.org/docs/stable/fsdp.html).
 
 ## A few caveats to be aware of
 

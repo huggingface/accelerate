@@ -21,17 +21,21 @@ from functools import update_wrapper
 from typing import Any, Mapping
 
 import torch
-from torch.distributed import ReduceOp
 
 from ..state import PartialState
 from .constants import CUDA_DISTRIBUTED_TYPES,XPU_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, TensorInformation
-from .imports import is_tpu_available,is_xpu_available
+from .imports import is_torch_distributed_available, is_tpu_available, is_xpu_available
+
 from .versions import is_torch_version
 
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+
+
+if is_torch_distributed_available():
+    from torch.distributed import ReduceOp
 
 
 def is_torch_tensor(tensor):
@@ -44,15 +48,30 @@ def is_tensor_information(tensor_info):
     return isinstance(tensor_info, TensorInformation)
 
 
+def is_namedtuple(data):
+    """
+    Checks if `x` is a `namedtuple` or not. Can have false positives, but only if a user is trying to mimic a
+    `namedtuple` perfectly.
+    """
+    data_type = type(data)
+    bases = data_type.__bases__
+    if len(bases) != 1 or bases[0] != tuple:
+        return False
+    fields = getattr(data_type, "_fields", None)
+    if not isinstance(fields, tuple):
+        return False
+    return all(isinstance(member, str) for member in fields)
+
+
 def honor_type(obj, generator):
     """
     Cast a generator to the same type as obj (list, tuple, or namedtuple)
     """
-    try:
-        return type(obj)(generator)
-    except TypeError:
-        # Some objects may not be able to instantiate from a generator directly
+    # Some objects may not be able to instantiate from a generator directly
+    if is_namedtuple(obj):
         return type(obj)(*list(generator))
+    else:
+        return type(obj)(generator)
 
 
 def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_other_type=False, **kwargs):
@@ -100,8 +119,8 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
         return func(data, *args, **kwargs)
     elif error_on_other_type:
         raise TypeError(
-            f"Can't apply {func.__name__} on object of type {type(data)}, only of nested list/tuple/dicts of objects "
-            f"that satisfy {test_type.__name__}."
+            f"Unsupported types ({type(data)}) passed to `{func.__name__}`. Only nested list/tuple/dicts of "
+            f"objects that are valid for `{test_type.__name__}` should be passed."
         )
     return data
 
@@ -190,7 +209,9 @@ def _tpu_gather(tensor, name="gather tensor"):
     elif isinstance(tensor, Mapping):
         return type(tensor)({k: _tpu_gather(v, name=f"{name}_{k}") for k, v in tensor.items()})
     elif not isinstance(tensor, torch.Tensor):
-        raise TypeError(f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors.")
+        raise TypeError(
+            f"Can't gather the values of type {type(tensor)}, only nested list/tuple/dicts of tensors are supported."
+        )
     if tensor.ndim == 0:
         tensor = tensor.clone()[None]
     return xm.mesh_reduce(name, tensor, torch.cat)
@@ -440,23 +461,19 @@ def reduce(tensor, reduction="mean"):
     def _reduce_across_processes(tensor, reduction="mean"):
         state = PartialState()
         cloned_tensor = tensor.clone()
+        if state.distributed_type == DistributedType.NO:
+            return cloned_tensor
         if state.distributed_type == DistributedType.TPU:
             xm.all_reduce("sum", cloned_tensor)
-            return cloned_tensor
         elif state.distributed_type.value in CUDA_DISTRIBUTED_TYPES:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
-            return cloned_tensor
         elif state.distributed_type.value in XPU_DISTRIBUTED_TYPES:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
-            return cloned_tensor
         elif state.distributed_type == DistributedType.MULTI_CPU:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
-            return cloned_tensor
-        else:
-            if reduction == "sum":
-                return cloned_tensor.sum()
-            else:
-                return cloned_tensor.mean()
+        if reduction == "mean":
+            cloned_tensor /= state.num_processes
+        return cloned_tensor
 
     return recursively_apply(_reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction)
 

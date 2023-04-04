@@ -367,7 +367,7 @@ class DataLoaderShard(DataLoader):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
-        self.gradient_state._set_end_of_dataloader(False)
+        self.gradient_state._add_dataloader(self)
         # We can safely pass because the default is -1
         with suppress(Exception):
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
@@ -391,7 +391,7 @@ class DataLoaderShard(DataLoader):
                 batch_index += 1
                 current_batch = next_batch
             except StopIteration:
-                self.gradient_state._set_end_of_dataloader(True)
+                self.gradient_state._remove_dataloader(self)
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
@@ -401,8 +401,8 @@ class DataLoaderShard(DataLoader):
         batch_sampler = self.sampler if isinstance(self.sampler, BatchSampler) else self.batch_sampler
         return (
             batch_sampler.batch_size
-            if batch_sampler.split_batches
-            else (batch_sampler.batch_size * batch_sampler.num_processes)
+            if getattr(batch_sampler, "split_batches", False)
+            else (batch_sampler.batch_size * getattr(batch_sampler, "num_processes", 1))
         )
 
     @property
@@ -502,7 +502,7 @@ class DataLoaderDispatcher(DataLoader):
         return batch, batch_info
 
     def __iter__(self):
-        self.gradient_state._set_end_of_dataloader(False)
+        self.gradient_state._add_dataloader(self)
         main_iterator = None
         if self.state.process_index == 0:
             # We only iterate through the DataLoader on process 0.
@@ -548,8 +548,8 @@ class DataLoaderDispatcher(DataLoader):
             batch = slice_tensors(batch, data_slice)
 
             if stop_iteration:
+                self.gradient_state._remove_dataloader(self)
                 self.gradient_state._set_remainder(observed_batch_size)
-                self.gradient_state._set_end_of_dataloader(True)
             if batch_index >= self.skip_batches:
                 yield batch
             batch_index += 1
