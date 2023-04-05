@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import argparse
+from ast import literal_eval
 import importlib
 import logging
 import os
@@ -764,8 +765,18 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
         )
 
     from sagemaker.huggingface import HuggingFace
+    from sagemaker.inputs import FileSystemInput
 
     args, sagemaker_inputs = prepare_sagemager_args_inputs(sagemaker_config, args)
+    for input_name, input_value in sagemaker_inputs.items():
+        try:
+            input_dict = literal_eval(input_value)
+            if isinstance(input_dict, dict):
+                sagemaker_inputs[input_name] = FileSystemInput(**input_dict)
+            else:
+                sagemaker_inputs[input_name] = input_value
+        except (ValueError, SyntaxError):
+            sagemaker_inputs[input_name] = input_value
 
     huggingface_estimator = HuggingFace(**args)
 
