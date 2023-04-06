@@ -359,6 +359,9 @@ def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
 def prepare_sagemager_args_inputs(
     sagemaker_config: SageMakerConfig, args: argparse.Namespace
 ) -> Tuple[argparse.Namespace, Dict[str, Any]]:
+
+    from sagemaker.inputs import FileSystemInput
+
     # configure environment
     print("Configuring Amazon SageMaker environment")
     os.environ["AWS_DEFAULT_REGION"] = sagemaker_config.region
@@ -464,6 +467,17 @@ def prepare_sagemager_args_inputs(
 
     if sagemaker_config.additional_args is not None:
         args = merge_dicts(sagemaker_config.additional_args, args)
+
+    for input_name, input_value in sagemaker_inputs.items():
+        try:
+            input_dict = literal_eval(input_value)
+            if isinstance(input_dict, dict):
+                sagemaker_inputs[input_name] = FileSystemInput(**input_dict)
+            else:
+                sagemaker_inputs[input_name] = input_value
+        except ValueError as e:
+            sagemaker_inputs[input_name] = input_value
+
     return args, sagemaker_inputs
 
 
