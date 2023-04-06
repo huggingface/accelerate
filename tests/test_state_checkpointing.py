@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import logging
 import os
 import random
@@ -25,7 +26,8 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.utils import ProjectConfiguration, set_seed
+from accelerate.test_utils import execute_subprocess_async
+from accelerate.utils import ProjectConfiguration, get_launch_prefix, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -250,6 +252,11 @@ class CheckpointTest(unittest.TestCase):
             self.assertTrue(not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10")))
+
+    def test_map_location(self):
+        cmd = get_launch_prefix()
+        cmd += [f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
+        execute_subprocess_async(cmd, env=os.environ.copy())
 
 
 if __name__ == "__main__":
