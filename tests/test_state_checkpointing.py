@@ -285,6 +285,7 @@ class CheckpointTest(unittest.TestCase):
             )
 
             # Check device state
+            model.to(accelerator.device)
             accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"), map_location="on_device")
             for group in optimizer.param_groups:
                 param_device = group["params"][0].device

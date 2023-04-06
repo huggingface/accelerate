@@ -143,7 +143,7 @@ def load_accelerator_state(
     """
     if map_location not in [None, "cpu", "on_device"]:
         raise TypeError(
-            "Unsupported optimizer map location passed, please choose one of `None`, `cpu`, or `on_device`"
+            "Unsupported optimizer map location passed, please choose one of `None`, `'cpu'`, or `'on_device'`"
         )
     if map_location is None:
         map_location = "cpu"
@@ -153,8 +153,6 @@ def load_accelerator_state(
     for i, model in enumerate(models):
         weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
         input_model_file = os.path.join(input_dir, weights_name)
-        if map_location != "cpu":
-            models[i].to(map_location)
         models[i].load_state_dict(torch.load(input_model_file, map_location=map_location), **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
