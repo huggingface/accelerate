@@ -26,7 +26,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.test_utils import execute_subprocess_async
+from accelerate.test_utils import execute_subprocess_async, require_cuda
 from accelerate.utils import ProjectConfiguration, get_launch_prefix, set_seed
 
 
@@ -253,6 +253,7 @@ class CheckpointTest(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10")))
 
+    @require_cuda
     def test_map_location(self):
         cmd = get_launch_prefix()
         cmd += [f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
