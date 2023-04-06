@@ -12,18 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import logging
 import os
 import random
+import shutil
 import tempfile
 import unittest
 
+import pytest
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.utils import ProjectConfiguration, set_seed
+from accelerate.test_utils import execute_subprocess_async, require_cuda
+from accelerate.utils import ProjectConfiguration, get_launch_prefix, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -248,3 +252,65 @@ class CheckpointTest(unittest.TestCase):
             self.assertTrue(not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10")))
+
+    @require_cuda
+    def test_map_location(self):
+        cmd = get_launch_prefix()
+        cmd += [f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
+        execute_subprocess_async(cmd, env=os.environ.copy())
+
+
+if __name__ == "__main__":
+    savedir = "/tmp/accelerate/state_checkpointing"
+    model = DummyModel()
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.99)
+    train_dataloader, valid_dataloader = dummy_dataloaders()
+    project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
+    # Train baseline
+    accelerator = Accelerator(project_dir=savedir, project_config=project_config, mixed_precision="no")
+    if accelerator.process_index == 0:
+        if os.path.exists(savedir):
+            shutil.rmtree(savedir)
+        os.makedirs(savedir)
+    model, optimizer, train_dataloader, valid_dataloader, scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, valid_dataloader, scheduler
+    )
+    model, optimizer = accelerator.prepare(model, optimizer)
+    train(3, model, train_dataloader, optimizer, accelerator, scheduler)
+    # Check that the intial optimizer is loaded on the GPU
+    for group in optimizer.param_groups:
+        param_device = group["params"][0].device
+        break
+    assert param_device.type == accelerator.device.type
+    model = model.cpu()
+    accelerator.wait_for_everyone()
+    accelerator.save_state()
+    accelerator.wait_for_everyone()
+
+    # Check CPU state
+    accelerator.load_state(os.path.join(savedir, "checkpoints", "checkpoint_0"), map_location="cpu")
+    for group in optimizer.param_groups:
+        param_device = group["params"][0].device
+        break
+    assert (
+        param_device.type == torch.device("cpu").type
+    ), f"Loaded optimizer states did not match, expected to be loaded on the CPU but got {param_device}"
+
+    # Check device state
+    model.to(accelerator.device)
+    accelerator.load_state(os.path.join(savedir, "checkpoints", "checkpoint_0"), map_location="on_device")
+    for group in optimizer.param_groups:
+        param_device = group["params"][0].device
+        break
+    assert (
+        param_device.type == accelerator.device.type
+    ), f"Loaded optimizer states did not match, expected to be loaded on {accelerator.device} but got {param_device}"
+
+    # Check error
+    with pytest.raises(TypeError, match="Unsupported optimizer map location passed"):
+        accelerator.load_state(os.path.join(savedir, "checkpoints", "checkpoint_0"), map_location="invalid")
+    accelerator.wait_for_everyone()
+    if accelerator.process_index == 0:
+        shutil.rmtree(savedir)
+    accelerator.wait_for_everyone()

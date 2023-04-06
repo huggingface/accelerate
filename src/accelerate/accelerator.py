@@ -2384,7 +2384,8 @@ class Accelerator:
                 The name of the folder all relevant weights and states were saved in.
             load_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for loading model which can be passed to the underlying load function,
-                such as optional arguments for DeepSpeed's `load_checkpoint` function.
+                such as optional arguments for DeepSpeed's `load_checkpoint` function or a `map_location` to load the
+                model and optimizer on.
 
         Example:
 
@@ -2447,8 +2448,22 @@ class Accelerator:
         for hook in self._load_model_state_pre_hook.values():
             hook(models, input_dir)
 
+        map_location = load_model_func_kwargs.pop("map_location", None)
+        if map_location is None:
+            if self.num_processes > 1 and self.distributed_type == DistributedType.MULTI_GPU:
+                map_location = "on_device"
+            else:
+                map_location = "cpu"
+
         load_accelerator_state(
-            input_dir, models, optimizers, schedulers, self.state.process_index, self.scaler, **load_model_func_kwargs
+            input_dir,
+            models,
+            optimizers,
+            schedulers,
+            self.state.process_index,
+            self.scaler,
+            map_location,
+            **load_model_func_kwargs,
         )
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
