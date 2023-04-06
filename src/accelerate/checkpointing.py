@@ -32,7 +32,7 @@ from .utils import (
     is_tpu_available,
     save,
 )
-
+from .optimizer import move_to_device
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
@@ -73,6 +73,7 @@ def save_accelerator_state(
     for i, state in enumerate(model_states):
         weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
         output_model_file = os.path.join(output_dir, weights_name)
+        state = move_to_device(state, "cpu")
         save(state, output_model_file)
         logger.info(f"Model weights saved in {output_model_file}")
     # Optimizer states
@@ -118,7 +119,7 @@ def load_accelerator_state(
     schedulers,
     process_index,
     scaler=None,
-    optimizer_map_location=None,
+    map_location=None,
     **load_model_func_kwargs,
 ):
     """
@@ -137,35 +138,37 @@ def load_accelerator_state(
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
             An optional *GradScaler* instance to load
-        optimizer_map_location (`str`, *optional*):
+        map_location (`str`, *optional*):
             What device to load the optimizer state onto. Should be one of either "cpu" or "on_device".
         load_model_func_kwargs (`dict`, *optional*):
             Additional arguments that can be passed to the model's `load_state_dict` method.
     """
-    # Model states
-    for i, model in enumerate(models):
-        weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
-        input_model_file = os.path.join(input_dir, weights_name)
-        models[i].load_state_dict(torch.load(input_model_file, map_location="cpu"), **load_model_func_kwargs)
-    logger.info("All model weights loaded successfully")
-
-    # Optimizer states
-    if optimizer_map_location not in [None, "cpu", "on_device"]:
+    if map_location not in [None, "cpu", "on_device"]:
         raise TypeError(
             "Unsupported optimizer map location passed, please choose one of `None`, `cpu`, or `on_device`"
         )
     current_device = PartialState().device
-    if optimizer_map_location is None:
+    if map_location is None:
         if PartialState().distributed_type == DistributedType.MULTI_GPU:
-            optimizer_map_location = current_device
+            map_location = current_device
         else:
-            optimizer_map_location = "cpu"
-    elif optimizer_map_location == "on_device":
-        optimizer_map_location = current_device
+            map_location = "cpu"
+    elif map_location == "on_device":
+        map_location = current_device
+    # Model states
+    for i, model in enumerate(models):
+        weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
+        input_model_file = os.path.join(input_dir, weights_name)
+        models[i].to(map_location)
+        models[i].load_state_dict(torch.load(input_model_file, map_location=map_location), **load_model_func_kwargs)
+    logger.info("All model weights loaded successfully")
+
+    # Optimizer states
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = os.path.join(input_dir, optimizer_name)
-        optimizers[i].load_state_dict(torch.load(input_optimizer_file, map_location=optimizer_map_location))
+        optimizer_state = torch.load(input_optimizer_file)
+        optimizers[i].load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
 
     # Scheduler states

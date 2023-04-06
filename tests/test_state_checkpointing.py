@@ -23,6 +23,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
+from accelerate.test_utils import require_cuda
 from accelerate.utils import ProjectConfiguration, set_seed
 
 
@@ -248,3 +249,56 @@ class CheckpointTest(unittest.TestCase):
             self.assertTrue(not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10")))
+
+    @require_cuda
+    def test_map_location(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.99)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            project_config = ProjectConfiguration(automatic_checkpoint_naming=True)
+            # Train baseline
+            accelerator = Accelerator(project_dir=tmpdir, project_config=project_config)
+            model, optimizer, train_dataloader, valid_dataloader, scheduler = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader, scheduler
+            )
+            model, optimizer = accelerator.prepare(model, optimizer)
+            train(3, model, train_dataloader, optimizer, accelerator, scheduler)
+            # Check that the intial optimizer is loaded on the GPU
+            for group in optimizer.param_groups:
+                param_device = group["params"][0].device
+                break
+            self.assertEqual(param_device.type, accelerator.device.type)
+            model = model.cpu()
+            accelerator.save_state()
+
+            # Check CPU state
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"), map_location="cpu")
+            for group in optimizer.param_groups:
+                param_device = group["params"][0].device
+                break
+            self.assertEqual(
+                param_device.type,
+                torch.device("cpu").type,
+                f"Loaded optimizer states did not match, expected to be loaded on the CPU but got {param_device}",
+            )
+
+            # Check device state
+            accelerator.load_state(
+                os.path.join(tmpdir, "checkpoints", "checkpoint_0"), map_location="on_device"
+            )
+            for group in optimizer.param_groups:
+                param_device = group["params"][0].device
+                break
+            self.assertEqual(
+                param_device.type,
+                accelerator.device.type,
+                f"Loaded optimizer states did not match, expected to be loaded on {accelerator.device} but got {param_device}",
+            )
+
+            # Check error
+            with self.assertRaises(TypeError, msg="Unsupported optimizer map location passed"):
+                accelerator.load_state(
+                    os.path.join(tmpdir, "checkpoints", "checkpoint_0"), map_location="invalid"
+                )
