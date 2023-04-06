@@ -285,9 +285,7 @@ class CheckpointTest(unittest.TestCase):
             )
 
             # Check device state
-            accelerator.load_state(
-                os.path.join(tmpdir, "checkpoints", "checkpoint_0"), map_location="on_device"
-            )
+            accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"), map_location="on_device")
             for group in optimizer.param_groups:
                 param_device = group["params"][0].device
                 break
@@ -299,6 +297,4 @@ class CheckpointTest(unittest.TestCase):
 
             # Check error
             with self.assertRaises(TypeError, msg="Unsupported optimizer map location passed"):
-                accelerator.load_state(
-                    os.path.join(tmpdir, "checkpoints", "checkpoint_0"), map_location="invalid"
-                )
+                accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"), map_location="invalid")
