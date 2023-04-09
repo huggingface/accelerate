@@ -681,7 +681,8 @@ class AcceleratorState:
 
         The other processes will enter the with block after the main process exits.
         """
-        yield PartialState().main_process_first()
+        with PartialState().main_process_first():
+            yield
 
     @contextmanager
     def local_main_process_first(self):
@@ -690,7 +691,8 @@ class AcceleratorState:
 
         The other processes will enter the with block after the main process exits.
         """
-        yield PartialState().local_main_process_first()
+        with PartialState().local_main_process_first():
+            yield
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)

@@ -755,7 +755,8 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.process_index}")
         ```
         """
-        yield self.state.main_process_first()
+        with self.state.main_process_first():
+            yield
 
     @contextmanager
     def local_main_process_first(self):
@@ -776,7 +777,8 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.local_process_index}")
         ```
         """
-        yield self.state.local_main_process_first()
+        with self.state.local_main_process_first():
+            yield
 
     @contextmanager
     def no_sync(self, model):
