@@ -16,6 +16,8 @@
 
 import contextlib
 import io
+import os
+import time
 
 import torch
 from torch.utils.data import DataLoader
@@ -55,10 +57,13 @@ def process_execution_check():
     accelerator = Accelerator()
     num_processes = accelerator.num_processes
     with accelerator.main_process_first():
-        idx = torch.tensor(accelerator.process_index).to(accelerator.device)
-    idxs = accelerator.gather(idx)
-    if num_processes > 1:
-        assert idxs[0] == 0, "Main process was not first."
+        if accelerator.is_main_process:
+            time.sleep(0.1)  # ensure main process takes longest
+            open("check_main_process_first.txt", "w").close()
+        assert os.path.isfile("check_main_process_first.txt"), "Main process did not create check file yet."
+    accelerator.wait_for_everyone()
+    if accelerator.is_main_process:
+        os.remove("check_main_process_first.txt")
 
     # Test the decorators
     f = io.StringIO()
