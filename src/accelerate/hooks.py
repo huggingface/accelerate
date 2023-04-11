@@ -532,7 +532,6 @@ class CpuOffload(ModelHook):
     ):
         self.prev_module_hook = prev_module_hook
 
-        if execution_device is not None:
         self.execution_device = execution_device if execution_device is not None else PartialState().default_device
 
     def init_hook(self, module):
