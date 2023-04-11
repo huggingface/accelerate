@@ -70,14 +70,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
 
     current_env = os.environ.copy()
     current_env["ACCELERATE_USE_CPU"] = str(args.cpu or args.use_cpu)
-    current_env["ACCELERATE_USE_MPS_DEVICE"] = str(args.mps)
-    if args.mps:
-        warnings.warn(
-            "`mps` is deprecated and will be removed in version 0.18.0 of 🤗 Accelerate."
-            " MPS device will be enabled by default when available and can be disabled via `--cpu`.",
-            FutureWarning,
-        )
-    elif args.gpu_ids != "all" and args.gpu_ids is not None:
+    if args.gpu_ids != "all" and args.gpu_ids is not None:
         current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip

@@ -18,10 +18,10 @@ from typing import Dict, List, Mapping, Optional, Union
 import torch
 import torch.nn as nn
 
+from .state import PartialState
 from .utils import (
     PrefixedDataset,
     find_device,
-    is_mps_available,
     named_module_tensors,
     send_to_device,
     set_module_tensor_to_device,
@@ -533,13 +533,7 @@ class CpuOffload(ModelHook):
         self.prev_module_hook = prev_module_hook
 
         if execution_device is not None:
-            self.execution_device = execution_device
-        elif is_mps_available():
-            self.execution_device = torch.device("mps")
-        elif torch.cuda.is_available():
-            self.execution_device = torch.device(0)
-        else:
-            self.execution_device = torch.device("cpu")
+        self.execution_device = execution_device if execution_device is not None else PartialState().default_device
 
     def init_hook(self, module):
         return module.to("cpu")

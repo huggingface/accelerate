@@ -181,31 +181,8 @@ class PartialState:
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
 
-                # the below block using env variable for `mps` will be removed in version 0.18.0
-                if parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE") and not cpu:
-                    from .utils import is_torch_version
-
-                    if is_mps_available():
-                        if not is_torch_version(">", "1.12.0"):
-                            warnings.warn(
-                                "We strongly recommend to install PyTorch >= 1.13 for transformer based models."
-                            )
-                        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-                        self.device = torch.device("mps")
-                    else:
-                        raise AssertionError(
-                            "MPS not available because PyTorch version is < 1.12.0 or MacOS version is < 12.3 "
-                            "and/or you do not have an MPS-enabled device on this machine."
-                        )
-
                 if self.device is None:
-                    if cpu or not (torch.cuda.is_available() or is_mps_available()):
-                        self.device = torch.device("cpu")
-                    elif is_mps_available():
-                        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-                        self.device = torch.device("mps")
-                    else:
-                        self.device = torch.device("cuda")
+                    self.device = torch.device("cpu") if cpu else self.default_device
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
     def __repr__(self) -> str:
@@ -499,6 +476,22 @@ class PartialState:
     def print(self, *args, **kwargs):
         if self.is_local_main_process:
             print(*args, **kwargs)
+
+    @property
+    def default_device(self) -> torch.device:
+        """
+        Returns the default device which is:
+        - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` bother return True.
+        - CUDA if `torch.cuda.is_available()`
+        - CPU otherwise
+        """
+        if is_mps_available():
+            os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+            return torch.device("mps")
+        elif torch.cuda.is_available():
+            return torch.device("cuda")
+        else:
+            return torch.device("cpu")
 
 
 class AcceleratorState:
