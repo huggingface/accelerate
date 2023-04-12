@@ -481,7 +481,7 @@ class PartialState:
     def default_device(self) -> torch.device:
         """
         Returns the default device which is:
-        - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` bother return True.
+        - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` both return True.
         - CUDA if `torch.cuda.is_available()`
         - CPU otherwise
         """
