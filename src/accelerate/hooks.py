@@ -18,6 +18,7 @@ from typing import Dict, List, Mapping, Optional, Union
 import torch
 import torch.nn as nn
 
+from .state import PartialState
 from .utils import (
     PrefixedDataset,
     find_device,
@@ -532,6 +533,7 @@ class CpuOffload(ModelHook):
         prev_module_hook: Optional["UserCpuOffloadHook"] = None,
     ):
         self.prev_module_hook = prev_module_hook
+
 
         if execution_device is not None:
             self.execution_device = execution_device
