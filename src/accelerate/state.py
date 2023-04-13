@@ -127,8 +127,8 @@ class PartialState:
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend="nccl", **kwargs)
-                    self.backend = "nccl"
+                    self.backend = kwargs.pop("backend")
+                    torch.distributed.init_process_group(backend=self.backend, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
