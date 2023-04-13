@@ -407,7 +407,7 @@ class DataLoaderShard(DataLoader):
 
     @property
     def total_dataset_length(self):
-        if hasattr("total_length", self.dataset):
+        if hasattr(self.dataset, "total_length"):
             return self.dataset.total_length
         else:
             return len(self.dataset)
