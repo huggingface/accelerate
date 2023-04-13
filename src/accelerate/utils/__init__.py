@@ -5,9 +5,12 @@ from .dataclasses import (
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
+    FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
+    GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
+    IntelPyTorchExtensionPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
@@ -16,6 +19,7 @@ from .dataclasses import (
     RNGType,
     SageMakerDistributedType,
     TensorInformation,
+    TorchDynamoPlugin,
 )
 from .environment import get_int_from_env, parse_choice_from_env, parse_flag_from_env
 from .imports import (
@@ -28,6 +32,8 @@ from .imports import (
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_fp8_available,
+    is_ipex_available,
     is_megatron_lm_available,
     is_mlflow_available,
     is_mps_available,
@@ -79,6 +85,7 @@ from .operations import (
     get_data_structure,
     honor_type,
     initialize_tensors,
+    is_namedtuple,
     is_tensor_information,
     is_torch_tensor,
     pad_across_processes,
@@ -100,7 +107,16 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
-from .launch import PrepareForLaunch, _filter_args, get_launch_prefix, prepare_tpu
+from .launch import (
+    PrepareForLaunch,
+    _filter_args,
+    get_launch_prefix,
+    prepare_deepspeed_cmd_env,
+    prepare_multi_gpu_env,
+    prepare_sagemager_args_inputs,
+    prepare_simple_launcher_cmd_env,
+    prepare_tpu,
+)
 from .megatron_lm import (
     AbstractTrainStep,
     BertTrainStep,
@@ -123,6 +139,7 @@ from .memory import find_executable_batch_size, release_memory
 from .other import (
     extract_model_from_parallel,
     get_pretty_name,
+    merge_dicts,
     patch_environment,
     save,
     wait_for_everyone,
@@ -131,3 +148,4 @@ from .other import (
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
 from .torch_xla import install_xla
 from .tqdm import tqdm
+from .transformer_engine import convert_model, has_transformer_engine_layers

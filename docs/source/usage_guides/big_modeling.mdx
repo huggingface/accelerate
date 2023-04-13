@@ -118,7 +118,15 @@ with init_empty_weights():
     model = AutoModelForCausalLM.from_config(config)
 ```
 
-and load the checkpoint we just downloaded with:
+Note that loading the model with `from_config` in Transformers does not tie the weights, which may cause issue when
+loading a checkpoint that does not contain duplicate keys for the tied weights. So you should tie the weights before
+loading the checkpoint.
+
+```py
+model.tie_weights()
+```
+
+Then load the checkpoint we just downloaded with:
 
 ```py
 from accelerate import load_checkpoint_and_dispatch

@@ -25,6 +25,7 @@ It should be noted that the expectation is that those states come from the same 
 - By using [`~Accelerator.register_for_checkpointing`], you can register custom objects to be automatically stored or loaded from the two prior functions,
 so long as the object has a `state_dict` **and** a `load_state_dict` functionality. This could include objects such as a learning rate scheduler. 
 
+
 Below is a brief example using checkpointing to save and reload a state during training:
 
 ```python
@@ -60,4 +61,21 @@ for epoch in range(num_epochs):
 
 # Restore previous state
 accelerator.load_state("my/save/path/checkpointing/checkpoint_0")
+```
+
+## Restoring the state of the DataLoader 
+
+After resuming from a checkpoint, it may also be desireable to resume from a particular point in the active `DataLoader` if 
+the state was saved during the middle of an epoch. You can use [`~Accelerator.skip_first_batches`] to do so. 
+
+```python
+from accelerate import Accelerator
+
+accelerator = Accelerator(project_dir="my/save/path")
+
+train_dataloader = accelerator.prepare(train_dataloader)
+accelerator.load_state("my_state")
+
+# Assume the checkpoint was saved 100 steps into the epoch
+accelerator.skip_first_batches(train_dataloader, 100)
 ```

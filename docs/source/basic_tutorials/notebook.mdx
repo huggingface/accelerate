@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Launching Multi-Node Training from a Jupyter Environment
+# Launching Multi-GPU Training from a Jupyter Environment
 
 This tutorial teaches you how to fine tune a computer vision model with 🤗 Accelerate from a Jupyter Notebook on a distributed system.
 You will also learn how to setup a few requirements needed for ensuring your environment is configured properly, your data has been prepared properly, and finally how to launch training.
@@ -35,7 +35,7 @@ The following code will restart Jupyter after writing the configuration, as CUDA
 
 <Tip warning={true}>
 
-    CUDA can't be initialized more than once on a multi-node system. It's fine to debug in the notebook and have calls to CUDA, but in order to finally train a full cleanup and restart will need to be performed.
+    CUDA can't be initialized more than once on a multi-GPU system. It's fine to debug in the notebook and have calls to CUDA, but in order to finally train a full cleanup and restart will need to be performed.
     
 </Tip>
 
@@ -153,7 +153,7 @@ def get_dataloaders(batch_size: int = 64):
     random_perm = np.random.permutation(len(fnames))
     cut = int(0.8 * len(fnames))
     train_split = random_perm[:cut]
-    eval_split = random_perm[:cut]
+    eval_split = random_perm[cut:]
 
     # For training a simple RandomResizedCrop will be used
     train_tfm = Compose([RandomResizedCrop((224, 224), scale=(0.5, 1.0)), ToTensor()])
@@ -337,7 +337,7 @@ def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
     mean = torch.tensor(model.default_cfg["mean"])[None, :, None, None]
     std = torch.tensor(model.default_cfg["std"])[None, :, None, None]
 
-    # To make this constant available on the active device, set it to the accelerator device
+    # To make these constants available on the active device, set it to the accelerator device
     mean = mean.to(accelerator.device)
     std = std.to(accelerator.device)
 

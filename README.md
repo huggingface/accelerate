@@ -16,7 +16,7 @@ limitations under the License.
 
 <p align="center">
     <br>
-    <img src="docs/source/imgs/accelerate_logo.png" width="400"/>
+    <img src="https://raw.githubusercontent.com/huggingface/accelerate/main/docs/source/imgs/accelerate_logo.png" width="400"/>
     <br>
 <p>
 
@@ -136,7 +136,7 @@ Want to learn more? Check out the [documentation](https://huggingface.co/docs/ac
 
 ## Launching script
 
-🤗 Accelerate also provides an optional CLI tool that allows you to quickly configure and test your training environment before launching the scripts. No need to remember how to use `torch.distributed.launch` or to write a specific launcher for TPU training!
+🤗 Accelerate also provides an optional CLI tool that allows you to quickly configure and test your training environment before launching the scripts. No need to remember how to use `torch.distributed.run` or to write a specific launcher for TPU training!
 On your machine(s) just run:
 
 ```bash
@@ -155,7 +155,7 @@ For instance, here is how you would run the GLUE example on the MRPC task (from 
 accelerate launch examples/nlp_example.py
 ```
 
-This CLI tool is **optional**, and you can still use `python my_script.py` or `python -m torch.distributed.launch my_script.py` at your convenance.
+This CLI tool is **optional**, and you can still use `python my_script.py` or `python -m torchrun my_script.py` at your convenance.
 
 ## Launching multi-CPU run using MPI
 
@@ -213,6 +213,7 @@ If you like the simplicity of 🤗 Accelerate but would prefer a higher-level ab
 * [Animus](https://github.com/Scitator/animus) is a minimalistic framework to run machine learning experiments. Animus highlights common "breakpoints" in ML experiments and provides a unified interface for them within [IExperiment](https://github.com/Scitator/animus/blob/main/animus/core.py#L76).
 * [Catalyst](https://github.com/catalyst-team/catalyst#getting-started) is a PyTorch framework for Deep Learning Research and Development. It focuses on reproducibility, rapid experimentation, and codebase reuse so you can create something new rather than write yet another train loop. Catalyst provides a [Runner](https://catalyst-team.github.io/catalyst/api/core.html#runner) to connect all parts of the experiment: hardware backend, data transformations, model train, and inference logic.
 * [fastai](https://github.com/fastai/fastai#installing) is a PyTorch framework for Deep Learning that simplifies training fast and accurate neural nets using modern best practices. fastai provides a [Learner](https://docs.fast.ai/learner.html#Learner) to handle the training, fine-tuning, and inference of deep learning algorithms.
+* [Finetuner](https://github.com/jina-ai/finetuner) is a service that enables models to create higher-quality embeddings for semantic search, visual similarity search, cross-modal text<->image search, recommendation systems, clustering, duplication detection, anomaly detection, or other uses.
 * [InvokeAI](https://github.com/invoke-ai/InvokeAI) is a creative engine for Stable Diffusion models, offering industry-leading WebUI, terminal usage support, and serves as the foundation for many commercial products.
 * [Kornia](https://kornia.readthedocs.io/en/latest/get-started/introduction.html) is a differentiable library that allows classical computer vision to be integrated into deep learning models. Kornia provides a [Trainer](https://kornia.readthedocs.io/en/latest/x.html#kornia.x.Trainer) with the specific purpose to train and fine-tune the supported deep learning algorithms within the library.
 * [Open Assistant](https://projects.laion.ai/Open-Assistant/) is a chat-based assistant that understands tasks, can interact with their party systems, and retrieve information dynamically to do so. 

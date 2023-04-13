@@ -79,16 +79,33 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
-        if accelerator.distributed_type == DistributedType.TPU:
-            return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
-        return tokenizer.pad(examples, padding="longest", return_tensors="pt")
+        max_length = 128 if accelerator.distributed_type == DistributedType.TPU else None
+        # When using mixed precision we want round multiples of 8/16
+        if accelerator.mixed_precision == "fp8":
+            pad_to_multiple_of = 16
+        elif accelerator.mixed_precision != "no":
+            pad_to_multiple_of = 8
+        else:
+            pad_to_multiple_of = None
+
+        return tokenizer.pad(
+            examples,
+            padding="longest",
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors="pt",
+        )
 
     # Instantiate dataloaders.
     train_dataloader = DataLoader(
-        tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size
+        tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size, drop_last=True
     )
     eval_dataloader = DataLoader(
-        tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE
+        tokenized_datasets["validation"],
+        shuffle=False,
+        collate_fn=collate_fn,
+        batch_size=EVAL_BATCH_SIZE,
+        drop_last=(accelerator.mixed_precision == "fp8"),
     )
 
     return train_dataloader, eval_dataloader
@@ -120,7 +137,6 @@ def training_function(config, args):
     # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
     # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
     model = model.to(accelerator.device)
-
     # Instantiate optimizer
     optimizer = AdamW(params=model.parameters(), lr=lr)
 
@@ -134,6 +150,7 @@ def training_function(config, args):
     # Prepare everything
     # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
     # prepare method.
+
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
@@ -177,7 +194,7 @@ def main():
         "--mixed_precision",
         type=str,
         default=None,
-        choices=["no", "fp16", "bf16"],
+        choices=["no", "fp16", "bf16", "fp8"],
         help="Whether to use mixed precision. Choose"
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
         "and an Nvidia Ampere GPU.",

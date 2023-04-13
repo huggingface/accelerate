@@ -16,17 +16,19 @@ import os
 import warnings
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import torch
 
 from .utils import (
     DistributedType,
     DynamoBackend,
+    GradientAccumulationPlugin,
     get_ccl_version,
     get_int_from_env,
     is_ccl_available,
     is_deepspeed_available,
+    is_fp8_available,
     is_mps_available,
     is_tpu_available,
     is_xpu_available,
@@ -78,13 +80,6 @@ class PartialState:
 
     def __init__(self, cpu: bool = False, **kwargs):
         self.__dict__ = self._shared_state
-        # Raise an error if the user tries to reinitialize on a different device setup in the same launch
-        if self.initialized and (self._cpu != cpu):
-            raise AssertionError(
-                "The current device and desired device are not the same. If the `PartialState` was generated "
-                "before the `Accelerator` has been instantiated, ensure the `cpu` flag is the same for both. In this case, "
-                f"the `PartialState` has {self._cpu} and the desired device is {cpu}. Please use `cpu={self._cpu}`."
-            )
         if not self.initialized:
             self._cpu = cpu
             self.backend = None
@@ -120,17 +115,18 @@ class PartialState:
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
+
                     from .utils import compare_versions
-                    self.backend = "nccl"
                     if is_ccl_available():
                         self.backend = "ccl"
+                    else:
+                        self.backend = "nccl"
                     if compare_versions("deepspeed", ">", "0.6.5"):
                         from deepspeed import comm as dist
 
                         dist.init_distributed(dist_backend=self.backend)
                     else:
                         torch.distributed.init_process_group(backend = self.backend,**kwargs)
-                        
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
@@ -550,7 +546,7 @@ class AcceleratorState:
         self,
         mixed_precision: str = None,
         cpu: bool = False,
-        dynamo_backend=None,
+        dynamo_plugin=None,
         deepspeed_plugin=None,
         fsdp_plugin=None,
         megatron_lm_plugin=None,
@@ -560,12 +556,13 @@ class AcceleratorState:
         **kwargs,
     ):
         self.__dict__ = self._shared_state
-        if PartialState._shared_state == {} or (cpu != PartialState._shared_state.get("_cpu", False)):
+        if parse_flag_from_env("ACCELERATE_USE_CPU"):
+            cpu = True
+        if PartialState._shared_state == {}:
             PartialState(cpu, **kwargs)
         self.__dict__.update(PartialState._shared_state)
-        self._check_initialized(mixed_precision)
+        self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
-            self.backend = None
             self.deepspeed_plugin = None
             self.ipex_plugin = None
             self.xpu_plugin = None
@@ -574,10 +571,9 @@ class AcceleratorState:
                 if mixed_precision is None
                 else mixed_precision.lower()
             )
-            dynamo_backend = (
-                parse_choice_from_env("ACCELERATE_DYNAMO_BACKEND", "no") if dynamo_backend is None else dynamo_backend
-            )
-            self.dynamo_backend = DynamoBackend(dynamo_backend.upper())
+            if mixed_precision == "fp8" and not is_fp8_available():
+                raise ValueError("Using `fp8` precision requires `transformer_engine` to be installed.")
+            self.dynamo_plugin = dynamo_plugin
             if not _from_accelerator:
                 raise ValueError(
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
@@ -618,11 +614,12 @@ class AcceleratorState:
                     if self.xpu_plugin is not None:
                         self.xpu_plugin.set_mixed_precision(mixed_precision)
             if (
-                self.dynamo_backend != DynamoBackend.NO
+                self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"
                 and self.device.type == "cuda"
             ):
                 torch.backends.cuda.matmul.allow_tf32 = True
+            PartialState._shared_state["distributed_type"] = self.distributed_type
 
     @property
     def initialized(self) -> bool:
@@ -634,10 +631,12 @@ class AcceleratorState:
             repr += f"ds_config: {self.deepspeed_plugin.deepspeed_config}\n"
         return repr
 
-    def _check_initialized(self, mixed_precision=None):
+    def _check_initialized(self, mixed_precision=None, cpu=None):
         "Checks if a modification is trying to be made and the `AcceleratorState` has already been initialized"
         if self.initialized:
             err = "AcceleratorState has already been initialized and cannot be changed, restart your runtime completely and pass `{flag}` to `Accelerator()`."
+            if cpu and self.device.type != "cpu":
+                raise ValueError(err.format(flag="cpu=True"))
             if (
                 mixed_precision is not None
                 and mixed_precision != self._mixed_precision
@@ -732,16 +731,39 @@ class GradientState:
         - **end_of_dataloader** (`bool`) -- Whether we have reached the end the current dataloader
         - **remainder** (`int`) -- The number of extra samples that were added from padding the dataloader
         - **sync_gradients** (`bool`) -- Whether the gradients should be synced across all devices
+        - **active_dataloader** (`Optional[DataLoader]`) -- The dataloader that is currently being iterated over
+        - **dataloader_references** (`List[Optional[DataLoader]]`) -- A list of references to the dataloaders that are
+          being iterated over
+        - **num_steps** (`int`) -- The number of steps to accumulate over
+        - **adjust_scheduler** (`bool`) -- Whether the scheduler should be adjusted to account for the gradient
+          accumulation
     """
 
     _shared_state = {}
 
-    def __init__(self):
+    def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True
             self.end_of_dataloader = False
             self.remainder = -1
+            self.active_dataloader = None
+            self.dataloader_references = [None]
+            self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
+
+        # Plugin args are different and can be updated
+        if gradient_accumulation_plugin is not None and self.plugin_kwargs != gradient_accumulation_plugin.to_kwargs():
+            self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
+
+    @property
+    def num_steps(self) -> int:
+        "Returns the number of steps to accumulate over"
+        return self.plugin_kwargs.get("num_steps", 1)
+
+    @property
+    def adjust_scheduler(self) -> bool:
+        "Returns whether the scheduler should be adjusted"
+        return self.plugin_kwargs.get("adjust_scheduler", False)
 
     @property
     def initialized(self) -> bool:
@@ -752,7 +774,8 @@ class GradientState:
         return (
             f"Sync Gradients: {self.sync_gradients}\n"
             f"At end of current dataloader: {self.end_of_dataloader}\n"
-            f"Extra samples added: {self.remainder}"
+            f"Extra samples added: {self.remainder}\n"
+            f"Gradient accumulation plugin: {self.plugin_kwargs}\n"
         )
 
     def _set_sync_gradients(self, sync_gradients):
@@ -766,3 +789,25 @@ class GradientState:
     def _set_remainder(self, remainder):
         "Private function that sets the number of remaining samples at the end of the dataloader. Users should not have to call this."
         self.remainder = remainder
+
+    def _add_dataloader(self, dataloader):
+        "Private function that adds a dataloader to `self.dataloader_references` and sets `in_dataloader` to `True`. Users should not have to call this."
+        self.active_dataloader = dataloader
+        self.dataloader_references.append(self.active_dataloader)
+        self._set_end_of_dataloader(False)
+
+    def _remove_dataloader(self, dataloader):
+        "Private function that removes a dataloader from `self.dataloader_references` and sets `in_dataloader` to `False` if there are no more dataloaders. Users should not have to call this."
+        self.dataloader_references.remove(dataloader)
+        self.active_dataloader = self.dataloader_references[-1]
+        self._set_end_of_dataloader(True)
+
+    @property
+    def in_dataloader(self) -> bool:
+        "Returns whether the current process is in a dataloader"
+        return self.active_dataloader is not None
+
+    @staticmethod
+    def _reset_state():
+        "Resets `_shared_state`, is used internally and should not be called"
+        GradientState._shared_state = {}

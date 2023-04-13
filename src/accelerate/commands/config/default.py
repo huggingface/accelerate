@@ -46,12 +46,13 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         )
         return False
     mixed_precision = mixed_precision.lower()
-    if mixed_precision not in ["no", "fp16", "bf16"]:
-        raise ValueError(f"`mixed_precision` should be one of 'no', 'fp16', or 'bf16'. Received {mixed_precision}")
+    if mixed_precision not in ["no", "fp16", "bf16", "fp8"]:
+        raise ValueError(
+            f"`mixed_precision` should be one of 'no', 'fp16', 'bf16', or 'fp8'. Received {mixed_precision}"
+        )
     config = {
         "compute_environment": "LOCAL_MACHINE",
         "mixed_precision": mixed_precision,
-        "dynamo_backend": dynamo_backend,
     }
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()

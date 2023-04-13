@@ -71,12 +71,12 @@ def _convert_distributed_mode(value):
 
 def _convert_dynamo_backend(value):
     value = int(value)
-    return DynamoBackend(DYNAMO_BACKENDS[value])
+    return DynamoBackend(DYNAMO_BACKENDS[value]).value
 
 
 def _convert_mixed_precision(value):
     value = int(value)
-    return PrecisionType(["no", "fp16", "bf16"][value])
+    return PrecisionType(["no", "fp16", "bf16", "fp8"][value])
 
 
 def _convert_sagemaker_distributed_mode(value):

@@ -20,7 +20,8 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
-from accelerate import Accelerator
+from accelerate.accelerator import Accelerator
+from accelerate.state import GradientState
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, set_seed
 
@@ -150,7 +151,7 @@ def test_distributed_sync(accelerator):
 
 def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
     accelerator = Accelerator(
-        gradient_accumulation_steps=2, split_batches=split_batches, dispatch_batches=dispatch_batches
+        split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_steps=2
     )
     # Test that context manager behaves properly
     model, ddp_model, dataloader = get_training_setup(accelerator)
@@ -183,11 +184,12 @@ def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(len(ddp_input))]
+    GradientState._reset_state()
 
 
 def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False, dispatch_batches=False):
     accelerator = Accelerator(
-        gradient_accumulation_steps=2, split_batches=split_batches, dispatch_batches=dispatch_batches
+        split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_steps=2
     )
     # Test that context manager behaves properly
     model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
@@ -225,11 +227,41 @@ def test_gradient_accumulation_with_opt_and_scheduler(split_batches=False, dispa
             check_model_parameters(model, ddp_model, did_step, iteration)
         # Shuffle ddp_input on each iteration
         torch.manual_seed(1337 + iteration)
+    GradientState._reset_state()
+
+
+def test_dataloader_break():
+    accelerator = Accelerator()
+
+    first_dset = RegressionDataset(length=80)
+    first_dataloader = DataLoader(first_dset, batch_size=16)
+    second_dset = RegressionDataset(length=96)
+    second_dataloader = DataLoader(second_dset, batch_size=16)
+    first_dataloader, second_dataloader = accelerator.prepare(first_dataloader, second_dataloader)
+    for iteration, _ in enumerate(first_dataloader):
+        # Will be True except if we are on the last batch
+        if iteration < len(first_dataloader) - 1:
+            assert id(accelerator.gradient_state.active_dataloader) == id(first_dataloader)
+            if iteration == 1:
+                for batch_num, _ in enumerate(second_dataloader):
+                    if batch_num < len(second_dataloader) - 1:
+                        assert id(accelerator.gradient_state.active_dataloader) == id(
+                            second_dataloader
+                        ), f"First dataloader: {id(first_dataloader)}\nSecond dataloader: {id(second_dataloader)}\nActive dataloader: {id(accelerator.gradient_state.active_dataloader)}\n"
+                    else:
+                        assert id(accelerator.gradient_state.active_dataloader) == id(
+                            first_dataloader
+                        ), f"First dataloader: {id(first_dataloader)}\nSecond dataloader: {id(second_dataloader)}\nActive dataloader: {id(accelerator.gradient_state.active_dataloader)}\n"
+        else:
+            assert accelerator.gradient_state.active_dataloader is None
 
 
 def main():
     accelerator = Accelerator()
     state = accelerator.state
+    if state.local_process_index == 0:
+        print("**Test `accumulate` gradient accumulation with dataloader break**")
+    test_dataloader_break()
     if state.distributed_type == DistributedType.NO:
         if state.local_process_index == 0:
             print("**Test NOOP `no_sync` context manager**")
