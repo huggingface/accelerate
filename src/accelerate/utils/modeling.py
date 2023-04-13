@@ -485,9 +485,7 @@ def get_balanced_memory(
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
 
-    if not torch.cuda.is_available():
-        return max_memory
-    if not is_xpu_available():
+    if not (torch.cuda.is_available() and is_xpu_available()) :
         return max_memory
             
     if is_xpu_available():
