@@ -533,7 +533,7 @@ class CpuOffload(ModelHook):
         elif torch.cuda.is_available():
             self.execution_device = torch.device(0)
         elif is_xpu_available():
-            self.execution_device = torch.device("xpu")
+            self.execution_device = torch.device("xpu:0")
         else:
             self.execution_device = torch.device("cpu")
 

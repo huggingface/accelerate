@@ -106,12 +106,8 @@ class PartialState:
                     self.process_index = torch.distributed.get_rank()
                     self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                     if self.device is None:
-                        if is_xpu_available():
-                            self.device = torch.device("xpu", self.local_process_index)  
-                            torch.xpu.set_device(self.device)
-                        else:
-                            self.device = torch.device("cuda", self.local_process_index)
-                            torch.cuda.set_device(self.device)
+                        self.device = torch.device("cuda", self.local_process_index)
+                    torch.cuda.set_device(self.device)
             elif is_tpu_available() and not cpu:
                 self.distributed_type = DistributedType.TPU
                 self.num_processes = xm.xrt_world_size()
@@ -146,26 +142,22 @@ class PartialState:
                         self.device = torch.device("cuda", self.local_process_index)
                         torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
-            elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
+            elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu and not is_xpu_available():
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
                     torch.distributed.init_process_group(backend="nccl", **kwargs)
                     self.backend = "nccl"
-                    if is_ccl_available():
-                        torch.distributed.init_process_group(backend="ccl", **kwargs)
-                        self.backend = "ccl"
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 if self.device is None:
-                    if is_xpu_available():
-                        self.device = torch.device("xpu", self.local_process_index)
-                        torch.xpu.set_device(self.device)
-                    else:
-                        self.device = torch.device("cuda", self.local_process_index)
-                        torch.cuda.set_device(self.device)
+                    self.device = torch.device("cuda", self.local_process_index)
+                torch.cuda.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
-                self.distributed_type = DistributedType.MULTI_CPU
+                if is_xpu_available():
+                    self.distributed_type = DistributedType.MULTI_XPU
+                else:
+                    self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
                     if get_ccl_version() >= "1.12":
                         import oneccl_bindings_for_pytorch  # noqa: F401
@@ -562,6 +554,8 @@ class AcceleratorState:
         deepspeed_plugin=None,
         fsdp_plugin=None,
         megatron_lm_plugin=None,
+        ipex_plugin=None,
+        xpu_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -573,6 +567,8 @@ class AcceleratorState:
         if not self.initialized:
             self.backend = None
             self.deepspeed_plugin = None
+            self.ipex_plugin = None
+            self.xpu_plugin = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
@@ -611,6 +607,16 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
+            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
+                if self.device.type == "cpu" and ipex_plugin is not None:
+                    self.ipex_plugin = ipex_plugin if ipex_plugin.use_ipex else None
+                    if self.ipex_plugin is not None:
+                        self.ipex_plugin.set_mixed_precision(mixed_precision)
+            elif self.distributed_type in [DistributedType.MULTI_XPU, DistributedType.NO]:
+                if self.device.type == "xpu" and xpu_plugin is not None:
+                    self.xpu_plugin = xpu_plugin if xpu_plugin.use_xpu else None
+                    if self.xpu_plugin is not None:
+                        self.xpu_plugin.set_mixed_precision(mixed_precision)
             if (
                 self.dynamo_backend != DynamoBackend.NO
                 and self._mixed_precision == "no"
