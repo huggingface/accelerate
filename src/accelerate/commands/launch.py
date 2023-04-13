@@ -559,7 +559,15 @@ def launch_command_parser(subparsers=None):
         "--ipex_enabled",
         default=False,
         action="store_true",
-        help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU?",
+        help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU and XPU?",
+    )
+    # xpu args
+    xpu_args = parser.add_argument_group("XPU Arguments", "Arguments related to XPU.")
+    xpu_args.add_argument(
+        "--xpu_enabled",
+        default=False,
+        action="store_true",
+        help="Whether to use XPU plugin to speed up training on XPU?",
     )
 
     # Other arguments of the training scripts
@@ -825,6 +833,8 @@ def _validate_launch_command(args):
                         setattr(args, k, defaults.dynamo_config[k])
                     for k in defaults.ipex_config:
                         setattr(args, k, defaults.ipex_config[k])
+                    for k in defaults.xpu_config:
+                        setattr(args, k, defaults.xpu_config[k])
                     continue
 
                 # Those args are handled separately

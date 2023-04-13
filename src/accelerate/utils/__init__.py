@@ -11,6 +11,7 @@ from .dataclasses import (
     GradScalerKwargs,
     InitProcessGroupKwargs,
     IntelPyTorchExtensionPlugin,
+    XPUPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,

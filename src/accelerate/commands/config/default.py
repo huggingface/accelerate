@@ -20,7 +20,7 @@ import torch
 
 from .config_args import ClusterConfig, default_json_config_file
 from .config_utils import SubcommandHelpFormatter
-
+from ...utils import is_xpu_available
 
 description = "Create a default config file for Accelerate with only a few flags set."
 
@@ -60,6 +60,14 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         config["use_cpu"] = False
         if num_gpus > 1:
             config["distributed_type"] = "MULTI_GPU"
+        else:
+            config["distributed_type"] = "NO"
+    if is_xpu_available():
+        num_gpus = torch.xpu.device_count()
+        config["num_processes"] = num_gpus
+        config["use_cpu"] = False
+        if num_gpus > 1:
+            config["distributed_type"] = "MULTI_XPU"
         else:
             config["distributed_type"] = "NO"
     else:

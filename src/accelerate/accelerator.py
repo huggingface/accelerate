@@ -439,10 +439,7 @@ class Accelerator:
 
                 self.scaler = ShardedGradScaler(**kwargs)
             else:
-                if is_xpu_available():
-                    self.scaler = torch.xpu.amp.GradScaler(**kwargs)
-                else:
-                    self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+                self.scaler = torch.cuda.amp.GradScaler(**kwargs)
                 
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
@@ -2705,10 +2702,7 @@ class Accelerator:
         """
         if self.native_amp:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
-                if is_xpu_available():
-                    autocast_context = torch.xpu.amp.autocast(dtype=torch.float16)
-                else:
-                    autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
+                autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
             elif self.mixed_precision == "bf16":
                 if self.distributed_type in [DistributedType.NO, DistributedType.MULTI_CPU,DistributedType.MULTI_XPU, DistributedType.MULTI_GPU]:
                     if is_xpu_available():
