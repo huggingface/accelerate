@@ -22,6 +22,7 @@ import gc
 import inspect
 
 import torch
+from .imports import is_xpu_available
 
 
 def release_memory(*objects):
@@ -51,11 +52,10 @@ def release_memory(*objects):
     for i in range(len(objects)):
         objects[i] = None
     gc.collect()
-    torch.cuda.empty_cache()
-    try:
+    if not is_xpu_available():
+        torch.cuda.empty_cache()
+    else:
         torch.xpu.empty_cache()
-    except AttributeError:
-        pass
     return objects
 
 
@@ -112,11 +112,10 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
     def decorator(*args, **kwargs):
         nonlocal batch_size
         gc.collect()
-        torch.cuda.empty_cache()
-        try:
+        if not is_xpu_available():
+            torch.cuda.empty_cache()
+        else:
             torch.xpu.empty_cache()
-        except AttributeError:
-            pass
         params = list(inspect.signature(function).parameters.keys())
         # Guard against user error
         if len(params) < (len(args) + 1):
@@ -133,11 +132,10 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
             except Exception as e:
                 if should_reduce_batch_size(e):
                     gc.collect()
-                    torch.cuda.empty_cache()
-                    try:
+                    if not is_xpu_available():
+                        torch.cuda.empty_cache()
+                    else:
                         torch.xpu.empty_cache()
-                    except AttributeError:
-                        pass
                     batch_size //= 2
                 else:
                     raise

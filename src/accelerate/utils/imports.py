@@ -40,12 +40,6 @@ try:
     _tpu_available = True
 except ImportError:
     _tpu_available = False
-
-try: 
-    import intel_extension_for_pytorch as ipex
-    _xpu_available = True
-except ImportError:
-    _xpu_available = False
     
 
 # Cache this result has it's a C FFI call which can be pretty time-consuming
@@ -96,17 +90,6 @@ def is_tpu_available(check_device=True):
     return _tpu_available
 
 
-@lru_cache()
-def is_xpu_available(check_device=True):
-    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
-    if _xpu_available and check_device:
-        try:
-            # Will raise a RuntimeError if no XPU  is found
-            _ = torch.xpu.device_count()
-            return True
-        except RuntimeError:
-            return False
-    return _xpu_available
 
 def is_deepspeed_available():
     package_exists = importlib.util.find_spec("deepspeed") is not None
@@ -223,3 +206,22 @@ def is_ipex_available():
         )
         return False
     return True
+
+@lru_cache()
+def is_xpu_available(check_device=True):
+    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
+    if is_ipex_available():
+        import torch
+        if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.13"):
+            return False
+    else:
+        return False
+    import intel_extension_for_pytorch
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no XPU  is found
+            _ = torch.xpu.device_count()
+            return torch.xpu.is_available()
+        except RuntimeError:
+            return False
+    return torch.xpu.is_available()

@@ -47,6 +47,7 @@ from .utils import (
     GradScalerKwargs,
     InitProcessGroupKwargs,
     IntelPyTorchExtensionPlugin,
+    XPUPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
@@ -163,6 +164,9 @@ class Accelerator:
         ipex_plugin (`IntelExtensionPlugin`, *optional*):
             Tweak your Intel Extension for PyTorch related args using this argument. This argument is optional and can
             be configured directly using *accelerate config*
+        xpu_plugin (`XPUPlugin`, *optional*):
+            Tweak your xpu related args using this argument. This argument is optional and can
+            be configured directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -235,6 +239,7 @@ class Accelerator:
         fsdp_plugin: FullyShardedDataParallelPlugin = None,
         megatron_lm_plugin: MegatronLMPlugin = None,
         ipex_plugin: IntelPyTorchExtensionPlugin = None,
+        xpu_plugin: XPUPlugin = None,
         rng_types: Optional[List[Union[str, RNGType]]] = None,
         log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
         project_dir: Optional[Union[str, os.PathLike]] = None,
@@ -323,7 +328,12 @@ class Accelerator:
         else:
             if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
                 raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
-
+                
+        if xpu_plugin is None:  # init from env variables
+            xpu_plugin = XPUPlugin() if os.environ.get("XPU_ENABLED", "false") == "true" else None
+        else:
+            if not isinstance(xpu_plugin, XPUPlugin):
+                raise TypeError("`xpu_plugin` must be a XPUPlugin object.")
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -364,6 +374,7 @@ class Accelerator:
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             ipex_plugin=ipex_plugin,
+            xpu_plugin=xpu_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -416,6 +427,7 @@ class Accelerator:
         if (
             self.state.mixed_precision == "fp16"
             and self.device.type != "cpu"
+             and self.device.type != "xpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
@@ -438,6 +450,8 @@ class Accelerator:
         ):
             if self.device.type == "cpu":
                 self.native_amp = is_torch_version(">=", "1.10")
+            elif self.device.type == "xpu":
+                self.native_amp = is_torch_version(">=", "1.13")
             else:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
@@ -933,7 +947,7 @@ class Accelerator:
         if is_torch_version("<", "1.10.0"):
             raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
 
-        if self.distributed_type == DistributedType.MULTI_GPU:
+        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
             dl_even_batches_values = []
 
             if even_batches is not None:
@@ -1135,6 +1149,9 @@ class Accelerator:
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.ipex_plugin is not None:
                 args = self._prepare_ipex(*args)
+        elif self.distributed_type in [DistributedType.MULTI_XPU, DistributedType.NO]:
+            if self.device.type == "xpu" and self.state.xpu_plugin is not None:
+                args = self._prepare_xpu(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1208,7 +1225,8 @@ class Accelerator:
                     raise ValueError(
                         "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
                         "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}"
-                    )
+                         "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
+                         )
 
             if "cpu" in model_devices or "disk" in model_devices:
                 raise ValueError(
@@ -1217,7 +1235,7 @@ class Accelerator:
         elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
 
-        if self.distributed_type == DistributedType.MULTI_GPU:
+        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(
@@ -1607,6 +1625,38 @@ class Accelerator:
             elif isinstance(result[i], (torch.optim.Optimizer)):
                 result[i] = optimizer
         return tuple(result)
+
+    def _prepare_xpu(self, *args):
+        ipex_plugin = self.state.ipex_plugin
+        if not is_xpu_available():
+            raise ImportError(
+                "Using XPU but XPU is not available or could not detect XPU Device, please refer"
+                " to https://github.com/intel/intel-extension-for-pytorch."
+            )
+
+        model = None
+        optimizer = None
+        result = [obj for obj in args]
+        for obj in result:
+            if isinstance(obj, torch.nn.Module):
+                model = obj
+            elif isinstance(obj, (torch.optim.Optimizer)):
+                optimizer = obj
+        model.to(self.device)
+        if optimizer is not None:
+            if not model.training:
+                model.train()
+            model, optimizer = torch.xpu.optimize(
+                model, dtype=xpu_plugin.dtype, optimizer=optimizer, inplace=True, level="O1"
+            )
+            model.forward = torch.xpu.amp.autocast(dtype=xpu_plugin.dtype)(model.forward)
+        for i in range(len(result)):
+            if isinstance(result[i], torch.nn.Module):
+                result[i] = model
+            elif isinstance(result[i], (torch.optim.Optimizer)):
+                result[i] = optimizer
+        return tuple(result)
+
 
     def prepare_data_loader(self, data_loader: torch.utils.data.DataLoader, device_placement=None):
         """
@@ -2660,7 +2710,7 @@ class Accelerator:
                 else:
                     autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
             elif self.mixed_precision == "bf16":
-                if self.distributed_type in [DistributedType.NO, DistributedType.MULTI_CPU, DistributedType.MULTI_GPU]:
+                if self.distributed_type in [DistributedType.NO, DistributedType.MULTI_CPU,DistributedType.MULTI_XPU, DistributedType.MULTI_GPU]:
                     if is_xpu_available():
                         autocast_context = torch.xpu.amp.autocast(dtype=torch.bfloat16, device_type=self.device.type)
                     else:

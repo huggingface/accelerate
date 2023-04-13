@@ -182,6 +182,7 @@ class DistributedType(str, enum.Enum):
         - **NO** -- Not a distributed environment, just a single process.
         - **MULTI_CPU** -- Distributed on multiple CPU nodes.
         - **MULTI_GPU** -- Distributed on multiple GPUs.
+        - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **TPU** -- Distributed on TPUs.
     """
@@ -190,6 +191,7 @@ class DistributedType(str, enum.Enum):
     NO = "NO"
     MULTI_CPU = "MULTI_CPU"
     MULTI_GPU = "MULTI_GPU"
+    MULTI_XPU = "MULTI_XPU" 
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
     TPU = "TPU"
@@ -1344,5 +1346,25 @@ class IntelPyTorchExtensionPlugin:
     def set_mixed_precision(self, mixed_precision):
         if mixed_precision == "fp16":
             raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+        elif mixed_precision == "bf16":
+            self.dtype = torch.bfloat16
+
+@dataclass
+class XPUPlugin:
+    """
+    This plugin is used to enable XPU plugin with IPEX.
+    """
+
+    use_xpu: bool = field(default=None, metadata={"help": "Enable XPU Plugin"})
+    dtype: torch.dtype = field(default=torch.float32, metadata={"help": "Enable mixed precision on XPU"})
+
+    def __post_init__(self):
+        prefix = "XPU_"
+        if self.use_xpu is None:
+            self.use_xpu = strtobool(os.environ.get(prefix + "ENABLED", "False")) == 1
+
+    def set_mixed_precision(self, mixed_precision):
+        if mixed_precision == "fp16":
+            raise ValueError("Tried to use `fp16` but it is not supported on xpu")
         elif mixed_precision == "bf16":
             self.dtype = torch.bfloat16

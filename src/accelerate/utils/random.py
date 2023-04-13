@@ -43,8 +43,9 @@ def set_seed(seed: int, device_specific: bool = False):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    if is_xpu_available:
+    if not is_xpu_available():
+        torch.cuda.manual_seed_all(seed)
+    else:
         torch.xpu.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
     if is_tpu_available():
@@ -62,7 +63,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         rng_state = torch.tensor(xm.get_rng_state())
     elif rng_type == RNGType.XPU:
         assert is_xpu_available(), "Can't synchronize XPU seeds on an environment without XPUs."
-        rng_state = torch.tensor(torch.xpu.get_rng_state())
+        rng_state = torch.xpu.get_rng_state()
     elif rng_type == RNGType.GENERATOR:
         assert generator is not None, "Need a generator to synchronize its seed."
         rng_state = generator.get_state()
@@ -71,15 +72,11 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     state = AcceleratorState()
     if state.distributed_type == DistributedType.TPU:
         rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
-    elif state.distributed_type in CUDA_DISTRIBUTED_TYPES:
+    elif state.distributed_type in CUDA_DISTRIBUTED_TYPES or state.distributed_type == DistributedType.MULTI_XPU:
         rng_state = rng_state.to(state.device)
         torch.distributed.broadcast(rng_state, 0)
         rng_state = rng_state.cpu()
         #xpu distributed
-    elif state.distributed_type in XPU_DISTRIBUTED_TYPES:
-        rng_state =rng_state.to(state.device)
-        torch.distributed.broadcast(rng_state, 0)
-        rng_state = rng_state.cpu()
     elif state.distributed_type == DistributedType.MULTI_CPU:
         torch.distributed.broadcast(rng_state, 0)
     

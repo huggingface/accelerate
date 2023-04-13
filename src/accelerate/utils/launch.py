@@ -22,7 +22,7 @@ import torch
 
 from ..commands.config.config_args import SageMakerConfig
 from ..commands.config.config_utils import DYNAMO_BACKENDS
-from ..utils import DynamoBackend, PrecisionType, is_torch_version
+from ..utils import DynamoBackend, PrecisionType, is_torch_version, is_xpu_available
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from ..utils.other import merge_dicts
 from .dataclasses import DistributedType, SageMakerDistributedType
@@ -70,7 +70,10 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     current_env = os.environ.copy()
     current_env["ACCELERATE_USE_CPU"] = str(args.cpu or args.use_cpu)
     if args.gpu_ids != "all" and args.gpu_ids is not None:
-        current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
+        if not is_xpu_available():
+            current_env["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
+        else:
+            current_env["ZE_AFFINITY_MASK"] = args.gpu_ids
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
@@ -101,7 +104,9 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if args.cpu or args.use_cpu:
         if args.ipex_enabled:
             current_env["IPEX_ENABLED"] = str(args.ipex_enabled).lower()
-
+     elif is_xpu_available():
+        if args.xpu_enabled:
+            current_env["XPU_ENABLED"] = str(args.xpu_enabled).lower()
     return cmd, current_env
 
 
@@ -137,7 +142,10 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     current_env = os.environ.copy()
     gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
-        current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
+        if not is_xpu_available():
+            current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
+        else:
+            current_env["ZE_AFFINITY_MASK"] = gpu_ids
     mixed_precision = args.mixed_precision.lower()
     try:
         mixed_precision = PrecisionType(mixed_precision)
@@ -255,7 +263,10 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     current_env = os.environ.copy()
     gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
-        current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
+        if not is_xpu_available():
+            current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
+        else:
+            current_env["ZE_AFFINITY_MASK"] = gpu_ids
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
@@ -497,7 +508,7 @@ class PrepareForLaunch:
                 store=torch.distributed.FileStore(rdv_file, world_size),
                 world_size=world_size,
             )
-        elif self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_CPU):
+        elif self.distributed_type in (DistributedType.MULTI_GPU,DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
             # Prepare the environment for torch.distributed
             os.environ["LOCAL_RANK"] = str(index)
             os.environ["RANK"] = str(index)
