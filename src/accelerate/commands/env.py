@@ -1,4 +1,4 @@
-[#!/usr/bin/env python
+#!/usr/bin/env python
 
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
