@@ -448,7 +448,7 @@ class Accelerator:
             if self.device.type == "cpu":
                 self.native_amp = is_torch_version(">=", "1.10")
             elif self.device.type == "xpu":
-                self.native_amp = is_torch_version(">=", "1.13")
+                self.native_amp = is_torch_version(">=", "1.10")
             else:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
