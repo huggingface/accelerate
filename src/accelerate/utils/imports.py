@@ -50,6 +50,10 @@ def is_torch_distributed_available() -> bool:
     return _torch_distributed_available
 
 
+def is_torch_dynamo_available() -> bool:
+    return hasattr(torch, "compile")
+
+
 def is_ccl_available():
     return (
         importlib.util.find_spec("torch_ccl") is not None
