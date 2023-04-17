@@ -19,7 +19,7 @@ from collections import UserDict, namedtuple
 
 import torch
 
-from accelerate.test_utils.testing import require_cuda, require_dynamo
+from accelerate.test_utils.testing import require_cuda, require_torch_min_version
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
     convert_outputs_to_fp32,
@@ -107,7 +107,7 @@ class UtilsTester(unittest.TestCase):
         _ = pickle.dumps(model)
 
     @require_cuda
-    @require_dynamo
+    @require_torch_min_version(version="2.0")
     def test_dynamo(self):
         model = RegressionModel()
         model._original_forward = model.forward

@@ -36,7 +36,6 @@ from ..utils import (
     is_mps_available,
     is_safetensors_available,
     is_tensorboard_available,
-    is_torch_dynamo_available,
     is_torch_version,
     is_tpu_available,
     is_transformers_available,
@@ -96,13 +95,6 @@ def require_mps(test_case):
     backend.
     """
     return unittest.skipUnless(is_mps_available(), "test requires a `mps` backend support in `torch`")(test_case)
-
-
-def require_dynamo(test_case):
-    """
-    Decorator marking a test case that requires torch.compile. These tests are skipped when torch < 2.0.
-    """
-    return unittest.skipUnless(is_torch_dynamo_available(), "test requires PyTorch 2.0 or higher.")(test_case)
 
 
 def require_huggingface_suite(test_case):
