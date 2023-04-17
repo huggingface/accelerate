@@ -811,7 +811,7 @@ def load_state_dict(checkpoint_file, device_map=None):
         if device_map is None:
             return safe_load_file(checkpoint_file)
         else:
-            devices = [device for device in device_map.values() if device not in ["disk"]]
+            devices = list(set(device_map.values()) - {"disk"})
 
             # if we only have one device we can load everything directly
             if len(devices) == 1:
