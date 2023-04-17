@@ -514,7 +514,16 @@ class ConvertOutputsToFp32:
         )
 
 
-convert_outputs_to_fp32 = ConvertOutputsToFp32
+def convert_outputs_to_fp32(model_forward):
+    model_forward = ConvertOutputsToFp32(model_forward)
+
+    def forward(x):
+        return model_forward(x)
+
+    # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
+    forward.__wrapped__ = model_forward
+
+    return forward
 
 
 def find_device(data):
