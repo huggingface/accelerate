@@ -106,6 +106,16 @@ class UtilsTester(unittest.TestCase):
         model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
         _ = pickle.dumps(model)
 
+    @require_cuda
+    def test_dynamo(self):
+        model = RegressionModel()
+        model._original_forward = model.forward
+        model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
+        model.forward = convert_outputs_to_fp32(model.forward)
+        model.forward = torch.compile(model.forward, backend="inductor")
+        inputs = torch.randn(4, 10).cuda()
+        _ = model(inputs)
+
     def test_find_device(self):
         self.assertEqual(find_device([1, "a", torch.tensor([1, 2, 3])]), torch.device("cpu"))
         self.assertEqual(find_device({"a": 1, "b": torch.tensor([1, 2, 3])}), torch.device("cpu"))
