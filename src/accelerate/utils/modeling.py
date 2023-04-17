@@ -408,7 +408,7 @@ def clean_device_map(device_map: Dict[str, Union[int, str, torch.device]], modul
         device_map[module_name] = values[0]
 
     # Recurse over the children
-    children_modules = [k for k in device_map.keys() if k.startswith(module_name) and len(k) > len(module_name)]
+    children_modules = [k for k in device_map.keys() if k.startswith(prefix) and len(k) > len(module_name)]
     idx = len(module_name.split(".")) + 1 if len(module_name) > 0 else 1
     children_modules = set(".".join(k.split(".")[:idx]) for k in children_modules)
     for child in children_modules:
@@ -515,10 +515,10 @@ def get_balanced_memory(
         buffer = 0
 
     # Compute mean of final modules. In the first dict of module sizes, leaves are the parameters
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if p.startswith(n) and len(p) > len(n)]) == 0]
+    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
     module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
     # Once removed, leaves are the final modules.
-    leaves = [n for n in module_sizes if len([p for p in module_sizes if p.startswith(n) and len(p) > len(n)]) == 0]
+    leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
     mean_leaves = int(sum([module_sizes[n] for n in leaves]) / len(leaves))
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
@@ -614,7 +614,7 @@ def infer_auto_device_map(
         if verbose:
             print(f"\nTreating module {name}.")
         # Max size in the remaining layers may have changed since we took one, so we maybe update it.
-        max_layer_names = [n for n in max_layer_names if not n.startswith(name)]
+        max_layer_names = [n for n in max_layer_names if n != name and not n.startswith(name + ".")]
         if len(max_layer_names) == 0:
             max_layer_size, max_layer_names = get_max_layer_size(
                 [(n, m) for n, m in modules_to_treat if isinstance(m, torch.nn.Module)],
@@ -766,7 +766,15 @@ def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, tor
     """
     all_model_tensors = [name for name, _ in model.state_dict().items()]
     for module_name in device_map.keys():
-        all_model_tensors = [name for name in all_model_tensors if not name.startswith(module_name)]
+        if module_name == "":
+            all_model_tensors.clear()
+            break
+        else:
+            all_model_tensors = [
+                name
+                for name in all_model_tensors
+                if not name == module_name and not name.startswith(module_name + ".")
+            ]
     if len(all_model_tensors) > 0:
         non_covered_params = ", ".join(all_model_tensors)
         raise ValueError(
@@ -825,7 +833,9 @@ def load_state_dict(checkpoint_file, device_map=None):
             device_weights = {device: [] for device in devices}
             for module_name, device in device_map.items():
                 if device in devices:
-                    device_weights[device].extend([k for k in weight_names if k.startswith(module_name)])
+                    device_weights[device].extend(
+                        [k for k in weight_names if k == module_name or k.startswith(module_name + ".")]
+                    )
 
             # all weights that haven't defined a device should be loaded on CPU
             device_weights["cpu"].extend([k for k in weight_names if k not in sum(device_weights.values(), [])])
