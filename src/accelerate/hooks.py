@@ -550,9 +550,9 @@ class CpuOffload(ModelHook):
         return module.to("cpu")
 
     def pre_forward(self, module, *args, **kwargs):
-        module.to(self.execution_device)
         if self.prev_module_hook is not None:
             self.prev_module_hook.offload()
+        module.to(self.execution_device)
         return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
 
 
