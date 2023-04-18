@@ -24,6 +24,7 @@ for log in Path().glob("*.log"):
                     else:
                         passed.append([test, duration, log.name.split('_')[0]])
     group_info.append([str(log), section_num_failed, failed])
+    log.unlink()
     failed = []
 message = ""
 if total_num_failed > 0:

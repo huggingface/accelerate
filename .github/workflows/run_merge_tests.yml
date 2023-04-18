@@ -91,4 +91,5 @@ jobs:
       - name: Generate Report
         if: always()
         run: |
+          pip install slack_sdk
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
