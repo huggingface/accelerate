@@ -138,11 +138,11 @@ class PartialState:
                         self.device = torch.device("cuda", self.local_process_index)
                         torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
-            elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu and not is_xpu_available():
+            elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu :
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend="nccl", **kwargs)
-                    self.backend = "nccl"
+                    self.backend = kwargs.pop("backend", "nccl")
+                    torch.distributed.init_process_group(backend=self.backend, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
@@ -199,18 +199,7 @@ class PartialState:
                 self.process_index = self.local_process_index = 0
 
                 if self.device is None:
-
-                    if cpu or not (torch.cuda.is_available() or is_mps_available() or is_xpu_available()):
-                        self.device = torch.device("cpu")
-                    elif is_mps_available():
-                        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-                        self.device = torch.device("mps")
-                    elif is_xpu_available():
-                        self.device =  torch.device("xpu")
-                    else:
-                        self.device = torch.device("cuda")
-
-                    #self.device = torch.device("cpu") if cpu else self.default_device
+                    self.device = torch.device("cpu") if cpu else self.default_device
 
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
@@ -519,6 +508,8 @@ class PartialState:
             return torch.device("mps")
         elif torch.cuda.is_available():
             return torch.device("cuda")
+        elif is_xpu_available():
+            return torch.device("xpu:0")
         else:
             return torch.device("cpu")
 
@@ -611,7 +602,7 @@ class AcceleratorState:
                     self.ipex_plugin = ipex_plugin if ipex_plugin.use_ipex else None
                     if self.ipex_plugin is not None:
                         self.ipex_plugin.set_mixed_precision(mixed_precision)
-            elif self.distributed_type in [DistributedType.MULTI_XPU, DistributedType.NO]:
+            if self.distributed_type in [DistributedType.MULTI_XPU, DistributedType.NO]:
                 if self.device.type == "xpu" and xpu_plugin is not None:
                     self.xpu_plugin = xpu_plugin if xpu_plugin.use_xpu else None
                     if self.xpu_plugin is not None:

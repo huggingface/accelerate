@@ -455,7 +455,7 @@ def reduce(tensor, reduction="mean"):
             A reduction method. Can be of "mean", "sum", or "none"
 
     Returns:
-        The same data structure as `data` with all the tensors reduced.
+        The same data structure as `data` with all the tensors reduced.   
     """
 
     def _reduce_across_processes(tensor, reduction="mean"):

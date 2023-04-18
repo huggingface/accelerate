@@ -117,8 +117,6 @@ def rng_sync_check():
     if state.distributed_type == DistributedType.MULTI_GPU:
         synchronize_rng_states(["cuda"])
         assert are_the_same_tensors(torch.cuda.get_rng_state()), "RNG states improperly synchronized on GPU."
-        if is_xpu_available():
-            assert are_the_same_tensors(torch.xpu.get_rng_state()), "RNG states improperly synchronized on GPU."
     generator = torch.Generator()
     synchronize_rng_states(["generator"], generator=generator)
     assert are_the_same_tensors(generator.get_state()), "RNG states improperly synchronized in generator."
@@ -324,7 +322,7 @@ def training_check():
 
     accelerator.print("Training yielded the same results on one CPU or distributes setup with batch split.")
 
-    if torch.cuda.is_available() or is_xpu_available():
+    if torch.cuda.is_available():
         # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
         print("FP16 training check.")
         AcceleratorState._reset_state()
