@@ -107,9 +107,9 @@ class MemoryTest(unittest.TestCase):
 
     @require_cuda
     def test_release_memory(self):
-        self.assertEqual(torch.cuda.memory_allocated(), 0)
+        starting_memory = torch.cuda.memory_allocated()
         model = ModelForTest()
         model.cuda()
-        self.assertGreater(torch.cuda.memory_allocated(), 0)
+        self.assertGreater(torch.cuda.memory_allocated(), starting_memory)
         model = release_memory(model)
-        self.assertEqual(torch.cuda.memory_allocated(), 0)
+        self.assertEqual(torch.cuda.memory_allocated(), starting_memory)
