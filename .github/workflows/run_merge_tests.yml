@@ -26,7 +26,7 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
-          pip install -e .[testing,test_trackers]
+          pip install -e .[testing,test_trackers] -U
           pip install pytest-reportlog
 
       - name: Run CLI tests
@@ -64,7 +64,7 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
-          pip install -e .[testing,test_trackers]
+          pip install -e .[testing,test_trackers] -U
           pip install pytest-reportlog
 
       - name: Run CLI tests

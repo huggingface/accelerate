@@ -19,7 +19,7 @@ from collections import UserDict, namedtuple
 
 import torch
 
-from accelerate.test_utils.testing import require_cuda
+from accelerate.test_utils.testing import require_cuda, require_torch_min_version
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
     convert_outputs_to_fp32,
@@ -105,6 +105,17 @@ class UtilsTester(unittest.TestCase):
         model.forward = convert_outputs_to_fp32(model.forward)
         model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
         _ = pickle.dumps(model)
+
+    @require_cuda
+    @require_torch_min_version(version="2.0")
+    def test_dynamo(self):
+        model = RegressionModel()
+        model._original_forward = model.forward
+        model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
+        model.forward = convert_outputs_to_fp32(model.forward)
+        model.forward = torch.compile(model.forward, backend="inductor")
+        inputs = torch.randn(4, 10).cuda()
+        _ = model(inputs)
 
     def test_find_device(self):
         self.assertEqual(find_device([1, "a", torch.tensor([1, 2, 3])]), torch.device("cpu"))
