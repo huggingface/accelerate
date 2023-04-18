@@ -75,7 +75,8 @@ def process_execution_check():
             text = "".join(f.readlines())
         try:
             assert text.startswith("Currently in the main process\n"), "Main process was not first"
-            assert text.endswith("Now on another process\n"), "Main process was not first"
+            if num_processes > 1:
+                assert text.endswith("Now on another process\n"), "Main process was not first"
             assert (
                 text.count("Now on another process\n") == num_processes - 1
             ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {num_processes}"
