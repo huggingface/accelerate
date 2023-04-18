@@ -34,10 +34,22 @@ if total_num_failed > 0:
                 message += f"*{name}: {num_failed} failed test*\n"
             else:
                 message += f"*{name}: {num_failed} failed tests*\n"
-            failed_table = '```\n| Test Location | Test Class | Test Name |\n|---|---|---|\n| '
+            max_location = max(failed_tests, key=lambda x: len(x[0].split("::")[1])) + 2
+            max_class = max(failed_tests, key=lambda x: len(x[0].split("::")[0])) + 2
+            max_name = max(failed_tests, key=lambda x: len(x[0].split("::")[2]))
+            failed_table = '```\n'
+            failed_table += f'Test Location |'.center(max_location)
+            failed_table += f'Test Class |'.center(max_class)
+            failed_table += f'Test Name\n'.center(max_name)
+            failed_table += f'|:{"-"*max_location}:|:{"-"*max_class}:|:{"-"*max_name}:|\n'
             for test in failed_tests:
-                failed_table += ' | '.join(test[0].split("::"))
-                failed_table += "\n"
+                for i, part in test[0].split("::"):
+                    if i == 0:
+                        failed_table += part.center(max_location) + " | "
+                    elif i == 1:
+                        failed_table += part.center(max_class) + " | "
+                    else:
+                        failed_table += part.center(max_name) + "\n"
             # failed_table += f" | {test[2]} |"
             message += failed_table
             message += "\n```\n"
