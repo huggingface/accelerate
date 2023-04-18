@@ -33,11 +33,13 @@ if total_num_failed > 0:
                 message += f"*{name}: {num_failed} failed test*\n"
             else:
                 message += f"*{name}: {num_failed} failed tests*\n"
-            failed_table = '| Test Location | Test Class | Test Name | PyTorch Version |\n|---|---|---|---|\n| '
+            failed_table = '```\n| Test Location | Test Class | Test Name | PyTorch Version |\n|---|---|---|---|\n| '
             for test in failed_tests:
                 failed_table += ' | '.join(test[0].split("::"))
+                failed_table += "\n"
             failed_table += f" | {test[2]} |"
             message += failed_table
+            message += "\n```\n"
     print(f'### {message}')
 else:
     message = "No failed tests! 🤗"
