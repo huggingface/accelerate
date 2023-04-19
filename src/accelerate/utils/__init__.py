@@ -25,7 +25,6 @@ from .environment import get_int_from_env, parse_choice_from_env, parse_flag_fro
 from .imports import (
     get_ccl_version,
     is_aim_available,
-    is_apex_available,
     is_bf16_available,
     is_boto3_available,
     is_ccl_available,
