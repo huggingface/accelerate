@@ -843,23 +843,26 @@ def load_state_dict(checkpoint_file, device_map=None):
             # all weights that haven't defined a device should be loaded on CPU
             device_weights["cpu"].extend([k for k in weight_names if k not in sum(device_weights.values(), [])])
             tensors = {}
-            pbar = is_tqdm_available() and tqdm(
-                main_process_only=False,
-                total=sum([len(device_weights[device]) for device in devices]),
-                unit="w",
-                smoothing=0,
-                leave=False,
-            )
+            if is_tqdm_available():
+                progress_bar = tqdm(
+                    main_process_only=False,
+                    total=sum([len(device_weights[device]) for device in devices]),
+                    unit="w",
+                    smoothing=0,
+                    leave=False,
+                )
+            else:
+                progress_bar = None
             for device in devices:
                 with safe_open(checkpoint_file, framework="pt", device=device) as f:
                     for key in device_weights[device]:
-                        if pbar:
-                            pbar.set_postfix(dev=device, refresh=False)
-                            pbar.set_description(key, refresh=False)
-                            pbar.update()
+                        if progress_bar is not None:
+                            progress_bar.set_postfix(dev=device, refresh=False)
+                            progress_bar.set_description(key, refresh=False)
+                            progress_bar.update()
                         tensors[key] = f.get_tensor(key)
-            if pbar:
-                pbar.close()
+            if progress_bar is not None:
+                progress_bar.close()
 
             return tensors
     else:
