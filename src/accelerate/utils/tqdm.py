@@ -16,7 +16,7 @@ from .imports import is_tqdm_available
 
 
 if is_tqdm_available():
-    import tqdm.auto as _tqdm
+    from tqdm.auto import tqdm as _tqdm
 
 from ..state import PartialState
 
