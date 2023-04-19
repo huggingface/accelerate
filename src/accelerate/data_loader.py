@@ -36,31 +36,6 @@ from .utils import (
 )
 
 
-if is_tpu_available(check_device=False):
-    import torch_xla.distributed.parallel_loader as xpl
-
-    class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
-        """
-        Wrapper for the xpl.MpDeviceLoader class that knows the total batch size.
-
-        **Available attributes:**
-
-        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
-            Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
-            number of processes
-
-        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
-        """
-
-        @property
-        def total_batch_size(self):
-            return self._loader.total_batch_size
-
-        @property
-        def total_dataset_length(self):
-            return self._loader.total_dataset_length
-
-
 logger = get_logger(__name__)
 
 # kwargs of the DataLoader in min version 1.4.0.
@@ -411,6 +386,41 @@ class DataLoaderShard(DataLoader):
             return self.dataset.total_length
         else:
             return len(self.dataset)
+
+
+if is_tpu_available(check_device=False):
+    import torch_xla.distributed.parallel_loader as xpl
+
+    class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
+        """
+        Wrapper for the xpl.MpDeviceLoader class that knows the total batch size.
+
+        **Available attributes:**
+
+        - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
+            Equal to the original batch size when `split_batches=True`; otherwise the original batch size * the total
+            number of processes
+
+        - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
+        """
+        def __init__(self, dataloader: DataLoaderShard, device: torch.device):
+          super().__init__(dataloader, device)
+          self._rng_types = self._loader.rng_types
+          self._loader.rng_types = None
+
+        def __iter__(self):
+          if self._rng_types is not None:
+            synchronize_rng_states(self._rng_types, self._loader.synchronized_generator)
+
+          return super().__iter__()
+
+        @property
+        def total_batch_size(self):
+            return self._loader.total_batch_size
+
+        @property
+        def total_dataset_length(self):
+            return self._loader.total_dataset_length
 
 
 class DataLoaderDispatcher(DataLoader):
