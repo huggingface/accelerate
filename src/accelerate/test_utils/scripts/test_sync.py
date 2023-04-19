@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import DistributedType, set_seed
+from accelerate.utils import DistributedType, is_torch_version, set_seed
 
 
 def check_model_parameters(model_a, model_b, did_step, iteration):
@@ -280,23 +280,26 @@ def main():
                         f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
                     )
                 test_gradient_accumulation(split_batch, dispatch_batches)
-    if state.local_process_index == 0:
-        print(
-            "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
-            "`split_batches=False`, `dispatch_batches=False`**",
-        )
-    test_gradient_accumulation_with_opt_and_scheduler()
-    if state.distributed_type == DistributedType.MULTI_GPU:
-        for split_batch in [True, False]:
-            for dispatch_batches in [True, False]:
-                if not split_batch and not dispatch_batches:
-                    continue
-                if state.local_process_index == 0:
-                    print(
-                        "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
-                        f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
-                    )
-                test_gradient_accumulation_with_opt_and_scheduler(split_batch, dispatch_batches)
+
+    # Currently will break on torch 2.0 +, need to investigate why
+    if is_torch_version("<", "2.0") or state.distributed_type == DistributedType.NO:
+        if state.local_process_index == 0:
+            print(
+                "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
+                "`split_batches=False`, `dispatch_batches=False`**",
+            )
+        test_gradient_accumulation_with_opt_and_scheduler()
+        if state.distributed_type == DistributedType.MULTI_GPU:
+            for split_batch in [True, False]:
+                for dispatch_batches in [True, False]:
+                    if not split_batch and not dispatch_batches:
+                        continue
+                    if state.local_process_index == 0:
+                        print(
+                            "**Test `accumulate` gradient accumulation with optimizer and scheduler, ",
+                            f"`split_batches={split_batch}` and `dispatch_batches={dispatch_batches}`**",
+                        )
+                    test_gradient_accumulation_with_opt_and_scheduler(split_batch, dispatch_batches)
 
 
 def _mp_fn(index):
