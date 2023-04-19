@@ -121,6 +121,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             setattr(args, "master_addr", str(main_process_ip))
             setattr(args, "master_port", str(main_process_port))
         else:
+            setattr(args, "rdzv_backend", "c10d")
             setattr(args, "rdzv_endpoint", f"{main_process_ip}:{main_process_port}")
     else:
         setattr(args, "nproc_per_node", str(num_processes))
