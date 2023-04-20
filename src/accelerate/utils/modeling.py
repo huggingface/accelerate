@@ -858,9 +858,10 @@ def load_state_dict(checkpoint_file, device_map=None):
                     for key in device_weights[device]:
                         if progress_bar is not None:
                             progress_bar.set_postfix(dev=device, refresh=False)
-                            progress_bar.set_description(key, refresh=False)
-                            progress_bar.update()
+                            progress_bar.set_description(key)
                         tensors[key] = f.get_tensor(key)
+                        if progress_bar is not None:
+                            progress_bar.update()
             if progress_bar is not None:
                 progress_bar.close()
 
