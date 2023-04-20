@@ -115,6 +115,9 @@ class PartialState:
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
+                    # DeepSpeed always uses nccl
+                    kwargs.pop("backend", None)
+                    self.backend = "nccl"
                     torch.distributed.init_process_group(backend="nccl", **kwargs)
 
                 self.num_processes = torch.distributed.get_world_size()
@@ -169,6 +172,8 @@ class PartialState:
                             "please try exporting rank 0's hostname as MASTER_ADDR"
                         )
                 if not torch.distributed.is_initialized():
+                    # Backend is not set by the user, we set it here
+                    kwargs.pop("nccl_backend", None)
                     torch.distributed.init_process_group(backend, rank=rank, world_size=size, **kwargs)
                     self.backend = backend
                 self.num_processes = torch.distributed.get_world_size()
