@@ -118,7 +118,7 @@ class PartialState:
                     # DeepSpeed always uses nccl
                     kwargs.pop("backend", None)
                     self.backend = "nccl"
-                    torch.distributed.init_process_group(backend="nccl", **kwargs)
+                    torch.distributed.init_process_group(backend=self.backend, **kwargs)
 
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
@@ -174,8 +174,8 @@ class PartialState:
                 if not torch.distributed.is_initialized():
                     # Backend is not set by the user, we set it here
                     kwargs.pop("nccl_backend", None)
-                    torch.distributed.init_process_group(backend, rank=rank, world_size=size, **kwargs)
                     self.backend = backend
+                    torch.distributed.init_process_group(self.backend, rank=rank, world_size=size, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
