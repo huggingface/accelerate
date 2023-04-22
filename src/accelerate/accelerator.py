@@ -1267,10 +1267,11 @@ class Accelerator:
             if "fp8_format" in kwargs:
                 kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
             fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-            fp8_enabled = torch.cuda.get_device_capability()[0] >= 9
+            cuda_device_capacity = torch.cuda.get_device_capability()
+            fp8_enabled = cuda_device_capacity[0] >= 9 or (cuda_device_capacity[0] == 8 and cuda_device_capacity[1] >= 9)    
             if not fp8_enabled:
                 logger.warn(
-                    f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
+                    f"The current device has compute capability of {cuda_device_capacity} which is "
                     "insufficient for FP8 mixed precision training (requires a GPU Hopper or higher, compute "
                     "capability of 9 or higher). Will use FP16 instead."
                 )
