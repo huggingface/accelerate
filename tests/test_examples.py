@@ -34,6 +34,7 @@ from accelerate.utils import write_basic_config
 EXCLUDE_EXAMPLES = [
     "cross_validation.py",
     "gradient_accumulation.py",
+    "local_sgd.py",
     "multi_process_metrics.py",
     "memory.py",
     "automatic_gradient_accumulation.py",
