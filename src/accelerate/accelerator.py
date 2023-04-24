@@ -1274,8 +1274,8 @@ class Accelerator:
             if not fp8_enabled:
                 logger.warn(
                     f"The current device has compute capability of {cuda_device_capacity} which is "
-                    "insufficient for FP8 mixed precision training (requires a GPU Hopper or higher, compute "
-                    "capability of 9 or higher). Will use FP16 instead."
+                    "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
+                    "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                 )
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
