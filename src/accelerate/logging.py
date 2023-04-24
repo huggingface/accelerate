@@ -68,8 +68,7 @@ def get_logger(name: str, log_level: str = None):
     Returns a `logging.Logger` for `name` that can handle multiprocessing.
 
     If a log should be called on all processes, pass `main_process_only=False`
-
-    If a lot should be called on all processes in order, also pass `in_order=True`
+    If a log should be called on all processes and in order, also pass `in_order=True`
 
     Args:
         name (`str`):
