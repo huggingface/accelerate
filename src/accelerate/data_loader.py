@@ -488,6 +488,7 @@ class DataLoaderDispatcher(DataLoader):
         else:
             batch_info = [None, self._stop_iteration]
         # This is inplace, so after this instruction, every process has the same `batch_info` as process 0.
+        print(batch_info)
         broadcast_object_list(batch_info)
         self._stop_iteration = batch_info[1]
         if self._stop_iteration:
