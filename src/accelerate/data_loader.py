@@ -467,6 +467,7 @@ class DataLoaderDispatcher(DataLoader):
     def _fetch_batches(self, iterator):
         batches, batch = None, None
         # On process 0, we gather the batch to dispatch.
+        print("Starting to dispatch")
         if self.state.process_index == 0:
             print("In process zero")
             try:
@@ -494,7 +495,7 @@ class DataLoaderDispatcher(DataLoader):
         else:
             batch_info = [None, self._stop_iteration]
         # This is inplace, so after this instruction, every process has the same `batch_info` as process 0.
-        print(batch_info)
+        print(f'Batch info on process {AcceleratorState().process_index}: {batch_info}')
         from accelerate.utils import wait_for_everyone
         wait_for_everyone()
         broadcast_object_list(batch_info)
