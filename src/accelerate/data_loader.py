@@ -468,10 +468,13 @@ class DataLoaderDispatcher(DataLoader):
         batches, batch = None, None
         # On process 0, we gather the batch to dispatch.
         if self.state.process_index == 0:
+            print("In process zero")
             try:
                 if self.split_batches:
                     # One batch of the main iterator is dispatched and split.
+                    print("Getting next batch")
                     batch = next(iterator)
+                    print(f'Batch: {batch}')
                 else:
                     # num_processes batches of the main iterator are concatenated then dispatched and split.
                     # We add the batches one by one so we have the remainder available when drop_last=False.
@@ -482,7 +485,9 @@ class DataLoaderDispatcher(DataLoader):
                 # In both cases, we need to get the structure of the batch that we will broadcast on other
                 # processes to initialize the tensors with the right shape.
                 # data_structure, stop_iteration
+                print("getting batch info")
                 batch_info = [get_data_structure(batch), False]
+                print(f'Batch info: {batch_info}')
             except StopIteration:
                 batch_info = [None, True]
         else:
