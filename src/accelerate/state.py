@@ -109,16 +109,22 @@ class PartialState:
                 self.process_index = xm.get_ordinal()
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
-            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
+            elif (
+                os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true"
+                and int(os.environ.get("LOCAL_RANK", -1)) != -1
+                and not cpu
+            ):
                 assert (
                     is_deepspeed_available()
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
+                    from deepspeed import comm as dist
+
                     # DeepSpeed always uses nccl
                     kwargs.pop("backend", None)
                     self.backend = "nccl"
-                    torch.distributed.init_process_group(backend=self.backend, **kwargs)
+                    dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
 
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
