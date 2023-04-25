@@ -489,6 +489,7 @@ class DataLoaderDispatcher(DataLoader):
                 batch_info = [get_data_structure(batch), False]
                 print(f'Batch info: {batch_info}')
             except StopIteration:
+                print("Hit stop iteration")
                 batch_info = [None, True]
         else:
             batch_info = [None, self._stop_iteration]
