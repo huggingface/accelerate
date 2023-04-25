@@ -1,7 +1,6 @@
 import json
 import os
 import tempfile
-import unittest
 from unittest.mock import patch
 
 import torch
@@ -184,7 +183,7 @@ class AcceleratorTester(AccelerateTestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "EleutherAI/gpt-neo-125m",
             load_in_8bit=True,
-            device_map="auto",
+            device_map={"": 0},
         )
         accelerator = Accelerator()
 
@@ -192,7 +191,6 @@ class AcceleratorTester(AccelerateTestCase):
         model = accelerator.prepare(model)
 
     @slow
-    @unittest.skip("Skip until the next `transformers` release")
     def test_accelerator_bnb_cpu_error(self):
         """Tests that the accelerator can be used with the BNB library. This should fail as we are trying to load a model
         that is loaded between cpu and gpu"""
