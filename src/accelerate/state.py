@@ -123,6 +123,7 @@ class PartialState:
                     from deepspeed import comm as dist
 
                     # DeepSpeed always uses nccl
+                    # DeepSpeed can use ccl if present in system 
                     if is_ccl_available():
                         self.backend = kwargs.pop("backend", "ccl")
                     else:
