@@ -54,7 +54,7 @@ def _is_package_available(pkg_name):
             _ = importlib_metadata.metadata(pkg_name)
             return True
         except importlib_metadata.PackageNotFoundError:
-            return False    
+            return False
 
 
 def is_torch_distributed_available() -> bool:
