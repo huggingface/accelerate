@@ -771,7 +771,8 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.process_index}")
         ```
         """
-        yield self.state.main_process_first()
+        with self.state.main_process_first():
+            yield
 
     @contextmanager
     def local_main_process_first(self):
@@ -792,7 +793,8 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.local_process_index}")
         ```
         """
-        yield self.state.local_main_process_first()
+        with self.state.local_main_process_first():
+            yield
 
     @contextmanager
     def no_sync(self, model):
@@ -1285,12 +1287,15 @@ class Accelerator:
             if "fp8_format" in kwargs:
                 kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
             fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-            fp8_enabled = torch.cuda.get_device_capability()[0] >= 9
+            cuda_device_capacity = torch.cuda.get_device_capability()
+            fp8_enabled = cuda_device_capacity[0] >= 9 or (
+                cuda_device_capacity[0] == 8 and cuda_device_capacity[1] >= 9
+            )
             if not fp8_enabled:
                 logger.warn(
-                    f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
-                    "insufficient for FP8 mixed precision training (requires a GPU Hopper or higher, compute "
-                    "capability of 9 or higher). Will use FP16 instead."
+                    f"The current device has compute capability of {cuda_device_capacity} which is "
+                    "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
+                    "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                 )
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:

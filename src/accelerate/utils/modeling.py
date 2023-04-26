@@ -27,6 +27,7 @@ import torch.nn as nn
 
 from .imports import is_safetensors_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
+from .tqdm import is_tqdm_available, tqdm
 
 
 if is_safetensors_available():
@@ -762,7 +763,9 @@ def infer_auto_device_map(
 
         else:
             if verbose:
-                print(f"Putting {name} on {devices[current_device]}.")
+                print(
+                    f"Putting {name} (size={module_size}) on {devices[current_device]} (available={current_max_size-current_memory_used})."
+                )
             current_memory_used += module_size
             device_map[name] = devices[current_device]
 
@@ -853,10 +856,27 @@ def load_state_dict(checkpoint_file, device_map=None):
             # all weights that haven't defined a device should be loaded on CPU
             device_weights["cpu"].extend([k for k in weight_names if k not in sum(device_weights.values(), [])])
             tensors = {}
+            if is_tqdm_available():
+                progress_bar = tqdm(
+                    main_process_only=False,
+                    total=sum([len(device_weights[device]) for device in devices]),
+                    unit="w",
+                    smoothing=0,
+                    leave=False,
+                )
+            else:
+                progress_bar = None
             for device in devices:
                 with safe_open(checkpoint_file, framework="pt", device=device) as f:
                     for key in device_weights[device]:
+                        if progress_bar is not None:
+                            progress_bar.set_postfix(dev=device, refresh=False)
+                            progress_bar.set_description(key)
                         tensors[key] = f.get_tensor(key)
+                        if progress_bar is not None:
+                            progress_bar.update()
+            if progress_bar is not None:
+                progress_bar.close()
 
             return tensors
     else:

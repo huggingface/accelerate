@@ -109,20 +109,26 @@ class PartialState:
                 self.process_index = xm.get_ordinal()
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
-            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
+            elif (
+                os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true"
+                and int(os.environ.get("LOCAL_RANK", -1)) != -1
+                and not cpu
+            ):
                 assert (
                     is_deepspeed_available()
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
 
-                    from .utils import compare_versions
+                    from deepspeed import comm as dist
+
+                    # DeepSpeed always uses nccl
                     if is_ccl_available():
                         self.backend = kwargs.pop("backend", "ccl")
                     else:
                         self.backend = kwargs.pop("backend", "nccl")
-                    if not torch.distributed.is_initialized():
-                        torch.distributed.init_process_group(backend = self.backend,**kwargs)
+                    self.backend = "nccl"
+                    dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
@@ -183,8 +189,10 @@ class PartialState:
                             "please try exporting rank 0's hostname as MASTER_ADDR"
                         )
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend, rank=rank, world_size=size, **kwargs)
+                    # Backend is not set by the user, we set it here
+                    kwargs.pop("nccl_backend", None)
                     self.backend = backend
+                    torch.distributed.init_process_group(self.backend, rank=rank, world_size=size, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
@@ -698,7 +706,8 @@ class AcceleratorState:
 
         The other processes will enter the with block after the main process exits.
         """
-        yield PartialState().main_process_first()
+        with PartialState().main_process_first():
+            yield
 
     @contextmanager
     def local_main_process_first(self):
@@ -707,7 +716,8 @@ class AcceleratorState:
 
         The other processes will enter the with block after the main process exits.
         """
-        yield PartialState().local_main_process_first()
+        with PartialState().local_main_process_first():
+            yield
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)

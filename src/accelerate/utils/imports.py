@@ -69,10 +69,6 @@ def get_ccl_version():
     return importlib_metadata.version("oneccl_bind_pt")
 
 
-def is_apex_available():
-    return importlib.util.find_spec("apex") is not None
-
-
 def is_fp8_available():
     return importlib.util.find_spec("transformer_engine") is not None
 

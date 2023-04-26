@@ -16,6 +16,8 @@
 
 import contextlib
 import io
+import time
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
@@ -55,11 +57,33 @@ def print_on(state, process_idx):
 def process_execution_check():
     accelerator = Accelerator()
     num_processes = accelerator.num_processes
+
+    # Test main_process_first context manager
+    path = Path("check_main_process_first.txt")
+    if path.exists():
+        path.unlink()
     with accelerator.main_process_first():
-        idx = torch.tensor(accelerator.process_index).to(accelerator.device)
-    idxs = accelerator.gather(idx)
-    if num_processes > 1:
-        assert idxs[0] == 0, "Main process was not first."
+        if accelerator.is_main_process:
+            time.sleep(0.1)  # ensure main process takes longest
+            with open(path, "a+") as f:
+                f.write("Currently in the main process\n")
+        else:
+            with open(path, "a+") as f:
+                f.write("Now on another process\n")
+    accelerator.wait_for_everyone()
+    if accelerator.is_main_process:
+        with open(path, "r") as f:
+            text = "".join(f.readlines())
+        try:
+            assert text.startswith("Currently in the main process\n"), "Main process was not first"
+            if num_processes > 1:
+                assert text.endswith("Now on another process\n"), "Main process was not first"
+            assert (
+                text.count("Now on another process\n") == num_processes - 1
+            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {num_processes}"
+        except AssertionError:
+            path.unlink()
+            raise
 
     # Test the decorators
     f = io.StringIO()
