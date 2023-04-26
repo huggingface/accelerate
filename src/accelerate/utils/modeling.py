@@ -382,7 +382,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     if max_memory is None:
         if not torch.cuda.is_available():
             max_memory = {}
-        if not is_xpu_available():
+        if is_xpu_available():
             max_memory = {}
         else:
             # Make sure CUDA is initialized on each GPU to have the right memory info.

@@ -63,15 +63,15 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         else:
             config["distributed_type"] = "NO"
     if is_xpu_available():
-        num_gpus = torch.xpu.device_count()
-        config["num_processes"] = num_gpus
+        num_xpus = torch.xpu.device_count()
+        config["num_processes"] = num_xpus
         config["use_cpu"] = False
-        if num_gpus > 1:
+        if num_xpus > 1:
             config["distributed_type"] = "MULTI_XPU"
         else:
             config["distributed_type"] = "NO"
     else:
-        num_gpus = 0
+        num_xpus = 0
         config["use_cpu"] = True
         config["num_processes"] = 1
         config["distributed_type"] = "NO"

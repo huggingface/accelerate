@@ -123,11 +123,8 @@ class PartialState:
                     from deepspeed import comm as dist
 
                     # DeepSpeed always uses nccl
-                    # DeepSpeed can use ccl if present in system 
-                    if is_ccl_available():
-                        self.backend = kwargs.pop("backend", "ccl")
-                    else:
-                        self.backend = kwargs.pop("backend", "nccl")
+                    kwargs.pop("backend", None)
+                    self.backend = "nccl"
                     dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         
                 self.num_processes = torch.distributed.get_world_size()

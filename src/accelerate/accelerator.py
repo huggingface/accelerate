@@ -1148,7 +1148,7 @@ class Accelerator:
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.ipex_plugin is not None:
                 args = self._prepare_ipex(*args)
-        elif self.distributed_type in [DistributedType.MULTI_XPU, DistributedType.NO]:
+        elif self.distributed_type in [DistributedType.MULTI_XPU]:
             if self.device.type == "xpu" and self.state.xpu_plugin is not None:
                 args = self._prepare_xpu(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
