@@ -127,7 +127,6 @@ class PartialState:
                         self.backend = kwargs.pop("backend", "ccl")
                     else:
                         self.backend = kwargs.pop("backend", "nccl")
-                    self.backend = "nccl"
                     dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         
                 self.num_processes = torch.distributed.get_world_size()
