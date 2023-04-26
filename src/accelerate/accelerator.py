@@ -330,7 +330,7 @@ class Accelerator:
                 raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
                 
         if xpu_plugin is None:  # init from env variables
-            xpu_plugin = XPUPlugin() if os.environ.get("XPU_ENABLED", "false") == "true" else None
+            xpu_plugin = XPUPlugin() if is_xpu_available() else None
         else:
             if not isinstance(xpu_plugin, XPUPlugin):
                 raise TypeError("`xpu_plugin` must be a XPUPlugin object.")
@@ -427,7 +427,7 @@ class Accelerator:
         if (
             self.state.mixed_precision == "fp16"
             and self.device.type != "cpu"
-             and self.device.type != "xpu"
+            and self.device.type != "xpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True

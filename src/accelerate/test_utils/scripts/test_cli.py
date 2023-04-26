@@ -7,6 +7,5 @@ def main():
         num_gpus = 0
     print(f"Successfully ran on {num_gpus} GPUs")
     
-
 if __name__ == "__main__":
     main()

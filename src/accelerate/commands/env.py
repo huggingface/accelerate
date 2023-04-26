@@ -56,7 +56,7 @@ def env_command(args):
         "Python version": platform.python_version(),
         "Numpy version": np.__version__,
         "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
-        "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available} or {pt_xpu_available})",
+        "PyTorch version (GPU?)": f"{pt_version} ({pt_xpu_available})",
     }
 
     print("\nCopy-and-paste the text below in your GitHub issue\n")

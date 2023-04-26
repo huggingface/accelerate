@@ -118,15 +118,12 @@ class PartialState:
 
                     from .utils import compare_versions
                     if is_ccl_available():
-                        self.backend = "ccl"
+                        self.backend = kwargs.pop("backend", "ccl")
                     else:
-                        self.backend = "nccl"
-                    if compare_versions("deepspeed", ">", "0.6.5"):
-                        from deepspeed import comm as dist
-
-                        dist.init_distributed(dist_backend=self.backend)
-                    else:
+                        self.backend = kwargs.pop("backend", "nccl")
+                    if not torch.distributed.is_initialized():
                         torch.distributed.init_process_group(backend = self.backend,**kwargs)
+                        
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
