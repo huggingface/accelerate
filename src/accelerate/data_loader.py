@@ -452,8 +452,8 @@ class DataLoaderDispatcher(DataLoader):
             raise ImportError(
                 f"Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
-        if shuffle:
-            torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
+        # if shuffle:
+        #     torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
 
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
