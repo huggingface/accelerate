@@ -315,7 +315,7 @@ def get_cluster_input():
                 fsdp_config["fsdp_min_num_params"] = _ask_field(
                     "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
                     int,
-                    default=1e8,
+                    default=100000000,
                 )
             fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
             fsdp_config["fsdp_backward_prefetch_policy"] = _ask_options(
