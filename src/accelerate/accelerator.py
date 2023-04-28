@@ -167,8 +167,8 @@ class Accelerator:
             Tweak your Intel Extension for PyTorch related args using this argument. This argument is optional and can
             be configured directly using *accelerate config*
         xpu_plugin (`XPUPlugin`, *optional*):
-            Tweak your xpu related args using this argument. This argument is optional and can
-            be configured directly using *accelerate config*
+            Tweak your xpu related args using this argument. This argument is optional and can be configured directly
+            using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
