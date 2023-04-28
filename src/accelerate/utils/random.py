@@ -21,7 +21,7 @@ import torch
 from ..state import AcceleratorState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, RNGType
-from .imports import is_tpu_available,is_xpu_available
+from .imports import is_tpu_available, is_xpu_available
 
 
 if is_tpu_available(check_device=False):
@@ -76,10 +76,9 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         rng_state = rng_state.to(state.device)
         torch.distributed.broadcast(rng_state, 0)
         rng_state = rng_state.cpu()
-        #xpu distributed
+        # xpu distributed
     elif state.distributed_type == DistributedType.MULTI_CPU:
         torch.distributed.broadcast(rng_state, 0)
-    
 
     # Set the broadcast rng state
     if rng_type == RNGType.TORCH:

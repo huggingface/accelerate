@@ -18,9 +18,10 @@ from pathlib import Path
 
 import torch
 
+from ...utils import is_xpu_available
 from .config_args import ClusterConfig, default_json_config_file
 from .config_utils import SubcommandHelpFormatter
-from ...utils import is_xpu_available
+
 
 description = "Create a default config file for Accelerate with only a few flags set."
 

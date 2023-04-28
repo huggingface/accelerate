@@ -37,6 +37,7 @@ from .utils import (
 )
 from .utils.dataclasses import SageMakerDistributedType
 
+
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
@@ -119,14 +120,13 @@ class PartialState:
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
-
                     from deepspeed import comm as dist
 
                     # DeepSpeed always uses nccl
                     kwargs.pop("backend", None)
                     self.backend = "nccl"
                     dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
-                        
+
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
@@ -138,7 +138,7 @@ class PartialState:
                         self.device = torch.device("cuda", self.local_process_index)
                         torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
-            elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu :
+            elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
                     self.backend = kwargs.pop("backend", "nccl")

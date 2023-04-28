@@ -25,6 +25,7 @@ from accelerate.state import GradientState
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, is_torch_version, set_seed
 
+
 def check_model_parameters(model_a, model_b, did_step, iteration):
     for param, grad_param in zip(model_a.parameters(), model_b.parameters()):
         if not param.requires_grad:

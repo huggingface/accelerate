@@ -22,7 +22,6 @@ from .state import PartialState
 from .utils import (
     PrefixedDataset,
     find_device,
-    is_xpu_available,
     named_module_tensors,
     send_to_device,
     set_module_tensor_to_device,
@@ -532,7 +531,6 @@ class CpuOffload(ModelHook):
         prev_module_hook: Optional["UserCpuOffloadHook"] = None,
     ):
         self.prev_module_hook = prev_module_hook
-
 
         self.execution_device = execution_device if execution_device is not None else PartialState().default_device
 

@@ -49,7 +49,6 @@ from .utils import (
     GradScalerKwargs,
     InitProcessGroupKwargs,
     IntelPyTorchExtensionPlugin,
-    XPUPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
@@ -57,6 +56,7 @@ from .utils import (
     ProjectConfiguration,
     RNGType,
     TorchDynamoPlugin,
+    XPUPlugin,
     compare_versions,
     convert_model,
     convert_outputs_to_fp32,
@@ -330,7 +330,7 @@ class Accelerator:
         else:
             if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
                 raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
-                
+
         if xpu_plugin is None:  # init from env variables
             xpu_plugin = XPUPlugin() if is_xpu_available() else None
         else:
@@ -442,7 +442,7 @@ class Accelerator:
                 self.scaler = ShardedGradScaler(**kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
-                
+
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
             DistributedType.MEGATRON_LM,
@@ -1226,8 +1226,8 @@ class Accelerator:
                     raise ValueError(
                         "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
                         "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}"
-                         "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
-                         )
+                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
+                    )
 
             if "cpu" in model_devices or "disk" in model_devices:
                 raise ValueError(
@@ -1631,7 +1631,7 @@ class Accelerator:
         return tuple(result)
 
     def _prepare_xpu(self, *args):
-        ipex_plugin = self.state.ipex_plugin
+        xpu_plugin = self.state.xpu_plugin
         if not is_xpu_available():
             raise ImportError(
                 "Using XPU but XPU is not available or could not detect XPU Device, please refer"
@@ -1660,7 +1660,6 @@ class Accelerator:
             elif isinstance(result[i], (torch.optim.Optimizer)):
                 result[i] = optimizer
         return tuple(result)
-
 
     def prepare_data_loader(self, data_loader: torch.utils.data.DataLoader, device_placement=None):
         """
@@ -2711,7 +2710,12 @@ class Accelerator:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
             elif self.mixed_precision == "bf16":
-                if self.distributed_type in [DistributedType.NO, DistributedType.MULTI_CPU,DistributedType.MULTI_XPU, DistributedType.MULTI_GPU]:
+                if self.distributed_type in [
+                    DistributedType.NO,
+                    DistributedType.MULTI_CPU,
+                    DistributedType.MULTI_XPU,
+                    DistributedType.MULTI_GPU,
+                ]:
                     if is_xpu_available():
                         autocast_context = torch.xpu.amp.autocast(dtype=torch.bfloat16, device_type=self.device.type)
                     else:

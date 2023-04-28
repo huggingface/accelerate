@@ -192,7 +192,7 @@ class DistributedType(str, enum.Enum):
     NO = "NO"
     MULTI_CPU = "MULTI_CPU"
     MULTI_GPU = "MULTI_GPU"
-    MULTI_XPU = "MULTI_XPU" 
+    MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
     TPU = "TPU"
@@ -1349,6 +1349,7 @@ class IntelPyTorchExtensionPlugin:
             raise ValueError("Tried to use `fp16` but it is not supported on cpu")
         elif mixed_precision == "bf16":
             self.dtype = torch.bfloat16
+
 
 @dataclass
 class XPUPlugin:

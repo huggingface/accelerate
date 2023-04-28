@@ -508,7 +508,11 @@ class PrepareForLaunch:
                 store=torch.distributed.FileStore(rdv_file, world_size),
                 world_size=world_size,
             )
-        elif self.distributed_type in (DistributedType.MULTI_GPU,DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
+        elif self.distributed_type in (
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_XPU,
+            DistributedType.MULTI_CPU,
+        ):
             # Prepare the environment for torch.distributed
             os.environ["LOCAL_RANK"] = str(index)
             os.environ["RANK"] = str(index)

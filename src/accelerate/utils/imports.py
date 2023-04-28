@@ -40,7 +40,7 @@ try:
     _tpu_available = True
 except ImportError:
     _tpu_available = False
-    
+
 
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
@@ -63,7 +63,7 @@ def is_torch_distributed_available() -> bool:
 
 def is_ccl_available():
     try:
-        import oneccl_bindings_for_pytorch
+        pass
     except ImportError:
         print(
             "Intel(R) oneCCL Bindings for PyTorch* is required to run DDP on Intel(R) GPUs, but it is not"
@@ -95,7 +95,6 @@ def is_tpu_available(check_device=True):
         except RuntimeError:
             return False
     return _tpu_available
-
 
 
 def is_deepspeed_available():
@@ -204,16 +203,18 @@ def is_ipex_available():
         return False
     return True
 
+
 @lru_cache()
 def is_xpu_available(check_device=False):
     "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
     if is_ipex_available():
         import torch
+
         if is_torch_version("<=", "1.12"):
             return False
     else:
         return False
-    import intel_extension_for_pytorch
+
     if check_device:
         try:
             # Will raise a RuntimeError if no XPU  is found

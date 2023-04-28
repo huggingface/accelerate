@@ -11,7 +11,6 @@ from .dataclasses import (
     GradScalerKwargs,
     InitProcessGroupKwargs,
     IntelPyTorchExtensionPlugin,
-    XPUPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
@@ -21,6 +20,7 @@ from .dataclasses import (
     SageMakerDistributedType,
     TensorInformation,
     TorchDynamoPlugin,
+    XPUPlugin,
 )
 from .environment import get_int_from_env, parse_choice_from_env, parse_flag_from_env
 from .imports import (
@@ -42,9 +42,9 @@ from .imports import (
     is_sagemaker_available,
     is_tensorboard_available,
     is_tpu_available,
-    is_xpu_available,
     is_transformers_available,
     is_wandb_available,
+    is_xpu_available,
 )
 from .modeling import (
     check_device_map,

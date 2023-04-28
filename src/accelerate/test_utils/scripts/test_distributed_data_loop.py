@@ -25,6 +25,7 @@ from torch.utils.data import DataLoader, IterableDataset, TensorDataset
 from accelerate.accelerator import Accelerator
 from accelerate.utils.dataclasses import DistributedType
 
+
 class DummyIterableDataset(IterableDataset):
     def __init__(self, data):
         self.data = data

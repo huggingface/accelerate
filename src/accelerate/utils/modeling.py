@@ -378,7 +378,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     Get the maximum memory available if nothing is passed, converts string to int otherwise.
     """
     import psutil
-     
+
     if max_memory is None:
         if not torch.cuda.is_available():
             max_memory = {}
@@ -388,8 +388,8 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
             # Make sure CUDA is initialized on each GPU to have the right memory info.
             if is_xpu_available():
                 for i in range(torch.xpu.device_count()):
-                   _ = torch.tensor(0, device=torch.device("xpu", i))
-                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())} 
+                    _ = torch.tensor(0, device=torch.device("xpu", i))
+                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
             else:
                 for i in range(torch.cuda.device_count()):
                     _ = torch.tensor([0], device=i)
@@ -486,9 +486,9 @@ def get_balanced_memory(
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
 
-    if not (torch.cuda.is_available() and is_xpu_available()) :
+    if not (torch.cuda.is_available() and is_xpu_available()):
         return max_memory
-            
+
     if is_xpu_available():
         num_devices = len([d for d in max_memory if torch.device(d).type == "xpu" and max_memory[d] > 0])
     else:
@@ -496,7 +496,6 @@ def get_balanced_memory(
 
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
-
 
     # We can't just set the memory to model_size // num_devices as it will end being too small: each GPU will get
     # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
@@ -556,7 +555,6 @@ def infer_auto_device_map(
     dtype: Optional[Union[str, torch.dtype]] = None,
     special_dtypes: Optional[Dict[str, Union[str, torch.dtype]]] = None,
     verbose: bool = False,
-
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,

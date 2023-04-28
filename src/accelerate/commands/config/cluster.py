@@ -21,8 +21,8 @@ from ...utils import (
     DistributedType,
     is_deepspeed_available,
     is_mps_available,
-    is_xpu_available,
     is_transformers_available,
+    is_xpu_available,
 )
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
@@ -410,7 +410,12 @@ def get_cluster_input():
     tpu_use_sudo = False
     tpu_use_cluster = False
 
-    if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
+    if distributed_type in [
+        DistributedType.MULTI_CPU,
+        DistributedType.MULTI_XPU,
+        DistributedType.MULTI_GPU,
+        DistributedType.TPU,
+    ]:
         machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
         if machine_type == "TPU":
             machine_type += " cores"

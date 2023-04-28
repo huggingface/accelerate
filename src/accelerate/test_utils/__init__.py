@@ -3,7 +3,6 @@ from .testing import (
     execute_subprocess_async,
     require_cpu,
     require_cuda,
-    require_xpu,
     require_huggingface_suite,
     require_mps,
     require_multi_gpu,
@@ -13,6 +12,7 @@ from .testing import (
     require_single_xpu,
     require_torch_min_version,
     require_tpu,
+    require_xpu,
     skip,
     slow,
 )

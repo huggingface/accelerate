@@ -23,7 +23,9 @@ import torch
 
 from accelerate import __version__ as version
 from accelerate.commands.config import default_config_file, load_config_from_file
+
 from ..utils import is_xpu_available
+
 
 def env_command_parser(subparsers=None):
     if subparsers is not None:
@@ -44,7 +46,7 @@ def env_command(args):
     pt_version = torch.__version__
     pt_cuda_available = torch.cuda.is_available()
     pt_xpu_available = is_xpu_available()
-    
+
     accelerate_config = "Not found"
     # Get the default from the config file.
     if args.config_file is not None or os.path.isfile(default_config_file):

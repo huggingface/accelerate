@@ -23,10 +23,9 @@ from typing import Any, Mapping
 import torch
 
 from ..state import PartialState
-from .constants import CUDA_DISTRIBUTED_TYPES,XPU_DISTRIBUTED_TYPES
+from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, TensorInformation
-from .imports import is_torch_distributed_available, is_tpu_available, is_xpu_available
-
+from .imports import is_torch_distributed_available, is_tpu_available
 from .versions import is_torch_version
 
 
@@ -41,8 +40,19 @@ if is_torch_distributed_available():
 def is_torch_tensor(tensor):
     return isinstance(tensor, torch.Tensor)
 
+
 def is_torch_xpu_tensor(tensor):
-    return isinstance(tensor,torch.xpu.FloatTensor,torch.xpu.ByteTensor,torch.xpu.IntTensor,torch.xpu.LongTensor,torch.xpu.HalfTensor,torch.xpu.DoubleTensor,torch.xpu.BFloat16Tensor)
+    return isinstance(
+        tensor,
+        torch.xpu.FloatTensor,
+        torch.xpu.ByteTensor,
+        torch.xpu.IntTensor,
+        torch.xpu.LongTensor,
+        torch.xpu.HalfTensor,
+        torch.xpu.DoubleTensor,
+        torch.xpu.BFloat16Tensor,
+    )
+
 
 def is_tensor_information(tensor_info):
     return isinstance(tensor_info, TensorInformation)
@@ -455,7 +465,7 @@ def reduce(tensor, reduction="mean"):
             A reduction method. Can be of "mean", "sum", or "none"
 
     Returns:
-        The same data structure as `data` with all the tensors reduced.   
+        The same data structure as `data` with all the tensors reduced.
     """
 
     def _reduce_across_processes(tensor, reduction="mean"):

@@ -32,8 +32,8 @@ from accelerate.utils import (
     is_bf16_available,
     is_ipex_available,
     is_torch_version,
-    set_seed,
     is_xpu_available,
+    set_seed,
     synchronize_rng_states,
 )
 
@@ -421,7 +421,7 @@ def training_check():
         model = accelerator.unwrap_model(model).cpu()
         assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
-    
+
     # XPU support is only for XPU
     if is_xpu_available():
         print("xpu BF16 training check.")
@@ -449,7 +449,7 @@ def training_check():
         assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on XPU or distributed training."
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on XPU or distributed training."
 
-    
+
 def main():
     accelerator = Accelerator()
     state = accelerator.state
