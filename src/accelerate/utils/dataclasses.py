@@ -1337,7 +1337,6 @@ class IntelPyTorchExtensionPlugin:
     """
 
     use_ipex: bool = field(default=None, metadata={"help": "Enable Intel PyTorch Extension (IPEX)"})
-    dtype: torch.dtype = field(default=torch.float32, metadata={"help": "Enable mixed precision in IPEX"})
 
     def __post_init__(self):
         prefix = "IPEX_"
@@ -1358,7 +1357,6 @@ class XPUPlugin:
     """
 
     use_xpu: bool = field(default=None, metadata={"help": "Enable XPU Plugin"})
-    dtype: torch.dtype = field(default=torch.float32, metadata={"help": "Enable mixed precision on XPU"})
 
     def __post_init__(self):
         prefix = "XPU_"

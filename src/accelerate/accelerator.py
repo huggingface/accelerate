@@ -1600,7 +1600,6 @@ class Accelerator:
         return tuple(result)
 
     def _prepare_ipex(self, *args):
-        ipex_plugin = self.state.ipex_plugin
         if not is_ipex_available():
             raise ImportError(
                 "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
@@ -1617,12 +1616,8 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
         if optimizer is not None:
-            if not model.training:
-                model.train()
-            model, optimizer = ipex.optimize(
-                model, dtype=ipex_plugin.dtype, optimizer=optimizer, inplace=True, level="O1"
-            )
-            model.forward = torch.cpu.amp.autocast(dtype=ipex_plugin.dtype)(model.forward)
+            model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+            model.forward = torch.cpu.amp.autocast()(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
@@ -1631,7 +1626,6 @@ class Accelerator:
         return tuple(result)
 
     def _prepare_xpu(self, *args):
-        xpu_plugin = self.state.xpu_plugin
         if not is_xpu_available():
             raise ImportError(
                 "Using XPU but XPU is not available or could not detect XPU Device, please refer"
@@ -1648,12 +1642,8 @@ class Accelerator:
                 optimizer = obj
         model.to(self.device)
         if optimizer is not None:
-            if not model.training:
-                model.train()
-            model, optimizer = torch.xpu.optimize(
-                model, dtype=xpu_plugin.dtype, optimizer=optimizer, inplace=True, level="O1"
-            )
-            model.forward = torch.xpu.amp.autocast(dtype=xpu_plugin.dtype)(model.forward)
+            model, optimizer = torch.xpu.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+            model.forward = torch.xpu.amp.autocast()(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
