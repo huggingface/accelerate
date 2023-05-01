@@ -17,9 +17,9 @@
 import argparse
 import os
 import platform
-import psutil
 
 import numpy as np
+import psutil
 import torch
 
 from accelerate import __version__ as version
@@ -50,19 +50,16 @@ def env_command(args):
     if args.config_file is not None or os.path.isfile(default_config_file):
         accelerate_config = load_config_from_file(args.config_file).to_dict()
 
-    
-
     info = {
         "`Accelerate` version": version,
         "Platform": platform.platform(),
         "Python version": platform.python_version(),
         "Numpy version": np.__version__,
         "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
-        "System RAM": f'{psutil.virtual_memory().total / 1024 ** 3:.2f} GB',
+        "System RAM": f"{psutil.virtual_memory().total / 1024 ** 3:.2f} GB",
     }
     if pt_cuda_available:
         info["GPU type"] = torch.cuda.get_device_name()
-    
 
     print("\nCopy-and-paste the text below in your GitHub issue\n")
     print("\n".join([f"- {prop}: {val}" for prop, val in info.items()]))
