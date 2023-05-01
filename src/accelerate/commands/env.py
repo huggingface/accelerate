@@ -19,6 +19,7 @@ import os
 import platform
 
 import numpy as np
+import psutil
 import torch
 
 from accelerate import __version__ as version
@@ -55,7 +56,10 @@ def env_command(args):
         "Python version": platform.python_version(),
         "Numpy version": np.__version__,
         "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
+        "System RAM": f"{psutil.virtual_memory().total / 1024 ** 3:.2f} GB",
     }
+    if pt_cuda_available:
+        info["GPU type"] = torch.cuda.get_device_name()
 
     print("\nCopy-and-paste the text below in your GitHub issue\n")
     print("\n".join([f"- {prop}: {val}" for prop, val in info.items()]))
