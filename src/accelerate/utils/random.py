@@ -65,7 +65,10 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     # Broadcast the rng state from device 0 to other devices
     state = AcceleratorState()
     if state.distributed_type == DistributedType.TPU:
-        rng_state = xm.mesh_reduce("random_seed", rng_state, lambda x: x[0])
+        rng_state = rng_state.to(xm.xla_device())
+        xm.collective_broadcast([rng_state])
+        xm.mark_step()
+        rng_state = rng_state.cpu()
     elif state.distributed_type in CUDA_DISTRIBUTED_TYPES:
         rng_state = rng_state.to(state.device)
         torch.distributed.broadcast(rng_state, 0)
