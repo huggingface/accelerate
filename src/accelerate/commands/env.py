@@ -56,6 +56,9 @@ def env_command(args):
         "Numpy version": np.__version__,
         "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
     }
+    if pt_cuda_available:
+        info["GPU type"] = torch.cuda.get_device_name()
+    
 
     print("\nCopy-and-paste the text below in your GitHub issue\n")
     print("\n".join([f"- {prop}: {val}" for prop, val in info.items()]))
