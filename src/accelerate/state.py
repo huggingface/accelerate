@@ -136,7 +136,7 @@ class PartialState:
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
-                    self.backend = kwargs.pop("backend", "nccl") 
+                    self.backend = kwargs.pop("backend", "nccl")
                     # Special case for `TrainingArguments`, where `backend` will be `None`
                     if self.backend is None:
                         self.backend = "nccl"
