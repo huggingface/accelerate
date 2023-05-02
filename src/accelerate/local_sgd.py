@@ -93,7 +93,7 @@ class LocalSGD:
         """
         Synchronize + Average model parameters across all GPUs
         """
-        import torch.distributed as dist
+        
 
         self.accelerator.wait_for_everyone()
         with self.accelerator.autocast():
