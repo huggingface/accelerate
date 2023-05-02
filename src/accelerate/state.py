@@ -552,6 +552,7 @@ class AcceleratorState:
         if not self.initialized:
             self.deepspeed_plugin = None
             self.ipex_plugin = None
+            self._mixed_precision = "no"
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
@@ -565,42 +566,56 @@ class AcceleratorState:
                     "Please make sure to properly initialize your accelerator via `accelerator = Accelerator()` "
                     "before using any functionality from the `accelerate` library."
                 )
-            # deepspeed handles mixed_precision using deepspeed_config
-            self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
-            if self.distributed_type == DistributedType.TPU:
-                if mixed_precision == "bf16":
-                    if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
-                        os.environ["XLA_USE_BF16"] = str(0)
-                        os.environ["XLA_DOWNCAST_BF16"] = str(1)
-                        self.downcast_bfloat = True
-                    else:
-                        os.environ["XLA_USE_BF16"] = str(1)
-                        os.environ["XLA_DOWNCAST_BF16"] = str(0)
-                        self.downcast_bfloat = False
-            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
+            if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
                 self.deepspeed_plugin = deepspeed_plugin
             elif self.distributed_type == DistributedType.MULTI_GPU:
                 if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP
-                    if self._mixed_precision != "no":
-                        fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
                 if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true":
                     self.distributed_type = DistributedType.MEGATRON_LM
-                    megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
                 if self.device.type == "cpu" and ipex_plugin is not None:
                     self.ipex_plugin = ipex_plugin if ipex_plugin.use_ipex else None
-                    if self.ipex_plugin is not None:
-                        self.ipex_plugin.set_mixed_precision(mixed_precision)
-            if (
-                self.dynamo_plugin.backend != DynamoBackend.NO
-                and self._mixed_precision == "no"
-                and self.device.type == "cuda"
-            ):
-                torch.backends.cuda.matmul.allow_tf32 = True
-            PartialState._shared_state["distributed_type"] = self.distributed_type
+            self._init_mixed_precision(mixed_precision=mixed_precision)
+
+    def _init_mixed_precision(self, mixed_precision:str = "no"):
+        """
+        Internal private function to update the mixed precision type after the `AcceleratorState`
+        has been initialized.
+        """
+        if mixed_precision != self.mixed_precision and self.mixed_precision != "no":
+            raise ValueError(
+                "The `AcceleratorState` has already been initialized and the mixed precision type cannot be changed."
+            )
+        # deepspeed handles mixed_precision using deepspeed_config
+        self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
+        if self.distributed_type == DistributedType.TPU:
+            if self._mixed_precision == "bf16":
+                if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
+                    os.environ["XLA_USE_BF16"] = str(0)
+                    os.environ["XLA_DOWNCAST_BF16"] = str(1)
+                    self.downcast_bfloat = True
+                else:
+                    os.environ["XLA_USE_BF16"] = str(1)
+                    os.environ["XLA_DOWNCAST_BF16"] = str(0)
+                    self.downcast_bfloat = False
+        elif self.distributed_type == DistributedType.FSDP:
+            if self._mixed_precision != "no":
+                self.fsdp_plugin.set_mixed_precision(self._mixed_precision)
+        elif self.distributed_type == DistributedType.MEGATRON_LM:
+            self.megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
+        elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
+            if self.device.type == "cpu" and self.ipex_plugin is not None:
+                self.ipex_plugin.set_mixed_precision(self._mixed_precision)
+        if (
+            self.dynamo_plugin.backend != DynamoBackend.NO
+            and self._mixed_precision == "no"
+            and self.device.type == "cuda"
+        ):
+            torch.backends.cuda.matmul.allow_tf32 = True
+        
 
     @property
     def initialized(self) -> bool:
