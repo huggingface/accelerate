@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import threading
 import warnings
 from contextlib import contextmanager
 from functools import partial
@@ -54,6 +55,21 @@ def do_nothing(*args, **kwargs):
     return None
 
 
+class GlobalSharedDict:
+  def __init__(self, thread_local: bool = False):
+    self._storage = {}
+
+  def __get__(self, obj, objtype=None):
+    return self._storage
+
+  def __set__(self, obj, value):
+    self._storage = value
+
+class ThreadLocalSharedDict(GlobalSharedDict, threading.local):
+  pass
+
+SharedDict = GlobalSharedDict if not is_tpu_available(check_device=False) else ThreadLocalSharedDict
+
 # Inspired by Alex Martelli's 'Borg'.
 class PartialState:
     """
@@ -75,8 +91,7 @@ class PartialState:
         - **is_main_process** (`bool`) -- Whether or not the current process is the main one.
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
     """
-
-    _shared_state = {}
+    _shared_state = SharedDict()
 
     def __init__(self, cpu: bool = False, **kwargs):
         self.__dict__ = self._shared_state
@@ -211,7 +226,7 @@ class PartialState:
     @staticmethod
     def _reset_state():
         "Resets `_shared_state`, is used internally and should not be called"
-        PartialState._shared_state = {}
+        PartialState._shared_state.clear()
 
     @property
     def initialized(self) -> bool:
@@ -527,8 +542,7 @@ class AcceleratorState:
         - **is_main_process** (`bool`) -- Whether or not the current process is the main one.
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
     """
-
-    _shared_state = {}
+    _shared_state = SharedDict()
 
     def __init__(
         self,
@@ -652,7 +666,7 @@ class AcceleratorState:
     @staticmethod
     def _reset_state(reset_partial_state: bool = False):
         "Resets `_shared_state`, is used internally and should not be called"
-        AcceleratorState._shared_state = {}
+        AcceleratorState._shared_state.clear()
         if reset_partial_state:
             PartialState._reset_state()
 
@@ -721,8 +735,7 @@ class GradientState:
         - **adjust_scheduler** (`bool`) -- Whether the scheduler should be adjusted to account for the gradient
           accumulation
     """
-
-    _shared_state = {}
+    _shared_state = SharedDict()
 
     def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
         self.__dict__ = self._shared_state
@@ -793,4 +806,4 @@ class GradientState:
     @staticmethod
     def _reset_state():
         "Resets `_shared_state`, is used internally and should not be called"
-        GradientState._shared_state = {}
+        GradientState._shared_state.clear()
