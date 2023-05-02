@@ -215,3 +215,7 @@ class FeatureExamplesTests(TempDirTestCase):
     def test_gradient_accumulation(self):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
         run_command(self._launch_args + testargs)
+
+    def test_local_sgd(self):
+        testargs = ["examples/by_feature/local_sgd.py"]
+        run_command(self._launch_args + testargs)

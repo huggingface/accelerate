@@ -98,4 +98,4 @@ class LocalSGD:
         self.accelerator.wait_for_everyone()
         with self.accelerator.autocast():
             for param in self.model.parameters():
-                self.accelerator.reduce(param.data, reduction="mean")
+                param.data = self.accelerator.reduce(param.data, reduction="mean")
