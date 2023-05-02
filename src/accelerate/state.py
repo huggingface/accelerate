@@ -142,6 +142,9 @@ class PartialState:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
                     self.backend = kwargs.pop("backend", "nccl")
+                    # Special case for `TrainingArguments`, where `backend` will be `None`
+                    if self.backend is None:
+                        self.backend = "nccl"
                     torch.distributed.init_process_group(backend=self.backend, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
