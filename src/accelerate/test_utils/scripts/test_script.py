@@ -85,6 +85,9 @@ def process_execution_check():
             path.unlink()
             raise
 
+    if path.exists():
+        path.unlink()
+
     # Test the decorators
     f = io.StringIO()
     with contextlib.redirect_stdout(f):

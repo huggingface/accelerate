@@ -61,6 +61,7 @@ from .utils import (
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
+    get_mixed_precision_context_manager,
     get_pretty_name,
     has_transformer_engine_layers,
     is_bf16_available,
@@ -2644,7 +2645,7 @@ class Accelerator:
         self._custom_objects.extend(objects)
 
     @contextmanager
-    def autocast(self):
+    def autocast(self, cache_enabled: bool = False):
         """
         Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
         different will happen otherwise.
@@ -2659,31 +2660,10 @@ class Accelerator:
         ...     train()
         ```
         """
-        if self.native_amp:
-            if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
-                autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
-            elif self.mixed_precision == "bf16":
-                if self.distributed_type in [
-                    DistributedType.NO,
-                    DistributedType.MULTI_CPU,
-                    DistributedType.MULTI_XPU,
-                    DistributedType.MULTI_GPU,
-                ]:
-                    if is_xpu_available():
-                        autocast_context = torch.xpu.amp.autocast(dtype=torch.bfloat16, device_type=self.device.type)
-                    else:
-                        autocast_context = torch.autocast(dtype=torch.bfloat16, device_type=self.device.type)
-            else:
-                if is_xpu_available():
-                    autocast_context = torch.xpu.amp.autocast()
-                else:
-                    autocast_context = torch.cuda.amp.autocast()
-
-            autocast_context.__enter__()
-            yield
-            autocast_context.__exit__(*sys.exc_info())
-        else:
-            yield
+        autocast_context = get_mixed_precision_context_manager(self.native_amp, cache_enabled=cache_enabled)
+        autocast_context.__enter__()
+        yield
+        autocast_context.__exit__(*sys.exc_info())
 
     @property
     def optimizer_step_was_skipped(self):

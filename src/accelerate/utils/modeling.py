@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import gc
 import json
 import logging
@@ -25,7 +26,9 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from .imports import is_safetensors_available, is_xpu_available
+from ..state import AcceleratorState
+from .dataclasses import DistributedType
+from .imports import is_safetensors_available, is_torch_version, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -1012,3 +1015,29 @@ def load_checkpoint_in_model(
         shutil.rmtree(state_dict_folder)
 
     retie_parameters(model, tied_params)
+
+
+def get_mixed_precision_context_manager(native_amp: bool = False, cache_enabled: bool = True):
+    """
+    Return a context manager for autocasting mixed precision
+
+    Args:
+        native_amp (`bool`, *optional*, defaults to False):
+            Whether mixed precision is actually enabled.
+        cache_enabled (`bool`, *optional*, defaults to True):
+            Whether the weight cache inside autocast should be enabled.
+    """
+    state = AcceleratorState()
+    if native_amp:
+        if state.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
+            return torch.autocast(device_type=state.device.type, dtype=torch.float16, cache_enabled=cache_enabled)
+        elif state.mixed_precision == "bf16" and state.distributed_type in [
+            DistributedType.NO,
+            DistributedType.MULTI_CPU,
+            DistributedType.MULTI_GPU,
+        ]:
+            return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, cache_enabled=cache_enabled)
+        else:
+            return torch.autocast(device_type=state.device.type, cache_enabled=cache_enabled)
+    else:
+        return contextlib.nullcontext()
