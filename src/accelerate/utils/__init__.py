@@ -81,6 +81,7 @@ from .operations import (
     gather,
     gather_object,
     get_data_structure,
+    get_mixed_precision_context_manager,
     honor_type,
     initialize_tensors,
     is_namedtuple,

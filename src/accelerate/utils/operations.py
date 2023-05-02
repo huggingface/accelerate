@@ -16,13 +16,14 @@
 A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
+import contextlib
 import pickle
 from functools import update_wrapper
 from typing import Any, Mapping
 
 import torch
 
-from ..state import PartialState
+from ..state import AcceleratorState, PartialState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, TensorInformation
 from .imports import is_torch_distributed_available, is_tpu_available
@@ -463,6 +464,32 @@ def reduce(tensor, reduction="mean"):
         return cloned_tensor
 
     return recursively_apply(_reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction)
+
+
+def get_mixed_precision_context_manager(native_amp: bool = False, cache_enabled: bool = True):
+    """
+    Return a context manager for autocasting mixed precision
+
+    Args:
+        native_amp (`bool`, *optional*, defaults to False):
+            Whether mixed precision is actually enabled.
+        cache_enabled (`bool`, *optional*, defaults to True):
+            Whether the weight cache inside autocast should be enabled.
+    """
+    state = AcceleratorState()
+    if native_amp:
+        if state.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
+            return torch.autocast(device_type=state.device.type, dtype=torch.float16, cache_enabled=cache_enabled)
+        elif state.mixed_precision == "bf16" and state.distributed_type in [
+            DistributedType.NO,
+            DistributedType.MULTI_CPU,
+            DistributedType.MULTI_GPU,
+        ]:
+            return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, cache_enabled=cache_enabled)
+        else:
+            return torch.autocast(device_type=state.device.type, cache_enabled=cache_enabled)
+    else:
+        return contextlib.nullcontext()
 
 
 def convert_to_fp32(tensor):
