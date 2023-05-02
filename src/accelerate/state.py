@@ -580,10 +580,9 @@ class AcceleratorState:
                     self.ipex_plugin = ipex_plugin if ipex_plugin.use_ipex else None
             self._init_mixed_precision(mixed_precision=mixed_precision)
 
-    def _init_mixed_precision(self, mixed_precision:str = "no"):
+    def _init_mixed_precision(self, mixed_precision: str = "no"):
         """
-        Internal private function to update the mixed precision type after the `AcceleratorState`
-        has been initialized.
+        Internal private function to update the mixed precision type after the `AcceleratorState` has been initialized.
         """
         if mixed_precision != self.mixed_precision and self.mixed_precision != "no":
             raise ValueError(
@@ -615,7 +614,6 @@ class AcceleratorState:
             and self.device.type == "cuda"
         ):
             torch.backends.cuda.matmul.allow_tf32 = True
-        
 
     @property
     def initialized(self) -> bool:
