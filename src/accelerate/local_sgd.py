@@ -24,7 +24,6 @@ class LocalSGD:
     It should be used only in the multi-GPU (or multi-CPU) setup without extensions such as DeepSpeed. In particular,
     this is a simple implementation that cannot support scenarios such as model parallelism.
 
-    Contributed by Leo (Leonid) Boytsov.
 
     Although we are not aware of the true origins of this simple approach, the idea of local SGD is quite old and goes
     back to at least:
