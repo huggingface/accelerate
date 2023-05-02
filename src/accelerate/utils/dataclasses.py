@@ -1336,35 +1336,8 @@ class IntelPyTorchExtensionPlugin:
     This plugin is used to enable Intel PyTorch Extension (IPEX).
     """
 
-    use_ipex: bool = field(default=None, metadata={"help": "Enable Intel PyTorch Extension (IPEX)"})
-
-    def __post_init__(self):
-        prefix = "IPEX_"
-        if self.use_ipex is None:
-            self.use_ipex = strtobool(os.environ.get(prefix + "ENABLED", "False")) == 1
-
     def set_mixed_precision(self, mixed_precision):
         if mixed_precision == "fp16":
-            raise ValueError("Tried to use `fp16` but it is not supported on cpu")
-        elif mixed_precision == "bf16":
-            self.dtype = torch.bfloat16
-
-
-@dataclass
-class XPUPlugin:
-    """
-    This plugin is used to enable XPU plugin with IPEX.
-    """
-
-    use_xpu: bool = field(default=None, metadata={"help": "Enable XPU Plugin"})
-
-    def __post_init__(self):
-        prefix = "XPU_"
-        if self.use_xpu is None:
-            self.use_xpu = strtobool(os.environ.get(prefix + "ENABLED", "False")) == 1
-
-    def set_mixed_precision(self, mixed_precision):
-        if mixed_precision == "fp16":
-            raise ValueError("Tried to use `fp16` but it is not supported on xpu")
+            raise ValueError("Tried to use `fp16` but it is not supported on cpu or xpu")
         elif mixed_precision == "bf16":
             self.dtype = torch.bfloat16

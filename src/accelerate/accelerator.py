@@ -56,7 +56,6 @@ from .utils import (
     ProjectConfiguration,
     RNGType,
     TorchDynamoPlugin,
-    XPUPlugin,
     compare_versions,
     convert_model,
     convert_outputs_to_fp32,
@@ -164,11 +163,8 @@ class Accelerator:
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
         ipex_plugin (`IntelExtensionPlugin`, *optional*):
-            Tweak your Intel Extension for PyTorch related args using this argument. This argument is optional and can
-            be configured directly using *accelerate config*
-        xpu_plugin (`XPUPlugin`, *optional*):
-            Tweak your xpu related args using this argument. This argument is optional and can be configured directly
-            using *accelerate config*
+            Tweak your Intel Extension for PyTorch related args using this argument for CPU and XPU. This argument is
+            optional and can be configured directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -241,7 +237,6 @@ class Accelerator:
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         ipex_plugin: IntelPyTorchExtensionPlugin | None = None,
-        xpu_plugin: XPUPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
         project_dir: str | os.PathLike | None = None,
@@ -326,16 +321,11 @@ class Accelerator:
                 raise ImportError("Megatron is not installed. please build it from source.")
 
         if ipex_plugin is None:  # init from env variables
-            ipex_plugin = IntelPyTorchExtensionPlugin() if os.environ.get("IPEX_ENABLED", "false") == "true" else None
+            ipex_plugin = IntelPyTorchExtensionPlugin()
         else:
             if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
                 raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
 
-        if xpu_plugin is None:  # init from env variables
-            xpu_plugin = XPUPlugin() if is_xpu_available() else None
-        else:
-            if not isinstance(xpu_plugin, XPUPlugin):
-                raise TypeError("`xpu_plugin` must be a XPUPlugin object.")
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -376,7 +366,6 @@ class Accelerator:
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
             ipex_plugin=ipex_plugin,
-            xpu_plugin=xpu_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -1151,8 +1140,8 @@ class Accelerator:
             if self.device.type == "cpu" and self.state.ipex_plugin is not None:
                 args = self._prepare_ipex(*args)
         elif self.distributed_type in [DistributedType.MULTI_XPU]:
-            if self.device.type == "xpu" and self.state.xpu_plugin is not None:
-                args = self._prepare_xpu(*args)
+            if self.device.type == "xpu" and self.state.ipex_plugin is not None:
+                args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1618,32 +1607,6 @@ class Accelerator:
         if optimizer is not None:
             model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
             model.forward = torch.cpu.amp.autocast()(model.forward)
-        for i in range(len(result)):
-            if isinstance(result[i], torch.nn.Module):
-                result[i] = model
-            elif isinstance(result[i], (torch.optim.Optimizer)):
-                result[i] = optimizer
-        return tuple(result)
-
-    def _prepare_xpu(self, *args):
-        if not is_xpu_available():
-            raise ImportError(
-                "Using XPU but XPU is not available or could not detect XPU Device, please refer"
-                " to https://github.com/intel/intel-extension-for-pytorch."
-            )
-
-        model = None
-        optimizer = None
-        result = [obj for obj in args]
-        for obj in result:
-            if isinstance(obj, torch.nn.Module):
-                model = obj
-            elif isinstance(obj, (torch.optim.Optimizer)):
-                optimizer = obj
-        model.to(self.device)
-        if optimizer is not None:
-            model, optimizer = torch.xpu.optimize(model, optimizer=optimizer, inplace=True, level="O1")
-            model.forward = torch.xpu.amp.autocast()(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
