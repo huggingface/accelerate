@@ -133,10 +133,12 @@ class PartialState:
                 if self.device is None:
                     if is_xpu_available():
                         self.device = torch.device("xpu", self.local_process_index)
-                        torch.xpu.set_device(self.device)
+                        if self.device is not None:
+                            torch.xpu.set_device(self.device)
                     else:
                         self.device = torch.device("cuda", self.local_process_index)
-                        torch.cuda.set_device(self.device)
+                        if self.device is not None:
+                            torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
@@ -550,7 +552,6 @@ class AcceleratorState:
         fsdp_plugin=None,
         megatron_lm_plugin=None,
         ipex_plugin=None,
-        xpu_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -564,7 +565,6 @@ class AcceleratorState:
         if not self.initialized:
             self.deepspeed_plugin = None
             self.ipex_plugin = None
-            self.xpu_plugin = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
@@ -608,10 +608,10 @@ class AcceleratorState:
                     if self.ipex_plugin is not None:
                         self.ipex_plugin.set_mixed_precision(mixed_precision)
             if self.distributed_type in [DistributedType.MULTI_XPU, DistributedType.NO]:
-                if self.device.type == "xpu" and xpu_plugin is not None:
-                    self.xpu_plugin = xpu_plugin if xpu_plugin.use_xpu else None
-                    if self.xpu_plugin is not None:
-                        self.xpu_plugin.set_mixed_precision(mixed_precision)
+                if self.device.type == "xpu" and ipex_plugin is not None:
+                    self.ipex_plugin = ipex_plugin
+                    if self.ipex_plugin is not None:
+                        self.ipex_plugin.set_mixed_precision(mixed_precision)
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"

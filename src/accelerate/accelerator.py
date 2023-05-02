@@ -71,7 +71,6 @@ from .utils import (
     is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
-    is_xpu_available,
     pad_across_processes,
     parse_choice_from_env,
     recursively_apply,
@@ -437,9 +436,7 @@ class Accelerator:
             DistributedType.DEEPSPEED,
             DistributedType.MEGATRON_LM,
         ):
-            if self.device.type == "cpu":
-                self.native_amp = is_torch_version(">=", "1.10")
-            elif self.device.type == "xpu":
+            if self.device.type in ["cpu", "xpu"]:
                 self.native_amp = is_torch_version(">=", "1.10")
             else:
                 self.native_amp = is_bf16_available(True)
@@ -1140,7 +1137,7 @@ class Accelerator:
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.ipex_plugin is not None:
                 args = self._prepare_ipex(*args)
-        elif self.distributed_type in [DistributedType.MULTI_XPU]:
+        elif self.distributed_type == DistributedType.MULTI_XPU:
             if self.device.type == "xpu" and self.state.ipex_plugin is not None:
                 args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
