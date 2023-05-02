@@ -98,7 +98,5 @@ class LocalSGD:
 
         self.accelerator.wait_for_everyone()
         with self.accelerator.autocast():
-            qty = float(dist.get_world_size())
             for param in self.model.parameters():
-                dist.all_reduce(param.data, op=torch.distributed.ReduceOp.SUM)
-                param.data /= qty
+                self.accelerator.reduce(param.data, reduction="mean")
