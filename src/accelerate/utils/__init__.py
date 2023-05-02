@@ -53,6 +53,7 @@ from .modeling import (
     get_balanced_memory,
     get_max_layer_size,
     get_max_memory,
+    get_mixed_precision_context_manager,
     infer_auto_device_map,
     load_checkpoint_in_model,
     load_offloaded_weights,
