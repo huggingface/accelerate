@@ -1136,10 +1136,10 @@ class Accelerator:
             old_named_params = self._get_named_parameters(*args)
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
-            if self.device.type == "cpu" and self.state.ipex_plugin is not None:
+            if self.device.type == "cpu":
                 args = self._prepare_ipex(*args)
         elif self.distributed_type == DistributedType.MULTI_XPU:
-            if self.device.type == "xpu" and self.state.ipex_plugin is not None:
+            if self.device.type == "xpu":
                 args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
@@ -1589,11 +1589,12 @@ class Accelerator:
 
     def _prepare_ipex(self, *args):
         if not is_ipex_available():
-            raise ImportError(
-                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+            logger.warn(
+                "Trying to use IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
                 " to https://github.com/intel/intel-extension-for-pytorch."
             )
-        import intel_extension_for_pytorch as ipex
+        else:
+            import intel_extension_for_pytorch as ipex
 
         model = None
         optimizer = None
@@ -1609,7 +1610,8 @@ class Accelerator:
                 model, optimizer = torch.xpu.optimize(model, optimizer=optimizer, inplace=True, level="O1")
                 model.forward = torch.xpu.amp.autocast()(model.forward)
             else:
-                model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+                if is_ipex_available():
+                    model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
                 model.forward = torch.cpu.amp.autocast()(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
