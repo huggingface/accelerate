@@ -71,6 +71,7 @@ from .utils import (
     is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
+    is_xpu_available,
     pad_across_processes,
     parse_choice_from_env,
     recursively_apply,
@@ -1603,8 +1604,13 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
         if optimizer is not None:
-            model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
-            model.forward = torch.cpu.amp.autocast()(model.forward)
+            if is_xpu_available():
+                model = model.to(self.device)
+                model, optimizer = torch.xpu.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+                model.forward = torch.xpu.amp.autocast()(model.forward)
+            else:
+                model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+                model.forward = torch.cpu.amp.autocast()(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
