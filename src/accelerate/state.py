@@ -604,7 +604,7 @@ class AcceleratorState:
                     self.megatron_lm_plugin = megatron_lm_plugin
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
                 if self.device.type == "cpu" and ipex_plugin is not None:
-                    self.ipex_plugin = ipex_plugin if ipex_plugin.use_ipex else None
+                    self.ipex_plugin = ipex_plugin
                     if self.ipex_plugin is not None:
                         self.ipex_plugin.set_mixed_precision(mixed_precision)
             if self.distributed_type in [DistributedType.MULTI_XPU, DistributedType.NO]:
