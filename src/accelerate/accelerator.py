@@ -1603,10 +1603,12 @@ class Accelerator:
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
-        if optimizer is not None:
+        if optimizer is not None and model is not None:
             if is_ipex_available():
                 model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
-            model.forward = torch.cpu.amp.autocast()(model.forward)
+                model.forward = torch.cpu.amp.autocast()(model.forward)
+            else:
+                model.forward = torch.amp.autocast(self.device.type)(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
