@@ -82,7 +82,7 @@ def process_execution_check():
             path.unlink()
             raise
 
-    if accelerator.is_main_process() and path.exists():
+    if accelerator.is_main_process and path.exists():
         path.unlink()
     accelerator.wait_for_everyone()
     # Test the decorators
