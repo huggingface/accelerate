@@ -1608,7 +1608,10 @@ class Accelerator:
                 model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
                 model.forward = torch.cpu.amp.autocast()(model.forward)
             else:
-                model.forward = torch.autocast(self.device.type)(model.forward)
+                if is_torch_version(">=", "1.10"):
+                    model.forward = torch.autocast(self.device.type)(model.forward)
+                else:
+                    model.forward = convert_outputs_to_fp32(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
