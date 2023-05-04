@@ -1608,7 +1608,7 @@ class Accelerator:
                 model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
                 model.forward = torch.cpu.amp.autocast()(model.forward)
             else:
-                model.forward = torch.amp.autocast(self.device.type)(model.forward)
+                model.forward = torch.autocast(self.device.type)(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
