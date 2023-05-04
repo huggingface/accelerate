@@ -59,8 +59,6 @@ def process_execution_check():
 
     # Test main_process_first context manager
     path = Path("check_main_process_first.txt")
-    if path.exists():
-        path.unlink()
     with accelerator.main_process_first():
         if accelerator.is_main_process:
             time.sleep(0.1)  # ensure main process takes longest
@@ -84,9 +82,9 @@ def process_execution_check():
             path.unlink()
             raise
 
-    if path.exists():
+    if accelerator.is_main_process and path.exists():
         path.unlink()
-
+    accelerator.wait_for_everyone()
     # Test the decorators
     f = io.StringIO()
     with contextlib.redirect_stdout(f):
