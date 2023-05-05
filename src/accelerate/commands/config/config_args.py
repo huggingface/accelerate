@@ -123,6 +123,8 @@ class BaseConfig:
 
         if "mixed_precision" not in config_dict:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
+        if isinstance(config_dict["mixed_precision"], bool) and not config_dict["mixed_precision"]:
+            config_dict["mixed_precision"] = "no"
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
         if "dynamo_backend" in config_dict:  # Convert the config to the new format.
