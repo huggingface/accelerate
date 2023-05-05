@@ -383,10 +383,9 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     import psutil
 
     if max_memory is None:
-        if not torch.cuda.is_available():
+        if not (torch.cuda.is_available() and is_xpu_available()):
             max_memory = {}
-        if is_xpu_available():
-            max_memory = {}
+
         else:
             # Make sure CUDA is initialized on each GPU to have the right memory info.
             if is_xpu_available():
@@ -492,10 +491,10 @@ def get_balanced_memory(
     if not (torch.cuda.is_available() and is_xpu_available()):
         return max_memory
 
-    if is_xpu_available():
-        num_devices = len([d for d in max_memory if torch.device(d).type == "xpu" and max_memory[d] > 0])
-    else:
+    if not is_xpu_available():
         num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
+    else:
+        num_devices = len([d for d in max_memory if torch.device(d).type == "xpu" and max_memory[d] > 0])
 
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)

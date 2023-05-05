@@ -71,6 +71,7 @@ from .utils import (
     is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
+    is_xpu_available,
     pad_across_processes,
     parse_choice_from_env,
     recursively_apply,
@@ -1134,11 +1135,8 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
-        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
-            if self.device.type == "cpu":
-                args = self._prepare_ipex(*args)
-        elif self.distributed_type == DistributedType.MULTI_XPU:
-            if self.device.type == "xpu":
+        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
+            if self.device.type in ["cpu", "xpu"]:
                 args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
@@ -1605,8 +1603,13 @@ class Accelerator:
                 optimizer = obj
         if optimizer is not None and model is not None:
             if is_ipex_available():
-                model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
-                model.forward = torch.cpu.amp.autocast()(model.forward)
+                if is_xpu_available() and self.device.type == "xpu":
+                    model = model.to(self.device)
+                    model, optimizer = torch.xpu.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+                    model.forward = torch.xpu.amp.autocast()(model.forward)
+                else:
+                    model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+                    model.forward = torch.cpu.amp.autocast()(model.forward)
             else:
                 if is_torch_version(">=", "1.10"):
                     model.forward = torch.autocast(self.device.type)(model.forward)
