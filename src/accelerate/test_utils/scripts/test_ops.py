@@ -31,7 +31,7 @@ def test_gather(state):
 
 
 def test_gather_object(state):
-    obj = [state.local_process_index]
+    obj = [state.process_index]
     gathered_obj = gather_object(obj)
     assert len(gathered_obj) == state.num_processes, f"{gathered_obj}, {len(gathered_obj)} != {state.num_processes}"
     assert gathered_obj == list(range(state.num_processes)), f"{gathered_obj} != {list(range(state.num_processes))}"
