@@ -395,6 +395,10 @@ if is_tpu_available(check_device=False):
         """
         Wrapper for the xpl.MpDeviceLoader class that knows the total batch size.
 
+        XLA preloading threads will all call DataLoaderShard's __iter__(). Remove rng_types from DataLoaderShard to
+        prevent it from using the XLA device in the preloading threads, and synchronize the RNG once from the main
+        thread only.
+
         **Available attributes:**
 
         - **total_batch_size** (`int`) -- Total batch size of the dataloader across all processes.
@@ -404,15 +408,15 @@ if is_tpu_available(check_device=False):
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
         """
         def __init__(self, dataloader: DataLoaderShard, device: torch.device):
-          super().__init__(dataloader, device)
-          self._rng_types = self._loader.rng_types
-          self._loader.rng_types = None
+            super().__init__(dataloader, device)
+            self._rng_types = self._loader.rng_types
+            self._loader.rng_types = None
 
         def __iter__(self):
-          if self._rng_types is not None:
-            synchronize_rng_states(self._rng_types, self._loader.synchronized_generator)
+            if self._rng_types is not None:
+                synchronize_rng_states(self._rng_types, self._loader.synchronized_generator)
 
-          return super().__iter__()
+            return super().__iter__()
 
         @property
         def total_batch_size(self):

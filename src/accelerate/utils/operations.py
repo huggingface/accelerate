@@ -202,10 +202,10 @@ def find_batch_size(data):
 
 def _tpu_gather(tensor):
     def _tpu_gather_one(tensor):
-      if tensor.ndim == 0:
-          tensor = tensor.clone()[None]
+        if tensor.ndim == 0:
+            tensor = tensor.clone()[None]
 
-      return xm.all_gather(tensor)
+        return xm.all_gather(tensor)
 
     res = recursively_apply(_tpu_gather_one, tensor, error_on_other_type=True)
     xm.mark_step()
