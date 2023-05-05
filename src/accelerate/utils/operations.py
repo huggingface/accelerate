@@ -270,6 +270,8 @@ def gather_object(object: Any):
     Returns:
         The same data structure as `object` with all the objects sent to every device.
     """
+    if is_torch_version("<", "1.7"):
+        raise NotImplementedError("Gathering non-tensor objects requires PyTorch 1.7 or later")
     if PartialState().distributed_type == DistributedType.TPU:
         raise NotImplementedError("gather objects in TPU is not supported")
     elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
