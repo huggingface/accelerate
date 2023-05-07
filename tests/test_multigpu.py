@@ -36,20 +36,21 @@ class MultiGPUTester(unittest.TestCase):
     @require_multi_gpu
     def test_multi_gpu(self):
         print(f"Found {torch.cuda.device_count()} devices.")
-        cmd = get_launch_prefix() + [self.test_file_path]
+        cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}", self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_gpu
     def test_multi_gpu_ops(self):
         print(f"Found {torch.cuda.device_count()} devices.")
-        cmd = get_launch_prefix() + [self.operation_file_path]
+        cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}", self.operation_file_path]
+        print(f"Command: {cmd}")
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_gpu
     def test_pad_across_processes(self):
-        cmd = get_launch_prefix() + [inspect.getfile(self.__class__)]
+        cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 

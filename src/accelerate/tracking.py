@@ -247,6 +247,23 @@ class TensorBoardTracker(GeneralTracker):
         logger.debug("Successfully logged to TensorBoard")
 
     @on_main_process
+    def log_images(self, values: dict, step: Optional[int], **kwargs):
+        """
+        Logs `images` to the current run.
+
+        Args:
+            values (Dictionary `str` to `List` of `np.ndarray` or `PIL.Image`):
+                Values to be logged as key-value pairs. The values need to have type `List` of `np.ndarray` or
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `SummaryWriter.add_image` method.
+        """
+        for k, v in values.items():
+            self.writer.add_images(k, v, global_step=step, **kwargs)
+        logger.debug("Successfully logged images to TensorBoard")
+
+    @on_main_process
     def finish(self):
         """
         Closes `TensorBoard` writer
@@ -313,6 +330,53 @@ class WandBTracker(GeneralTracker):
         """
         self.run.log(values, step=step, **kwargs)
         logger.debug("Successfully logged to WandB")
+
+    @on_main_process
+    def log_images(self, values: dict, step: Optional[int] = None, **kwargs):
+        """
+        Logs `images` to the current run.
+
+        Args:
+            values (Dictionary `str` to `List` of `np.ndarray` or `PIL.Image`):
+                Values to be logged as key-value pairs. The values need to have type `List` of `np.ndarray` or
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `wandb.log` method.
+        """
+        for k, v in values.items():
+            self.log({k: [wandb.Image(image) for image in v]}, step=step, **kwargs)
+        logger.debug("Successfully logged images to WandB")
+
+    @on_main_process
+    def log_table(
+        self,
+        table_name: str,
+        columns: List[str] = None,
+        data: List[List[Any]] = None,
+        dataframe: Any = None,
+        step: Optional[int] = None,
+        **kwargs,
+    ):
+        """
+        Log a Table containing any object type (text, image, audio, video, molecule, html, etc). Can be defined either
+        with `columns` and `data` or with `dataframe`.
+
+        Args:
+            table_name (`str`):
+                The name to give to the logged table on the wandb workspace
+            columns (List of `str`'s *optional*):
+                The name of the columns on the table
+            data (List of List of Any data type *optional*):
+                The data to be logged in the table
+            dataframe (Any data type *optional*):
+                The data to be logged in the table
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+        """
+
+        values = {table_name: wandb.Table(columns=columns, data=data, dataframe=dataframe)}
+        self.log(values, step=step, **kwargs)
 
     @on_main_process
     def finish(self):
