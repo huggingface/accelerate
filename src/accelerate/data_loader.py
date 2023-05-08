@@ -407,6 +407,7 @@ if is_tpu_available(check_device=False):
 
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
         """
+
         def __init__(self, dataloader: DataLoaderShard, device: torch.device):
             super().__init__(dataloader, device)
             self._rng_types = self._loader.rng_types
