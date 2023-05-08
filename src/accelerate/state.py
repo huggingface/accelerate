@@ -55,11 +55,9 @@ def do_nothing(*args, **kwargs):
     return None
 
 
-class GlobalSharedDict:
+class ThreadLocalSharedDict(threading.local):
     """
-    Descriptor that holds shared between instances of a class.
-
-    See Python documentation for an explanation of descriptors: https://docs.python.org/3/howto/descriptor.html
+    Descriptor that holds a dict shared between instances of a class in the same thread.
 
     Note: Descriptors have slightly different semantics than just a dict field on its own.
     `PartialState(...)._shared_state` and `PartialState._shared_state` (instance vs class) give the same value: the
@@ -67,7 +65,11 @@ class GlobalSharedDict:
     descriptor as you would expect. However, `PartialState._shared_state = {}` actually replaces the descriptor object with
     a dict instead Thus, you should modify the _storage dict in-place (e.g. `_shared_state.clear()`).
 
-    See https://docs.python.org/3/howto/descriptor.html#invocation-from-a-class
+    See Python documentation for an explanation of descriptors: https://docs.python.org/3/howto/descriptor.html
+
+    This is required for using PyTorch/XLA with PJRT in multithreaded mode (required for TPU v2 and v3).
+
+    See https://github.com/pytorch/xla/blob/r2.0/docs/pjrt.md#multithreading-on-tpu-v2v3
     """
     def __init__(self, thread_local: bool = False):
         self._storage = {}
@@ -79,19 +81,8 @@ class GlobalSharedDict:
         self._storage = value
 
 
-class ThreadLocalSharedDict(GlobalSharedDict, threading.local):
-    """
-    Same as GlobalSharedDict, but the shared dictionary is scoped to each thread separately.
-
-    This is required for using PyTorch/XLA with PJRT in multithreaded mode (required for TPU v2 and v3).
-
-    See https://github.com/pytorch/xla/blob/r2.0/docs/pjrt.md#multithreading-on-tpu-v2v3
-    """
-    pass
-
-
 # Prefer global shared dictionary, except when using TPU.
-SharedDict = GlobalSharedDict if not is_tpu_available(check_device=False) else ThreadLocalSharedDict
+SharedDict = dict if not is_tpu_available(check_device=False) else ThreadLocalSharedDict
 
 # Inspired by Alex Martelli's 'Borg'.
 class PartialState:
