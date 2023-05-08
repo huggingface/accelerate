@@ -71,6 +71,7 @@ class ThreadLocalSharedDict(threading.local):
 
     See https://github.com/pytorch/xla/blob/r2.0/docs/pjrt.md#multithreading-on-tpu-v2v3
     """
+
     def __init__(self, thread_local: bool = False):
         self._storage = {}
 
@@ -83,6 +84,7 @@ class ThreadLocalSharedDict(threading.local):
 
 # Prefer global shared dictionary, except when using TPU.
 SharedDict = dict if not is_tpu_available(check_device=False) else ThreadLocalSharedDict
+
 
 # Inspired by Alex Martelli's 'Borg'.
 class PartialState:
@@ -105,6 +107,7 @@ class PartialState:
         - **is_main_process** (`bool`) -- Whether or not the current process is the main one.
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
     """
+
     _shared_state = SharedDict()
 
     def __init__(self, cpu: bool = False, **kwargs):
@@ -556,6 +559,7 @@ class AcceleratorState:
         - **is_main_process** (`bool`) -- Whether or not the current process is the main one.
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
     """
+
     _shared_state = SharedDict()
 
     def __init__(
@@ -749,6 +753,7 @@ class GradientState:
         - **adjust_scheduler** (`bool`) -- Whether the scheduler should be adjusted to account for the gradient
           accumulation
     """
+
     _shared_state = SharedDict()
 
     def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
