@@ -93,7 +93,6 @@ class LocalSGD:
         """
         Synchronize + Average model parameters across all GPUs
         """
-        
 
         self.accelerator.wait_for_everyone()
         with self.accelerator.autocast():
