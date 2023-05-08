@@ -61,9 +61,9 @@ class ThreadLocalSharedDict(threading.local):
 
     Note: Descriptors have slightly different semantics than just a dict field on its own.
     `PartialState(...)._shared_state` and `PartialState._shared_state` (instance vs class) give the same value: the
-    underlying _storage dict. Likewise, `PartialState(...)._shared_state = {...}` overrides the _storage dict inside the
-    descriptor as you would expect. However, `PartialState._shared_state = {}` actually replaces the descriptor object with
-    a dict instead Thus, you should modify the _storage dict in-place (e.g. `_shared_state.clear()`).
+    underlying _storage dict. Likewise, `PartialState(...)._shared_state = {...}` overrides the _storage dict inside
+    the descriptor as you would expect. However, `PartialState._shared_state = {}` actually replaces the descriptor
+    object with a dict instead Thus, you should modify the _storage dict in-place (e.g. `_shared_state.clear()`).
 
     See Python documentation for an explanation of descriptors: https://docs.python.org/3/howto/descriptor.html
 
