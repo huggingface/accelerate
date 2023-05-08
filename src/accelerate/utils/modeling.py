@@ -383,19 +383,19 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     import psutil
 
     if max_memory is None:
-        if not (torch.cuda.is_available() and is_xpu_available()):
+        if not (torch.cuda.is_available() or is_xpu_available()):
             max_memory = {}
 
         else:
             # Make sure CUDA is initialized on each GPU to have the right memory info.
-            if is_xpu_available():
-                for i in range(torch.xpu.device_count()):
-                    _ = torch.tensor(0, device=torch.device("xpu", i))
-                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
-            else:
+            if not is_xpu_available():
                 for i in range(torch.cuda.device_count()):
                     _ = torch.tensor([0], device=i)
                 max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+            else:
+                for i in range(torch.xpu.device_count()):
+                    _ = torch.tensor(0, device=torch.device("xpu", i))
+                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
         max_memory["cpu"] = psutil.virtual_memory().available
         return max_memory
 
@@ -488,7 +488,7 @@ def get_balanced_memory(
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
 
-    if not (torch.cuda.is_available() and is_xpu_available()):
+    if not (torch.cuda.is_available() or is_xpu_available()):
         return max_memory
 
     if not is_xpu_available():
