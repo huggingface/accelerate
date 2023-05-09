@@ -117,6 +117,7 @@ if is_torch_version(">", "1.10.0"):
 
 
 if is_tpu_available(check_device=False):
+    import torch_xla.core.xla_model as xm
     import torch_xla.distributed.xla_multiprocessing as xmp
 
 
@@ -2304,6 +2305,10 @@ class Accelerator:
                 )
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
+
+        if self.distributed_type == DistributedType.TPU:
+            # Finish running the previous step before checkpointing
+            xm.mark_step()
 
         # Save the models taking care of FSDP and DeepSpeed nuances
         weights = []

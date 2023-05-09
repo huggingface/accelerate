@@ -213,18 +213,16 @@ def find_batch_size(data):
     return data.shape[0]
 
 
-def _tpu_gather(tensor, name="gather tensor"):
-    if isinstance(tensor, (list, tuple)):
-        return honor_type(tensor, (_tpu_gather(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
-    elif isinstance(tensor, Mapping):
-        return type(tensor)({k: _tpu_gather(v, name=f"{name}_{k}") for k, v in tensor.items()})
-    elif not isinstance(tensor, torch.Tensor):
-        raise TypeError(
-            f"Can't gather the values of type {type(tensor)}, only nested list/tuple/dicts of tensors are supported."
-        )
-    if tensor.ndim == 0:
-        tensor = tensor.clone()[None]
-    return xm.mesh_reduce(name, tensor, torch.cat)
+def _tpu_gather(tensor):
+    def _tpu_gather_one(tensor):
+        if tensor.ndim == 0:
+            tensor = tensor.clone()[None]
+
+        return xm.all_gather(tensor)
+
+    res = recursively_apply(_tpu_gather_one, tensor, error_on_other_type=True)
+    xm.mark_step()
+    return res
 
 
 def _gpu_gather(tensor):
@@ -253,7 +251,7 @@ def gather(tensor):
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
     if PartialState().distributed_type == DistributedType.TPU:
-        return _tpu_gather(tensor, name="accelerate.utils.gather")
+        return _tpu_gather(tensor)
     elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
         return _gpu_gather(tensor)
     elif PartialState().distributed_type in DistributedType.MULTI_XPU:
