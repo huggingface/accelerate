@@ -78,3 +78,14 @@ These arguments should be added at the end of any method for starting the python
 ```bash
 accelerate launch ./gradient_accumulation.py --gradient_accumulation_steps 5
 ```
+
+### LocalSGD (`local_sgd.py`)
+- Shows how to use `Accelerator.no_sync` to prevent gradient averaging in a distributed setup. However, unlike gradient accumulation, this method does not change the effective batch size. Local SGD can be combined with gradient accumulation.
+
+These arguments should be added at the end of any method for starting the python script (such as `python`, `accelerate launch`, `python -m torchrun`), such as:
+
+```bash
+accelerate launch ./local_sgd.py --local_sgd_steps 4
+```
+
+

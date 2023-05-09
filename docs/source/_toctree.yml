@@ -25,6 +25,8 @@
     title: How perform inference on large models with small resources
   - local: usage_guides/gradient_accumulation
     title: Performing gradient accumulation
+  - local: usage_guides/local_sgd
+    title: Accelerating training with local SGD
   - local: usage_guides/checkpoint
     title: Saving and loading training states
   - local: usage_guides/tracking
