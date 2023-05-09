@@ -21,11 +21,10 @@ from accelerate.utils.dataclasses import DistributedType
 
 class RegressionDataset:
     def __init__(self, a=2, b=3, length=64, seed=None):
-        if seed is not None:
-            np.random.seed(seed)
+        rng = np.random.default_rng(seed)
         self.length = length
-        self.x = np.random.normal(size=(length,)).astype(np.float32)
-        self.y = a * self.x + b + np.random.normal(scale=0.1, size=(length,)).astype(np.float32)
+        self.x = rng.normal(size=(length,)).astype(np.float32)
+        self.y = a * self.x + b + rng.normal(scale=0.1, size=(length,)).astype(np.float32)
 
     def __len__(self):
         return self.length
