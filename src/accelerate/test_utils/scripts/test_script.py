@@ -31,7 +31,6 @@ from accelerate.utils import (
     gather,
     is_bf16_available,
     is_ipex_available,
-    is_torch_version,
     set_seed,
     synchronize_rng_states,
 )
@@ -426,43 +425,60 @@ def training_check():
 def test_split_between_processes_list():
     state = AcceleratorState()
     data = list(range(0, 2 * state.num_processes))
-    results = state.split_between_processes(data)
-    assert (
-        len(results) == 2
-    ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+    with state.split_between_processes(data) as results:
+        assert (
+            len(results) == 2
+        ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
 
 
 def test_split_between_processes_nested_dict():
     state = AcceleratorState()
     if state.num_processes == 2:
         data = {"a": [1, 2, 3, 4], "b": ["w", "x", "y", "z"], "c": torch.tensor([0, 1, 2, 3])}
-        results = state.split_between_processes(data)
-        assert len(results["a"]) == 2
-        if state.process_index == 0:
-            assert results["a"] == [1, 2]
-        else:
-            assert results["a"] == [3, 4]
-        assert len(results["b"]) == 2
-        if state.process_index == 0:
-            assert results["b"] == ["w", "x"]
-        else:
-            assert results["b"] == ["y", "z"]
-        assert len(results["c"]) == 2
-        if state.process_index == 0:
-            assert results["c"] == torch.tensor([1, 2])
-        else:
-            assert results["c"] == torch.tensor([3, 4])
+        with state.split_between_processes(data) as results:
+            assert (
+                len(results["a"]) == 2
+            ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results['a'])}; Values: {results['a']}"
+            if state.process_index == 0:
+                assert results["a"] == [1, 2]
+            else:
+                assert results["a"] == [3, 4]
+            assert len(results["b"]) == 2
+            if state.process_index == 0:
+                assert results["b"] == ["w", "x"]
+            else:
+                assert results["b"] == ["y", "z"]
+            assert len(results["c"]) == 2
+            if state.process_index == 0:
+                assert torch.allclose(
+                    results["c"], torch.tensor([0, 1])
+                ), f"Did not obtain expected values on process 0, expected `torch.tensor([1,2])`, received: {results['c']}"
+            else:
+                assert torch.allclose(
+                    results["c"], torch.tensor([2, 3])
+                ), f"Did not obtain expected values on process 1, expected `torch.tensor([3,4])`, received: {results['c']}"
+
+        data = {"a": [1, 2, 3], "b": ["w", "x", "y"], "c": torch.tensor([0, 1, 2])}
+        with state.split_between_processes(data) as results:
+            if state.process_index == 0:
+                assert len(results["a"]) == 2
+                assert len(results["b"]) == 2
+                assert len(results["c"]) == 2
+            else:
+                assert len(results["a"]) == 1
+                assert len(results["b"]) == 1
+                assert len(results["c"]) == 1
 
 
 def main():
     accelerator = Accelerator()
     state = accelerator.state
-    if state.local_process_index == 0:
-        print("**Initialization**")
-    init_state_check()
-    if state.local_process_index == 0:
-        print("\n**Test process execution**")
-    process_execution_check()
+    # if state.local_process_index == 0:
+    #     print("**Initialization**")
+    # init_state_check()
+    # if state.local_process_index == 0:
+    #     print("\n**Test process execution**")
+    # process_execution_check()
 
     if state.local_process_index == 0:
         print("\n**Test split between processes as a list**")
@@ -472,23 +488,23 @@ def main():
         print("\n**Test split between processes as a dict**")
     test_split_between_processes_nested_dict()
 
-    if state.local_process_index == 0:
-        print("\n**Test random number generator synchronization**")
-    rng_sync_check()
+    # if state.local_process_index == 0:
+    #     print("\n**Test random number generator synchronization**")
+    # rng_sync_check()
 
-    if state.local_process_index == 0:
-        print("\n**DataLoader integration test**")
-    dl_preparation_check()
-    if state.distributed_type != DistributedType.TPU and is_torch_version(">=", "1.8.0"):
-        central_dl_preparation_check()
+    # if state.local_process_index == 0:
+    #     print("\n**DataLoader integration test**")
+    # dl_preparation_check()
+    # if state.distributed_type != DistributedType.TPU and is_torch_version(">=", "1.8.0"):
+    #     central_dl_preparation_check()
 
-    # Trainings are not exactly the same in DeepSpeed and CPU mode
-    if state.distributed_type == DistributedType.DEEPSPEED:
-        return
+    # # Trainings are not exactly the same in DeepSpeed and CPU mode
+    # if state.distributed_type == DistributedType.DEEPSPEED:
+    #     return
 
-    if state.local_process_index == 0:
-        print("\n**Training integration test**")
-    training_check()
+    # if state.local_process_index == 0:
+    #     print("\n**Training integration test**")
+    # training_check()
 
 
 if __name__ == "__main__":

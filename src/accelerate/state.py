@@ -331,14 +331,17 @@ class PartialState:
         start_index = self.process_index * num_samples_per_process
         end_index = start_index + num_samples_per_process
         if (len(inputs) % self.num_processes != 0) and (self.process_index == self.num_processes - 1):
-            end_index = len(inputs)
+            if isinstance(inputs, (list, tuple)):
+                end_index = len(inputs)
+            elif isinstance(inputs, dict):
+                end_index = len(inputs[list(inputs.keys())[0]])
 
         def _nested_index(item, start_index, end_index):
             if isinstance(item, (list, tuple)):
                 return item[start_index:end_index]
             elif isinstance(item, dict):
                 for key in item.keys():
-                    item[key] = item[start_index:end_index]
+                    item[key] = item[key][start_index:end_index]
                 return item
             else:
                 return item
@@ -738,6 +741,15 @@ class AcceleratorState:
 
     def wait_for_everyone(self):
         PartialState().wait_for_everyone()
+
+    @contextmanager
+    def split_between_processes(self, inputs: Any):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+        """
+        with PartialState().split_between_processes(inputs) as inputs:
+            yield inputs
 
     @contextmanager
     def main_process_first(self):
