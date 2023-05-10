@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import os
 import threading
 import warnings
@@ -326,9 +327,12 @@ class PartialState:
         can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.  
         """
-        num_samples_per_process = len(inputs) // self.num_processes
+        num_samples_per_process = math.ceil(len(inputs) / self.num_processes)
         start_index = self.process_index * num_samples_per_process
-        yield inputs[start_index:self.process_index+num_samples_per_process+1]
+        end_index = start_index + num_samples_per_process
+        if (len(inputs) % self.num_processes != 0) and (self.process_index == self.num_processes - 1):
+            end_index = len(inputs)
+        yield inputs[start_index:end_index]
 
     @contextmanager
     def main_process_first(self):
