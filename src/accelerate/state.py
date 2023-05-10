@@ -321,18 +321,29 @@ class PartialState:
             self.wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs:Any):
+    def split_between_processes(self, inputs: Any):
         """
-        Splits `input` between `self.num_processes` quickly and
-        can be then used on that process. Useful when doing
-        distributed inference, such as with different prompts.  
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
         """
+        # Nested dictionary of any types
         num_samples_per_process = math.ceil(len(inputs) / self.num_processes)
         start_index = self.process_index * num_samples_per_process
         end_index = start_index + num_samples_per_process
         if (len(inputs) % self.num_processes != 0) and (self.process_index == self.num_processes - 1):
             end_index = len(inputs)
-        yield inputs[start_index:end_index]
+
+        def _nested_index(item, start_index, end_index):
+            if isinstance(item, (list, tuple)):
+                return item[start_index:end_index]
+            elif isinstance(item, dict):
+                for key in item.keys():
+                    item[key] = item[start_index:end_index]
+                return item
+            else:
+                return item
+
+        yield _nested_index(inputs, start_index, end_index)
 
     @contextmanager
     def main_process_first(self):
