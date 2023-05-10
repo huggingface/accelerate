@@ -567,7 +567,7 @@ def launch_command_parser(subparsers=None):
         "--xpu_enabled",
         default=False,
         action="store_true",
-        help="Whether to use XPU plugin to speed up training on XPU?",
+        help="Whether to use IPEX plugin to speed up training on XPU?",
     )
 
     # Other arguments of the training scripts
