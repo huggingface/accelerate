@@ -327,6 +327,11 @@ class PartialState:
         distributed inference, such as with different prompts.
         """
         # Nested dictionary of any types
+        if isinstance(inputs, dict):
+            length = len(inputs[list(inputs.keys())[0]])
+            assert all(
+                len(v) == length for v in inputs.values()
+            ), "All values in the dictionary must have the same length"
         num_samples_per_process = math.ceil(len(inputs) / self.num_processes)
         start_index = self.process_index * num_samples_per_process
         end_index = start_index + num_samples_per_process
