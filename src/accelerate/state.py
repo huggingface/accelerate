@@ -328,10 +328,7 @@ class PartialState:
         """
         num_samples_per_process = len(inputs) // self.num_processes
         start_index = self.process_index * num_samples_per_process
-        if len(inputs) % self.num_processes != 0:
-            yield inputs[start_index:self.process_index+num_samples_per_process]
-        else:
-            yield inputs[start_index:]
+        yield inputs[start_index:self.process_index+num_samples_per_process]
 
     @contextmanager
     def main_process_first(self):
