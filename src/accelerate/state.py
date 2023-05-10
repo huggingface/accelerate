@@ -329,7 +329,7 @@ class PartialState:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`): The input to split between processes.
+            inputs (`list`, `tuple`, or `dict`): The input to split between processes.
 
         Example:
 
@@ -361,17 +361,14 @@ class PartialState:
             elif isinstance(inputs, dict):
                 end_index = len(inputs[list(inputs.keys())[0]])
 
-        def _nested_index(item, start_index, end_index):
-            if isinstance(item, (list, tuple)):
-                return item[start_index:end_index]
-            elif isinstance(item, dict):
-                for key in item.keys():
-                    item[key] = item[key][start_index:end_index]
-                return item
-            else:
-                return item
-
-        yield _nested_index(inputs, start_index, end_index)
+        if isinstance(inputs, (list, tuple)):
+            return inputs[start_index:end_index]
+        elif isinstance(inputs, dict):
+            for key in inputs.keys():
+                inputs[key] = inputs[key][start_index:end_index]
+            return inputs
+        else:
+            return inputs
 
     @contextmanager
     def main_process_first(self):
