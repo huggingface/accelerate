@@ -328,7 +328,7 @@ class PartialState:
         """
         num_samples_per_process = len(inputs) // self.num_processes
         start_index = self.process_index * num_samples_per_process
-        yield inputs[start_index:self.process_index+num_samples_per_process]
+        yield inputs[start_index:self.process_index+num_samples_per_process+1]
 
     @contextmanager
     def main_process_first(self):
