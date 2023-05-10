@@ -320,13 +320,13 @@ class PartialState:
             self.wait_for_everyone()
 
     @contextmanager
-    def split_input_to_processes(self, inputs:Any):
+    def split_between_processes(self, inputs:Any):
         """
         Splits `input` between `self.num_processes` quickly and
         can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.  
         """
-        num_samples_per_process = inputs // self.num_processes
+        num_samples_per_process = len(inputs) // self.num_processes
         start_index = self.process_index * num_samples_per_process
         if len(inputs) % self.num_processes != 0:
             yield inputs[start_index:self.process_index+num_samples_per_process]
