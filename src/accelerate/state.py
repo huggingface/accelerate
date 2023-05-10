@@ -321,10 +321,30 @@ class PartialState:
             self.wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs: Any):
+    def split_between_processes(self, inputs: list | tuple | dict):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`): The input to split between processes.
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+        with accelerator.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+        ```
         """
         # Nested dictionary of any types
         if isinstance(inputs, dict):
@@ -748,10 +768,30 @@ class AcceleratorState:
         PartialState().wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs: Any):
+    def split_between_processes(self, inputs: list | tuple | dict):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`): The input to split between processes.
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+        with accelerator.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+        ```
         """
         with PartialState().split_between_processes(inputs) as inputs:
             yield inputs

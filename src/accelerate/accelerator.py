@@ -527,6 +527,35 @@ class Accelerator:
     def mixed_precision(self):
         return self.state.mixed_precision
 
+    @contextmanager
+    def split_between_processes(self, inputs: list | tuple | dict):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`): The input to split between processes.
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+        with accelerator.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+        ```
+        """
+        with PartialState().split_between_processes(inputs) as inputs:
+            yield inputs
+
     def on_main_process(self, function: Callable[..., Any] = None):
         """
         A decorator that will run the decorated function on the main process only. Can also be called using the
