@@ -63,7 +63,7 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
             config["distributed_type"] = "MULTI_GPU"
         else:
             config["distributed_type"] = "NO"
-    if is_xpu_available():
+    elif is_xpu_available():
         num_xpus = torch.xpu.device_count()
         config["num_processes"] = num_xpus
         config["use_cpu"] = False
