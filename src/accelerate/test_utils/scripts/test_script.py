@@ -32,6 +32,7 @@ from accelerate.utils import (
     gather,
     is_bf16_available,
     is_ipex_available,
+    is_torch_version,
     set_seed,
     synchronize_rng_states,
 )
@@ -467,14 +468,13 @@ def test_split_between_processes_nested_dict():
 def main():
     accelerator = Accelerator()
     state = accelerator.state
-    # if state.local_process_index == 0:
-    #     print("**Initialization**")
-    # init_state_check()
-    # if state.local_process_index == 0:
-    #     print("\n**Test process execution**")
-    # process_execution_check()
+    if state.local_process_index == 0:
+        print("**Initialization**")
+    init_state_check()
+    if state.local_process_index == 0:
+        print("\n**Test process execution**")
+    process_execution_check()
 
-    # if state.num_processes == 2:
     if state.local_process_index == 0:
         print("\n**Test split between processes as a list**")
     test_split_between_processes_list()
@@ -483,23 +483,23 @@ def main():
         print("\n**Test split between processes as a dict**")
     test_split_between_processes_nested_dict()
 
-    # if state.local_process_index == 0:
-    #     print("\n**Test random number generator synchronization**")
-    # rng_sync_check()
+    if state.local_process_index == 0:
+        print("\n**Test random number generator synchronization**")
+    rng_sync_check()
 
-    # if state.local_process_index == 0:
-    #     print("\n**DataLoader integration test**")
-    # dl_preparation_check()
-    # if state.distributed_type != DistributedType.TPU and is_torch_version(">=", "1.8.0"):
-    #     central_dl_preparation_check()
+    if state.local_process_index == 0:
+        print("\n**DataLoader integration test**")
+    dl_preparation_check()
+    if state.distributed_type != DistributedType.TPU and is_torch_version(">=", "1.8.0"):
+        central_dl_preparation_check()
 
-    # # Trainings are not exactly the same in DeepSpeed and CPU mode
-    # if state.distributed_type == DistributedType.DEEPSPEED:
-    #     return
+    # Trainings are not exactly the same in DeepSpeed and CPU mode
+    if state.distributed_type == DistributedType.DEEPSPEED:
+        return
 
-    # if state.local_process_index == 0:
-    #     print("\n**Training integration test**")
-    # training_check()
+    if state.local_process_index == 0:
+        print("\n**Training integration test**")
+    training_check()
 
 
 if __name__ == "__main__":
