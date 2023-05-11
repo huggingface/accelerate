@@ -28,7 +28,7 @@ import torch.nn as nn
 
 from ..state import AcceleratorState
 from .dataclasses import DistributedType
-from .imports import is_safetensors_available, is_torch_version
+from .imports import is_safetensors_available, is_torch_version, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -383,13 +383,19 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     import psutil
 
     if max_memory is None:
-        if not torch.cuda.is_available():
+        if not (torch.cuda.is_available() or is_xpu_available()):
             max_memory = {}
+
         else:
             # Make sure CUDA is initialized on each GPU to have the right memory info.
-            for i in range(torch.cuda.device_count()):
-                _ = torch.tensor([0], device=i)
-            max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+            if not is_xpu_available():
+                for i in range(torch.cuda.device_count()):
+                    _ = torch.tensor([0], device=i)
+                max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+            else:
+                for i in range(torch.xpu.device_count()):
+                    _ = torch.tensor(0, device=torch.device("xpu", i))
+                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
         max_memory["cpu"] = psutil.virtual_memory().available
         return max_memory
 
@@ -482,10 +488,14 @@ def get_balanced_memory(
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
 
-    if not torch.cuda.is_available():
+    if not (torch.cuda.is_available() or is_xpu_available()):
         return max_memory
 
-    num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
+    if not is_xpu_available():
+        num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
+    else:
+        num_devices = len([d for d in max_memory if torch.device(d).type == "xpu" and max_memory[d] > 0])
+
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
 
@@ -1024,6 +1034,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, cache_enabled:
             DistributedType.NO,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_XPU,
         ]:
             return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, cache_enabled=cache_enabled)
         else:

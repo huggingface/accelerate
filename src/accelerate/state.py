@@ -32,6 +32,7 @@ from .utils import (
     is_fp8_available,
     is_mps_available,
     is_tpu_available,
+    is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
 )
@@ -162,8 +163,14 @@ class PartialState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 if self.device is None:
-                    self.device = torch.device("cuda", self.local_process_index)
-                torch.cuda.set_device(self.device)
+                    if is_xpu_available():
+                        self.device = torch.device("xpu", self.local_process_index)
+                        if self.device is not None:
+                            torch.xpu.set_device(self.device)
+                    else:
+                        self.device = torch.device("cuda", self.local_process_index)
+                        if self.device is not None:
+                            torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
@@ -180,7 +187,10 @@ class PartialState:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
-                self.distributed_type = DistributedType.MULTI_CPU
+                if is_xpu_available():
+                    self.distributed_type = DistributedType.MULTI_XPU
+                else:
+                    self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
                     if get_ccl_version() >= "1.12":
                         import oneccl_bindings_for_pytorch  # noqa: F401
@@ -229,6 +239,7 @@ class PartialState:
 
                 if self.device is None:
                     self.device = torch.device("cpu") if cpu else self.default_device
+
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
     def __repr__(self) -> str:
@@ -536,6 +547,8 @@ class PartialState:
             return torch.device("mps")
         elif torch.cuda.is_available():
             return torch.device("cuda")
+        elif is_xpu_available():
+            return torch.device("xpu:0")
         else:
             return torch.device("cpu")
 
@@ -623,7 +636,12 @@ class AcceleratorState:
                     self.megatron_lm_plugin = megatron_lm_plugin
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
                 if self.device.type == "cpu" and ipex_plugin is not None:
-                    self.ipex_plugin = ipex_plugin if ipex_plugin.use_ipex else None
+                    self.ipex_plugin = ipex_plugin
+                    if self.ipex_plugin is not None:
+                        self.ipex_plugin.set_mixed_precision(mixed_precision)
+            if self.distributed_type in [DistributedType.MULTI_XPU, DistributedType.NO]:
+                if self.device.type == "xpu" and ipex_plugin is not None:
+                    self.ipex_plugin = ipex_plugin
                     if self.ipex_plugin is not None:
                         self.ipex_plugin.set_mixed_precision(mixed_precision)
             if (

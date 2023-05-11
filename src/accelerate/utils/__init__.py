@@ -43,6 +43,7 @@ from .imports import (
     is_tpu_available,
     is_transformers_available,
     is_wandb_available,
+    is_xpu_available,
 )
 from .modeling import (
     check_device_map,

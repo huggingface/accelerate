@@ -32,6 +32,7 @@ from accelerate.utils import (
     is_bf16_available,
     is_ipex_available,
     is_torch_version,
+    is_xpu_available,
     set_seed,
     synchronize_rng_states,
 )
@@ -401,7 +402,7 @@ def training_check():
         from accelerate.utils.dataclasses import IntelPyTorchExtensionPlugin
 
         AcceleratorState._reset_state()
-        ipex_plugin = IntelPyTorchExtensionPlugin(use_ipex=True, dtype=torch.bfloat16)
+        ipex_plugin = IntelPyTorchExtensionPlugin()
         accelerator = Accelerator(mixed_precision="bf16", cpu=True, ipex_plugin=ipex_plugin)
         train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
         model = RegressionModel()
@@ -421,6 +422,33 @@ def training_check():
         model = accelerator.unwrap_model(model).cpu()
         assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+
+    # XPU support is only for XPU
+    if is_xpu_available():
+        print("xpu BF16 training check.")
+        from accelerate.utils.dataclasses import IntelPyTorchExtensionPlugin
+
+        AcceleratorState._reset_state()
+        ipex_plugin = IntelPyTorchExtensionPlugin()
+        accelerator = Accelerator(mixed_precision="bf16", cpu=False, ipex_plugin=ipex_plugin)
+        train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
+        model = RegressionModel()
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+        train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
+        set_seed(42)
+        generator.manual_seed(42)
+        for _ in range(3):
+            for batch in train_dl:
+                model.zero_grad()
+                output = model(batch["x"])
+                loss = torch.nn.functional.mse_loss(output, batch["y"])
+                accelerator.backward(loss)
+                optimizer.step()
+
+        model = accelerator.unwrap_model(model).cpu()
+        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on XPU or distributed training."
+        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on XPU or distributed training."
 
 
 def main():
