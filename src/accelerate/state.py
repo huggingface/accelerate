@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from __future__ import annotations
-
 import math
 import os
 import threading
@@ -348,6 +347,8 @@ class PartialState:
         ["C"]
         ```
         """
+        if self.num_processes == 1:
+            yield inputs
         # Nested dictionary of any types
         if isinstance(inputs, dict):
             length = len(inputs[list(inputs.keys())[0]])
@@ -358,19 +359,21 @@ class PartialState:
         start_index = self.process_index * num_samples_per_process
         end_index = start_index + num_samples_per_process
         if (len(inputs) % self.num_processes != 0) and (self.process_index == self.num_processes - 1):
-            if isinstance(inputs, (list, tuple)):
+            if isinstance(inputs, (list, tuple, torch.Tensor)):
                 end_index = len(inputs)
             elif isinstance(inputs, dict):
                 end_index = len(inputs[list(inputs.keys())[0]])
 
-        if isinstance(inputs, (list, tuple)):
-            return inputs[start_index:end_index]
-        elif isinstance(inputs, dict):
-            for key in inputs.keys():
-                inputs[key] = inputs[key][start_index:end_index]
-            return inputs
-        else:
-            return inputs
+        def _split_values(inputs, start_index, end_index):
+            if isinstance(inputs, (list, tuple, torch.Tensor)):
+                return inputs[start_index:end_index]
+            elif isinstance(inputs, dict):
+                for key in inputs.keys():
+                    inputs[key] = _split_values(inputs[key], start_index, end_index)
+                return inputs
+            else:
+                return inputs
+        yield _split_values(inputs, start_index, end_index)
 
     @contextmanager
     def main_process_first(self):
