@@ -558,13 +558,13 @@ class MLflowTracker(GeneralTracker):
     """
 
     name = "mlflow"
-    requires_logging_directory = True
+    requires_logging_directory = False
 
     @on_main_process
     def __init__(
         self,
         experiment_name: str = None,
-        logging_dir: Optional[Union[str, os.PathLike]] = ".",
+        logging_dir: Optional[Union[str, os.PathLike]] = None,
         run_id: Optional[str] = None,
         tags: Optional[Union[Dict[str, Any], str]] = None,
         nested_run: Optional[bool] = False,
