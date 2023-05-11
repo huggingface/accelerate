@@ -1411,7 +1411,11 @@ class Accelerator:
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
                 )
             if isinstance(scheduler, (DummyScheduler)):
-                max_lr = getattr(scheduler.optimizer, "lr", None) or scheduler.optimizer.defaults["lr"]
+                max_lr = (
+                    getattr(scheduler.optimizer, "lr", None)
+                    if getattr(scheduler.optimizer, "defaults", None) is None
+                    else scheduler.optimizer.defaults["lr"]
+                )
                 config_kwargs.update(
                     {
                         "scheduler.params.warmup_min_lr": 0,
@@ -1434,7 +1438,7 @@ class Accelerator:
                 else:
                     if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
                         "device", "none"
-                    ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", False):
+                    ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", True):
                         from deepspeed.ops.adam import DeepSpeedCPUAdam
 
                         defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
