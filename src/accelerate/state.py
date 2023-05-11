@@ -350,6 +350,7 @@ class PartialState:
         """
         if self.num_processes == 1:
             yield inputs
+            return
         # Nested dictionary of any types
         if isinstance(inputs, dict):
             length = len(inputs[list(inputs.keys())[0]])
