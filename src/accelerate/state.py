@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import annotations
+
 import math
 import os
 import threading
@@ -373,6 +374,7 @@ class PartialState:
                 return inputs
             else:
                 return inputs
+
         yield _split_values(inputs, start_index, end_index)
 
     @contextmanager
