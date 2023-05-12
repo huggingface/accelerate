@@ -159,10 +159,7 @@ def set_module_tensor_to_device(
         elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
-            if param_cls.__name__ == "Int8Params":
-                # downcast to fp16 if any
-                if new_value.dtype == torch.float32:
-                    new_value = new_value.to(torch.float16)
+            if param_cls.__name__ in ["Int8Params", "FP4Params"]:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
