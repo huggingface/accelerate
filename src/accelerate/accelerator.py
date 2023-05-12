@@ -1137,7 +1137,9 @@ class Accelerator:
             old_named_params = self._get_named_parameters(*args)
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-            if self.device.type in ["cpu", "xpu"]:
+            if self.device.type == "cpu" and self.state.ipex_plugin is not None:
+                args = self._prepare_ipex(*args)
+            elif self.device.type == "xpu" and self.state.ipex_plugin is not None and is_xpu_available():
                 args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
