@@ -593,6 +593,7 @@ class AcceleratorState:
         if PartialState._shared_state == {}:
             PartialState(cpu, **kwargs)
         self.__dict__.update(PartialState._shared_state)
+        self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision  # _mixed_precision is not set yet used in _check_initialized, raising AttributeError
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
             self.deepspeed_plugin = None
