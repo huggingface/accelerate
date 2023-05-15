@@ -51,6 +51,7 @@ for log in Path().glob("*.log"):
     failed = []
     log.unlink()
 message = ""
+detailed_failed = []
 if total_num_failed > 0:
     for name, num_failed, failed_tests in group_info:
         if num_failed > 0:
@@ -68,6 +69,7 @@ if total_num_failed > 0:
                 else:
                     files2failed[data[0]] += [data[1:]]
                 failed_table.append(data)
+            detailed_failed.append(failed_table)
 
             files = [test[0] for test in failed_table]
             individual_files = list(set(files))
@@ -134,4 +136,11 @@ if os.environ.get("TEST_TYPE", "") != "":
         }
         payload.append(date_report)
     print(f'Payload:\n{payload}')
-    client.chat_postMessage(channel="#accelerate-ci-daily", text=message, blocks=payload)
+    response = client.chat_postMessage(channel="#accelerate-ci-daily", text=message, blocks=payload)
+    ts = response.data["ts"]
+    for failed_tests in detailed_failed:
+        client.chat_postMessage(
+            channel="#accelerate-ci-daily",
+            thread_ts=ts,
+            text=f"```\n{tabulate(failed_tests, headers=['Class', 'Test'], tablefmt=hf_table_format, stralign='right')}\n```",
+        )
