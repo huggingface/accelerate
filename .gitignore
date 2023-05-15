@@ -139,3 +139,6 @@ dmypy.json
 
 # More test things
 wandb
+
+# ruff
+.ruff_cache

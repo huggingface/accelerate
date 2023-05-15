@@ -17,6 +17,9 @@ import inspect
 import os
 
 import torch
+from transformers import AutoModel
+from transformers.testing_utils import mockenv_context
+from transformers.trainer_utils import set_seed
 
 import accelerate
 from accelerate.accelerator import Accelerator
@@ -38,9 +41,6 @@ from accelerate.utils.constants import (
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
 from accelerate.utils.other import patch_environment
-from transformers import AutoModel
-from transformers.testing_utils import mockenv_context
-from transformers.trainer_utils import set_seed
 
 
 set_seed(42)
@@ -156,7 +156,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
                     self.assertTrue(isinstance(accelerator.scaler, ShardedGradScaler))
                 elif mp_dtype == BF16:
                     self.assertIsNone(accelerator.scaler)
-                AcceleratorState._reset_state()
+                AcceleratorState._reset_state(True)
 
     def test_cpu_offload(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload

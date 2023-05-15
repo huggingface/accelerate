@@ -6,8 +6,11 @@ from unittest.mock import patch
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
+from accelerate import infer_auto_device_map, init_empty_weights
 from accelerate.accelerator import Accelerator
-from accelerate.test_utils.testing import AccelerateTestCase
+from accelerate.state import GradientState, PartialState
+from accelerate.test_utils import require_multi_gpu, slow
+from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
 from accelerate.utils import patch_environment
 
 
@@ -31,6 +34,26 @@ def load_random_weights(model):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    @require_cuda
+    def test_accelerator_can_be_reinstantiated(self):
+        _ = Accelerator()
+        assert PartialState._shared_state["_cpu"] is False
+        assert PartialState._shared_state["device"].type == "cuda"
+        with self.assertRaises(ValueError):
+            _ = Accelerator(cpu=True)
+
+    def test_mutable_states(self):
+        accelerator = Accelerator()
+        state = GradientState()
+        assert state.num_steps == 1
+        accelerator.gradient_accumulation_steps = 4
+        assert state.num_steps == 4
+
+        assert state.sync_gradients is True
+        accelerator.sync_gradients = False
+        assert state.sync_gradients is False
+        GradientState._reset_state()
+
     def test_prepared_objects_are_referenced(self):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
@@ -62,6 +85,7 @@ class AcceleratorTester(AccelerateTestCase):
 
     def test_env_var_device(self):
         """Tests that setting the torch device with ACCELERATE_TORCH_DEVICE overrides default device."""
+        PartialState._reset_state()
 
         # Mock torch.cuda.set_device to avoid an exception as the device doesn't exist
         def noop(*args, **kwargs):
@@ -150,3 +174,72 @@ class AcceleratorTester(AccelerateTestCase):
 
             # mode.class_name is NOT loaded from config
             self.assertTrue(model.class_name != model.__class__.__name__)
+
+    @slow
+    def test_accelerator_bnb(self):
+        """Tests that the accelerator can be used with the BNB library."""
+        from transformers import AutoModelForCausalLM
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "EleutherAI/gpt-neo-125m",
+            load_in_8bit=True,
+            device_map={"": 0},
+        )
+        accelerator = Accelerator()
+
+        # This should work
+        model = accelerator.prepare(model)
+
+    @slow
+    def test_accelerator_bnb_cpu_error(self):
+        """Tests that the accelerator can be used with the BNB library. This should fail as we are trying to load a model
+        that is loaded between cpu and gpu"""
+        from transformers import AutoModelForCausalLM
+
+        accelerator = Accelerator()
+
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_pretrained(
+                "EleutherAI/gpt-neo-125m",
+            )
+            device_map = infer_auto_device_map(model)
+            device_map["lm_head"] = "cpu"
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "EleutherAI/gpt-neo-125m", device_map=device_map, load_in_8bit=True, llm_int8_enable_fp32_cpu_offload=True
+        )
+
+        # This should not work and get value error
+        with self.assertRaises(ValueError):
+            model = accelerator.prepare(model)
+
+    @slow
+    @require_multi_gpu
+    def test_accelerator_bnb_multi_gpu(self):
+        """Tests that the accelerator can be used with the BNB library."""
+        from transformers import AutoModelForCausalLM
+
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_pretrained(
+                "EleutherAI/gpt-neo-125m",
+            )
+            device_map = infer_auto_device_map(model)
+            device_map["lm_head"] = 1
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "EleutherAI/gpt-neo-125m",
+            load_in_8bit=True,
+            device_map=device_map,
+        )
+        accelerator = Accelerator()
+
+        # This should not work and get value error
+        with self.assertRaises(ValueError):
+            _ = accelerator.prepare(model)
+
+    @require_cuda
+    def test_accelerator_cpu_flag_prepare(self):
+        model = torch.nn.Linear(10, 10)
+        sgd = torch.optim.SGD(model.parameters(), lr=0.01)
+        accelerator = Accelerator(cpu=True)
+        _ = accelerator.prepare(sgd)

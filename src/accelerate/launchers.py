@@ -110,6 +110,7 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
         if num_processes > 1:
             # Multi-GPU launch
             from torch.multiprocessing import start_processes
+            from torch.multiprocessing.spawn import ProcessRaisedException
 
             if len(AcceleratorState._shared_state) > 0:
                 raise ValueError(
@@ -131,9 +132,17 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                 world_size=num_processes, master_addr="127.0.01", master_port=use_port, mixed_precision=mixed_precision
             ):
                 launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
-
                 print(f"Launching training on {num_processes} GPUs.")
-                start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
+                try:
+                    start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
+                except ProcessRaisedException as e:
+                    if "Cannot re-initialize CUDA in forked subprocess" in e.args[0]:
+                        raise RuntimeError(
+                            "CUDA has been initialized before the `notebook_launcher` could create a forked subprocess. "
+                            "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
+                            "Please review your imports and test them when running the `notebook_launcher()` to identify "
+                            "which one is problematic."
+                        ) from e
 
         else:
             # No need for a distributed launch otherwise as it's either CPU, GPU or MPS.

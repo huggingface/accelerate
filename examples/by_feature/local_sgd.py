@@ -1,4 +1,5 @@
-# Copyright 2022 The HuggingFace Team. All rights reserved.
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +15,6 @@
 import argparse
 import os
 
-# New Code #
 import evaluate
 import torch
 from datasets import load_dataset
@@ -23,13 +23,14 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import find_executable_batch_size
+from accelerate.local_sgd import LocalSGD
 
 
 ########################################################################
-# This is a fully working simple example to use Accelerate,
-# specifically showcasing how to ensure out-of-memory errors never
-# interrupt training, and builds off the `nlp_example.py` script.
+# This is a fully working simple example to use Accelerate
+# with LocalSGD, which is a method to synchronize model
+# parameters every K batches. It is different, but complementary
+# to gradient accumulation.
 #
 # This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):
@@ -37,9 +38,6 @@ from accelerate.utils import find_executable_batch_size
 #   - multi GPUS (using PyTorch distributed mode)
 #   - (multi) TPUs
 #   - fp16 (mixed-precision) or fp32 (normal precision)
-#
-# New additions from the base script can be found quickly by
-# looking for the # New Code # tags
 #
 # To run it in each of these various modes, follow the instructions
 # in the readme for examples:
@@ -125,8 +123,15 @@ def training_function(config, args):
     # For testing only
     if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
         config["num_epochs"] = 2
+    # New Code #
+    gradient_accumulation_steps = int(args.gradient_accumulation_steps)
+    local_sgd_steps = int(args.local_sgd_steps)
     # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    accelerator = Accelerator(
+        cpu=args.cpu, mixed_precision=args.mixed_precision, gradient_accumulation_steps=gradient_accumulation_steps
+    )
+    if accelerator.distributed_type not in [DistributedType.NO, DistributedType.MULTI_CPU, DistributedType.MULTI_GPU]:
+        raise NotImplementedError("LocalSGD is supported only for CPUs and GPUs (no DeepSpeed or MegatronLM)")
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
@@ -135,81 +140,71 @@ def training_function(config, args):
 
     metric = evaluate.load("glue", "mrpc")
 
-    # New Code #
-    # We now can define an inner training loop function. It should take a batch size as the only parameter,
-    # and build the dataloaders in there.
-    # It also gets our decorator
-    @find_executable_batch_size(starting_batch_size=batch_size)
-    def inner_training_loop(batch_size):
-        # And now just move everything below under this function
-        # We need to bring in the Accelerator object from earlier
-        nonlocal accelerator
-        # And reset all of its attributes that could hold onto any memory:
-        accelerator.free_memory()
+    set_seed(seed)
+    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
+    # Instantiate the model (we build the model here so that the seed also control new weights initialization)
+    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
 
-        # Then we can declare the model, optimizer, and everything else:
-        set_seed(seed)
+    # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
+    # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
+    # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
+    model = model.to(accelerator.device)
 
-        # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-        model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
+    # Instantiate optimizer
+    optimizer = AdamW(params=model.parameters(), lr=lr)
 
-        # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
-        # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
-        # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
-        model = model.to(accelerator.device)
+    # Instantiate scheduler
+    lr_scheduler = get_linear_schedule_with_warmup(
+        optimizer=optimizer,
+        num_warmup_steps=100,
+        num_training_steps=(len(train_dataloader) * num_epochs),
+    )
 
-        # Instantiate optimizer
-        optimizer = AdamW(params=model.parameters(), lr=lr)
-        train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
+    # Prepare everything
+    # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
+    # prepare method.
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+    )
 
-        # Instantiate scheduler
-        lr_scheduler = get_linear_schedule_with_warmup(
-            optimizer=optimizer,
-            num_warmup_steps=100,
-            num_training_steps=(len(train_dataloader) * num_epochs),
-        )
-
-        # Prepare everything
-        # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
-        # prepare method.
-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-            model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
-        )
-
-        # Now we train the model
-        for epoch in range(num_epochs):
-            model.train()
+    # Now we train the model
+    for epoch in range(num_epochs):
+        model.train()
+        with LocalSGD(
+            accelerator=accelerator, model=model, local_sgd_steps=local_sgd_steps, enabled=local_sgd_steps is not None
+        ) as local_sgd:
             for step, batch in enumerate(train_dataloader):
                 # We could avoid this line since we set the accelerator with `device_placement=True`.
                 batch.to(accelerator.device)
+                # New code #
+                # We use the new `accumulate` context manager to perform gradient accumulation
+                # We also currently do not support TPUs nor advise it as bugs were found on the XLA side when running our tests.
+                with accelerator.accumulate(model):
+                    output = model(**batch)
+                    loss = output.loss
+                    accelerator.backward(loss)
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
+                    # LocalSGD-specific line
+                    local_sgd.step()
+
+        model.eval()
+        for step, batch in enumerate(eval_dataloader):
+            # We could avoid this line since we set the accelerator with `device_placement=True`.
+            batch.to(accelerator.device)
+            with torch.no_grad():
                 outputs = model(**batch)
-                loss = outputs.loss
-                accelerator.backward(loss)
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+            predictions = outputs.logits.argmax(dim=-1)
+            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
+            metric.add_batch(
+                predictions=predictions,
+                references=references,
+            )
 
-            model.eval()
-            for step, batch in enumerate(eval_dataloader):
-                # We could avoid this line since we set the accelerator with `device_placement=True`.
-                batch.to(accelerator.device)
-                with torch.no_grad():
-                    outputs = model(**batch)
-                predictions = outputs.logits.argmax(dim=-1)
-                predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
-                metric.add_batch(
-                    predictions=predictions,
-                    references=references,
-                )
-
-            eval_metric = metric.compute()
-            # Use accelerator.print to print only on the main process.
-            accelerator.print(f"epoch {epoch}:", eval_metric)
-
-    # New Code #
-    # And call it at the end with no arguments
-    # Note: You could also refactor this outside of your training loop function
-    inner_training_loop()
+        eval_metric = metric.compute()
+        # Use accelerator.print to print only on the main process.
+        accelerator.print(f"epoch {epoch}:", eval_metric)
 
 
 def main():
@@ -222,6 +217,16 @@ def main():
         help="Whether to use mixed precision. Choose"
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
         "and an Nvidia Ampere GPU.",
+    )
+    # New Code #
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="The number of minibatches to be ran before gradients are accumulated.",
+    )
+    parser.add_argument(
+        "--local_sgd_steps", type=int, default=8, help="Number of local SGD steps or None to disable local SGD"
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()

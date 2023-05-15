@@ -40,7 +40,6 @@ class HfDeepSpeedConfig:
     """
 
     def __init__(self, config_file_or_dict):
-
         if isinstance(config_file_or_dict, dict):
             # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
             # modified it, it will not be accepted here again, since `auto` values would have been overridden
@@ -52,9 +51,9 @@ class HfDeepSpeedConfig:
             try:
                 config_decoded = base64.urlsafe_b64decode(config_file_or_dict).decode("utf-8")
                 config = json.loads(config_decoded)
-            except (UnicodeDecodeError, AttributeError):
+            except (UnicodeDecodeError, AttributeError, ValueError):
                 raise ValueError(
-                    f"Expected a string path to an existing deepspeed config, or a dictionary, or a base64 encoded string. Received: {config}"
+                    f"Expected a string path to an existing deepspeed config, or a dictionary, or a base64 encoded string. Received: {config_file_or_dict}"
                 )
 
         self.config = config
@@ -191,6 +190,7 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
 
     def __init__(self, optimizer):
         super().__init__(optimizer, device_placement=False, scaler=None)
+        self.__has_overflow__ = hasattr(self.optimizer, "overflow")
 
     def zero_grad(self, set_to_none=None):
         pass  # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
@@ -201,7 +201,9 @@ class DeepSpeedOptimizerWrapper(AcceleratedOptimizer):
     @property
     def step_was_skipped(self):
         """Whether or not the optimizer step was done, or skipped because of gradient overflow."""
-        return self.optimizer.overflow
+        if self.__has_overflow__:
+            return self.optimizer.overflow
+        return False
 
 
 class DeepSpeedSchedulerWrapper(AcceleratedScheduler):

@@ -18,6 +18,7 @@ from pathlib import Path
 
 import torch
 
+from ...utils import is_xpu_available
 from .config_args import ClusterConfig, default_json_config_file
 from .config_utils import SubcommandHelpFormatter
 
@@ -46,12 +47,13 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         )
         return False
     mixed_precision = mixed_precision.lower()
-    if mixed_precision not in ["no", "fp16", "bf16"]:
-        raise ValueError(f"`mixed_precision` should be one of 'no', 'fp16', or 'bf16'. Received {mixed_precision}")
+    if mixed_precision not in ["no", "fp16", "bf16", "fp8"]:
+        raise ValueError(
+            f"`mixed_precision` should be one of 'no', 'fp16', 'bf16', or 'fp8'. Received {mixed_precision}"
+        )
     config = {
         "compute_environment": "LOCAL_MACHINE",
         "mixed_precision": mixed_precision,
-        "dynamo_backend": dynamo_backend,
     }
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()
@@ -61,8 +63,16 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
             config["distributed_type"] = "MULTI_GPU"
         else:
             config["distributed_type"] = "NO"
+    elif is_xpu_available():
+        num_xpus = torch.xpu.device_count()
+        config["num_processes"] = num_xpus
+        config["use_cpu"] = False
+        if num_xpus > 1:
+            config["distributed_type"] = "MULTI_XPU"
+        else:
+            config["distributed_type"] = "NO"
     else:
-        num_gpus = 0
+        num_xpus = 0
         config["use_cpu"] = True
         config["num_processes"] = 1
         config["distributed_type"] = "NO"

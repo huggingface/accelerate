@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from distutils.util import strtobool
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 
@@ -137,8 +137,41 @@ class InitProcessGroupKwargs(KwargsHandler):
     ```
     """
 
+    backend: Optional[str] = "nccl"
     init_method: Optional[str] = None
     timeout: timedelta = timedelta(seconds=1800)
+
+
+@dataclass
+class FP8RecipeKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
+    training. Please refer to the documentation of this
+    [class](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html#transformer_engine.common.recipe.DelayedScaling)
+    for more information on each argument.
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import FP8RecipeKwargs
+
+    kwargs = FP8RecipeKwargs(fp8_format="HYBRID")
+    accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
+    ```
+    """
+
+    margin: int = 0
+    interval: int = 1
+    fp8_format: str = "E4M3"
+    amax_history_len: int = 1
+    amax_compute_algo: str = "most_recent"
+    override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
+
+    def __post_init__(self):
+        self.fp8_format = self.fp8_format.upper()
+        if self.fp8_format not in ["E4M3", "HYBRID"]:
+            raise ValueError("`fp8_format` must be 'E4M3' or 'HYBRID'.")
+        if self.amax_compute_algo not in ["max", "most_recent"]:
+            raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
 
 
 class DistributedType(str, enum.Enum):
@@ -150,6 +183,7 @@ class DistributedType(str, enum.Enum):
         - **NO** -- Not a distributed environment, just a single process.
         - **MULTI_CPU** -- Distributed on multiple CPU nodes.
         - **MULTI_GPU** -- Distributed on multiple GPUs.
+        - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **TPU** -- Distributed on TPUs.
     """
@@ -158,6 +192,7 @@ class DistributedType(str, enum.Enum):
     NO = "NO"
     MULTI_CPU = "MULTI_CPU"
     MULTI_GPU = "MULTI_GPU"
+    MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
     TPU = "TPU"
@@ -294,6 +329,7 @@ class PrecisionType(BaseEnum):
     """
 
     NO = "no"
+    FP8 = "fp8"
     FP16 = "fp16"
     BF16 = "bf16"
 
@@ -302,6 +338,7 @@ class RNGType(BaseEnum):
     TORCH = "torch"
     CUDA = "cuda"
     XLA = "xla"
+    XPU = "xpu"
     GENERATOR = "generator"
 
 
@@ -345,6 +382,57 @@ class ProjectConfiguration:
     def __post_init__(self):
         if self.logging_dir is None:
             self.logging_dir = self.project_dir
+
+
+@dataclass
+class GradientAccumulationPlugin(KwargsHandler):
+    """
+    A plugin to configure gradient accumulation behavior.
+    """
+
+    num_steps: int = field(default=None, metadata={"help": "The number of steps to accumulate gradients for."})
+    adjust_scheduler: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to adjust the scheduler steps to account for the number of steps being accumulated. Should be `True` if the used scheduler was not adjusted for gradient accumulation."
+        },
+    )
+
+
+@dataclass
+class TorchDynamoPlugin(KwargsHandler):
+    """
+    This plugin is used to compile a model with PyTorch 2.0
+    """
+
+    backend: DynamoBackend = field(
+        default=None,
+        metadata={"help": f"Possible options are {[b.value.lower() for b in DynamoBackend]}"},
+    )
+    mode: str = field(
+        default=None, metadata={"help": "Possible options are 'default', 'reduce-overhead' or 'max-autotune'"}
+    )
+    fullgraph: bool = field(default=None, metadata={"help": "Whether it is ok to break model into several subgraphs"})
+    dynamic: bool = field(default=None, metadata={"help": "Whether to use dynamic shape for tracing"})
+    options: Any = field(default=None, metadata={"help": "A dictionary of options to pass to the backend."})
+    disable: bool = field(default=False, metadata={"help": "Turn torch.compile() into a no-op for testing"})
+
+    def __post_init__(self):
+        prefix = "ACCELERATE_DYNAMO_"
+        if self.backend is None:
+            self.backend = os.environ.get(prefix + "BACKEND", "no")
+        self.backend = DynamoBackend(self.backend.upper())
+        if self.mode is None:
+            self.mode = os.environ.get(prefix + "MODE", "default")
+        if self.fullgraph is None:
+            self.fullgraph = strtobool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
+        if self.dynamic is None:
+            self.dynamic = strtobool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
+
+    def to_dict(self):
+        dynamo_config = copy.deepcopy(self.__dict__)
+        dynamo_config["backend"] = dynamo_config["backend"].value.lower()
+        return dynamo_config
 
 
 @dataclass
@@ -431,17 +519,25 @@ class DeepSpeedPlugin:
                 raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config.")
 
             self._deepspeed_config_checks()
-            kwargs = {
-                "gradient_accumulation_steps": self.gradient_accumulation_steps,
-                "gradient_clipping": self.gradient_clipping if self.gradient_clipping else 1.0,
-                "zero_optimization.stage": self.zero_stage,
-                "zero_optimization.offload_optimizer.device": self.offload_optimizer_device,
-                "zero_optimization.offload_param.device": self.offload_param_device,
-                "zero_optimization.stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
+            plugin_to_config_mapping = {
+                "gradient_accumulation_steps": "gradient_accumulation_steps",
+                "gradient_clipping": "gradient_clipping",
+                "zero_stage": "zero_optimization.stage",
+                "offload_optimizer_device": "zero_optimization.offload_optimizer.device",
+                "offload_param_device": "zero_optimization.offload_param.device",
+                "zero3_save_16bit_model": "zero_optimization.stage3_gather_16bit_weights_on_model_save",
             }
+            kwargs = {v: getattr(self, k) for k, v in plugin_to_config_mapping.items() if getattr(self, k) is not None}
             for key in kwargs.keys():
                 self.fill_match(key, **kwargs, must_match=False)
             self.hf_ds_config.set_stage_and_offload()
+
+            # filling the missing values in the class attributes from the DeepSpeed config
+            # when using the DeepSpeed config file.
+            for key, value in plugin_to_config_mapping.items():
+                config_value = self.hf_ds_config.get_value(value)
+                if config_value is not None and config_value != "auto":
+                    setattr(self, key, config_value)
         else:
             config = {
                 "train_batch_size": "auto",
@@ -675,6 +771,11 @@ class FullyShardedDataParallelPlugin:
         },
     )
 
+    use_orig_params: bool = field(
+        default=False,
+        metadata={"help": "If True, enables parameter-efficient fine-tuning"},
+    )
+
     def __post_init__(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             BackwardPrefetch,
@@ -731,16 +832,19 @@ class FullyShardedDataParallelPlugin:
         if self.auto_wrap_policy is None:
             auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", "NO_WRAP")
             if auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[0]:
-                transformer_cls_to_wrap = os.environ.get("FSDP_TRANSFORMER_CLS_TO_WRAP", "")
-                transformer_cls_to_wrap = FullyShardedDataParallelPlugin.get_module_class_from_name(
-                    model, transformer_cls_to_wrap
-                )
-                if transformer_cls_to_wrap is None:
-                    raise Exception("Could not find the transformer layer class to wrap in the model.")
+                transformer_cls_names_to_wrap = os.environ.get("FSDP_TRANSFORMER_CLS_TO_WRAP", "").split(",")
+                transformer_cls_to_wrap = set()
+                for layer_class in transformer_cls_names_to_wrap:
+                    transformer_cls = FullyShardedDataParallelPlugin.get_module_class_from_name(model, layer_class)
+                    if transformer_cls is None:
+                        raise Exception("Could not find the transformer layer class to wrap in the model.")
+                    else:
+                        transformer_cls_to_wrap.add(transformer_cls)
+
                 self.auto_wrap_policy = functools.partial(
                     transformer_auto_wrap_policy,
                     # Transformer layer class to wrap
-                    transformer_layer_cls={transformer_cls_to_wrap},
+                    transformer_layer_cls=transformer_cls_to_wrap,
                 )
             elif auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[1]:
                 min_num_params = int(os.environ.get("FSDP_MIN_NUM_PARAMS", 0))
@@ -1224,3 +1328,16 @@ class MegatronLMPlugin:
                 self.megatron_lm_default_args[key] = True
             elif key.startswith("no_log_"):
                 self.megatron_lm_default_args[key.replace("no_", "")] = True
+
+
+@dataclass
+class IntelPyTorchExtensionPlugin:
+    """
+    This plugin is used to enable Intel PyTorch Extension (IPEX).
+    """
+
+    def set_mixed_precision(self, mixed_precision):
+        if mixed_precision == "fp16":
+            raise ValueError("Tried to use `fp16` but it is not supported on cpu or xpu")
+        elif mixed_precision == "bf16":
+            self.dtype = torch.bfloat16

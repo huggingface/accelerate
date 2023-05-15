@@ -31,16 +31,12 @@ import random
 from itertools import chain
 from pathlib import Path
 
-import torch
-from torch.utils.data import DataLoader
-
 import datasets
+import torch
 import transformers
-from accelerate import Accelerator, DistributedType
-from accelerate.logging import get_logger
-from accelerate.utils import MegatronLMDummyScheduler, set_seed
 from datasets import load_dataset
 from huggingface_hub import Repository
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from transformers import (
     CONFIG_MAPPING,
@@ -54,6 +50,10 @@ from transformers import (
 )
 from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
+
+from accelerate import Accelerator, DistributedType
+from accelerate.logging import get_logger
+from accelerate.utils import MegatronLMDummyScheduler, set_seed
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

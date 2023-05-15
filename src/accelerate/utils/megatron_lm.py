@@ -58,9 +58,8 @@ if is_megatron_lm_available():
         set_jit_fusion_options,
         write_args_to_tensorboard,
     )
-    from megatron.model import BertModel
+    from megatron.model import BertModel, Float16Module, GPTModel, ModelType, T5Model
     from megatron.model import DistributedDataParallel as LocalDDP
-    from megatron.model import Float16Module, GPTModel, ModelType, T5Model
     from megatron.model.classification import Classification
     from megatron.optimizer import get_megatron_optimizer
     from megatron.schedules import get_forward_backward_func
@@ -101,7 +100,6 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
                 post_process=post_process,
             )
         else:
-
             model = Classification(
                 num_classes=args.num_labels, num_tokentypes=2, pre_process=pre_process, post_process=post_process
             )
@@ -270,7 +268,6 @@ class MegatronLMDummyDataLoader:
 
         # Data loader only on rank 0 of each model parallel group.
         if mpu.get_tensor_model_parallel_rank() == 0:
-
             # Number of train/valid/test samples.
             if args.train_samples:
                 train_samples = args.train_samples

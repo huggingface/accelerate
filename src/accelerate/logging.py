@@ -15,8 +15,7 @@
 import logging
 import os
 
-from .state import AcceleratorState
-from .utils import DistributedType
+from .state import PartialState
 
 
 class MultiProcessAdapter(logging.LoggerAdapter):
@@ -25,17 +24,15 @@ class MultiProcessAdapter(logging.LoggerAdapter):
 
     `log` takes in an additional `main_process_only` kwarg, which dictates whether it should be called on all processes
     or only the main executed one. Default is `main_process_only=True`.
+
+    Does not require an `Accelerator` object to be created first.
     """
 
     @staticmethod
     def _should_log(main_process_only):
         "Check if log should be performed"
-        state = AcceleratorState()
-        if state.distributed_type != DistributedType.MEGATRON_LM:
-            process_index_flag = state.local_process_index == 0
-        else:
-            process_index_flag = state.process_index == state.num_processes - 1
-        return not main_process_only or (main_process_only and process_index_flag)
+        state = PartialState()
+        return not main_process_only or (main_process_only and state.is_main_process)
 
     def log(self, level, msg, *args, **kwargs):
         """
@@ -72,7 +69,7 @@ def get_logger(name: str, log_level: str = None):
     >>> logger.info("My log", main_process_only=False)
     >>> logger.debug("My log", main_process_only=True)
 
-    >>> logger = get_logger(__name__, accelerate_log_level="DEBUG")
+    >>> logger = get_logger(__name__, log_level="DEBUG")
     >>> logger.info("My log")
     >>> logger.debug("My second log")
     ```

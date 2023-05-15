@@ -19,10 +19,10 @@ import os
 from ...utils import (
     ComputeEnvironment,
     DistributedType,
-    DynamoBackend,
     is_deepspeed_available,
     is_mps_available,
     is_transformers_available,
+    is_xpu_available,
 )
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
@@ -30,9 +30,11 @@ from ...utils.constants import (
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
     FSDP_STATE_DICT_TYPE,
+    TORCH_DYNAMO_MODES,
 )
 from .config_args import ClusterConfig
 from .config_utils import (
+    DYNAMO_BACKENDS,
     _ask_field,
     _ask_options,
     _convert_distributed_mode,
@@ -45,7 +47,7 @@ from .config_utils import (
 def get_cluster_input():
     distributed_type = _ask_options(
         "Which type of machine are you using?",
-        ["No distributed training", "multi-CPU", "multi-GPU", "TPU"],
+        ["No distributed training", "multi-CPU", "multi-XPU", "multi-GPU", "TPU"],
         _convert_distributed_mode,
     )
 
@@ -57,11 +59,8 @@ def get_cluster_input():
     main_process_port = None
     rdzv_backend = "static"
     same_network = True
-    tpu_name = None
-    tpu_zone = None
-    commands = None
-    command_file = None
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
+
+    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_XPU, DistributedType.MULTI_CPU]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
             int,
@@ -103,6 +102,24 @@ def get_cluster_input():
     else:
         use_cpu = False
 
+    ipex_config = {}
+    if use_cpu:
+        ipex_config["ipex_enabled"] = _ask_field(
+            "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU? [yes/NO]:",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+    xpu_config = {}
+    if not use_cpu and is_xpu_available():
+        ipex_config["xpu_enabled"] = _ask_field(
+            "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+
+    dynamo_config = {}
     use_dynamo = _ask_field(
         "Do you wish to optimize your script with torch dynamo?[yes/NO]:",
         _convert_yes_no_to_bool,
@@ -110,25 +127,39 @@ def get_cluster_input():
         error_message="Please enter yes or no.",
     )
     if use_dynamo:
-        dynamo_backend = _ask_options(
+        prefix = "dynamo_"
+        dynamo_config[prefix + "backend"] = _ask_options(
             "Which dynamo backend would you like to use?",
-            [
-                "eager",
-                "aot_eager",
-                "inductor",
-                "nvfuser",
-                "aot_nvfuser",
-                "aot_cudagraphs",
-                "ofi",
-                "fx2trt",
-                "onnxrt",
-                "ipex",
-            ],
+            [x.lower() for x in DYNAMO_BACKENDS],
             _convert_dynamo_backend,
             default=2,
         )
-    else:
-        dynamo_backend = DynamoBackend.NO
+        use_custom_options = _ask_field(
+            "Do you want to customize the defaults sent to torch.compile? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+
+        if use_custom_options:
+            dynamo_config[prefix + "mode"] = _ask_options(
+                "Which mode do you want to use?",
+                TORCH_DYNAMO_MODES,
+                lambda x: TORCH_DYNAMO_MODES[int(x)],
+                default=0,
+            )
+            dynamo_config[prefix + "use_fullgraph"] = _ask_field(
+                "Do you want the fullgraph mode or it is ok to break model into several subgraphs? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            dynamo_config[prefix + "use_dynamic"] = _ask_field(
+                "Do you want to enable dynamic shape tracing? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
 
     use_mps = not use_cpu and is_mps_available()
     deepspeed_config = {}
@@ -285,14 +316,15 @@ def get_cluster_input():
             )
             if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
                 fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
-                    "What is the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ...? : ",
+                    "Specify the comma-separated list of transformer layer class names (case-sensitive) to wrap ,e.g, :"
+                    "`BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput` ...? : ",
                     str,
                 )
             elif fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[1]:
                 fsdp_config["fsdp_min_num_params"] = _ask_field(
                     "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
                     int,
-                    default=1e8,
+                    default=100000000,
                 )
             fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
             fsdp_config["fsdp_backward_prefetch_policy"] = _ask_options(
@@ -367,72 +399,23 @@ def get_cluster_input():
                 float,
                 default=1.0,
             )
+    # TPU specific defaults
+    tpu_commands = None
+    tpu_command_file = None
+    tpu_downcast_bf16 = "no"
+    tpu_env = []
+    tpu_name = None
+    tpu_vm = None
+    tpu_zone = None
+    tpu_use_sudo = False
+    tpu_use_cluster = False
 
-    if distributed_type == DistributedType.TPU:
-        main_training_function = _ask_field(
-            "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
-            default="main",
-        )
-        use_cluster = _ask_field(
-            "Are you using a TPU cluster? [yes/NO]: ",
-            _convert_yes_no_to_bool,
-            default=False,
-            error_message="Please enter yes or no.",
-        )
-        if use_cluster:
-            tpu_name = _ask_field(
-                "What is the name of your TPU cluster? ",
-                default=None,
-                error_message="Please enter the name of your TPU cluster.",
-            )
-            tpu_zone = _ask_field(
-                "What is the zone of your TPU cluster? ",
-                default=None,
-                error_message="Please enter the zone of your TPU cluster.",
-            )
-            run_commands = _ask_field(
-                "Do you have code you wish to run on startup in each pod? [yes/NO]: ",
-                _convert_yes_no_to_bool,
-                default=False,
-                error_message="Please enter yes or no.",
-            )
-            if run_commands:
-                use_command_file = _ask_field(
-                    "Is this code located in a bash script? [yes/NO]: ",
-                    _convert_yes_no_to_bool,
-                    default=False,
-                    error_message="Please enter yes or no.",
-                )
-                if use_command_file:
-                    command_file = _ask_field(
-                        "What is the path to your bash script? ",
-                        default=None,
-                        error_message="Please enter the path to your bash script.",
-                    )
-                    command_file = os.path.abspath(command_file)
-                else:
-                    print("Please enter each command seperately you wish to run on startup in each pod.")
-                    commands = []
-                    another_command = True
-                    while another_command:
-                        commands.append(
-                            _ask_field(
-                                "Please enter a single command to be ran ",
-                                default=None,
-                                error_message="Please enter the commands you wish to run on startup in each pod as a single string.",
-                            )
-                        )
-                        another_command = _ask_field(
-                            "Do you wish to add another command? [yes/NO]: ",
-                            _convert_yes_no_to_bool,
-                            default=False,
-                            error_message="Please enter yes or no.",
-                        )
-
-    else:
-        main_training_function = "main"
-
-    if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
+    if distributed_type in [
+        DistributedType.MULTI_CPU,
+        DistributedType.MULTI_XPU,
+        DistributedType.MULTI_GPU,
+        DistributedType.TPU,
+    ]:
         machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
         if machine_type == "TPU":
             machine_type += " cores"
@@ -460,26 +443,99 @@ def get_cluster_input():
             default="all",
         )
 
-    if distributed_type != DistributedType.TPU:
+    if distributed_type == DistributedType.TPU:
+        mixed_precision = "no"
+        main_training_function = _ask_field(
+            "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
+            default="main",
+        )
+        tpu_use_cluster = _ask_field(
+            "Are you using a TPU cluster? [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+        if tpu_use_cluster:
+            tpu_name = _ask_field(
+                "What is the name of your TPU cluster? ",
+                default=None,
+                error_message="Please enter the name of your TPU cluster.",
+            )
+            tpu_zone = _ask_field(
+                "What is the zone of your TPU cluster? ",
+                default=None,
+                error_message="Please enter the zone of your TPU cluster.",
+            )
+            tpu_use_sudo = _ask_field(
+                "To run a python script in a TPU pod, should `sudo` be used? [yes/NO]: ",
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            run_commands = _ask_field(
+                "Do you have code you wish to run on startup in each pod? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+            if run_commands:
+                use_command_file = _ask_field(
+                    "Is this code located in a bash script? [yes/NO]: ",
+                    _convert_yes_no_to_bool,
+                    default=False,
+                    error_message="Please enter yes or no.",
+                )
+                if use_command_file:
+                    tpu_command_file = _ask_field(
+                        "What is the path to your bash script? ",
+                        default=None,
+                        error_message="Please enter the path to your bash script.",
+                    )
+                    tpu_command_file = os.path.abspath(tpu_command_file)
+                else:
+                    print("Please enter each command seperately you wish to run on startup in each pod.")
+                    tpu_commands = []
+                    another_command = True
+                    while another_command:
+                        tpu_commands.append(
+                            _ask_field(
+                                "Please enter a single command to be ran ",
+                                default=None,
+                                error_message="Please enter the commands you wish to run on startup in each pod as a single string.",
+                            )
+                        )
+                        another_command = _ask_field(
+                            "Do you wish to add another command? [yes/NO]: ",
+                            _convert_yes_no_to_bool,
+                            default=False,
+                            error_message="Please enter yes or no.",
+                        )
+            tpu_vm = _ask_field(
+                "If not using an instance group, what are the names of the Compute VM instances to be used, seperated by a comma: ",
+                default="",
+            ).split(",")
+            tpu_env = _ask_field(
+                "What environment variables do you wish to set in each pod, seperated by a comma: ",
+                default="",
+            ).split(",")
+
+    else:
+        main_training_function = "main"
         if distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config:
             mixed_precision = None
         else:
             mixed_precision = _ask_options(
                 "Do you wish to use FP16 or BF16 (mixed precision)?",
-                ["no", "fp16", "bf16"],
+                ["no", "fp16", "bf16", "fp8"],
                 _convert_mixed_precision,
             )
-    else:
-        mixed_precision = "no"
 
     if use_dynamo and mixed_precision == "no" and not use_cpu:
         print(
             "Torch dynamo used without mixed precision requires TF32 to be efficient. Accelerate will enable it by default when launching your scripts."
         )
 
-    downcast_bf16 = "no"
     if distributed_type == DistributedType.TPU and mixed_precision == "bf16":
-        downcast_bf16 = _ask_field(
+        tpu_downcast_bf16 = _ask_field(
             "Should `torch.float` be cast as `bfloat16` and `torch.double` remain `float32` on TPUs?", default="no"
         )
 
@@ -489,7 +545,7 @@ def get_cluster_input():
         num_processes=num_processes,
         gpu_ids=gpu_ids,
         mixed_precision=mixed_precision,
-        downcast_bf16=downcast_bf16,
+        downcast_bf16=tpu_downcast_bf16,
         machine_rank=machine_rank,
         num_machines=num_machines,
         main_process_ip=main_process_ip,
@@ -498,12 +554,18 @@ def get_cluster_input():
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
         megatron_lm_config=megatron_lm_config,
+        ipex_config=ipex_config,
+        xpu_config=xpu_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
         same_network=same_network,
+        commands=tpu_commands,
+        command_file=tpu_command_file,
+        tpu_env=tpu_env,
         tpu_name=tpu_name,
+        tpu_vm=tpu_vm,
         tpu_zone=tpu_zone,
-        commands=commands,
-        command_file=command_file,
-        dynamo_backend=dynamo_backend,
+        tpu_use_sudo=tpu_use_sudo,
+        tpu_use_cluster=tpu_use_cluster,
+        dynamo_config=dynamo_config,
     )
