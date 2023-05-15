@@ -54,9 +54,8 @@ if total_num_failed > 0:
             failed_table = tabulate(
                 failed_table,
                 headers=["Test Location", "Test Case", "Test Name"],
-                showindex=False,
                 tablefmt="github",
-                maxcolwidths=[28, 28, 28],
+                maxcolwidths=25,
             )
             message += f"\n```\n{failed_table}\n```"
     if len(message) > 3000:
