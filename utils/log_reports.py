@@ -54,9 +54,9 @@ if total_num_failed > 0:
             failed_table = tabulate(
                 failed_table,
                 headers=["Test Location", "Test Case", "Test Name"],
-                showindex="always",
+                showindex=False,
                 tablefmt="grid",
-                maxcolwidths=[24, 24, 24],
+                maxcolwidths=None,
             )
             message += f"\n```\n{failed_table}\n```"
     if len(message) > 3000:
