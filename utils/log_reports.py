@@ -69,7 +69,7 @@ if total_num_failed > 0:
                     files2failed[data[0]] += [data[1:]]
                 failed_table.append(data)
 
-            files = [test[0] for test in failed_tests]
+            files = [test[0] for test in failed_table]
             individual_files = list(set(files))
             # Count number of instances in failed_tests
             table = []
