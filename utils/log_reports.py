@@ -139,6 +139,14 @@ if os.environ.get("TEST_TYPE", "") != "":
     response = client.chat_postMessage(channel="#accelerate-ci-daily", text=message, blocks=payload)
     ts = response.data["ts"]
     for k,v in files2failed.items():
+        # Keep only the first instance of the test name
+        test_class = ''
+        for i, row in enumerate(v):
+            if row[0] != test_class:
+                test_class = row[0]
+            else:
+                v[i][0] = ''
+
         client.chat_postMessage(
             channel="#accelerate-ci-daily",
             thread_ts=ts,
