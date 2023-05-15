@@ -64,10 +64,16 @@ if total_num_failed > 0:
                 data[0] = data[0].split("/")[-1]
                 failed_table.append(data)
 
+            files = [test[0] for test in failed_tests]
+            individual_files = list(set(files))
+            # Count number of instances in failed_tests
+            num_failed = [files.count(file) for file in individual_files]
+            table = [[file, num] for file, num in zip(individual_files, num_failed)]
+
             failed_table = tabulate(
                 failed_table,
-                headers=["Test Location", "Test Case", "Test Name"],
-                tablefmt=hf_table_format,
+                headers=["Test Location", "Num Failed"],
+                tablefmt=table,
                 stralign="right",
             )
             message += f"\n```\n{failed_table}\n```"
