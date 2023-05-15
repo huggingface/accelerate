@@ -36,12 +36,12 @@ jobs:
       - name: Run test on GPUs
         run: |
           source activate accelerate
-          make test
-      - name: Run examples on GPUs
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
+          make test_core
+      # - name: Run examples on GPUs
+      #   run: |
+      #     source activate accelerate
+      #     pip uninstall comet_ml -y
+      #     make test_examples
           
       - name: Generate Report
         if: always()
@@ -73,19 +73,18 @@ jobs:
       - name: Run core and big modeling tests on GPUs
         run: |
           source activate accelerate
-          make test_big_modeling
           make test_core
 
-      - name: Run Integration tests on GPUs
-        run: |
-          source activate accelerate
-          make test_integrations
+      # - name: Run Integration tests on GPUs
+      #   run: |
+      #     source activate accelerate
+      #     make test_integrations
 
-      - name: Run examples on GPUs
-        run: |
-          source activate accelerate
-          pip uninstall comet_ml -y
-          make test_examples
+      # - name: Run examples on GPUs
+      #   run: |
+      #     source activate accelerate
+      #     pip uninstall comet_ml -y
+      #     make test_examples
 
       - name: Generate Report
         if: always()

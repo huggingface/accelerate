@@ -222,6 +222,7 @@ class Accelerator:
         kwargs_handlers: Optional[List[KwargsHandler]] = None,
         dynamo_backend: Union[DynamoBackend, str] = None,
     ):
+        print(s)
         if project_config is not None:
             self.project_configuration = project_config
         else:
