@@ -1,11 +1,14 @@
 import json, os
+import torch
+from tabulate import tabulate
 from pathlib import Path
 from datetime import date
 
 failed = []
-passed = []
 
 group_info = []
+
+torch_version = torch.__version__
 
 total_num_failed = 0
 for log in Path().glob("*.log"):
@@ -21,10 +24,9 @@ for log in Path().glob("*.log"):
                         section_num_failed += 1
                         failed.append([test, duration, log.name.split('_')[0]])
                         total_num_failed += 1
-                    else:
-                        passed.append([test, duration, log.name.split('_')[0]])
-    group_info.append([str(log), section_num_failed, failed])
+    group_info.append([str(log), torch_version, section_num_failed, failed])
     failed = []
+    log.unlink()
 message = ""
 if total_num_failed > 0:
     for name, num_failed, failed_tests in group_info:
@@ -33,10 +35,11 @@ if total_num_failed > 0:
                 message += f"*{name}: {num_failed} failed test*\n"
             else:
                 message += f"*{name}: {num_failed} failed tests*\n"
-            failed_table = '| Test Location | Test Class | Test Name | PyTorch Version |\n|---|---|---|---|\n| '
+            failed_table = []
             for test in failed_tests:
-                failed_table += ' | '.join(test[0].split("::"))
-            failed_table += f" | {test[2]} |"
+                failed_table += test[0].split("::")
+            
+            failed_table = tabulate(failed_table, headers=["Test Location", "Test Case", "Test Name"], showindex="always", tablefmt="grid", maxcolwidths=[12,12,12])
             message += failed_table
     print(f'### {message}')
 else:
