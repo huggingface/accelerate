@@ -43,7 +43,7 @@ message = ""
 if total_num_failed > 0:
     for name, num_failed, failed_tests in group_info:
         if num_failed > 0:
-            if len(num_failed) == 1:
+            if num_failed == 1:
                 message += f"*{name[1:]}: {num_failed} failed test*\n"
             else:
                 message += f"*{name[1:]}: {num_failed} failed tests*\n"
