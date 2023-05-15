@@ -55,7 +55,7 @@ if total_num_failed > 0:
                 failed_table,
                 headers=["Test Location", "Test Case", "Test Name"],
                 showindex=False,
-                tablefmt="grid",
+                tablefmt="github",
                 maxcolwidths=None,
             )
             message += f"\n```\n{failed_table}\n```"
