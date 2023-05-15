@@ -75,14 +75,14 @@ if os.environ.get("TEST_TYPE", "") != "":
 
     client = WebClient(token=os.environ["SLACK_API_TOKEN"])
     if message != "No failed tests! 🤗":
-        md_report = {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": message,
-            },
-        }
-        payload.append(md_report)
+        # md_report = {
+        #     "type": "section",
+        #     "text": {
+        #         "type": "mrkdwn",
+        #         "text": message,
+        #     },
+        # }
+        # payload.append(md_report)
         action_button = {
             "type": "section",
             "text": {
