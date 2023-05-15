@@ -56,7 +56,7 @@ if total_num_failed > 0:
                 headers=["Test Location", "Test Case", "Test Name"],
                 showindex=False,
                 tablefmt="github",
-                maxcolwidths=None,
+                maxcolwidths=[28, 28, 28],
             )
             message += f"\n```\n{failed_table}\n```"
     if len(message) > 3000:
