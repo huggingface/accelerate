@@ -59,16 +59,22 @@ if total_num_failed > 0:
             else:
                 message += f"*{name[1:]}: {num_failed} failed tests*\n"
             failed_table = []
+            files2failed = {}
             for test in failed_tests:
                 data = test[0].split("::")
                 data[0] = data[0].split("/")[-1]
+                if data[0] not in files2failed:
+                    files2failed[data[0]] = [data[1:]]
+                else:
+                    files2failed[data[0]] += [data[1:]]
                 failed_table.append(data)
 
             files = [test[0] for test in failed_tests]
             individual_files = list(set(files))
             # Count number of instances in failed_tests
-            num_failed = [files.count(file) for file in individual_files]
-            table = [[file, num] for file, num in zip(individual_files, num_failed)]
+            table = []
+            for file in individual_files:
+                table.append([file, len(files2failed[file])])
 
             failed_table = tabulate(
                 table,
