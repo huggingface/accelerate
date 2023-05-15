@@ -56,7 +56,7 @@ if total_num_failed > 0:
                 headers=["Test Location", "Test Case", "Test Name"],
                 showindex="always",
                 tablefmt="grid",
-                maxcolwidths=[12, 12, 12],
+                maxcolwidths=[24, 24, 24],
             )
             message += f"\n```\n{failed_table}\n```"
     print(f"### {message}")
