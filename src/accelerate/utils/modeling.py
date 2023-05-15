@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import enum
 import shutil
 import tempfile
 from collections import defaultdict
@@ -41,6 +42,14 @@ WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
 
 logger = logging.getLogger(__name__)
+
+
+class CustomDtype(enum.Enum):
+    r"""
+    An enum that contains multiple custom dtypes for the type.
+    """
+    FP8 = "fp8"
+    INT4 = "int4"
 
 
 def convert_file_size_to_int(size: Union[int, str]):
@@ -90,6 +99,10 @@ def dtype_byte_size(dtype: torch.dtype):
     """
     if dtype == torch.bool:
         return 1 / 8
+    elif dtype == CustomDtype.INT4:
+        return 1 / 2
+    elif dtype == CustomDtype.FP8:  
+        return 1 
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
@@ -162,7 +175,7 @@ def set_module_tensor_to_device(
             if param_cls.__name__ == "Int8Params":
                 # downcast to fp16 if any
                 if new_value.dtype == torch.float32:
-                    new_value = new_value.to(torch.float16)
+                   new_value = new_value.to(torch.float16)
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)

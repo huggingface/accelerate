@@ -62,6 +62,7 @@ from .modeling import (
     named_module_tensors,
     retie_parameters,
     set_module_tensor_to_device,
+    CustomDtype,
 )
 from .offload import (
     OffloadedWeightsLoader,
