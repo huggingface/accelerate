@@ -51,6 +51,8 @@ if total_num_failed > 0:
             for test in failed_tests:
                 failed_table.append(test[0].split("::"))
 
+            print(failed_table)
+
             failed_table = tabulate(
                 failed_table,
                 headers=["Test Location", "Test Case", "Test Name"],
