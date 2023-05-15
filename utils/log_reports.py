@@ -3,18 +3,19 @@ import os
 from datetime import date
 from pathlib import Path
 
-from tabulate import tabulate, TableFormat, DataRow
+from tabulate import DataRow, TableFormat, tabulate
+
 
 hf_table_format = TableFormat(
-        lineabove=None,
-        linebelowheader=None,
-        linebetweenrows=None,
-        linebelow=None,
-        headerrow=DataRow("", "|", "|"),
-        datarow=DataRow("", "|", "|"),
-        padding=1,
-        with_header_hide=None,
-    )
+    lineabove=None,
+    linebelowheader=None,
+    linebetweenrows=None,
+    linebelow=None,
+    headerrow=DataRow("", "|", "|"),
+    datarow=DataRow("", "|", "|"),
+    padding=1,
+    with_header_hide=None,
+)
 
 
 failed = []
@@ -51,7 +52,6 @@ for log in Path().glob("*.log"):
     failed = []
     log.unlink()
 message = ""
-detailed_failed = []
 if total_num_failed > 0:
     for name, num_failed, failed_tests in group_info:
         if num_failed > 0:
@@ -69,7 +69,6 @@ if total_num_failed > 0:
                 else:
                     files2failed[data[0]] += [data[1:]]
                 failed_table.append(data)
-            detailed_failed.append(failed_table)
 
             files = [test[0] for test in failed_table]
             individual_files = list(set(files))
@@ -88,7 +87,7 @@ if total_num_failed > 0:
     if len(message) > 3000:
         err = "Too many failed tests, please see the full report in the Action results."
         offset = len(err) + 10
-        message = message[:3000 - offset] + f"\n...\n```\n{err}"
+        message = message[: 3000 - offset] + f"\n...\n```\n{err}"
     print(f"### {message}")
 else:
     message = "No failed tests! 🤗"
@@ -135,20 +134,19 @@ if os.environ.get("TEST_TYPE", "") != "":
             ],
         }
         payload.append(date_report)
-    print(f'Payload:\n{payload}')
     response = client.chat_postMessage(channel="#accelerate-ci-daily", text=message, blocks=payload)
     ts = response.data["ts"]
-    for k,v in files2failed.items():
+    for test_location, test_failures in files2failed.items():
         # Keep only the first instance of the test name
-        test_class = ''
-        for i, row in enumerate(v):
+        test_class = ""
+        for i, row in enumerate(test_failures):
             if row[0] != test_class:
                 test_class = row[0]
             else:
-                v[i][0] = ''
+                test_failures[i][0] = ""
 
         client.chat_postMessage(
             channel="#accelerate-ci-daily",
             thread_ts=ts,
-            text=f"Test location: {k}\n```\n{tabulate(v, headers=['Class', 'Test'], tablefmt=hf_table_format, stralign='right')}\n```",
+            text=f"Test location: {test_location}\n```\n{tabulate(test_failures, headers=['Class', 'Test'], tablefmt=hf_table_format, stralign='right')}\n```",
         )
