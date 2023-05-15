@@ -61,8 +61,8 @@ if total_num_failed > 0:
             message += f"\n```\n{failed_table}\n```"
     if len(message) > 3000:
         err = "Too many failed tests, please see the full report in the Action results."
-        offset = len(err) + 5
-        message = message[:3000 - offset] + f"```\n{err}"
+        offset = len(err) + 10
+        message = message[:3000 - offset] + f"\n...```\n{err}"
     print(f"### {message}")
 else:
     message = "No failed tests! 🤗"
