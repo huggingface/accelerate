@@ -71,9 +71,9 @@ if total_num_failed > 0:
             table = [[file, num] for file, num in zip(individual_files, num_failed)]
 
             failed_table = tabulate(
-                failed_table,
+                table,
                 headers=["Test Location", "Num Failed"],
-                tablefmt=table,
+                tablefmt=hf_table_format,
                 stralign="right",
             )
             message += f"\n```\n{failed_table}\n```"
