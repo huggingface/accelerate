@@ -46,6 +46,7 @@ from .imports import (
     is_xpu_available,
 )
 from .modeling import (
+    CustomDtype,
     check_device_map,
     compute_module_sizes,
     convert_file_size_to_int,
@@ -62,7 +63,6 @@ from .modeling import (
     named_module_tensors,
     retie_parameters,
     set_module_tensor_to_device,
-    CustomDtype,
 )
 from .offload import (
     OffloadedWeightsLoader,
