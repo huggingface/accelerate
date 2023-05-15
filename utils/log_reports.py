@@ -105,4 +105,5 @@ if os.environ.get("TEST_TYPE", "") != "":
             ],
         }
         payload.append(date_report)
+    print(f'Payload:\n{payload}')
     client.chat_postMessage(channel="#accelerate-ci-daily", text=message, blocks=payload)
