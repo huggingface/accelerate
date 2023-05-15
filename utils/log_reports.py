@@ -3,7 +3,18 @@ import os
 from datetime import date
 from pathlib import Path
 
-from tabulate import tabulate
+from tabulate import tabulate, TableFormat, DataRow
+
+hf_table_format = TableFormat(
+        lineabove=None,
+        linebelowheader=None,
+        linebetweenrows=None,
+        linebelow=None,
+        headerrow=DataRow("", "|", "|"),
+        datarow=DataRow("", "|", "|"),
+        padding=1,
+        with_header_hide=None,
+    )
 
 
 failed = []
@@ -49,15 +60,15 @@ if total_num_failed > 0:
                 message += f"*{name[1:]}: {num_failed} failed tests*\n"
             failed_table = []
             for test in failed_tests:
-                failed_table.append(test[0].split("::"))
-
-            print(failed_table)
+                data = test[0].split("::")
+                data[0] = data[0].split("/")[-1]
+                failed_table.append(data)
 
             failed_table = tabulate(
                 failed_table,
                 headers=["Test Location", "Test Case", "Test Name"],
-                tablefmt="github",
-                maxcolwidths=25,
+                tablefmt=hf_table_format,
+                stralign="right",
             )
             message += f"\n```\n{failed_table}\n```"
     if len(message) > 3000:
@@ -75,14 +86,14 @@ if os.environ.get("TEST_TYPE", "") != "":
 
     client = WebClient(token=os.environ["SLACK_API_TOKEN"])
     if message != "No failed tests! 🤗":
-        # md_report = {
-        #     "type": "section",
-        #     "text": {
-        #         "type": "mrkdwn",
-        #         "text": message,
-        #     },
-        # }
-        # payload.append(md_report)
+        md_report = {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": message,
+            },
+        }
+        payload.append(md_report)
         action_button = {
             "type": "section",
             "text": {
