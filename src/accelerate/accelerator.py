@@ -251,7 +251,6 @@ class Accelerator:
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
     ):
-        print(s)
         if project_config is not None:
             self.project_configuration = project_config
         else:

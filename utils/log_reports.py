@@ -150,8 +150,8 @@ if os.environ.get("TEST_TYPE", "") != "":
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"Test location: {test_location}\n```\n{tabulate(test_failures, headers=['Class', 'Test'], tablefmt=hf_table_format, stralign='right')}\n```"
-            }
+                "text": f"Test location: {test_location}\n```\n{tabulate(test_failures, headers=['Class', 'Test'], tablefmt=hf_table_format, stralign='right')}\n```",
+            },
         }
 
         client.chat_postMessage(
