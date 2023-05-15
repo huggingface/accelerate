@@ -2,9 +2,8 @@ import gc
 import threading
 import time
 
-import torch
-
 import psutil
+import torch
 
 
 class PeakCPUMemory:

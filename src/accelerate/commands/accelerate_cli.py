@@ -24,7 +24,7 @@ from accelerate.commands.tpu import tpu_command_parser
 
 
 def main():
-    parser = ArgumentParser("Accelerate CLI tool", usage="accelerate <command> [<args>]")
+    parser = ArgumentParser("Accelerate CLI tool", usage="accelerate <command> [<args>]", allow_abbrev=False)
     subparsers = parser.add_subparsers(help="accelerate command helpers")
 
     # Register commands

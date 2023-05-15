@@ -18,9 +18,11 @@ from tempfile import TemporaryDirectory
 
 import torch
 import torch.nn as nn
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from accelerate.big_modeling import (
     cpu_offload,
+    cpu_offload_with_hook,
     disk_offload,
     dispatch_model,
     init_empty_weights,
@@ -30,7 +32,6 @@ from accelerate.big_modeling import (
 from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import require_cuda, require_mps, require_multi_gpu, require_torch_min_version, slow
 from accelerate.utils import offload_state_dict
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 class ModelForTest(nn.Module):
@@ -484,3 +485,134 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
+    def test_cpu_offload_with_hook(self):
+        model1 = torch.nn.Linear(4, 5)
+        model1, hook1 = cpu_offload_with_hook(model1)
+        self.assertEqual(model1.weight.device, torch.device("cpu"))
+
+        inputs = torch.randn(3, 4)
+        outputs = model1(inputs)
+        self.assertEqual(outputs.device, torch.device(0))
+        self.assertEqual(model1.weight.device, torch.device(0))
+
+        hook1.offload()
+        self.assertEqual(model1.weight.device, torch.device("cpu"))
+
+        model2 = torch.nn.Linear(5, 5)
+        model2, hook2 = cpu_offload_with_hook(model2, prev_module_hook=hook1)
+        self.assertEqual(model2.weight.device, torch.device("cpu"))
+
+        outputs = model1(inputs)
+        self.assertEqual(outputs.device, torch.device(0))
+        self.assertEqual(model1.weight.device, torch.device(0))
+
+        outputs = model2(outputs)
+        self.assertEqual(outputs.device, torch.device(0))
+        self.assertEqual(model1.weight.device, torch.device("cpu"))
+        self.assertEqual(model2.weight.device, torch.device(0))
+
+        hook2.offload()
+        self.assertEqual(model2.weight.device, torch.device("cpu"))
+
+    @slow
+    @require_multi_gpu
+    def test_dispatch_model_bnb(self):
+        """Tests that `dispatch_model` quantizes int8 layers"""
+        from huggingface_hub import hf_hub_download
+        from transformers import AutoConfig, AutoModel
+        from transformers.utils.bitsandbytes import replace_8bit_linear
+
+        with init_empty_weights():
+            model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
+
+        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
+
+        # TODO: @younesbelkada remove this block on the next `transformers` release
+        for p in model.parameters():
+            p.requires_grad = False
+
+        model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
+
+        model = load_checkpoint_and_dispatch(
+            model,
+            checkpoint=model_path,
+            # device_map="auto",
+            device_map="balanced",
+        )
+
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+
+        self.assertTrue(model.h[-1].self_attention.query_key_value.weight.dtype == torch.int8)
+        self.assertTrue(model.h[-1].self_attention.query_key_value.weight.device.index == 1)
+
+    @slow
+    def test_dipatch_model_int8_simple(self):
+        """Tests that `dispatch_model` quantizes int8 layers"""
+        from huggingface_hub import hf_hub_download
+        from transformers import AutoConfig, AutoModel
+        from transformers.utils.bitsandbytes import replace_8bit_linear
+
+        with init_empty_weights():
+            model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
+
+        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
+
+        # TODO: @younesbelkada remove this block on the next `transformers` release
+        for p in model.parameters():
+            p.requires_grad = False
+
+        model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
+
+        # test with auto
+        model = load_checkpoint_and_dispatch(
+            model,
+            checkpoint=model_path,
+            device_map="auto",
+        )
+
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+
+        with init_empty_weights():
+            model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
+
+        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
+
+        for p in model.parameters():
+            p.requires_grad = False
+
+        # test with str device map
+        model = load_checkpoint_and_dispatch(
+            model,
+            checkpoint=model_path,
+            device_map={"": torch.device("cuda:0")},
+        )
+
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+
+        with init_empty_weights():
+            model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
+
+        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
+
+        # TODO: @younesbelkada remove this block on the next `transformers` release
+        for p in model.parameters():
+            p.requires_grad = False
+
+        # test with torch.device device map
+        model = load_checkpoint_and_dispatch(
+            model,
+            checkpoint=model_path,
+            device_map={"": "cuda:0"},
+        )
+
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)

@@ -29,6 +29,7 @@ from .utils import (
     SCHEDULER_NAME,
     get_pretty_name,
     is_tpu_available,
+    is_xpu_available,
     save,
 )
 
@@ -37,6 +38,7 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 from .logging import get_logger
+from .state import PartialState
 
 
 logger = get_logger(__name__)
@@ -99,8 +101,10 @@ def save_accelerator_state(
     states["random_state"] = random.getstate()
     states["numpy_random_seed"] = np.random.get_state()
     states["torch_manual_seed"] = torch.get_rng_state()
-    states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
-    # ^^ safe to call this function even if cuda is not available
+    if is_xpu_available():
+        states["torch_xpu_manual_seed"] = torch.xpu.get_rng_state_all()
+    else:
+        states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
     if is_tpu_available():
         states["xm_seed"] = xm.get_rng_state()
     output_states_file = os.path.join(output_dir, states_name)
@@ -110,7 +114,14 @@ def save_accelerator_state(
 
 
 def load_accelerator_state(
-    input_dir, models, optimizers, schedulers, process_index, scaler=None, **load_model_func_kwargs
+    input_dir,
+    models,
+    optimizers,
+    schedulers,
+    process_index,
+    scaler=None,
+    map_location=None,
+    **load_model_func_kwargs,
 ):
     """
     Loads states of the models, optimizers, scaler, and RNG generators from a given directory.
@@ -128,21 +139,32 @@ def load_accelerator_state(
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
             An optional *GradScaler* instance to load
+        map_location (`str`, *optional*):
+            What device to load the optimizer state onto. Should be one of either "cpu" or "on_device".
         load_model_func_kwargs (`dict`, *optional*):
             Additional arguments that can be passed to the model's `load_state_dict` method.
     """
+    if map_location not in [None, "cpu", "on_device"]:
+        raise TypeError(
+            "Unsupported optimizer map location passed, please choose one of `None`, `'cpu'`, or `'on_device'`"
+        )
+    if map_location is None:
+        map_location = "cpu"
+    elif map_location == "on_device":
+        map_location = PartialState().device
     # Model states
     for i, model in enumerate(models):
         weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
         input_model_file = os.path.join(input_dir, weights_name)
-        models[i].load_state_dict(torch.load(input_model_file, map_location="cpu"), **load_model_func_kwargs)
+        models[i].load_state_dict(torch.load(input_model_file, map_location=map_location), **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
     # Optimizer states
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = os.path.join(input_dir, optimizer_name)
-        optimizers[i].load_state_dict(torch.load(input_optimizer_file, map_location="cpu"))
+        optimizer_state = torch.load(input_optimizer_file)
+        optimizers[i].load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
 
     # Scheduler states
@@ -164,12 +186,14 @@ def load_accelerator_state(
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])
-        torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
-        # ^^ safe to call this function even if cuda is not available
+        if is_xpu_available():
+            torch.xpu.set_rng_state_all(states["torch_xpu_manual_seed"])
+        else:
+            torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
         if is_tpu_available():
             xm.set_rng_state(states["xm_seed"])
         logger.info("All random states loaded successfully")
-    except:
+    except Exception:
         logger.info("Could not load random states")
 
 
@@ -189,4 +213,4 @@ def load_custom_state(obj, path, index: int = 0):
     """
     load_location = f"{path}/custom_checkpoint_{index}.pkl"
     logger.info(f"Loading the state of {get_pretty_name(obj)} from {load_location}")
-    obj.load_state_dict(torch.load(load_location))
+    obj.load_state_dict(torch.load(load_location, map_location="cpu"))

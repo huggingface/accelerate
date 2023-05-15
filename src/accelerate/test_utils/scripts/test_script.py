@@ -14,6 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
+import io
+import time
+from pathlib import Path
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -25,10 +30,101 @@ from accelerate.utils import (
     DistributedType,
     gather,
     is_bf16_available,
+    is_ipex_available,
     is_torch_version,
+    is_xpu_available,
     set_seed,
     synchronize_rng_states,
 )
+
+
+def print_main(state):
+    print(f"Printing from the main process {state.process_index}")
+
+
+def print_local_main(state):
+    print(f"Printing from the local main process {state.local_process_index}")
+
+
+def print_last(state):
+    print(f"Printing from the last process {state.process_index}")
+
+
+def print_on(state, process_idx):
+    print(f"Printing from process {process_idx}: {state.process_index}")
+
+
+def process_execution_check():
+    accelerator = Accelerator()
+    num_processes = accelerator.num_processes
+
+    # Test main_process_first context manager
+    path = Path("check_main_process_first.txt")
+    with accelerator.main_process_first():
+        if accelerator.is_main_process:
+            time.sleep(0.1)  # ensure main process takes longest
+            with open(path, "a+") as f:
+                f.write("Currently in the main process\n")
+        else:
+            with open(path, "a+") as f:
+                f.write("Now on another process\n")
+    accelerator.wait_for_everyone()
+    if accelerator.is_main_process:
+        with open(path, "r") as f:
+            text = "".join(f.readlines())
+        try:
+            assert text.startswith("Currently in the main process\n"), "Main process was not first"
+            if num_processes > 1:
+                assert text.endswith("Now on another process\n"), "Main process was not first"
+            assert (
+                text.count("Now on another process\n") == num_processes - 1
+            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {num_processes}"
+        except AssertionError:
+            path.unlink()
+            raise
+
+    if accelerator.is_main_process and path.exists():
+        path.unlink()
+    accelerator.wait_for_everyone()
+    # Test the decorators
+    f = io.StringIO()
+    with contextlib.redirect_stdout(f):
+        accelerator.on_main_process(print_main)(accelerator.state)
+    result = f.getvalue().rstrip()
+    if accelerator.is_main_process:
+        assert result == "Printing from the main process 0", f"{result} != Printing from the main process 0"
+    else:
+        assert f.getvalue().rstrip() == "", f'{result} != ""'
+    f.truncate(0)
+    f.seek(0)
+
+    with contextlib.redirect_stdout(f):
+        accelerator.on_local_main_process(print_local_main)(accelerator.state)
+    if accelerator.is_local_main_process:
+        assert f.getvalue().rstrip() == "Printing from the local main process 0"
+    else:
+        assert f.getvalue().rstrip() == ""
+    f.truncate(0)
+    f.seek(0)
+
+    with contextlib.redirect_stdout(f):
+        accelerator.on_last_process(print_last)(accelerator.state)
+    if accelerator.is_last_process:
+        assert f.getvalue().rstrip() == f"Printing from the last process {accelerator.state.num_processes - 1}"
+    else:
+        assert f.getvalue().rstrip() == ""
+    f.truncate(0)
+    f.seek(0)
+
+    for process_idx in range(num_processes):
+        with contextlib.redirect_stdout(f):
+            accelerator.on_process(print_on, process_index=process_idx)(accelerator.state, process_idx)
+        if accelerator.process_index == process_idx:
+            assert f.getvalue().rstrip() == f"Printing from process {process_idx}: {accelerator.process_index}"
+        else:
+            assert f.getvalue().rstrip() == ""
+        f.truncate(0)
+        f.seek(0)
 
 
 def init_state_check():
@@ -183,7 +279,7 @@ def central_dl_preparation_check():
 def mock_training(length, batch_size, generator):
     set_seed(42)
     generator.manual_seed(42)
-    train_set = RegressionDataset(length=length)
+    train_set = RegressionDataset(length=length, seed=42)
     train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -300,6 +396,60 @@ def training_check():
         assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
 
+    # IPEX support is only for CPU
+    if is_ipex_available():
+        print("ipex BF16 training check.")
+        from accelerate.utils.dataclasses import IntelPyTorchExtensionPlugin
+
+        AcceleratorState._reset_state()
+        ipex_plugin = IntelPyTorchExtensionPlugin()
+        accelerator = Accelerator(mixed_precision="bf16", cpu=True, ipex_plugin=ipex_plugin)
+        train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
+        model = RegressionModel()
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+        train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
+        set_seed(42)
+        generator.manual_seed(42)
+        for _ in range(3):
+            for batch in train_dl:
+                model.zero_grad()
+                output = model(batch["x"])
+                loss = torch.nn.functional.mse_loss(output, batch["y"])
+                accelerator.backward(loss)
+                optimizer.step()
+
+        model = accelerator.unwrap_model(model).cpu()
+        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
+        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+
+    # XPU support is only for XPU
+    if is_xpu_available():
+        print("xpu BF16 training check.")
+        from accelerate.utils.dataclasses import IntelPyTorchExtensionPlugin
+
+        AcceleratorState._reset_state()
+        ipex_plugin = IntelPyTorchExtensionPlugin()
+        accelerator = Accelerator(mixed_precision="bf16", cpu=False, ipex_plugin=ipex_plugin)
+        train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
+        model = RegressionModel()
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+        train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
+        set_seed(42)
+        generator.manual_seed(42)
+        for _ in range(3):
+            for batch in train_dl:
+                model.zero_grad()
+                output = model(batch["x"])
+                loss = torch.nn.functional.mse_loss(output, batch["y"])
+                accelerator.backward(loss)
+                optimizer.step()
+
+        model = accelerator.unwrap_model(model).cpu()
+        assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on XPU or distributed training."
+        assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on XPU or distributed training."
+
 
 def main():
     accelerator = Accelerator()
@@ -307,6 +457,9 @@ def main():
     if state.local_process_index == 0:
         print("**Initialization**")
     init_state_check()
+    if state.local_process_index == 0:
+        print("\n**Test process execution**")
+    process_execution_check()
 
     if state.local_process_index == 0:
         print("\n**Test random number generator synchronization**")
@@ -325,11 +478,6 @@ def main():
     if state.local_process_index == 0:
         print("\n**Training integration test**")
     training_check()
-
-
-def _mp_fn(index):
-    # For xla_spawn (TPUs)
-    main()
 
 
 if __name__ == "__main__":

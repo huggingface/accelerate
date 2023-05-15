@@ -152,7 +152,7 @@ Follow these steps to start contributing:
    $ make test
    ```
 
-   `accelerate` relies on `black` and `isort` to format its source code
+   `accelerate` relies on `black` and `ruff` to format its source code
    consistently. After you make changes, apply automatic style corrections and code verifications
    that can't be automated in one go with:
 
@@ -165,7 +165,7 @@ Follow these steps to start contributing:
    $ make style
    ```
 
-   `accelerate` also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
+   `accelerate` also uses a few custom scripts to check for coding mistakes. Quality
    control runs in CI, however you can also run the same checks with:
 
    ```bash

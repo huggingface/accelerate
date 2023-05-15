@@ -1,7 +1,7 @@
 import json
 import os
-from datetime import date
 from pathlib import Path
+from datetime import date
 
 from tabulate import DataRow, TableFormat, tabulate
 
@@ -51,6 +51,7 @@ for log in Path().glob("*.log"):
     group_info.append([str(log), section_num_failed, failed])
     failed = []
     log.unlink()
+
 message = ""
 if total_num_failed > 0:
     for name, num_failed, failed_tests in group_info:

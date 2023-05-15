@@ -22,7 +22,7 @@ from typing import List, Optional, Union
 
 import yaml
 
-from ...utils import ComputeEnvironment, DistributedType, DynamoBackend, SageMakerDistributedType
+from ...utils import ComputeEnvironment, DistributedType, SageMakerDistributedType
 from ...utils.constants import SAGEMAKER_PYTHON_VERSION, SAGEMAKER_PYTORCH_VERSION, SAGEMAKER_TRANSFORMERS_VERSION
 
 
@@ -41,8 +41,16 @@ else:
 
 
 def load_config_from_file(config_file):
-    config_file_exists = config_file is not None and os.path.isfile(config_file)
-    config_file = config_file if config_file_exists else default_config_file
+    if config_file is not None:
+        if not os.path.isfile(config_file):
+            raise FileNotFoundError(
+                f"The passed configuration file `{config_file}` does not exist. "
+                "Please pass an existing file to `accelerate launch`, or use the the default one "
+                "created through `accelerate config` and run `accelerate launch` "
+                "without the `--config_file` argument."
+            )
+    else:
+        config_file = default_config_file
     with open(config_file, "r", encoding="utf-8") as f:
         if config_file.endswith(".json"):
             if (
@@ -70,7 +78,6 @@ class BaseConfig:
     distributed_type: Union[DistributedType, SageMakerDistributedType]
     mixed_precision: str
     use_cpu: bool
-    dynamo_backend: DynamoBackend
 
     def to_dict(self):
         result = self.__dict__
@@ -78,6 +85,8 @@ class BaseConfig:
         for key, value in result.items():
             if isinstance(value, Enum):
                 result[key] = value.value
+            if isinstance(value, dict) and not bool(value):
+                result[key] = None
         result = {k: v for k, v in result.items() if v is not None}
         return result
 
@@ -92,10 +101,11 @@ class BaseConfig:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
+        if "dynamo_backend" in config_dict:  # Convert the config to the new format.
+            dynamo_backend = config_dict.pop("dynamo_backend")
+            config_dict["dynamo_config"] = {} if dynamo_backend == "NO" else {"dynamo_backend": dynamo_backend}
         if "use_cpu" not in config_dict:
             config_dict["use_cpu"] = False
-        if "dynamo_backend" not in config_dict:
-            config_dict["dynamo_backend"] = DynamoBackend.NO
         return cls(**config_dict)
 
     def to_json_file(self, json_file):
@@ -113,13 +123,15 @@ class BaseConfig:
 
         if "mixed_precision" not in config_dict:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
+        if isinstance(config_dict["mixed_precision"], bool) and not config_dict["mixed_precision"]:
+            config_dict["mixed_precision"] = "no"
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
+        if "dynamo_backend" in config_dict:  # Convert the config to the new format.
+            dynamo_backend = config_dict.pop("dynamo_backend")
+            config_dict["dynamo_config"] = {} if dynamo_backend == "NO" else {"dynamo_backend": dynamo_backend}
         if "use_cpu" not in config_dict:
             config_dict["use_cpu"] = False
-        if "dynamo_backend" not in config_dict:
-            config_dict["dynamo_backend"] = DynamoBackend.NO
-
         return cls(**config_dict)
 
     def to_yaml_file(self, yaml_file):
@@ -134,8 +146,8 @@ class BaseConfig:
                 self.distributed_type = SageMakerDistributedType(self.distributed_type)
             else:
                 self.distributed_type = DistributedType(self.distributed_type)
-        if isinstance(self.dynamo_backend, str):
-            self.dynamo_backend = DynamoBackend(self.dynamo_backend.upper())
+        if self.dynamo_config is None:
+            self.dynamo_config = {}
 
 
 @dataclass
@@ -156,14 +168,25 @@ class ClusterConfig(BaseConfig):
     fsdp_config: dict = None
     # args for megatron_lm
     megatron_lm_config: dict = None
+    # args for ipex
+    ipex_config: dict = None
+    # args for xpu
+    xpu_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
 
     # args for TPU pods
     tpu_name: str = None
     tpu_zone: str = None
+    tpu_use_cluster: bool = False
+    tpu_use_sudo: bool = False
     command_file: str = None
     commands: List[str] = None
+    tpu_vm: List[str] = None
+    tpu_env: List[str] = None
+
+    # args for dynamo
+    dynamo_config: dict = None
 
     def __post_init__(self):
         if self.deepspeed_config is None:
@@ -172,6 +195,10 @@ class ClusterConfig(BaseConfig):
             self.fsdp_config = {}
         if self.megatron_lm_config is None:
             self.megatron_lm_config = {}
+        if self.ipex_config is None:
+            self.ipex_config = {}
+        if self.xpu_config is None:
+            self.xpu_config = {}
         return super().__post_init__()
 
 
@@ -179,7 +206,7 @@ class ClusterConfig(BaseConfig):
 class SageMakerConfig(BaseConfig):
     ec2_instance_type: str
     iam_role_name: str
-    image_uri: str
+    image_uri: Optional[str] = None
     profile: Optional[str] = None
     region: str = "us-east-1"
     num_machines: int = 1
@@ -190,3 +217,5 @@ class SageMakerConfig(BaseConfig):
     py_version: str = SAGEMAKER_PYTHON_VERSION
     sagemaker_inputs_file: str = None
     sagemaker_metrics_file: str = None
+    additional_args: dict = None
+    dynamo_config: dict = None

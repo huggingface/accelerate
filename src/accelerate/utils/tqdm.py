@@ -16,9 +16,9 @@ from .imports import is_tqdm_available
 
 
 if is_tqdm_available():
-    import tqdm.auto as _tqdm
+    from tqdm.auto import tqdm as _tqdm
 
-from ..state import AcceleratorState
+from ..state import PartialState
 
 
 def tqdm(main_process_only: bool = True, *args, **kwargs):
@@ -33,5 +33,5 @@ def tqdm(main_process_only: bool = True, *args, **kwargs):
         raise ImportError("Accelerate's `tqdm` module requires `tqdm` to be installed. Please run `pip install tqdm`.")
     disable = False
     if main_process_only:
-        disable = AcceleratorState().local_process_index == 0
+        disable = PartialState().local_process_index == 0
     return _tqdm(*args, **kwargs, disable=disable)

@@ -61,7 +61,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
     def test_log(self):
         project_name = "test_project_with_log"
         with tempfile.TemporaryDirectory() as dirpath:
-            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
+            accelerator = Accelerator(log_with="tensorboard", project_dir=dirpath)
             accelerator.init_trackers(project_name)
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
             accelerator.log(values, step=0)

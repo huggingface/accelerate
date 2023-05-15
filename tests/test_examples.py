@@ -34,6 +34,7 @@ from accelerate.utils import write_basic_config
 EXCLUDE_EXAMPLES = [
     "cross_validation.py",
     "gradient_accumulation.py",
+    "local_sgd.py",
     "multi_process_metrics.py",
     "memory.py",
     "automatic_gradient_accumulation.py",
@@ -213,4 +214,8 @@ class FeatureExamplesTests(TempDirTestCase):
 
     def test_gradient_accumulation(self):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
+        run_command(self._launch_args + testargs)
+
+    def test_local_sgd(self):
+        testargs = ["examples/by_feature/local_sgd.py"]
         run_command(self._launch_args + testargs)

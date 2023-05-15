@@ -1,12 +1,9 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
-__version__ = "0.17.0.dev0"
+__version__ = "0.20.0.dev0"
 
 from .accelerator import Accelerator
 from .big_modeling import (
     cpu_offload,
+    cpu_offload_with_hook,
     disk_offload,
     dispatch_model,
     init_empty_weights,
@@ -15,6 +12,7 @@ from .big_modeling import (
 )
 from .data_loader import skip_first_batches
 from .launchers import debug_launcher, notebook_launcher
+from .state import PartialState
 from .utils import (
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
