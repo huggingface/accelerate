@@ -49,7 +49,7 @@ if total_num_failed > 0:
                 message += f"*{name[1:]}: {num_failed} failed tests*\n"
             failed_table = []
             for test in failed_tests:
-                failed_table += test[0].split("::")
+                failed_table.append(test[0].split("::"))
 
             failed_table = tabulate(
                 failed_table,
