@@ -19,10 +19,10 @@ import torch
 
 from ..commands.config.default import write_basic_config  # noqa: F401
 from ..state import PartialState
-from .versions import is_torch_version
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
 from .transformer_engine import convert_model
+from .versions import is_torch_version
 
 
 if is_deepspeed_available():

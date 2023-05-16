@@ -21,7 +21,6 @@ import torch
 
 from accelerate.test_utils.testing import require_cuda, require_torch_min_version
 from accelerate.test_utils.training import RegressionModel
-from accelerate.utils.other import extract_model_from_parallel
 from accelerate.utils import (
     convert_outputs_to_fp32,
     extract_model_from_parallel,
@@ -121,7 +120,6 @@ class UtilsTester(unittest.TestCase):
     def test_extract_model(self):
         model = RegressionModel()
         # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
-        # skip for now
         distributed_model = torch.nn.parallel.DataParallel(model)
         model_unwrapped = extract_model_from_parallel(distributed_model)
 
@@ -132,6 +130,7 @@ class UtilsTester(unittest.TestCase):
         model = RegressionModel()
         compiled_model = torch.compile(model)
 
+        # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
         distributed_model = torch.nn.parallel.DataParallel(model)
         distributed_compiled_model = torch.compile(distributed_model)
         compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model)
