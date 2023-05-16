@@ -18,7 +18,7 @@ quality:
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 style:
-	black $(check_dirs)
+	black --required-version 23 $(check_dirs)
 	ruff $(check_dirs) --fix
 	doc-builder style src/accelerate docs/source --max_len 119
 	
