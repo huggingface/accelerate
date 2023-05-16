@@ -26,7 +26,7 @@ from .config_utils import SubcommandHelpFormatter
 description = "Create a default config file for Accelerate with only a few flags set."
 
 
-def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file, dynamo_backend="no"):
+def write_basic_config(mixed_precision="no", save_location: str = default_json_config_file, use_xpu: bool = False):
     """
     Creates and saves a basic cluster config to be used on a local machine with potentially multiple GPUs. Will also
     set CPU if it is a CPU-only machine.
@@ -38,6 +38,8 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
             Optional custom save location. Should be passed to `--config_file` when using `accelerate launch`. Default
             location is inside the huggingface cache folder (`~/.cache/huggingface`) but can be overriden by setting
             the `HF_HOME` environmental variable, followed by `accelerate/default_config.yaml`.
+        use_xpu (`bool`, *optional*, defaults to `False`):
+            Whether to use XPU if available.
     """
     path = Path(save_location)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -63,7 +65,7 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
             config["distributed_type"] = "MULTI_GPU"
         else:
             config["distributed_type"] = "NO"
-    elif is_xpu_available():
+    elif is_xpu_available() and use_xpu:
         num_xpus = torch.xpu.device_count()
         config["num_processes"] = num_xpus
         config["use_cpu"] = False
