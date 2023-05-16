@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 class CustomDtype(enum.Enum):
     r"""
-    An enum that contains multiple custom dtypes for the type.
+    An enum that contains multiple custom dtypes that can be used for `infer_auto_device_map`.
     """
     FP8 = "fp8"
     INT4 = "int4"
