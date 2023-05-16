@@ -12,7 +12,7 @@ extra_quality_checks:
 
 # this target runs checks on all files
 quality:
-	black --check $(check_dirs)
+	black --required-version 23 --check $(check_dirs)
 	ruff $(check_dirs)
 	doc-builder style src/accelerate docs/source --max_len 119 --check_only
 
