@@ -1,6 +1,6 @@
-.PHONY: quality style test docs
+.PHONY: quality style test docs utils
 
-check_dirs := tests src examples benchmarks
+check_dirs := tests src examples benchmarks utils
 
 # Check that source code meets quality standards
 
