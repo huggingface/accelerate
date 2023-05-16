@@ -533,7 +533,7 @@ def get_balanced_memory(
     module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
     # Once removed, leaves are the final modules.
     leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
-    mean_leaves = int(sum([module_sizes[n] for n in leaves]) / len(leaves))
+    mean_leaves = int(sum([module_sizes[n] for n in leaves]) / ( len(leaves) or 1) )
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
