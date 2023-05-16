@@ -47,6 +47,7 @@ jobs:
       - name: Generate Report
         if: always()
         run: |
+          pip install tabulate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
@@ -86,4 +87,5 @@ jobs:
       - name: Generate Report
         if: always()
         run: |
+          pip install tabulate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
