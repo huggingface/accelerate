@@ -17,7 +17,7 @@ send a number of different prompts, each to a different GPU, and then get the re
 outside of just NLP, however for this tutorial we will focus on just this idea of each GPU receiving a different prompt,
 and then returning the results.
 
-## The problem
+## The Problem
 
 Normally when doing this, users send the model to a specific device to load it from the CPU, and then move each prompt to a different device. 
 
@@ -48,7 +48,7 @@ def run_inference(rank, world_size):
 One will notice how we have to check the rank to know what prompt to send, which can be a bit tedious.
 
 A user might then also think that with 🤗 Accelerate, using the `Accelerator` to prepare a dataloader for such a task might also be 
-a simple way to manage this. (To learn more, check out the relvent section in the [Quick Tour](quicktour#distributed-evaluation))
+a simple way to manage this. (To learn more, check out the relvent section in the [Quick Tour](../quicktour#distributed-evaluation))
 
 Can it manage it? Yes. Does it add unneeded extra code however: also yes.
 
