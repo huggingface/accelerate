@@ -171,18 +171,18 @@ def load_accelerator_state(
     for i, scheduler in enumerate(schedulers):
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         input_scheduler_file = os.path.join(input_dir, scheduler_name)
-        scheduler.load_state_dict(torch.load(input_scheduler_file, map_location=map_location))
+        scheduler.load_state_dict(torch.load(input_scheduler_file))
     logger.info("All scheduler states loaded successfully")
 
     # GradScaler state
     if scaler is not None:
         input_scaler_file = os.path.join(input_dir, SCALER_NAME)
-        scaler.load_state_dict(torch.load(input_scaler_file, map_location=map_location))
+        scaler.load_state_dict(torch.load(input_scaler_file))
         logger.info("GradScaler state loaded successfully")
 
     # Random states
     try:
-        states = torch.load(os.path.join(input_dir, f"{RNG_STATE_NAME}_{process_index}.pkl"), map_location=map_location)
+        states = torch.load(os.path.join(input_dir, f"{RNG_STATE_NAME}_{process_index}.pkl"))
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])
