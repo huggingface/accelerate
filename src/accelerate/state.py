@@ -781,7 +781,7 @@ class AcceleratorState:
         PartialState().wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict):
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -806,7 +806,7 @@ class AcceleratorState:
         ["C"]
         ```
         """
-        with PartialState().split_between_processes(inputs) as inputs:
+        with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:
             yield inputs
 
     @contextmanager
