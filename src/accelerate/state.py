@@ -335,23 +335,30 @@ class PartialState:
                 The input to split between processes.
             apply_padding (`bool`, `optional`, defaults to `False`):
                 Whether to apply padding by repeating the last element of the input so that all processes have the same
-                number of elements. Useful when trying to perform actions such as `Accelerator.gather()` on the
-                outputs. If so, just remember to drop the padded elements afterwards.
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
+                just remember to drop the padded elements afterwards.
 
 
         Example:
 
         ```python
         # Assume there are two processes
-        from accelerate import Accelerator
+        from accelerate import PartialState
 
-        accelerator = Accelerator()
-        with accelerator.split_between_processes(["A", "B", "C"]) as inputs:
+        state = PartialState()
+        with state.split_between_processes(["A", "B", "C"]) as inputs:
             print(inputs)
         # Process 0
         ["A", "B"]
         # Process 1
         ["C"]
+
+        with state.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
         ```
         """
         if self.num_processes == 1:
@@ -789,21 +796,34 @@ class AcceleratorState:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`): The input to split between processes.
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
+                just remember to drop the padded elements afterwards.
+
 
         Example:
 
         ```python
         # Assume there are two processes
-        from accelerate import Accelerator
+        from accelerate.state import AcceleratorState
 
-        accelerator = Accelerator()
-        with accelerator.split_between_processes(["A", "B", "C"]) as inputs:
+        state = AcceleratorState()
+        with state.split_between_processes(["A", "B", "C"]) as inputs:
             print(inputs)
         # Process 0
         ["A", "B"]
         # Process 1
         ["C"]
+
+        with state.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
         ```
         """
         with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:

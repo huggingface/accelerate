@@ -528,7 +528,7 @@ class Accelerator:
         return self.state.mixed_precision
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict):
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -536,7 +536,12 @@ class Accelerator:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`): The input to split between processes.
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `Accelerator.gather()` on the
+                outputs. If so, just remember to drop the padded elements afterwards.
 
         Example:
 
@@ -551,9 +556,16 @@ class Accelerator:
         ["A", "B"]
         # Process 1
         ["C"]
+
+        with accelerator.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
         ```
         """
-        with PartialState().split_between_processes(inputs) as inputs:
+        with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:
             yield inputs
 
     def on_main_process(self, function: Callable[..., Any] = None):
