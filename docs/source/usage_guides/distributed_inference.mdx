@@ -66,6 +66,7 @@ from diffusers import DiffusionPipeline
 
 pipe = DiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
 distributed_state = PartialState()
+pipe.to(distributed_state.device)
 
 # Assume two processes
 with distributed_state.split_across_processes(["a dog", "a cat"]) as prompt:
@@ -99,6 +100,7 @@ from diffusers import DiffusionPipeline
 
 pipe = DiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
 distributed_state = PartialState()
+pipe.to(distributed_state.device)
 
 # Assume two processes
 with distributed_state.split_across_processes(["a dog", "a cat", "a chicken"], apply_padding=True) as prompt:
