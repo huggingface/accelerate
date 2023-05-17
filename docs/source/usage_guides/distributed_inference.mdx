@@ -54,7 +54,7 @@ Can it manage it? Yes. Does it add unneeded extra code however: also yes.
 
 ## The Solution
 
-With 🤗 Accelerate, we can simplify this process by using the [`Accelerator.split_across_processes`] context manager (which also exists in `PartialState` and `AcceleratorState`). 
+With 🤗 Accelerate, we can simplify this process by using the [`Accelerator.split_between_processes`] context manager (which also exists in `PartialState` and `AcceleratorState`). 
 This function will automatically split whatever data you pass to it (be it a prompt, a set of tensors, a dictionary of the prior data, etc.) across all the processes (with a potential
 to be padded) for you to use right away.
 
@@ -69,7 +69,7 @@ distributed_state = PartialState()
 pipe.to(distributed_state.device)
 
 # Assume two processes
-with distributed_state.split_across_processes(["a dog", "a cat"]) as prompt:
+with distributed_state.split_between_processes(["a dog", "a cat"]) as prompt:
     result = pipe(prompt).images[0]
     result.save(f"result_{distributed_state.rank}.png")
 ```
@@ -103,7 +103,7 @@ distributed_state = PartialState()
 pipe.to(distributed_state.device)
 
 # Assume two processes
-with distributed_state.split_across_processes(["a dog", "a cat", "a chicken"], apply_padding=True) as prompt:
+with distributed_state.split_between_processes(["a dog", "a cat", "a chicken"], apply_padding=True) as prompt:
     result = pipe(prompt).images
 ```
 
