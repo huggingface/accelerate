@@ -673,7 +673,7 @@ def infer_auto_device_map(
         # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
-            modules_children = list(module.named_children())
+            modules_children = [] if isinstance(module, nn.Parameter) else list(module.named_children())
             if verbose:
                 print(
                     f"Not enough space on {devices[current_device]} to put {name} (space available "
@@ -776,9 +776,13 @@ def infer_auto_device_map(
 
         else:
             if verbose:
-                print(
-                    f"Putting {name} (size={module_size}) on {devices[current_device]} (available={current_max_size-current_memory_used})."
-                )
+                if current_max_size is None:
+                    print(f"Putting {name} (size={module_size}) on {devices[current_device]}.")
+                else:
+                    print(
+                        f"Putting {name} (size={module_size}) on {devices[current_device]} "
+                        f"(available={current_max_size-current_memory_used})."
+                    )
             current_memory_used += module_size
             device_map[name] = devices[current_device]
 
