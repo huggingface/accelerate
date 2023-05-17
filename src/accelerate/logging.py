@@ -43,7 +43,7 @@ class MultiProcessAdapter(logging.LoggerAdapter):
         """
         if PartialState._shared_state == {}:
             raise RuntimeError(
-                "You must create a `PartialState` through either `PartialState()` or `Accelerator()` before using the logging utility."
+                "You must initialize the accelerate state by calling either `PartialState()` or `Accelerator()` before using the logging utility."
             )
         main_process_only = kwargs.pop("main_process_only", True)
         if self.isEnabledFor(level) and self._should_log(main_process_only):
