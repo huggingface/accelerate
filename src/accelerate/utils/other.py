@@ -22,6 +22,7 @@ from ..state import PartialState
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
 from .transformer_engine import convert_model
+from .versions import is_torch_version
 
 
 if is_deepspeed_available():
@@ -29,6 +30,15 @@ if is_deepspeed_available():
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+
+
+def is_compiled_module(module):
+    """
+    Check whether the module was compiled with torch.compile()
+    """
+    if is_torch_version("<", "2.0.0") or not hasattr(torch, "_dynamo"):
+        return False
+    return isinstance(module, torch._dynamo.eval_frame.OptimizedModule)
 
 
 def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
@@ -45,6 +55,12 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
         `torch.nn.Module`: The extracted model.
     """
     options = (torch.nn.parallel.DistributedDataParallel, torch.nn.DataParallel)
+
+    is_compiled = is_compiled_module(model)
+    if is_compiled:
+        compiled_model = model
+        model = model._orig_mod
+
     if is_deepspeed_available():
         options += (DeepSpeedEngine,)
 
@@ -62,6 +78,11 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
             model.forward = forward
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
+
+    if is_compiled:
+        compiled_model._orig_mod = model
+        model = compiled_model
+
     return model
 
 

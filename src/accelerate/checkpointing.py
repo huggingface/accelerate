@@ -29,6 +29,7 @@ from .utils import (
     SCHEDULER_NAME,
     get_pretty_name,
     is_tpu_available,
+    is_xpu_available,
     save,
 )
 
@@ -100,8 +101,10 @@ def save_accelerator_state(
     states["random_state"] = random.getstate()
     states["numpy_random_seed"] = np.random.get_state()
     states["torch_manual_seed"] = torch.get_rng_state()
-    states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
-    # ^^ safe to call this function even if cuda is not available
+    if is_xpu_available():
+        states["torch_xpu_manual_seed"] = torch.xpu.get_rng_state_all()
+    else:
+        states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
     if is_tpu_available():
         states["xm_seed"] = xm.get_rng_state()
     output_states_file = os.path.join(output_dir, states_name)
@@ -160,7 +163,7 @@ def load_accelerator_state(
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = os.path.join(input_dir, optimizer_name)
-        optimizer_state = torch.load(input_optimizer_file)
+        optimizer_state = torch.load(input_optimizer_file, map_location=map_location)
         optimizers[i].load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
 
@@ -183,8 +186,10 @@ def load_accelerator_state(
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])
-        torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
-        # ^^ safe to call this function even if cuda is not available
+        if is_xpu_available():
+            torch.xpu.set_rng_state_all(states["torch_xpu_manual_seed"])
+        else:
+            torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
         if is_tpu_available():
             xm.set_rng_state(states["xm_seed"])
         logger.info("All random states loaded successfully")

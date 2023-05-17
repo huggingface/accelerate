@@ -25,7 +25,6 @@ from .environment import get_int_from_env, parse_choice_from_env, parse_flag_fro
 from .imports import (
     get_ccl_version,
     is_aim_available,
-    is_apex_available,
     is_bf16_available,
     is_boto3_available,
     is_ccl_available,
@@ -44,8 +43,10 @@ from .imports import (
     is_tpu_available,
     is_transformers_available,
     is_wandb_available,
+    is_xpu_available,
 )
 from .modeling import (
+    CustomDtype,
     check_device_map,
     compute_module_sizes,
     convert_file_size_to_int,
@@ -54,6 +55,7 @@ from .modeling import (
     get_balanced_memory,
     get_max_layer_size,
     get_max_memory,
+    get_mixed_precision_context_manager,
     infer_auto_device_map,
     load_checkpoint_in_model,
     load_offloaded_weights,

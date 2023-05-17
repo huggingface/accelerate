@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import contextlib
 import inspect
 import math
@@ -23,7 +25,7 @@ import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable
 
 import torch
 import torch.utils.hooks as hooks
@@ -59,6 +61,7 @@ from .utils import (
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
+    get_mixed_precision_context_manager,
     get_pretty_name,
     has_transformer_engine_layers,
     is_bf16_available,
@@ -68,6 +71,7 @@ from .utils import (
     is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
+    is_xpu_available,
     pad_across_processes,
     parse_choice_from_env,
     recursively_apply,
@@ -113,6 +117,7 @@ if is_torch_version(">", "1.10.0"):
 
 
 if is_tpu_available(check_device=False):
+    import torch_xla.core.xla_model as xm
     import torch_xla.distributed.xla_multiprocessing as xmp
 
 
@@ -160,8 +165,8 @@ class Accelerator:
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
         ipex_plugin (`IntelExtensionPlugin`, *optional*):
-            Tweak your Intel Extension for PyTorch related args using this argument. This argument is optional and can
-            be configured directly using *accelerate config*
+            Tweak your Intel Extension for PyTorch related args using this argument for CPU and XPU. This argument is
+            optional and can be configured directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -198,7 +203,7 @@ class Accelerator:
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
-        kwargs_handlers (`List[KwargHandler]`, *optional*)
+        kwargs_handlers (`list[KwargHandler]`, *optional*)
             A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
             are created. See [kwargs](kwargs) for more information.
         dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
@@ -227,24 +232,24 @@ class Accelerator:
         self,
         device_placement: bool = True,
         split_batches: bool = False,
-        mixed_precision: Union[PrecisionType, str] = None,
+        mixed_precision: PrecisionType | str | None = None,
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
-        deepspeed_plugin: DeepSpeedPlugin = None,
-        fsdp_plugin: FullyShardedDataParallelPlugin = None,
-        megatron_lm_plugin: MegatronLMPlugin = None,
-        ipex_plugin: IntelPyTorchExtensionPlugin = None,
-        rng_types: Optional[List[Union[str, RNGType]]] = None,
-        log_with: Optional[List[Union[str, LoggerType, GeneralTracker]]] = None,
-        project_dir: Optional[Union[str, os.PathLike]] = None,
-        project_config: Optional[ProjectConfiguration] = None,
-        logging_dir: Optional[Union[str, os.PathLike]] = None,
-        gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None,
-        dispatch_batches: Optional[bool] = None,
+        deepspeed_plugin: DeepSpeedPlugin | None = None,
+        fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
+        megatron_lm_plugin: MegatronLMPlugin | None = None,
+        ipex_plugin: IntelPyTorchExtensionPlugin | None = None,
+        rng_types: list[str | RNGType] | None = None,
+        log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
+        project_dir: str | os.PathLike | None = None,
+        project_config: ProjectConfiguration | None = None,
+        logging_dir: str | os.PathLike | None = None,
+        gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
+        dispatch_batches: bool | None = None,
         even_batches: bool = True,
         step_scheduler_with_optimizer: bool = True,
-        kwargs_handlers: Optional[List[KwargsHandler]] = None,
-        dynamo_backend: Union[DynamoBackend, str] = None,
+        kwargs_handlers: list[KwargsHandler] | None = None,
+        dynamo_backend: DynamoBackend | str | None = None,
     ):
         if project_config is not None:
             self.project_configuration = project_config
@@ -318,7 +323,7 @@ class Accelerator:
                 raise ImportError("Megatron is not installed. please build it from source.")
 
         if ipex_plugin is None:  # init from env variables
-            ipex_plugin = IntelPyTorchExtensionPlugin() if os.environ.get("IPEX_ENABLED", "false") == "true" else None
+            ipex_plugin = IntelPyTorchExtensionPlugin()
         else:
             if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
                 raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
@@ -415,6 +420,7 @@ class Accelerator:
         if (
             self.state.mixed_precision == "fp16"
             and self.device.type != "cpu"
+            and self.device.type != "xpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
@@ -427,11 +433,12 @@ class Accelerator:
                 self.scaler = ShardedGradScaler(**kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
             DistributedType.MEGATRON_LM,
         ):
-            if self.device.type == "cpu":
+            if self.device.type in ["cpu", "xpu"]:
                 self.native_amp = is_torch_version(">=", "1.10")
             else:
                 self.native_amp = is_bf16_available(True)
@@ -522,6 +529,47 @@ class Accelerator:
     @property
     def mixed_precision(self):
         return self.state.mixed_precision
+
+    @contextmanager
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `Accelerator.gather()` on the
+                outputs. If so, just remember to drop the padded elements afterwards.
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+        with accelerator.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+
+        with accelerator.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
+        ```
+        """
+        with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:
+            yield inputs
 
     def on_main_process(self, function: Callable[..., Any] = None):
         """
@@ -755,7 +803,8 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.process_index}")
         ```
         """
-        yield self.state.main_process_first()
+        with self.state.main_process_first():
+            yield
 
     @contextmanager
     def local_main_process_first(self):
@@ -776,7 +825,8 @@ class Accelerator:
         ...     print(f"This will be printed by process {accelerator.local_process_index}")
         ```
         """
-        yield self.state.local_main_process_first()
+        with self.state.local_main_process_first():
+            yield
 
     @contextmanager
     def no_sync(self, model):
@@ -888,7 +938,7 @@ class Accelerator:
         length of the dataset.
 
         Args:
-            joinables (`List[torch.distributed.algorithms.Joinable]`):
+            joinables (`list[torch.distributed.algorithms.Joinable]`):
                 A list of models or optimizers that subclass `torch.distributed.algorithms.Joinable`. Most commonly, a
                 PyTorch Module that was prepared with `Accelerator.prepare` for DistributedDataParallel training.
             even_batches (`bool`, *optional*)
@@ -928,7 +978,7 @@ class Accelerator:
         if is_torch_version("<", "1.10.0"):
             raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
 
-        if self.distributed_type == DistributedType.MULTI_GPU:
+        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
             dl_even_batches_values = []
 
             if even_batches is not None:
@@ -1058,7 +1108,7 @@ class Accelerator:
                 - `torch.optim.Optimizer`: PyTorch Optimizer
                 - `torch.optim.lr_scheduler.LRScheduler`: PyTorch LR Scheduler
 
-            device_placement (`List[bool]`, *optional*):
+            device_placement (`list[bool]`, *optional*):
                 Used to customize whether automatic device placement should be performed for each object passed. Needs
                 to be a list of the same length as `args`.
 
@@ -1127,8 +1177,10 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
-        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
+        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.ipex_plugin is not None:
+                args = self._prepare_ipex(*args)
+            elif self.device.type == "xpu" and self.state.ipex_plugin is not None and is_xpu_available():
                 args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
@@ -1203,6 +1255,7 @@ class Accelerator:
                     raise ValueError(
                         "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
                         "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}"
+                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
                     )
 
             if "cpu" in model_devices or "disk" in model_devices:
@@ -1212,7 +1265,7 @@ class Accelerator:
         elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
 
-        if self.distributed_type == DistributedType.MULTI_GPU:
+        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(
@@ -1265,20 +1318,23 @@ class Accelerator:
             if "fp8_format" in kwargs:
                 kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
             fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-            fp8_enabled = torch.cuda.get_device_capability()[0] >= 9
+            cuda_device_capacity = torch.cuda.get_device_capability()
+            fp8_enabled = cuda_device_capacity[0] >= 9 or (
+                cuda_device_capacity[0] == 8 and cuda_device_capacity[1] >= 9
+            )
             if not fp8_enabled:
                 logger.warn(
-                    f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
-                    "insufficient for FP8 mixed precision training (requires a GPU Hopper or higher, compute "
-                    "capability of 9 or higher). Will use FP16 instead."
+                    f"The current device has compute capability of {cuda_device_capacity} which is "
+                    "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
+                    "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                 )
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO:
-            if not hasattr(torch, "compile"):
-                raise ValueError("Using torch.compile requires PyTorch 2.0 or higher.")
+            if not is_torch_version(">=", "2.0"):
+                raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
             model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
@@ -1402,10 +1458,15 @@ class Accelerator:
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
                 )
             if isinstance(scheduler, (DummyScheduler)):
+                max_lr = (
+                    getattr(scheduler.optimizer, "lr", None)
+                    if getattr(scheduler.optimizer, "defaults", None) is None
+                    else scheduler.optimizer.defaults["lr"]
+                )
                 config_kwargs.update(
                     {
                         "scheduler.params.warmup_min_lr": 0,
-                        "scheduler.params.warmup_max_lr": scheduler.optimizer.lr,
+                        "scheduler.params.warmup_max_lr": max_lr,
                         "scheduler.params.warmup_num_steps": scheduler.warmup_num_steps,
                     }
                 )
@@ -1422,10 +1483,9 @@ class Accelerator:
                 if isinstance(optimizer, (DummyOptim)):
                     kwargs["model_parameters"] = optimizer.params
                 else:
-                    if (
-                        self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get("device", "none")
-                        != "none"
-                    ):
+                    if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
+                        "device", "none"
+                    ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", True):
                         from deepspeed.ops.adam import DeepSpeedCPUAdam
 
                         defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
@@ -1573,13 +1633,13 @@ class Accelerator:
         return tuple(result)
 
     def _prepare_ipex(self, *args):
-        ipex_plugin = self.state.ipex_plugin
         if not is_ipex_available():
-            raise ImportError(
-                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+            logger.warn(
+                "Trying to use IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
                 " to https://github.com/intel/intel-extension-for-pytorch."
             )
-        import intel_extension_for_pytorch as ipex
+        else:
+            import intel_extension_for_pytorch as ipex
 
         model = None
         optimizer = None
@@ -1589,13 +1649,20 @@ class Accelerator:
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
-        if optimizer is not None:
-            if not model.training:
-                model.train()
-            model, optimizer = ipex.optimize(
-                model, dtype=ipex_plugin.dtype, optimizer=optimizer, inplace=True, level="O1"
-            )
-            model.forward = torch.cpu.amp.autocast(dtype=ipex_plugin.dtype)(model.forward)
+        if optimizer is not None and model is not None:
+            if is_ipex_available():
+                if is_xpu_available() and self.device.type == "xpu":
+                    model = model.to(self.device)
+                    model, optimizer = torch.xpu.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+                    model.forward = torch.xpu.amp.autocast()(model.forward)
+                else:
+                    model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+                    model.forward = torch.cpu.amp.autocast()(model.forward)
+            else:
+                if is_torch_version(">=", "1.10"):
+                    model.forward = torch.autocast(self.device.type)(model.forward)
+                else:
+                    model.forward = convert_outputs_to_fp32(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
@@ -1743,7 +1810,7 @@ class Accelerator:
         Likely should be called through [`Accelerator.clip_grad_norm_`] or [`Accelerator.clip_grad_value_`]
 
         Args:
-            optimizer (`torch.optim.Optimizer` or `List[torch.optim.Optimizer]`, *optional*):
+            optimizer (`torch.optim.Optimizer` or `list[torch.optim.Optimizer]`, *optional*):
                 The optimizer(s) for which to unscale gradients. If not set, will unscale gradients on all optimizers
                 that were passed to [`~Accelerator.prepare`].
 
@@ -2043,7 +2110,7 @@ class Accelerator:
         wait_for_everyone()
 
     @on_main_process
-    def init_trackers(self, project_name: str, config: Optional[dict] = None, init_kwargs: Optional[dict] = {}):
+    def init_trackers(self, project_name: str, config: dict | None = None, init_kwargs: dict | None = {}):
         """
         Initializes a run for all trackers stored in `self.log_with`, potentially with starting configurations
 
@@ -2123,7 +2190,7 @@ class Accelerator:
         return GeneralTracker(_blank=True)
 
     @on_main_process
-    def log(self, values: dict, step: Optional[int] = None, log_kwargs: Optional[dict] = {}):
+    def log(self, values: dict, step: int | None = None, log_kwargs: dict | None = {}):
         """
         Logs `values` to all stored trackers in `self.trackers` on the main process only.
 
@@ -2202,7 +2269,7 @@ class Accelerator:
 
         The hook should have the following signature:
 
-        `hook(models: List[torch.nn.Module], weights: List[Dict[str, torch.Tensor]], input_dir: str) -> None`
+        `hook(models: list[torch.nn.Module], weights: list[dict[str, torch.Tensor]], input_dir: str) -> None`
 
         The `models` argument are the models as saved in the accelerator state under `accelerator._models`, `weigths`
         argument are the state dicts of the `models`, and the `input_dir` argument is the `input_dir` argument passed
@@ -2286,6 +2353,10 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
 
+        if self.distributed_type == DistributedType.TPU:
+            # Finish running the previous step before checkpointing
+            xm.mark_step()
+
         # Save the models taking care of FSDP and DeepSpeed nuances
         weights = []
         for i, model in enumerate(self._models):
@@ -2348,7 +2419,7 @@ class Accelerator:
 
         The hook should have the following signature:
 
-        `hook(models: List[torch.nn.Module], input_dir: str) -> None`
+        `hook(models: list[torch.nn.Module], input_dir: str) -> None`
 
         The `models` argument are the models as saved in the accelerator state under `accelerator._models`, and the
         `input_dir` argument is the `input_dir` argument passed to [`Accelerator.load_state`].
@@ -2633,7 +2704,7 @@ class Accelerator:
         self._custom_objects.extend(objects)
 
     @contextmanager
-    def autocast(self):
+    def autocast(self, cache_enabled: bool = False):
         """
         Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
         different will happen otherwise.
@@ -2648,20 +2719,10 @@ class Accelerator:
         ...     train()
         ```
         """
-        if self.native_amp:
-            if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
-                autocast_context = torch.cuda.amp.autocast(dtype=torch.float16)
-            elif self.mixed_precision == "bf16":
-                if self.distributed_type in [DistributedType.NO, DistributedType.MULTI_CPU, DistributedType.MULTI_GPU]:
-                    autocast_context = torch.autocast(dtype=torch.bfloat16, device_type=self.device.type)
-            else:
-                autocast_context = torch.cuda.amp.autocast()
-
-            autocast_context.__enter__()
-            yield
-            autocast_context.__exit__(*sys.exc_info())
-        else:
-            yield
+        autocast_context = get_mixed_precision_context_manager(self.native_amp, cache_enabled=cache_enabled)
+        autocast_context.__enter__()
+        yield
+        autocast_context.__exit__(*sys.exc_info())
 
     @property
     def optimizer_step_was_skipped(self):

@@ -33,12 +33,14 @@ from ..utils import (
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_mps_available,
     is_safetensors_available,
     is_tensorboard_available,
     is_torch_version,
     is_tpu_available,
     is_transformers_available,
     is_wandb_available,
+    is_xpu_available,
 )
 
 
@@ -88,13 +90,19 @@ def require_cuda(test_case):
     return unittest.skipUnless(torch.cuda.is_available(), "test requires a GPU")(test_case)
 
 
+def require_xpu(test_case):
+    """
+    Decorator marking a test that requires XPU. These tests are skipped when there are no XPU available.
+    """
+    return unittest.skipUnless(is_xpu_available(), "test requires a XPU")(test_case)
+
+
 def require_mps(test_case):
     """
     Decorator marking a test that requires MPS backend. These tests are skipped when torch doesn't support `mps`
     backend.
     """
-    is_mps_supported = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
-    return unittest.skipUnless(is_mps_supported, "test requires a `mps` backend support in `torch`")(test_case)
+    return unittest.skipUnless(is_mps_available(), "test requires a `mps` backend support in `torch`")(test_case)
 
 
 def require_huggingface_suite(test_case):
@@ -121,12 +129,28 @@ def require_single_gpu(test_case):
     return unittest.skipUnless(torch.cuda.device_count() == 1, "test requires a GPU")(test_case)
 
 
+def require_single_xpu(test_case):
+    """
+    Decorator marking a test that requires CUDA on a single XPU. These tests are skipped when there are no XPU
+    available or number of xPUs is more than one.
+    """
+    return unittest.skipUnless(torch.xpu.device_count() == 1, "test requires a XPU")(test_case)
+
+
 def require_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
     GPUs.
     """
     return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
+
+
+def require_multi_xpu(test_case):
+    """
+    Decorator marking a test that requires a multi-XPU setup. These tests are skipped on a machine without multiple
+    XPUs.
+    """
+    return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
 
 def require_safetensors(test_case):
