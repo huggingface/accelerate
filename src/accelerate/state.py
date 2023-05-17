@@ -323,7 +323,7 @@ class PartialState:
             self.wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict):
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -331,7 +331,13 @@ class PartialState:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, or `dict`): The input to split between processes.
+            inputs (`list`, `tuple`, or `dict`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `Accelerator.gather()` on the
+                outputs. If so, just remember to drop the padded elements afterwards.
+
 
         Example:
 
@@ -354,9 +360,8 @@ class PartialState:
         # Nested dictionary of any types
         if isinstance(inputs, dict):
             length = len(inputs[list(inputs.keys())[0]])
-            assert all(
-                len(v) == length for v in inputs.values()
-            ), "All values in the dictionary must have the same length"
+            if not all(len(v) == length for v in inputs.values()):
+                raise ValueError("All values in the dictionary must have the same length")
         num_samples_per_process = math.ceil(len(inputs) / self.num_processes)
         start_index = self.process_index * num_samples_per_process
         end_index = start_index + num_samples_per_process
@@ -368,7 +373,10 @@ class PartialState:
 
         def _split_values(inputs, start_index, end_index):
             if isinstance(inputs, (list, tuple, torch.Tensor)):
-                return inputs[start_index:end_index]
+                result = inputs[start_index:end_index]
+                if apply_padding:
+                    result += [result[-1]] * (num_samples_per_process - len(result))
+                return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
                     inputs[key] = _split_values(inputs[key], start_index, end_index)
