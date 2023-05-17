@@ -41,6 +41,10 @@ class MultiProcessAdapter(logging.LoggerAdapter):
         Accepts a new kwarg of `main_process_only`, which will dictate whether it will be logged across all processes
         or only the main executed one. Default is `True` if not passed
         """
+        if PartialState._shared_state == {}:
+            raise RuntimeError(
+                "You must create a `PartialState` through either `PartialState()` or `Accelerator()` before using the logging utility."
+            )
         main_process_only = kwargs.pop("main_process_only", True)
         if self.isEnabledFor(level) and self._should_log(main_process_only):
             msg, kwargs = self.process(msg, kwargs)
