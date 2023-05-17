@@ -76,8 +76,13 @@ with distributed_state.split_across_processes(["a dog", "a cat"]) as prompt:
 We've now reduced the boilerplate code needed to split this data to a few lines of code quite easily.
 
 But what if we have an odd distribution of prompts to GPUs? For example, what if we have 3 prompts, but only 2 GPUs? 
+
+Under the context manager, the first GPU would receive the first two prompts and the second GPU the third, ensuring that 
+all prompts are split and no overhead is needed.
+
+*However*, what if we then wanted to do something with the results of *all the GPUs*? (Say gather them all and perform some kind of post processing)
 You can pass in `apply_padding=True` to ensure that prompts are padded to the same length, with extra data being taken 
-from the last sample.
+from the last sample. This way all GPUs will have the same number of prompts, and you can then gather the results.
 
 <Tip>
 This is only needed when trying to perform an action such as gathering the results, where the data on each device 
