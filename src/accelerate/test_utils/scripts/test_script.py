@@ -16,7 +16,9 @@
 
 import contextlib
 import io
+import math
 import time
+from copy import deepcopy
 from pathlib import Path
 
 import torch
@@ -451,6 +453,56 @@ def training_check():
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on XPU or distributed training."
 
 
+def test_split_between_processes_list():
+    state = AcceleratorState()
+    data = list(range(0, 2 * state.num_processes))
+    with state.split_between_processes(data) as results:
+        assert (
+            len(results) == 2
+        ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+
+    data = list(range(0, (2 * state.num_processes) + 1))
+    with state.split_between_processes(data, apply_padding=True) as results:
+        if state.is_last_process:
+            # Test that the last process gets the extra item(s)
+            num_samples_per_device = math.ceil(len(data) / state.num_processes)
+            assert (
+                len(results) == num_samples_per_device
+            ), f"Last process did not get the extra item(s). Process index: {state.process_index}; Length: {len(results)}"
+
+
+def test_split_between_processes_nested_dict():
+    state = AcceleratorState()
+    if state.num_processes in (1, 2, 4):
+        data = {"a": [1, 2, 3, 4], "b": ["w", "x", "y", "z"], "c": torch.tensor([0, 1, 2, 3])}
+        data_copy = deepcopy(data)
+        with state.split_between_processes(data) as results:
+            if state.process_index == 0:
+                assert results["a"] == data_copy["a"][: 4 // state.num_processes]
+            elif state.num_processes == 2:
+                assert results["a"] == data_copy["a"][2:]
+            else:
+                assert results["a"] == data_copy["a"][-1]
+            if state.process_index == 0:
+                assert results["b"] == data_copy["b"][: 4 // state.num_processes]
+            elif state.num_processes == 2:
+                assert results["b"] == data_copy["b"][2:]
+            else:
+                assert results["b"] == data_copy["b"][-1]
+            if state.process_index == 0:
+                assert torch.allclose(
+                    results["c"], data_copy["c"][: 4 // state.num_processes]
+                ), f"Did not obtain expected values on process 0, expected `{data['c'][:4//state.num_processes]}`, received: {results['c']}"
+            elif state.num_processes == 2:
+                assert torch.allclose(
+                    results["c"], data_copy["c"][2:]
+                ), f"Did not obtain expected values on process 2, expected `{data['c'][2:]}`, received: {results['c']}"
+            elif state.process_index == 3:
+                assert torch.allclose(
+                    results["c"], data_copy["c"][3]
+                ), f"Did not obtain expected values on process 4, expected `{data['c'][3]}`, received: {results['c']}"
+
+
 def main():
     accelerator = Accelerator()
     state = accelerator.state
@@ -460,6 +512,14 @@ def main():
     if state.local_process_index == 0:
         print("\n**Test process execution**")
     process_execution_check()
+
+    if state.local_process_index == 0:
+        print("\n**Test split between processes as a list**")
+    test_split_between_processes_list()
+
+    if state.local_process_index == 0:
+        print("\n**Test split between processes as a dict**")
+    test_split_between_processes_nested_dict()
 
     if state.local_process_index == 0:
         print("\n**Test random number generator synchronization**")

@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import math
 import os
 import threading
 import warnings
@@ -329,6 +332,77 @@ class PartialState:
 
         if is_main:
             self.wait_for_everyone()
+
+    @contextmanager
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
+                just remember to drop the padded elements afterwards.
+
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate import PartialState
+
+        state = PartialState()
+        with state.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+
+        with state.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
+        ```
+        """
+        if self.num_processes == 1:
+            yield inputs
+            return
+        # Nested dictionary of any types
+        if isinstance(inputs, dict):
+            length = len(inputs[list(inputs.keys())[0]])
+            if not all(len(v) == length for v in inputs.values()):
+                raise ValueError("All values in the dictionary must have the same length")
+        num_samples_per_process = math.ceil(len(inputs) / self.num_processes)
+        start_index = self.process_index * num_samples_per_process
+        end_index = start_index + num_samples_per_process
+        if (len(inputs) % self.num_processes != 0) and (self.process_index == self.num_processes - 1):
+            if isinstance(inputs, (list, tuple, torch.Tensor)):
+                end_index = len(inputs)
+            elif isinstance(inputs, dict):
+                end_index = len(inputs[list(inputs.keys())[0]])
+
+        def _split_values(inputs, start_index, end_index):
+            if isinstance(inputs, (list, tuple, torch.Tensor)):
+                result = inputs[start_index:end_index]
+                if apply_padding:
+                    result += [result[-1]] * (num_samples_per_process - len(result))
+                return result
+            elif isinstance(inputs, dict):
+                for key in inputs.keys():
+                    inputs[key] = _split_values(inputs[key], start_index, end_index)
+                return inputs
+            else:
+                return inputs
+
+        yield _split_values(inputs, start_index, end_index)
 
     @contextmanager
     def main_process_first(self):
@@ -730,6 +804,48 @@ class AcceleratorState:
 
     def wait_for_everyone(self):
         PartialState().wait_for_everyone()
+
+    @contextmanager
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
+                just remember to drop the padded elements afterwards.
+
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate.state import AcceleratorState
+
+        state = AcceleratorState()
+        with state.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+
+        with state.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
+        ```
+        """
+        with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:
+            yield inputs
 
     @contextmanager
     def main_process_first(self):

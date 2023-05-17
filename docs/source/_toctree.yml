@@ -23,6 +23,8 @@
     title: Example Zoo
   - local: usage_guides/big_modeling
     title: How perform inference on large models with small resources
+  - local: usage_guides/distributed_inference
+    title: How to perform distributed inference with normal resources
   - local: usage_guides/gradient_accumulation
     title: Performing gradient accumulation
   - local: usage_guides/local_sgd
