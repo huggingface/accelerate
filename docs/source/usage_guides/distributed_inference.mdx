@@ -74,6 +74,28 @@ with distributed_state.split_between_processes(["a dog", "a cat"]) as prompt:
     result.save(f"result_{distributed_state.process_index}.png")
 ```
 
+And then to launch the code, we can use the 🤗 Accelerate:
+
+If you have generated a config file to be used using `accelerate config`:
+
+```bash
+accelerate launch distributed_inference.py
+```
+
+If you have a specific config file you want to use:
+
+```bash
+accelerate launch --config_file my_config.json distributed_inference.py
+```
+
+Or if don't want to make any config files and launch on two GPUs:
+
+> Note: You will get some warnings about values being guessed based on your system. To remove these you can do `accelerate config default` or go through `accelerate config` to create a config file.
+
+```bash
+accelerate launch --num_processes 2 distributed_inference.py
+```
+
 We've now reduced the boilerplate code needed to split this data to a few lines of code quite easily.
 
 But what if we have an odd distribution of prompts to GPUs? For example, what if we have 3 prompts, but only 2 GPUs? 
