@@ -71,7 +71,7 @@ pipe.to(distributed_state.device)
 # Assume two processes
 with distributed_state.split_between_processes(["a dog", "a cat"]) as prompt:
     result = pipe(prompt).images[0]
-    result.save(f"result_{distributed_state.rank}.png")
+    result.save(f"result_{distributed_state.process_index}.png")
 ```
 
 We've now reduced the boilerplate code needed to split this data to a few lines of code quite easily.
