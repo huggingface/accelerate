@@ -559,7 +559,15 @@ def launch_command_parser(subparsers=None):
         "--ipex_enabled",
         default=False,
         action="store_true",
-        help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU?",
+        help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU and XPU?",
+    )
+    # xpu args
+    xpu_args = parser.add_argument_group("XPU Arguments", "Arguments related to XPU.")
+    xpu_args.add_argument(
+        "--xpu_enabled",
+        default=False,
+        action="store_true",
+        help="Whether to use IPEX plugin to speed up training on XPU?",
     )
 
     # Other arguments of the training scripts
@@ -825,6 +833,8 @@ def _validate_launch_command(args):
                         setattr(args, k, defaults.dynamo_config[k])
                     for k in defaults.ipex_config:
                         setattr(args, k, defaults.ipex_config[k])
+                    for k in defaults.xpu_config:
+                        setattr(args, k, defaults.xpu_config[k])
                     continue
 
                 # Those args are handled separately
@@ -847,12 +857,12 @@ def _validate_launch_command(args):
         if args.num_processes is None:
             args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
-            if torch.cuda.device_count() > 1 and not args.multi_gpu:
-                warned.append(
-                    "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
-                    "\t\tIf this was unintended please pass in `--num_processes=1`."
-                )
-                args.multi_gpu = True
+        if torch.cuda.device_count() > 1 and not args.multi_gpu:
+            warned.append(
+                "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
+                "\t\tIf this was unintended please pass in `--num_processes=1`."
+            )
+            args.multi_gpu = True
         if args.num_machines is None:
             warned.append("\t`--num_machines` was set to a value of `1`")
             args.num_machines = 1

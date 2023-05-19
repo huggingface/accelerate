@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import contextlib
+import enum
 import gc
 import json
 import logging
@@ -28,7 +29,7 @@ import torch.nn as nn
 
 from ..state import AcceleratorState
 from .dataclasses import DistributedType
-from .imports import is_safetensors_available, is_torch_version
+from .imports import is_safetensors_available, is_torch_version, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -41,6 +42,14 @@ WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
 
 logger = logging.getLogger(__name__)
+
+
+class CustomDtype(enum.Enum):
+    r"""
+    An enum that contains multiple custom dtypes that can be used for `infer_auto_device_map`.
+    """
+    FP8 = "fp8"
+    INT4 = "int4"
 
 
 def convert_file_size_to_int(size: Union[int, str]):
@@ -90,6 +99,10 @@ def dtype_byte_size(dtype: torch.dtype):
     """
     if dtype == torch.bool:
         return 1 / 8
+    elif dtype == CustomDtype.INT4:
+        return 1 / 2
+    elif dtype == CustomDtype.FP8:
+        return 1
     bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
@@ -380,13 +393,19 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     import psutil
 
     if max_memory is None:
-        if not torch.cuda.is_available():
+        if not (torch.cuda.is_available() or is_xpu_available()):
             max_memory = {}
+
         else:
             # Make sure CUDA is initialized on each GPU to have the right memory info.
-            for i in range(torch.cuda.device_count()):
-                _ = torch.tensor([0], device=i)
-            max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+            if not is_xpu_available():
+                for i in range(torch.cuda.device_count()):
+                    _ = torch.tensor([0], device=i)
+                max_memory = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+            else:
+                for i in range(torch.xpu.device_count()):
+                    _ = torch.tensor(0, device=torch.device("xpu", i))
+                max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
         max_memory["cpu"] = psutil.virtual_memory().available
         return max_memory
 
@@ -479,10 +498,14 @@ def get_balanced_memory(
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
 
-    if not torch.cuda.is_available():
+    if not (torch.cuda.is_available() or is_xpu_available()):
         return max_memory
 
-    num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
+    if not is_xpu_available():
+        num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
+    else:
+        num_devices = len([d for d in max_memory if torch.device(d).type == "xpu" and max_memory[d] > 0])
+
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
 
@@ -520,7 +543,7 @@ def get_balanced_memory(
     module_sizes = {n: v for n, v in module_sizes.items() if n not in leaves}
     # Once removed, leaves are the final modules.
     leaves = [n for n in module_sizes if len([p for p in module_sizes if n == "" or p.startswith(n + ".")]) == 0]
-    mean_leaves = int(sum([module_sizes[n] for n in leaves]) / len(leaves))
+    mean_leaves = int(sum([module_sizes[n] for n in leaves]) / max(len(leaves), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
@@ -647,7 +670,7 @@ def infer_auto_device_map(
         # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
-            modules_children = list(module.named_children())
+            modules_children = [] if isinstance(module, nn.Parameter) else list(module.named_children())
             if verbose:
                 print(
                     f"Not enough space on {devices[current_device]} to put {name} (space available "
@@ -750,9 +773,13 @@ def infer_auto_device_map(
 
         else:
             if verbose:
-                print(
-                    f"Putting {name} (size={module_size}) on {devices[current_device]} (available={current_max_size-current_memory_used})."
-                )
+                if current_max_size is None:
+                    print(f"Putting {name} (size={module_size}) on {devices[current_device]}.")
+                else:
+                    print(
+                        f"Putting {name} (size={module_size}) on {devices[current_device]} "
+                        f"(available={current_max_size-current_memory_used})."
+                    )
             current_memory_used += module_size
             device_map[name] = devices[current_device]
 
@@ -1021,6 +1048,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, cache_enabled:
             DistributedType.NO,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_XPU,
         ]:
             return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, cache_enabled=cache_enabled)
         else:

@@ -27,7 +27,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e .[testing,test_trackers] -U
-          pip install pytest-reportlog
+          pip install pytest-reportlog tabulate
 
       - name: Run CLI tests
         run: |
@@ -47,6 +47,7 @@ jobs:
       - name: Generate Report
         if: always()
         run: |
+          pip install tabulate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
@@ -65,7 +66,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e .[testing,test_trackers] -U
-          pip install pytest-reportlog
+          pip install pytest-reportlog tabulate
 
       - name: Run CLI tests
         run: |
@@ -86,4 +87,5 @@ jobs:
       - name: Generate Report
         if: always()
         run: |
+          pip install tabulate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY

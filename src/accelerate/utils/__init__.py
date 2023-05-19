@@ -43,8 +43,10 @@ from .imports import (
     is_tpu_available,
     is_transformers_available,
     is_wandb_available,
+    is_xpu_available,
 )
 from .modeling import (
+    CustomDtype,
     check_device_map,
     compute_module_sizes,
     convert_file_size_to_int,

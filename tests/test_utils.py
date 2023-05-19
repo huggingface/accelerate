@@ -117,6 +117,26 @@ class UtilsTester(unittest.TestCase):
         inputs = torch.randn(4, 10).cuda()
         _ = model(inputs)
 
+    def test_extract_model(self):
+        model = RegressionModel()
+        # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
+        distributed_model = torch.nn.parallel.DataParallel(model)
+        model_unwrapped = extract_model_from_parallel(distributed_model)
+
+        self.assertEqual(model, model_unwrapped)
+
+    @require_torch_min_version(version="2.0")
+    def test_dynamo_extract_model(self):
+        model = RegressionModel()
+        compiled_model = torch.compile(model)
+
+        # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
+        distributed_model = torch.nn.parallel.DataParallel(model)
+        distributed_compiled_model = torch.compile(distributed_model)
+        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model)
+
+        self.assertEqual(compiled_model._orig_mod, compiled_model_unwrapped._orig_mod)
+
     def test_find_device(self):
         self.assertEqual(find_device([1, "a", torch.tensor([1, 2, 3])]), torch.device("cpu"))
         self.assertEqual(find_device({"a": 1, "b": torch.tensor([1, 2, 3])}), torch.device("cpu"))

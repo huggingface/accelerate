@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import math
 import os
 import threading
 import warnings
@@ -32,6 +35,7 @@ from .utils import (
     is_fp8_available,
     is_mps_available,
     is_tpu_available,
+    is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
 )
@@ -162,8 +166,14 @@ class PartialState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 if self.device is None:
-                    self.device = torch.device("cuda", self.local_process_index)
-                torch.cuda.set_device(self.device)
+                    if is_xpu_available():
+                        self.device = torch.device("xpu", self.local_process_index)
+                        if self.device is not None:
+                            torch.xpu.set_device(self.device)
+                    else:
+                        self.device = torch.device("cuda", self.local_process_index)
+                        if self.device is not None:
+                            torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
@@ -180,7 +190,10 @@ class PartialState:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
-                self.distributed_type = DistributedType.MULTI_CPU
+                if is_xpu_available():
+                    self.distributed_type = DistributedType.MULTI_XPU
+                else:
+                    self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
                     if get_ccl_version() >= "1.12":
                         import oneccl_bindings_for_pytorch  # noqa: F401
@@ -214,7 +227,7 @@ class PartialState:
                         )
                 if not torch.distributed.is_initialized():
                     # Backend is not set by the user, we set it here
-                    kwargs.pop("nccl_backend", None)
+                    kwargs.pop("backend", None)
                     self.backend = backend
                     torch.distributed.init_process_group(self.backend, rank=rank, world_size=size, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
@@ -229,6 +242,7 @@ class PartialState:
 
                 if self.device is None:
                     self.device = torch.device("cpu") if cpu else self.default_device
+
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
     def __repr__(self) -> str:
@@ -318,6 +332,77 @@ class PartialState:
 
         if is_main:
             self.wait_for_everyone()
+
+    @contextmanager
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
+                just remember to drop the padded elements afterwards.
+
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate import PartialState
+
+        state = PartialState()
+        with state.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+
+        with state.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
+        ```
+        """
+        if self.num_processes == 1:
+            yield inputs
+            return
+        # Nested dictionary of any types
+        if isinstance(inputs, dict):
+            length = len(inputs[list(inputs.keys())[0]])
+            if not all(len(v) == length for v in inputs.values()):
+                raise ValueError("All values in the dictionary must have the same length")
+        num_samples_per_process = math.ceil(len(inputs) / self.num_processes)
+        start_index = self.process_index * num_samples_per_process
+        end_index = start_index + num_samples_per_process
+        if (len(inputs) % self.num_processes != 0) and (self.process_index == self.num_processes - 1):
+            if isinstance(inputs, (list, tuple, torch.Tensor)):
+                end_index = len(inputs)
+            elif isinstance(inputs, dict):
+                end_index = len(inputs[list(inputs.keys())[0]])
+
+        def _split_values(inputs, start_index, end_index):
+            if isinstance(inputs, (list, tuple, torch.Tensor)):
+                result = inputs[start_index:end_index]
+                if apply_padding:
+                    result += [result[-1]] * (num_samples_per_process - len(result))
+                return result
+            elif isinstance(inputs, dict):
+                for key in inputs.keys():
+                    inputs[key] = _split_values(inputs[key], start_index, end_index)
+                return inputs
+            else:
+                return inputs
+
+        yield _split_values(inputs, start_index, end_index)
 
     @contextmanager
     def main_process_first(self):
@@ -536,6 +621,8 @@ class PartialState:
             return torch.device("mps")
         elif torch.cuda.is_available():
             return torch.device("cuda")
+        elif is_xpu_available():
+            return torch.device("xpu:0")
         else:
             return torch.device("cpu")
 
@@ -621,9 +708,13 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
-            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
-                if self.device.type == "cpu" and ipex_plugin is not None:
-                    self.ipex_plugin = ipex_plugin if ipex_plugin.use_ipex else None
+            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
+                if (
+                    self.device.type == "cpu"
+                    or (self.device.type == "xpu" and is_xpu_available())
+                    and ipex_plugin is not None
+                ):
+                    self.ipex_plugin = ipex_plugin
                     if self.ipex_plugin is not None:
                         self.ipex_plugin.set_mixed_precision(mixed_precision)
             if (
@@ -712,6 +803,48 @@ class AcceleratorState:
 
     def wait_for_everyone(self):
         PartialState().wait_for_everyone()
+
+    @contextmanager
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
+                just remember to drop the padded elements afterwards.
+
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate.state import AcceleratorState
+
+        state = AcceleratorState()
+        with state.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+
+        with state.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
+        ```
+        """
+        with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:
+            yield inputs
 
     @contextmanager
     def main_process_first(self):

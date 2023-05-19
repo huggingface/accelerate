@@ -62,6 +62,14 @@ def is_torch_distributed_available() -> bool:
 
 
 def is_ccl_available():
+    try:
+        pass
+    except ImportError:
+        print(
+            "Intel(R) oneCCL Bindings for PyTorch* is required to run DDP on Intel(R) GPUs, but it is not"
+            " detected. If you see \"ValueError: Invalid backend: 'ccl'\" error, please install Intel(R) oneCCL"
+            " Bindings for PyTorch*."
+        )
     return (
         importlib.util.find_spec("torch_ccl") is not None
         or importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None
@@ -194,3 +202,24 @@ def is_ipex_available():
         )
         return False
     return True
+
+
+@lru_cache()
+def is_xpu_available(check_device=False):
+    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
+    if is_ipex_available():
+        import torch
+
+        if is_torch_version("<=", "1.12"):
+            return False
+    else:
+        return False
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no XPU  is found
+            _ = torch.xpu.device_count()
+            return torch.xpu.is_available()
+        except RuntimeError:
+            return False
+    return torch.xpu.is_available()

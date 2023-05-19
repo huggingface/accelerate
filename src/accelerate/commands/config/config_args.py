@@ -170,6 +170,8 @@ class ClusterConfig(BaseConfig):
     megatron_lm_config: dict = None
     # args for ipex
     ipex_config: dict = None
+    # args for xpu
+    xpu_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
 
@@ -195,6 +197,8 @@ class ClusterConfig(BaseConfig):
             self.megatron_lm_config = {}
         if self.ipex_config is None:
             self.ipex_config = {}
+        if self.xpu_config is None:
+            self.xpu_config = {}
         return super().__post_init__()
 
 

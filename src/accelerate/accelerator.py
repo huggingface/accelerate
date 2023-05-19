@@ -71,6 +71,7 @@ from .utils import (
     is_megatron_lm_available,
     is_torch_version,
     is_tpu_available,
+    is_xpu_available,
     pad_across_processes,
     parse_choice_from_env,
     recursively_apply,
@@ -164,8 +165,8 @@ class Accelerator:
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
         ipex_plugin (`IntelExtensionPlugin`, *optional*):
-            Tweak your Intel Extension for PyTorch related args using this argument. This argument is optional and can
-            be configured directly using *accelerate config*
+            Tweak your Intel Extension for PyTorch related args using this argument for CPU and XPU. This argument is
+            optional and can be configured directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -322,7 +323,7 @@ class Accelerator:
                 raise ImportError("Megatron is not installed. please build it from source.")
 
         if ipex_plugin is None:  # init from env variables
-            ipex_plugin = IntelPyTorchExtensionPlugin() if os.environ.get("IPEX_ENABLED", "false") == "true" else None
+            ipex_plugin = IntelPyTorchExtensionPlugin()
         else:
             if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
                 raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
@@ -419,6 +420,7 @@ class Accelerator:
         if (
             self.state.mixed_precision == "fp16"
             and self.device.type != "cpu"
+            and self.device.type != "xpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
@@ -431,11 +433,12 @@ class Accelerator:
                 self.scaler = ShardedGradScaler(**kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
+
         elif self.state.mixed_precision == "bf16" and self.distributed_type not in (
             DistributedType.DEEPSPEED,
             DistributedType.MEGATRON_LM,
         ):
-            if self.device.type == "cpu":
+            if self.device.type in ["cpu", "xpu"]:
                 self.native_amp = is_torch_version(">=", "1.10")
             else:
                 self.native_amp = is_bf16_available(True)
@@ -526,6 +529,47 @@ class Accelerator:
     @property
     def mixed_precision(self):
         return self.state.mixed_precision
+
+    @contextmanager
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `Accelerator.gather()` on the
+                outputs. If so, just remember to drop the padded elements afterwards.
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate import Accelerator
+
+        accelerator = Accelerator()
+        with accelerator.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+
+        with accelerator.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
+        ```
+        """
+        with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:
+            yield inputs
 
     def on_main_process(self, function: Callable[..., Any] = None):
         """
@@ -934,7 +978,7 @@ class Accelerator:
         if is_torch_version("<", "1.10.0"):
             raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
 
-        if self.distributed_type == DistributedType.MULTI_GPU:
+        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
             dl_even_batches_values = []
 
             if even_batches is not None:
@@ -1133,8 +1177,10 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
-        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
+        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
             if self.device.type == "cpu" and self.state.ipex_plugin is not None:
+                args = self._prepare_ipex(*args)
+            elif self.device.type == "xpu" and self.state.ipex_plugin is not None and is_xpu_available():
                 args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
@@ -1209,6 +1255,7 @@ class Accelerator:
                     raise ValueError(
                         "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
                         "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}"
+                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
                     )
 
             if "cpu" in model_devices or "disk" in model_devices:
@@ -1218,7 +1265,7 @@ class Accelerator:
         elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
 
-        if self.distributed_type == DistributedType.MULTI_GPU:
+        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
             if any(p.requires_grad for p in model.parameters()):
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(
@@ -1411,7 +1458,11 @@ class Accelerator:
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
                 )
             if isinstance(scheduler, (DummyScheduler)):
-                max_lr = getattr(scheduler.optimizer, "lr", None) or scheduler.optimizer.defaults["lr"]
+                max_lr = (
+                    getattr(scheduler.optimizer, "lr", None)
+                    if getattr(scheduler.optimizer, "defaults", None) is None
+                    else scheduler.optimizer.defaults["lr"]
+                )
                 config_kwargs.update(
                     {
                         "scheduler.params.warmup_min_lr": 0,
@@ -1434,7 +1485,7 @@ class Accelerator:
                 else:
                     if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
                         "device", "none"
-                    ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", False):
+                    ) != "none" and self.deepspeed_config.get("zero_force_ds_cpu_optimizer", True):
                         from deepspeed.ops.adam import DeepSpeedCPUAdam
 
                         defaults = {k: v for k, v in optimizer.defaults.items() if k in ["lr", "weight_decay"]}
@@ -1582,13 +1633,13 @@ class Accelerator:
         return tuple(result)
 
     def _prepare_ipex(self, *args):
-        ipex_plugin = self.state.ipex_plugin
         if not is_ipex_available():
-            raise ImportError(
-                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+            logger.warn(
+                "Trying to use IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
                 " to https://github.com/intel/intel-extension-for-pytorch."
             )
-        import intel_extension_for_pytorch as ipex
+        else:
+            import intel_extension_for_pytorch as ipex
 
         model = None
         optimizer = None
@@ -1598,13 +1649,20 @@ class Accelerator:
                 model = obj
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
-        if optimizer is not None:
-            if not model.training:
-                model.train()
-            model, optimizer = ipex.optimize(
-                model, dtype=ipex_plugin.dtype, optimizer=optimizer, inplace=True, level="O1"
-            )
-            model.forward = torch.cpu.amp.autocast(dtype=ipex_plugin.dtype)(model.forward)
+        if optimizer is not None and model is not None:
+            if is_ipex_available():
+                if is_xpu_available() and self.device.type == "xpu":
+                    model = model.to(self.device)
+                    model, optimizer = torch.xpu.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+                    model.forward = torch.xpu.amp.autocast()(model.forward)
+                else:
+                    model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
+                    model.forward = torch.cpu.amp.autocast()(model.forward)
+            else:
+                if is_torch_version(">=", "1.10"):
+                    model.forward = torch.autocast(self.device.type)(model.forward)
+                else:
+                    model.forward = convert_outputs_to_fp32(model.forward)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model

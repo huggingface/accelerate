@@ -105,6 +105,12 @@ Here is how you would use all GPUs and train with mixed precision disabled:
 accelerate launch --multi_gpu {script_name.py} {--arg1} {--arg2} ...
 ```
 
+Or by specifying a number of GPUs to use:
+
+```bash
+accelerate launch --num_processes=2 {script_name.py} {--arg1} {--arg2} ...
+```
+
 To get more specific you should pass in the needed parameters yourself. For instance, here is how you 
 would also launch that same script on two GPUs using mixed precision while avoiding all of the warnings: 
 
@@ -129,6 +135,21 @@ For a visualization of this difference, that earlier `accelerate launch` on mult
 ```bash
 MIXED_PRECISION="fp16" torchrun --nproc_per_node=2 --num_machines=1 {script_name.py} {--arg1} {--arg2} ...
 ```
+
+You can also launch your script utilizing the launch CLI as a python module itself, enabling the ability to pass in other python-specific
+launching behaviors. To do so, use `accelerate.commands.launch` instead of `accelerate launch`:
+
+```bash
+python -m accelerate.commands.launch --num_processes=2 {script_name.py} {--arg1} {--arg2}
+```
+
+If you want to execute the script with any other python flags, you can pass them in as well similar to `-m`, such as 
+the below example enabling unbuffered stdout and stderr:
+
+```bash
+python -u -m accelerate.commands.launch --num_processes=2 {script_name.py} {--arg1} {--arg2}
+```
+
 
 ## Why you should always use `accelerate config`
 
