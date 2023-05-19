@@ -140,6 +140,13 @@ You can also launch your script utilizing the launch CLI as a python module itse
 launching behaviors. To do so, use `accelerate.commands.launch` instead of `accelerate launch`:
 
 ```bash
+python -m accelerate.commands.launch --num_processes=2 {script_name.py} {--arg1} {--arg2}
+```
+
+If you want to execute the script with any other python flags, you can pass them in as well similar to `-m`, such as 
+the below example enabling unbuffered stdout and stderr:
+
+```bash
 python -m -u accelerate.commands.launch --num_processes=2 {script_name.py} {--arg1} {--arg2}
 ```
 
