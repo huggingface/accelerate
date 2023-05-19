@@ -136,6 +136,14 @@ For a visualization of this difference, that earlier `accelerate launch` on mult
 MIXED_PRECISION="fp16" torchrun --nproc_per_node=2 --num_machines=1 {script_name.py} {--arg1} {--arg2} ...
 ```
 
+You can also launch your script utilizing the launch CLI as a python module itself, enabling the ability to pass in other python-specific
+launching behaviors. To do so, use `accelerate.commands.launch` instead of `accelerate launch`:
+
+```bash
+python -m -u accelerate.commands.launch --num_processes=2 {script_name.py} {--arg1} {--arg2}
+```
+
+
 ## Why you should always use `accelerate config`
 
 Why is it useful to the point you should **always** run `accelerate config`? 
