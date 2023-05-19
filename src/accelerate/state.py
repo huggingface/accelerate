@@ -227,7 +227,7 @@ class PartialState:
                         )
                 if not torch.distributed.is_initialized():
                     # Backend is not set by the user, we set it here
-                    kwargs.pop("nccl_backend", None)
+                    kwargs.pop("backend", None)
                     self.backend = backend
                     torch.distributed.init_process_group(self.backend, rank=rank, world_size=size, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
