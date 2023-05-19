@@ -709,11 +709,11 @@ class AcceleratorState:
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-                if self.device.type == "cpu" and ipex_plugin is not None:
-                    self.ipex_plugin = ipex_plugin
-                    if self.ipex_plugin is not None:
-                        self.ipex_plugin.set_mixed_precision(mixed_precision)
-                elif self.device.type == "xpu" and ipex_plugin is not None and is_xpu_available():
+                if (
+                    self.device.type == "cpu"
+                    or (self.device.type == "xpu" and is_xpu_available())
+                    and ipex_plugin is not None
+                ):
                     self.ipex_plugin = ipex_plugin
                     if self.ipex_plugin is not None:
                         self.ipex_plugin.set_mixed_precision(mixed_precision)
