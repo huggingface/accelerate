@@ -147,7 +147,7 @@ If you want to execute the script with any other python flags, you can pass them
 the below example enabling unbuffered stdout and stderr:
 
 ```bash
-python -m -u accelerate.commands.launch --num_processes=2 {script_name.py} {--arg1} {--arg2}
+python -u -m accelerate.commands.launch --num_processes=2 {script_name.py} {--arg1} {--arg2}
 ```
 
 
