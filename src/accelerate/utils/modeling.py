@@ -173,10 +173,9 @@ def set_module_tensor_to_device(
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
             if param_cls.__name__ in ["Int8Params", "FP4Params"]:
-                if param_cls.__name__ == "Int8Params":
+                if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
                     # downcast to fp16 if any - needed for 8bit serialization
-                    if new_value.dtype == torch.float32:
-                        new_value = new_value.to(torch.float16)
+                    new_value = new_value.to(torch.float16)
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
