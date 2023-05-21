@@ -150,4 +150,4 @@ Below are the average seconds per batch iterating over 29 batches of data for ea
 As you can see, if you are not careful about how you setup your gradient synchronization, you can get upwards of more than a 2x slowdown during training!
 
 If you are worried about making sure everything is done properly, we highly recommend utilizing the [`~Accelerator.accumulate`] function and passing in
-`gradient_accumulation_steps` to the [`Accelerator`] object so Accelerate can handle this for you.
+`gradient_accumulation_steps` or `gradient_accumulation_plugin` to the [`Accelerator`] object so Accelerate can handle this for you.

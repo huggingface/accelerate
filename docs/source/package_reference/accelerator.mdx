@@ -157,6 +157,21 @@ multi-device training, check if the step should actually be performed, and auto-
           scheduler.step()
           optimizer.zero_grad()
 ```
+#### GradientAccumulationPlugin
+[[autodoc]] utils.GradientAccumulationPlugin
+
+
+Instead of passing `gradient_accumulation_steps` you can instantiate a GradientAccumulationPlugin and pass it to the [`Accelerator`]'s `__init__`
+as `gradient_accumulation_plugin`. You can only pass either one of `gradient_accumulation_plugin` or `gradient_accumulation_steps` passing both will raise an error.
+```diff
+from accelerate.utils import GradientAccumulationPlugin
+
+gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=2)
+- accelerator = Accelerator()
++ accelerator = Accelerator(gradient_accumulation_plugin=gradient_accumulation_plugin)
+```
+
+In addition to the number of steps, this also lets you configure whether or not you adjust your learning rate scheduler to account for the change in steps due to accumulation.
 
 ## Overall API documentation:
 
