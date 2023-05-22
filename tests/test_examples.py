@@ -118,6 +118,7 @@ class ExampleDifferenceTests(unittest.TestCase):
             " " * 16 + "},\n\n",
             " " * 16 + "step=epoch,\n",
             " " * 12,
+            " " * 8 + "for step, batch in enumerate(active_dataloader):\n",
         ]
         self.one_complete_example("complete_cv_example.py", True, cv_path, special_strings)
         self.one_complete_example("complete_cv_example.py", False, cv_path, special_strings)
