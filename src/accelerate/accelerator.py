@@ -2750,13 +2750,19 @@ class Accelerator:
 
         >>> accelerator = Accelerator()
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
-
-        >>> for input, target in accelerator.skip_first_batches(dataloader, num_batches=2):
+        >>> skipped_dataloader = accelerator.skip_first_batches(dataloader, num_batches=2)
+        >>> # for the first epoch only
+        >>> for input, target in skipped_dataloader:
         ...     optimizer.zero_grad()
         ...     output = model(input)
         ...     loss = loss_func(output, target)
         ...     accelerator.backward(loss)
         ...     optimizer.step()
+
+        >>> # subsequent epochs
+        >>> for input, target in dataloader:
+        ...     optimizer.zero_grad()
+        ...     ...
         ```
         """
         return skip_first_batches(dataloader, num_batches=num_batches)
