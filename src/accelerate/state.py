@@ -122,15 +122,13 @@ class PartialState:
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.device = torch.device(env_device) if env_device is not None else None
             use_sagemaker_dp = kwargs.pop("_use_sagemaker_dp", None)
-
-            if (
-                (
+            if use_sagemaker_dp is None:
+                use_sagemaker_dp = (
                     os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
                     and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
                 )
-                or (use_sagemaker_dp)
-                and not cpu
-            ):
+
+            if use_sagemaker_dp and not cpu:
                 if (
                     os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") == SageMakerDistributedType.DATA_PARALLEL
                 ) or use_sagemaker_dp:
