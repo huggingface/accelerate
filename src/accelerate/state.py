@@ -121,12 +121,19 @@ class PartialState:
             self.backend = None
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.device = torch.device(env_device) if env_device is not None else None
+            use_sagemaker_dp = kwargs.pop("_use_sagemaker_dp", None)
+
             if (
-                os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
-                and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
+                (
+                    os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
+                    and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
+                )
+                or (use_sagemaker_dp)
                 and not cpu
             ):
-                if os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") == SageMakerDistributedType.DATA_PARALLEL:
+                if (
+                    os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") == SageMakerDistributedType.DATA_PARALLEL
+                ) or use_sagemaker_dp:
                     self.distributed_type = DistributedType.MULTI_GPU
                     import smdistributed.dataparallel.torch.torch_smddp  # noqa
 
