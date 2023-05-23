@@ -33,7 +33,9 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
             if any(p % 16 != 0 for p in module.weight.shape):
                 return
             has_bias = module.bias is not None
-            te_module = te.Linear(module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype)
+            te_module = te.Linear(
+                module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
+            )
             te_module.weight.data = module.weight.data.clone()
             if has_bias:
                 te_module.bias.data = module.bias.data.clone()
@@ -47,7 +49,9 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
             setattr(model, name, te_module)
         elif isinstance(module, te.Linear) and not to_transformer_engine and _convert_linear:
             has_bias = module.bias is not None
-            new_module = nn.Linear(module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype)
+            new_module = nn.Linear(
+                module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
+            )
             new_module.weight.data = module.weight.data.clone()
             if has_bias:
                 new_module.bias.data = module.bias.data.clone()
