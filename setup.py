@@ -16,7 +16,7 @@ from setuptools import setup
 from setuptools import find_packages
 
 extras = {}
-extras["quality"] = ["black ~= 23.1", "ruff >= 0.0.241", "hf-doc-builder >= 0.3.0"]
+extras["quality"] = ["black ~= 23.1", "ruff >= 0.0.241", "hf-doc-builder >= 0.3.0", "urllib3 < 2.0.0"]
 extras["docs"] = []
 extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
 extras["test_dev"] = ["datasets", "evaluate", "transformers", "scipy", "scikit-learn", "deepspeed", "tqdm"]
@@ -32,7 +32,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.18.0.dev0",
+    version="0.20.0.dev0",
     description="Accelerate",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -51,7 +51,7 @@ setup(
         ]
     },
     python_requires=">=3.7.0",
-    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.4.0"],
+    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.6.0"],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",

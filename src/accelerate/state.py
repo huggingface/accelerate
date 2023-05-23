@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import math
 import os
+import threading
 import warnings
 from contextlib import contextmanager
 from functools import partial
@@ -28,8 +32,10 @@ from .utils import (
     get_int_from_env,
     is_ccl_available,
     is_deepspeed_available,
+    is_fp8_available,
     is_mps_available,
     is_tpu_available,
+    is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
 )
@@ -51,6 +57,37 @@ def is_initialized() -> bool:
 # Lambda function that does nothing
 def do_nothing(*args, **kwargs):
     return None
+
+
+class ThreadLocalSharedDict(threading.local):
+    """
+    Descriptor that holds a dict shared between instances of a class in the same thread.
+
+    Note: Descriptors have slightly different semantics than just a dict field on its own.
+    `PartialState(...)._shared_state` and `PartialState._shared_state` (instance vs class) give the same value: the
+    underlying _storage dict. Likewise, `PartialState(...)._shared_state = {...}` overrides the _storage dict inside
+    the descriptor as you would expect. However, `PartialState._shared_state = {}` actually replaces the descriptor
+    object with a dict instead Thus, you should modify the _storage dict in-place (e.g. `_shared_state.clear()`).
+
+    See Python documentation for an explanation of descriptors: https://docs.python.org/3/howto/descriptor.html
+
+    This is required for using PyTorch/XLA with PJRT in multithreaded mode (required for TPU v2 and v3).
+
+    See https://github.com/pytorch/xla/blob/r2.0/docs/pjrt.md#multithreading-on-tpu-v2v3
+    """
+
+    def __init__(self, thread_local: bool = False):
+        self._storage = {}
+
+    def __get__(self, obj, objtype=None):
+        return self._storage
+
+    def __set__(self, obj, value):
+        self._storage = value
+
+
+# Prefer global shared dictionary, except when using TPU.
+SharedDict = dict if not is_tpu_available(check_device=False) else ThreadLocalSharedDict
 
 
 # Inspired by Alex Martelli's 'Borg'.
@@ -75,7 +112,7 @@ class PartialState:
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
     """
 
-    _shared_state = {}
+    _shared_state = SharedDict()
 
     def __init__(self, cpu: bool = False, **kwargs):
         self.__dict__ = self._shared_state
@@ -108,26 +145,44 @@ class PartialState:
                 self.process_index = xm.get_ordinal()
                 self.local_process_index = xm.get_local_ordinal()
                 self.device = xm.xla_device()
-            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
+            elif (
+                os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true"
+                and int(os.environ.get("LOCAL_RANK", -1)) != -1
+                and not cpu
+            ):
                 assert (
                     is_deepspeed_available()
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend="nccl", **kwargs)
+                    from deepspeed import comm as dist
+
+                    # DeepSpeed always uses nccl
+                    kwargs.pop("backend", None)
+                    self.backend = "nccl"
+                    dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
 
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                 if self.device is None:
-                    self.device = torch.device("cuda", self.local_process_index)
-                torch.cuda.set_device(self.device)
+                    if is_xpu_available():
+                        self.device = torch.device("xpu", self.local_process_index)
+                        if self.device is not None:
+                            torch.xpu.set_device(self.device)
+                    else:
+                        self.device = torch.device("cuda", self.local_process_index)
+                        if self.device is not None:
+                            torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend="nccl", **kwargs)
-                    self.backend = "nccl"
+                    self.backend = kwargs.pop("backend", "nccl")
+                    # Special case for `TrainingArguments`, where `backend` will be `None`
+                    if self.backend is None:
+                        self.backend = "nccl"
+                    torch.distributed.init_process_group(backend=self.backend, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
@@ -135,7 +190,10 @@ class PartialState:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
-                self.distributed_type = DistributedType.MULTI_CPU
+                if is_xpu_available():
+                    self.distributed_type = DistributedType.MULTI_XPU
+                else:
+                    self.distributed_type = DistributedType.MULTI_CPU
                 if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
                     if get_ccl_version() >= "1.12":
                         import oneccl_bindings_for_pytorch  # noqa: F401
@@ -168,8 +226,10 @@ class PartialState:
                             "please try exporting rank 0's hostname as MASTER_ADDR"
                         )
                 if not torch.distributed.is_initialized():
-                    torch.distributed.init_process_group(backend, rank=rank, world_size=size, **kwargs)
+                    # Backend is not set by the user, we set it here
+                    kwargs.pop("backend", None)
                     self.backend = backend
+                    torch.distributed.init_process_group(self.backend, rank=rank, world_size=size, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
@@ -180,31 +240,9 @@ class PartialState:
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
 
-                # the below block using env variable for `mps` will be removed in version 0.18.0
-                if parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE") and not cpu:
-                    from .utils import is_torch_version
-
-                    if is_mps_available():
-                        if not is_torch_version(">", "1.12.0"):
-                            warnings.warn(
-                                "We strongly recommend to install PyTorch >= 1.13 for transformer based models."
-                            )
-                        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-                        self.device = torch.device("mps")
-                    else:
-                        raise AssertionError(
-                            "MPS not available because PyTorch version is < 1.12.0 or MacOS version is < 12.3 "
-                            "and/or you do not have an MPS-enabled device on this machine."
-                        )
-
                 if self.device is None:
-                    if cpu or not (torch.cuda.is_available() or is_mps_available()):
-                        self.device = torch.device("cpu")
-                    elif is_mps_available():
-                        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-                        self.device = torch.device("mps")
-                    else:
-                        self.device = torch.device("cuda")
+                    self.device = torch.device("cpu") if cpu else self.default_device
+
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
     def __repr__(self) -> str:
@@ -219,7 +257,7 @@ class PartialState:
     @staticmethod
     def _reset_state():
         "Resets `_shared_state`, is used internally and should not be called"
-        PartialState._shared_state = {}
+        PartialState._shared_state.clear()
 
     @property
     def initialized(self) -> bool:
@@ -294,6 +332,77 @@ class PartialState:
 
         if is_main:
             self.wait_for_everyone()
+
+    @contextmanager
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
+                just remember to drop the padded elements afterwards.
+
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate import PartialState
+
+        state = PartialState()
+        with state.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+
+        with state.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
+        ```
+        """
+        if self.num_processes == 1:
+            yield inputs
+            return
+        # Nested dictionary of any types
+        if isinstance(inputs, dict):
+            length = len(inputs[list(inputs.keys())[0]])
+            if not all(len(v) == length for v in inputs.values()):
+                raise ValueError("All values in the dictionary must have the same length")
+        num_samples_per_process = math.ceil(len(inputs) / self.num_processes)
+        start_index = self.process_index * num_samples_per_process
+        end_index = start_index + num_samples_per_process
+        if (len(inputs) % self.num_processes != 0) and (self.process_index == self.num_processes - 1):
+            if isinstance(inputs, (list, tuple, torch.Tensor)):
+                end_index = len(inputs)
+            elif isinstance(inputs, dict):
+                end_index = len(inputs[list(inputs.keys())[0]])
+
+        def _split_values(inputs, start_index, end_index):
+            if isinstance(inputs, (list, tuple, torch.Tensor)):
+                result = inputs[start_index:end_index]
+                if apply_padding:
+                    result += [result[-1]] * (num_samples_per_process - len(result))
+                return result
+            elif isinstance(inputs, dict):
+                for key in inputs.keys():
+                    inputs[key] = _split_values(inputs[key], start_index, end_index)
+                return inputs
+            else:
+                return inputs
+
+        yield _split_values(inputs, start_index, end_index)
 
     @contextmanager
     def main_process_first(self):
@@ -499,6 +608,24 @@ class PartialState:
         if self.is_local_main_process:
             print(*args, **kwargs)
 
+    @property
+    def default_device(self) -> torch.device:
+        """
+        Returns the default device which is:
+        - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` both return True.
+        - CUDA if `torch.cuda.is_available()`
+        - CPU otherwise
+        """
+        if is_mps_available():
+            os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+            return torch.device("mps")
+        elif torch.cuda.is_available():
+            return torch.device("cuda")
+        elif is_xpu_available():
+            return torch.device("xpu:0")
+        else:
+            return torch.device("cpu")
+
 
 class AcceleratorState:
     """
@@ -520,7 +647,7 @@ class AcceleratorState:
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
     """
 
-    _shared_state = {}
+    _shared_state = SharedDict()
 
     def __init__(
         self,
@@ -530,6 +657,7 @@ class AcceleratorState:
         deepspeed_plugin=None,
         fsdp_plugin=None,
         megatron_lm_plugin=None,
+        ipex_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -542,11 +670,14 @@ class AcceleratorState:
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
             self.deepspeed_plugin = None
+            self.ipex_plugin = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
                 else mixed_precision.lower()
             )
+            if mixed_precision == "fp8" and not is_fp8_available():
+                raise ValueError("Using `fp8` precision requires `transformer_engine` to be installed.")
             self.dynamo_plugin = dynamo_plugin
             if not _from_accelerator:
                 raise ValueError(
@@ -577,6 +708,15 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
+            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
+                if (
+                    self.device.type == "cpu"
+                    or (self.device.type == "xpu" and is_xpu_available())
+                    and ipex_plugin is not None
+                ):
+                    self.ipex_plugin = ipex_plugin
+                    if self.ipex_plugin is not None:
+                        self.ipex_plugin.set_mixed_precision(mixed_precision)
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"
@@ -635,7 +775,7 @@ class AcceleratorState:
     @staticmethod
     def _reset_state(reset_partial_state: bool = False):
         "Resets `_shared_state`, is used internally and should not be called"
-        AcceleratorState._shared_state = {}
+        AcceleratorState._shared_state.clear()
         if reset_partial_state:
             PartialState._reset_state()
 
@@ -665,13 +805,56 @@ class AcceleratorState:
         PartialState().wait_for_everyone()
 
     @contextmanager
+    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+        """
+        Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
+        distributed inference, such as with different prompts.
+
+        Note that when using a `dict`, all keys need to have the same number of elements.
+
+        Args:
+            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+                The input to split between processes.
+            apply_padding (`bool`, `optional`, defaults to `False`):
+                Whether to apply padding by repeating the last element of the input so that all processes have the same
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
+                just remember to drop the padded elements afterwards.
+
+
+        Example:
+
+        ```python
+        # Assume there are two processes
+        from accelerate.state import AcceleratorState
+
+        state = AcceleratorState()
+        with state.split_between_processes(["A", "B", "C"]) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C"]
+
+        with state.split_between_processes(["A", "B", "C"], apply_padding=True) as inputs:
+            print(inputs)
+        # Process 0
+        ["A", "B"]
+        # Process 1
+        ["C", "C"]
+        ```
+        """
+        with PartialState().split_between_processes(inputs, apply_padding=apply_padding) as inputs:
+            yield inputs
+
+    @contextmanager
     def main_process_first(self):
         """
         Lets the main process go first inside a with block.
 
         The other processes will enter the with block after the main process exits.
         """
-        yield PartialState().main_process_first()
+        with PartialState().main_process_first():
+            yield
 
     @contextmanager
     def local_main_process_first(self):
@@ -680,7 +863,8 @@ class AcceleratorState:
 
         The other processes will enter the with block after the main process exits.
         """
-        yield PartialState().local_main_process_first()
+        with PartialState().local_main_process_first():
+            yield
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
@@ -703,7 +887,7 @@ class GradientState:
           accumulation
     """
 
-    _shared_state = {}
+    _shared_state = SharedDict()
 
     def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
         self.__dict__ = self._shared_state
@@ -774,4 +958,4 @@ class GradientState:
     @staticmethod
     def _reset_state():
         "Resets `_shared_state`, is used internally and should not be called"
-        GradientState._shared_state = {}
+        GradientState._shared_state.clear()

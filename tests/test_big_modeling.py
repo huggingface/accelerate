@@ -527,7 +527,8 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        model = replace_8bit_linear(model)
+        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
 
         # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
@@ -558,7 +559,8 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        model = replace_8bit_linear(model)
+        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
 
         # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
@@ -579,7 +581,8 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        model = replace_8bit_linear(model)
+        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
 
         for p in model.parameters():
             p.requires_grad = False
@@ -588,7 +591,7 @@ class BigModelingTester(unittest.TestCase):
         model = load_checkpoint_and_dispatch(
             model,
             checkpoint=model_path,
-            device_map={name: "cuda:0" for name, _ in model.named_parameters()},
+            device_map={"": torch.device("cuda:0")},
         )
 
         self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
@@ -597,7 +600,8 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        model = replace_8bit_linear(model)
+        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
 
         # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
@@ -607,7 +611,7 @@ class BigModelingTester(unittest.TestCase):
         model = load_checkpoint_and_dispatch(
             model,
             checkpoint=model_path,
-            device_map={name: torch.device("cuda:0") for name, _ in model.named_parameters()},
+            device_map={"": "cuda:0"},
         )
 
         self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)

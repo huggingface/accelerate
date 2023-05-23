@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,12 +23,14 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
+from accelerate.local_sgd import LocalSGD
 
 
 ########################################################################
-# This is a fully working simple example to use Accelerate,
-# specifically showcasing the checkpointing capability,
-# and builds off the `nlp_example.py` script.
+# This is a fully working simple example to use Accelerate
+# with LocalSGD, which is a method to synchronize model
+# parameters every K batches. It is different, but complementary
+# to gradient accumulation.
 #
 # This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):
@@ -37,16 +39,12 @@ from accelerate import Accelerator, DistributedType
 #   - (multi) TPUs
 #   - fp16 (mixed-precision) or fp32 (normal precision)
 #
-# To help focus on the differences in the code, building `DataLoaders`
-# was refactored into its own function.
-# New additions from the base script can be found quickly by
-# looking for the # New Code # tags
-#
 # To run it in each of these various modes, follow the instructions
 # in the readme for examples:
 # https://github.com/huggingface/accelerate/tree/main/examples
 #
 ########################################################################
+
 
 MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
@@ -125,39 +123,25 @@ def training_function(config, args):
     # For testing only
     if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
         config["num_epochs"] = 2
+    # New Code #
+    gradient_accumulation_steps = int(args.gradient_accumulation_steps)
+    local_sgd_steps = int(args.local_sgd_steps)
     # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    accelerator = Accelerator(
+        cpu=args.cpu, mixed_precision=args.mixed_precision, gradient_accumulation_steps=gradient_accumulation_steps
+    )
+    if accelerator.distributed_type not in [DistributedType.NO, DistributedType.MULTI_CPU, DistributedType.MULTI_GPU]:
+        raise NotImplementedError("LocalSGD is supported only for CPUs and GPUs (no DeepSpeed or MegatronLM)")
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
 
-    # New Code #
-    # Parse out whether we are saving every epoch or after a certain number of batches
-    if hasattr(args.checkpointing_steps, "isdigit"):
-        if args.checkpointing_steps == "epoch":
-            checkpointing_steps = args.checkpointing_steps
-        elif args.checkpointing_steps.isdigit():
-            checkpointing_steps = int(args.checkpointing_steps)
-        else:
-            raise ValueError(
-                f"Argument `checkpointing_steps` must be either a number or `epoch`. `{args.checkpointing_steps}` passed."
-            )
-    else:
-        checkpointing_steps = None
-
-    set_seed(seed)
-
-    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
     metric = evaluate.load("glue", "mrpc")
 
-    # If the batch size is too big we use gradient accumulation
-    gradient_accumulation_steps = 1
-    if batch_size > MAX_GPU_BATCH_SIZE and accelerator.distributed_type != DistributedType.TPU:
-        gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
-        batch_size = MAX_GPU_BATCH_SIZE
-
+    set_seed(seed)
+    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
 
@@ -173,7 +157,7 @@ def training_function(config, args):
     lr_scheduler = get_linear_schedule_with_warmup(
         optimizer=optimizer,
         num_warmup_steps=100,
-        num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
+        num_training_steps=(len(train_dataloader) * num_epochs),
     )
 
     # Prepare everything
@@ -183,76 +167,31 @@ def training_function(config, args):
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
-    # New Code #
-    # We need to keep track of how many total steps we have iterated over
-    overall_step = 0
-    # We also need to keep track of the stating epoch so files are named properly
-    starting_epoch = 0
-
-    # We need to load the checkpoint back in before training here with `load_state`
-    # The total number of epochs is adjusted based on where the state is being loaded from,
-    # as we assume continuation of the same training script
-    if args.resume_from_checkpoint:
-        if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
-            accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
-            accelerator.load_state(args.resume_from_checkpoint)
-            path = os.path.basename(args.resume_from_checkpoint)
-        else:
-            # Get the most recent checkpoint
-            dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
-            dirs.sort(key=os.path.getctime)
-            path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
-        # Extract `epoch_{i}` or `step_{i}`
-        training_difference = os.path.splitext(path)[0]
-
-        if "epoch" in training_difference:
-            starting_epoch = int(training_difference.replace("epoch_", "")) + 1
-            resume_step = None
-        else:
-            resume_step = int(training_difference.replace("step_", ""))
-            starting_epoch = resume_step // len(train_dataloader)
-            resume_step -= starting_epoch * len(train_dataloader)
-
     # Now we train the model
-    for epoch in range(starting_epoch, num_epochs):
+    for epoch in range(num_epochs):
         model.train()
-        # New Code #
-        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
-            # We need to skip steps until we reach the resumed step
-            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
-            overall_step += resume_step
-        else:
-            # After the first iteration though, we need to go back to the original dataloader
-            active_dataloader = train_dataloader
-        for step, batch in enumerate(active_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
-            batch.to(accelerator.device)
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss = loss / gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % gradient_accumulation_steps == 0:
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
-            # New Code #
-            overall_step += 1
-
-            # New Code #
-            # We save the model, optimizer, lr_scheduler, and seed states by calling `save_state`
-            # These are saved to folders named `step_{overall_step}`
-            # Will contain files: "pytorch_model.bin", "optimizer.bin", "scheduler.bin", and "random_states.pkl"
-            # If mixed precision was used, will also save a "scalar.bin" file
-            if isinstance(checkpointing_steps, int):
-                output_dir = f"step_{overall_step}"
-                if overall_step % checkpointing_steps == 0:
-                    if args.output_dir is not None:
-                        output_dir = os.path.join(args.output_dir, output_dir)
-                    accelerator.save_state(output_dir)
+        with LocalSGD(
+            accelerator=accelerator, model=model, local_sgd_steps=local_sgd_steps, enabled=local_sgd_steps is not None
+        ) as local_sgd:
+            for step, batch in enumerate(train_dataloader):
+                # We could avoid this line since we set the accelerator with `device_placement=True`.
+                batch.to(accelerator.device)
+                # New code #
+                # We use the new `accumulate` context manager to perform gradient accumulation
+                # We also currently do not support TPUs nor advise it as bugs were found on the XLA side when running our tests.
+                with accelerator.accumulate(model):
+                    output = model(**batch)
+                    loss = output.loss
+                    accelerator.backward(loss)
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
+                    # LocalSGD-specific line
+                    local_sgd.step()
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True` (the default).
+            # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             with torch.no_grad():
                 outputs = model(**batch)
@@ -267,17 +206,6 @@ def training_function(config, args):
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)
 
-        # New Code #
-        # We save the model, optimizer, lr_scheduler, and seed states by calling `save_state`
-        # These are saved to folders named `epoch_{epoch}`
-        # Will contain files: "pytorch_model.bin", "optimizer.bin", "scheduler.bin", and "random_states.pkl"
-        # If mixed precision was used, will also save a "scalar.bin" file
-        if checkpointing_steps == "epoch":
-            output_dir = f"epoch_{epoch}"
-            if args.output_dir is not None:
-                output_dir = os.path.join(args.output_dir, output_dir)
-            accelerator.save_state(output_dir)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
@@ -290,25 +218,17 @@ def main():
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
         "and an Nvidia Ampere GPU.",
     )
+    # New Code #
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="The number of minibatches to be ran before gradients are accumulated.",
+    )
+    parser.add_argument(
+        "--local_sgd_steps", type=int, default=8, help="Number of local SGD steps or None to disable local SGD"
+    )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
-    parser.add_argument(
-        "--checkpointing_steps",
-        type=str,
-        default=None,
-        help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default=".",
-        help="Optional save directory where all checkpoint folders will be stored. Default is the current working directory.",
-    )
-    parser.add_argument(
-        "--resume_from_checkpoint",
-        type=str,
-        default=None,
-        help="If the training should continue from a checkpoint folder.",
-    )
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
     training_function(config, args)

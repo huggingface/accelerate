@@ -22,6 +22,7 @@ from ...utils import (
     is_deepspeed_available,
     is_mps_available,
     is_transformers_available,
+    is_xpu_available,
 )
 from ...utils.constants import (
     DEEPSPEED_MULTINODE_LAUNCHERS,
@@ -46,7 +47,7 @@ from .config_utils import (
 def get_cluster_input():
     distributed_type = _ask_options(
         "Which type of machine are you using?",
-        ["No distributed training", "multi-CPU", "multi-GPU", "TPU"],
+        ["No distributed training", "multi-CPU", "multi-XPU", "multi-GPU", "TPU"],
         _convert_distributed_mode,
     )
 
@@ -59,7 +60,7 @@ def get_cluster_input():
     rdzv_backend = "static"
     same_network = True
 
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_CPU]:
+    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_XPU, DistributedType.MULTI_CPU]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
             int,
@@ -100,6 +101,23 @@ def get_cluster_input():
         use_cpu = True
     else:
         use_cpu = False
+
+    ipex_config = {}
+    if use_cpu:
+        ipex_config["ipex_enabled"] = _ask_field(
+            "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU? [yes/NO]:",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+    xpu_config = {}
+    if not use_cpu and is_xpu_available():
+        ipex_config["xpu_enabled"] = _ask_field(
+            "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
 
     dynamo_config = {}
     use_dynamo = _ask_field(
@@ -306,7 +324,7 @@ def get_cluster_input():
                 fsdp_config["fsdp_min_num_params"] = _ask_field(
                     "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
                     int,
-                    default=1e8,
+                    default=100000000,
                 )
             fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
             fsdp_config["fsdp_backward_prefetch_policy"] = _ask_options(
@@ -392,7 +410,12 @@ def get_cluster_input():
     tpu_use_sudo = False
     tpu_use_cluster = False
 
-    if distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_GPU, DistributedType.TPU]:
+    if distributed_type in [
+        DistributedType.MULTI_CPU,
+        DistributedType.MULTI_XPU,
+        DistributedType.MULTI_GPU,
+        DistributedType.TPU,
+    ]:
         machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
         if machine_type == "TPU":
             machine_type += " cores"
@@ -531,6 +554,8 @@ def get_cluster_input():
         deepspeed_config=deepspeed_config,
         fsdp_config=fsdp_config,
         megatron_lm_config=megatron_lm_config,
+        ipex_config=ipex_config,
+        xpu_config=xpu_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
         same_network=same_network,

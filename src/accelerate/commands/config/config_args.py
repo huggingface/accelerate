@@ -123,6 +123,8 @@ class BaseConfig:
 
         if "mixed_precision" not in config_dict:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
+        if isinstance(config_dict["mixed_precision"], bool) and not config_dict["mixed_precision"]:
+            config_dict["mixed_precision"] = "no"
         if "fp16" in config_dict:  # Convert the config to the new format.
             del config_dict["fp16"]
         if "dynamo_backend" in config_dict:  # Convert the config to the new format.
@@ -166,6 +168,10 @@ class ClusterConfig(BaseConfig):
     fsdp_config: dict = None
     # args for megatron_lm
     megatron_lm_config: dict = None
+    # args for ipex
+    ipex_config: dict = None
+    # args for xpu
+    xpu_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
 
@@ -189,6 +195,10 @@ class ClusterConfig(BaseConfig):
             self.fsdp_config = {}
         if self.megatron_lm_config is None:
             self.megatron_lm_config = {}
+        if self.ipex_config is None:
+            self.ipex_config = {}
+        if self.xpu_config is None:
+            self.xpu_config = {}
         return super().__post_init__()
 
 

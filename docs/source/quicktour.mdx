@@ -67,9 +67,9 @@ use `shuffle=True` or any kind of random sampler).
 
 </Tip>
 
-Alternatively, you can use the option `split_batches=True` when creating initializing your
-[`Accelerator`], in which case the batch size will always stay the same, whether your run your
-script on 1, 2, 4 or 64 GPUs.
+Alternatively, you can use the option `split_batches=True` when creating and initializing your
+[`Accelerator`], in which case the batch size will always stay the same, whether you run your
+script on 1, 2, 4, or 64 GPUs.
 
 You should execute this instruction as soon as all objects for training are created, before starting your actual
 training loop.

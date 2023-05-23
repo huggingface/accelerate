@@ -61,7 +61,6 @@ logger = logging.getLogger(__name__)
 options_to_group = {
     "--multi-gpu": "Distributed GPUs",
     "--tpu": "TPU",
-    "--mps": "MPS",
     "--use_deepspeed": "DeepSpeed Arguments",
     "--use_fsdp": "FSDP Arguments",
     "--use_megatron_lm": "Megatron-LM Arguments",
@@ -148,13 +147,6 @@ def launch_command_parser(subparsers=None):
         "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
     )
     hardware_args.add_argument(
-        "--mps",
-        default=False,
-        action="store_true",
-        help="This argument is deprecated. MPS device will be enabled by default when available and can be disabled via `--cpu`."
-        " Whether or not this should use MPS-enabled GPU device on MacOS machines.",
-    )
-    hardware_args.add_argument(
         "--multi_gpu",
         default=False,
         action="store_true",
@@ -171,7 +163,7 @@ def launch_command_parser(subparsers=None):
     resource_args.add_argument(
         "--mixed_precision",
         type=str,
-        choices=["no", "fp16", "bf16"],
+        choices=["no", "fp16", "bf16", "fp8"],
         help="Whether or not to use mixed precision training. "
         "Choose between FP16 and BF16 (bfloat16) training. "
         "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
@@ -561,6 +553,23 @@ def launch_command_parser(subparsers=None):
         ),
     )
 
+    # ipex args
+    ipex_args = parser.add_argument_group("IPEX Arguments", "Arguments related to IPEX.")
+    ipex_args.add_argument(
+        "--ipex_enabled",
+        default=False,
+        action="store_true",
+        help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU and XPU?",
+    )
+    # xpu args
+    xpu_args = parser.add_argument_group("XPU Arguments", "Arguments related to XPU.")
+    xpu_args.add_argument(
+        "--xpu_enabled",
+        default=False,
+        action="store_true",
+        help="Whether to use IPEX plugin to speed up training on XPU?",
+    )
+
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
 
@@ -766,9 +775,9 @@ def sagemaker_launcher(sagemaker_config: SageMakerConfig, args):
 
 def _validate_launch_command(args):
     # Sanity checks
-    if sum([args.multi_gpu, args.cpu, args.tpu, args.mps, args.use_deepspeed, args.use_fsdp]) > 1:
+    if sum([args.multi_gpu, args.cpu, args.tpu, args.use_deepspeed, args.use_fsdp]) > 1:
         raise ValueError(
-            "You can only use one of `--cpu`, `--multi_gpu`, `--mps`, `--tpu`, `--use_deepspeed`, `--use_fsdp` at a time."
+            "You can only use one of `--cpu`, `--multi_gpu`, `--tpu`, `--use_deepspeed`, `--use_fsdp` at a time."
         )
     if args.multi_gpu and (args.num_processes is not None) and (args.num_processes < 2):
         raise ValueError("You need to use at least 2 processes to use `--multi_gpu`.")
@@ -783,7 +792,6 @@ def _validate_launch_command(args):
             not args.multi_gpu
             and not args.tpu
             and not args.tpu_use_cluster
-            and not args.mps
             and not args.use_deepspeed
             and not args.use_fsdp
             and not args.use_megatron_lm
@@ -792,29 +800,22 @@ def _validate_launch_command(args):
             args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
-            args.mps = defaults.distributed_type == DistributedType.MPS
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
             args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
-        if not args.mps:
-            if args.gpu_ids is None:
-                if defaults.gpu_ids is not None:
-                    args.gpu_ids = defaults.gpu_ids
-                else:
-                    args.gpu_ids = "all"
+        if args.gpu_ids is None:
+            if defaults.gpu_ids is not None:
+                args.gpu_ids = defaults.gpu_ids
+            else:
+                args.gpu_ids = "all"
 
-            if args.multi_gpu and args.num_machines is None:
-                args.num_machines = defaults.num_machines
+        if args.multi_gpu and args.num_machines is None:
+            args.num_machines = defaults.num_machines
 
-            if (
-                len(args.gpu_ids.split(",")) < 2
-                and (args.gpu_ids != "all")
-                and args.multi_gpu
-                and args.num_machines <= 1
-            ):
-                raise ValueError(
-                    "Less than two GPU ids were configured and tried to run on on multiple GPUs. "
-                    "Please ensure at least two are specified for `--gpu_ids`, or use `--gpu_ids='all'`."
-                )
+        if len(args.gpu_ids.split(",")) < 2 and (args.gpu_ids != "all") and args.multi_gpu and args.num_machines <= 1:
+            raise ValueError(
+                "Less than two GPU ids were configured and tried to run on on multiple GPUs. "
+                "Please ensure at least two are specified for `--gpu_ids`, or use `--gpu_ids='all'`."
+            )
         if defaults.compute_environment == ComputeEnvironment.LOCAL_MACHINE:
             # Update args with the defaults
             for name, attr in defaults.__dict__.items():
@@ -830,6 +831,10 @@ def _validate_launch_command(args):
                         setattr(args, k, defaults.megatron_lm_config[k])
                     for k in defaults.dynamo_config:
                         setattr(args, k, defaults.dynamo_config[k])
+                    for k in defaults.ipex_config:
+                        setattr(args, k, defaults.ipex_config[k])
+                    for k in defaults.xpu_config:
+                        setattr(args, k, defaults.xpu_config[k])
                     continue
 
                 # Those args are handled separately
@@ -852,12 +857,12 @@ def _validate_launch_command(args):
         if args.num_processes is None:
             args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
-            if torch.cuda.device_count() > 1 and not args.multi_gpu:
-                warned.append(
-                    "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
-                    "\t\tIf this was unintended please pass in `--num_processes=1`."
-                )
-                args.multi_gpu = True
+        if torch.cuda.device_count() > 1 and not args.multi_gpu:
+            warned.append(
+                "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
+                "\t\tIf this was unintended please pass in `--num_processes=1`."
+            )
+            args.multi_gpu = True
         if args.num_machines is None:
             warned.append("\t`--num_machines` was set to a value of `1`")
             args.num_machines = 1
@@ -875,7 +880,7 @@ def _validate_launch_command(args):
     )
     if is_aws_env_disabled and args.num_cpu_threads_per_process is None:
         args.num_cpu_threads_per_process = 1
-        if args.use_cpu and args.num_processes > 1:
+        if args.use_cpu and args.num_processes >= 1:
             local_size = get_int_from_env(
                 ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
             )
