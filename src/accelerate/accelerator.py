@@ -1094,6 +1094,16 @@ class Accelerator:
                     "it is efficient and recommended to call prepare for the model before creating the optimizer"
                 )
 
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            model_count = 0
+            for obj in args:
+                if isinstance(obj, torch.nn.Module):
+                    model_count += 1
+            if model_count > 1:
+                raise AssertionError(
+                    "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
+                )
+
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
