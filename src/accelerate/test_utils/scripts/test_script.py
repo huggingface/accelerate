@@ -506,7 +506,7 @@ def test_split_between_processes_nested_dict():
 def test_split_between_processes_tensor():
     state = AcceleratorState()
     if state.num_processes > 1:
-        data = torch.tensor([0, 1, 2, 3], [4, 5, 6, 7]).to(state.device)
+        data = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]]).to(state.device)
         with state.split_between_processes(data) as results:
             if state.process_index == 0:
                 assert torch.allclose(results, torch.tensor([0, 1, 2, 3]))
