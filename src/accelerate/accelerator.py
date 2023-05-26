@@ -544,8 +544,7 @@ class Accelerator:
             apply_padding (`bool`, `optional`, defaults to `False`):
                 Whether to apply padding by repeating the last element of the input so that all processes have the same
                 number of elements. Useful when trying to perform actions such as `Accelerator.gather()` on the
-                outputs. If so, just remember to drop the padded elements afterwards. If `inputs` contains a `tensor`
-                to be split, it will be padded with `-1` to keep consistent with padding of the last value.
+                outputs. If so, just remember to drop the padded elements afterwards.
 
         Example:
 
