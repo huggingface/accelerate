@@ -339,7 +339,7 @@ class PartialState:
             self.wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+    def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -347,12 +347,12 @@ class PartialState:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, or `dict`):
+            inputs (`list`, `tuple`, `torch.Tensor`, or `dict` of `list`/`tuple`/`torch.Tensor`):
                 The input to split between processes.
             apply_padding (`bool`, `optional`, defaults to `False`):
                 Whether to apply padding by repeating the last element of the input so that all processes have the same
-                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
-                just remember to drop the padded elements afterwards.
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs or passing
+                in less inputs than there are processes. If so, just remember to drop the padded elements afterwards.
 
 
         Example:
@@ -398,7 +398,14 @@ class PartialState:
             if isinstance(inputs, (list, tuple, torch.Tensor)):
                 result = inputs[start_index:end_index]
                 if apply_padding:
-                    result += [result[-1]] * (num_samples_per_process - len(result))
+                    if isinstance(result, torch.Tensor):
+                        from accelerate.utils import pad_across_processes, send_to_device
+
+                        # The tensor needs to be on the device before we can pad it
+                        tensorized_result = send_to_device(result, self.device)
+                        result = pad_across_processes(tensorized_result, pad_index=inputs[-1])
+                    else:
+                        result += [result[-1]] * (num_samples_per_process - len(result))
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
@@ -810,7 +817,7 @@ class AcceleratorState:
         PartialState().wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+    def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -818,12 +825,12 @@ class AcceleratorState:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+            inputs (`list`, `tuple`, `torch.Tensor`, or `dict` of `list`/`tuple`/`torch.Tensor`):
                 The input to split between processes.
             apply_padding (`bool`, `optional`, defaults to `False`):
                 Whether to apply padding by repeating the last element of the input so that all processes have the same
-                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
-                just remember to drop the padded elements afterwards.
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs or passing
+                in less inputs than there are processes. If so, just remember to drop the padded elements afterwards.
 
 
         Example:

@@ -503,6 +503,17 @@ def test_split_between_processes_nested_dict():
                 ), f"Did not obtain expected values on process 4, expected `{data['c'][3]}`, received: {results['c']}"
 
 
+def test_split_between_processes_tensor():
+    state = AcceleratorState()
+    if state.num_processes > 1:
+        data = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]]).to(state.device)
+        with state.split_between_processes(data) as results:
+            if state.process_index == 0:
+                assert torch.allclose(results, torch.tensor([0, 1, 2, 3]))
+            else:
+                assert torch.allclose(results, torch.tensor([4, 5, 6, 7]))
+
+
 def main():
     accelerator = Accelerator()
     state = accelerator.state
@@ -520,6 +531,10 @@ def main():
     if state.local_process_index == 0:
         print("\n**Test split between processes as a dict**")
     test_split_between_processes_nested_dict()
+
+    if state.local_process_index == 0:
+        print("\n**Test split between processes as a tensor**")
+    test_split_between_processes_tensor()
 
     if state.local_process_index == 0:
         print("\n**Test random number generator synchronization**")
