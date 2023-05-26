@@ -509,9 +509,9 @@ def test_split_between_processes_tensor():
         data = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]]).to(state.device)
         with state.split_between_processes(data) as results:
             if state.process_index == 0:
-                assert torch.allclose(results, torch.tensor([0, 1, 2, 3]))
+                assert torch.allclose(results, torch.tensor([0, 1, 2, 3]).to(state.device))
             else:
-                assert torch.allclose(results, torch.tensor([4, 5, 6, 7]))
+                assert torch.allclose(results, torch.tensor([4, 5, 6, 7]).to(state.device))
 
 
 def main():
