@@ -403,8 +403,8 @@ class PartialState:
                         from accelerate.utils import pad_across_processes, send_to_device
 
                         # The tensor needs to be on the device before we can pad it
-                        result = send_to_device(result, self.device)
-                        result = pad_across_processes(result, pad_index=-1)
+                        tensorized_result = send_to_device(result, self.device)
+                        result = pad_across_processes(tensorized_result, pad_index=inputs[-1])
                     else:
                         result += [result[-1]] * (num_samples_per_process - len(result))
                 return result
