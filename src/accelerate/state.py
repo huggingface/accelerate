@@ -36,6 +36,7 @@ from .utils import (
     is_mps_available,
     is_tpu_available,
     is_xpu_available,
+    pad_across_processes,
     parse_choice_from_env,
     parse_flag_from_env,
 )
@@ -398,7 +399,10 @@ class PartialState:
             if isinstance(inputs, (list, tuple, torch.Tensor)):
                 result = inputs[start_index:end_index]
                 if apply_padding:
-                    result += [result[-1]] * (num_samples_per_process - len(result))
+                    if isinstance(result, torch.Tensor):
+                        result = pad_across_processes(result, pad_index=-1)
+                    else:
+                        result += [result[-1]] * (num_samples_per_process - len(result))
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
