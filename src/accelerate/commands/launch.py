@@ -377,6 +377,20 @@ def launch_command_parser(subparsers=None):
         "If unspecified, will default to 'none'.",
     )
     deepspeed_args.add_argument(
+        "--offload_optimizer_nvme_path",
+        default=None,
+        type=str,
+        help="Decides Nvme Path to offload optimizer states (useful only when `use_deepspeed` flag is passed). "
+        "If unspecified, will default to 'none'.",
+    )
+    deepspeed_args.add_argument(
+        "--offload_param_nvme_path",
+        default=None,
+        type=str,
+        help="Decides Nvme Path to offload parameters (useful only when `use_deepspeed` flag is passed). "
+        "If unspecified, will default to 'none'.",
+    )
+    deepspeed_args.add_argument(
         "--gradient_accumulation_steps",
         default=None,
         type=int,

@@ -467,6 +467,14 @@ class DeepSpeedPlugin:
         default=None,
         metadata={"help": "Possible options are none|cpu|nvme. Only applicable with ZeRO Stage 3."},
     )
+    offload_optimizer_nvme_path: str = field(
+        default=None,
+        metadata={"help": "Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3."},
+    )
+    offload_param_nvme_path: str = field(
+        default=None,
+        metadata={"help": "Possible options are /nvme|/local_nvme. Only applicable with ZeRO Stage 3."},
+    )
     zero3_init_flag: bool = field(
         default=None,
         metadata={
@@ -499,6 +507,12 @@ class DeepSpeedPlugin:
         if self.offload_param_device is None:
             self.offload_param_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
 
+        if self.offload_optimizer_nvme_path is None:
+            self.offload_optimizer_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_NVME_PATH", "none")
+
+        if self.offload_param_nvme_path is None:
+            self.offload_param_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH", "none")
+
         if self.zero3_save_16bit_model is None:
             self.zero3_save_16bit_model = (
                 os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
@@ -525,6 +539,8 @@ class DeepSpeedPlugin:
                 "zero_stage": "zero_optimization.stage",
                 "offload_optimizer_device": "zero_optimization.offload_optimizer.device",
                 "offload_param_device": "zero_optimization.offload_param.device",
+                "offload_param_nvme_path": "zero_optimization.offload_param.nvme_path",
+                "offload_optimizer_nvme_path": "zero_optimization.offload_optimizer.nvme_path",
                 "zero3_save_16bit_model": "zero_optimization.stage3_gather_16bit_weights_on_model_save",
             }
             kwargs = {v: getattr(self, k) for k, v in plugin_to_config_mapping.items() if getattr(self, k) is not None}
@@ -547,9 +563,11 @@ class DeepSpeedPlugin:
                     "stage": self.zero_stage,
                     "offload_optimizer": {
                         "device": self.offload_optimizer_device,
+                        "nvme_path": self.offload_optimizer_nvme_path,
                     },
                     "offload_param": {
                         "device": self.offload_param_device,
+                        "nvme_path": self.offload_param_nvme_path,
                     },
                     "stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
                 },
@@ -685,6 +703,8 @@ class DeepSpeedPlugin:
             "ACCELERATE_DEEPSPEED_ZERO_STAGE",
             "ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_DEVICE",
             "ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE",
+            "ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH",
+            "ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_NVME_PATH",
             "ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL",
             "ACCELERATE_MIXED_PRECISION",
         ]
