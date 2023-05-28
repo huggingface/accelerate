@@ -298,7 +298,18 @@ class IterableDatasetShard(IterableDataset):
                 yield current_batch[i]
 
 
-class DataLoaderShard(DataLoader):
+class DataLoaderStateMixin:
+    """
+    Mixin class that adds state to a `DataLoader` to keep track of the current state such as is end of dataloader or
+    not and the remainder of the current batch, etc.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        cls.end_of_dataloader = False
+        cls.remainder = -1
+
+
+class DataLoaderShard(DataLoader, DataLoaderStateMixin):
     """
     Subclass of a PyTorch `DataLoader` that will deal with device placement and current distributed setup.
 
@@ -346,7 +357,7 @@ class DataLoaderShard(DataLoader):
         # We can safely pass because the default is -1
         with suppress(Exception):
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-            self.gradient_state._set_remainder(length % self.total_batch_size)
+            self.remainder = length % self.total_batch_size
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
@@ -366,10 +377,11 @@ class DataLoaderShard(DataLoader):
                 batch_index += 1
                 current_batch = next_batch
             except StopIteration:
-                self.gradient_state._remove_dataloader(self)
+                self.end_of_dataloader = True
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
+        self.gradient_state._remove_dataloader(self)
 
     @property
     def total_batch_size(self):
@@ -390,6 +402,7 @@ class DataLoaderShard(DataLoader):
 
 if is_tpu_available(check_device=False):
     import torch_xla.distributed.parallel_loader as xpl
+
 
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
         """
@@ -428,7 +441,7 @@ if is_tpu_available(check_device=False):
             return self._loader.total_dataset_length
 
 
-class DataLoaderDispatcher(DataLoader):
+class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     """
     Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
     process their part of the batch.
@@ -477,7 +490,7 @@ class DataLoaderDispatcher(DataLoader):
         # We can safely pass because the default is -1
         with suppress(Exception):
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-            self.gradient_state._set_remainder(length % self.total_batch_size)
+            self.remainder = length % self.total_batch_size
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
@@ -563,11 +576,12 @@ class DataLoaderDispatcher(DataLoader):
             batch = slice_tensors(batch, data_slice)
 
             if stop_iteration:
-                self.gradient_state._remove_dataloader(self)
-                self.gradient_state._set_remainder(observed_batch_size)
+                self.end_of_dataloader = True
+                self.remainder = observed_batch_size
             if batch_index >= self.skip_batches:
                 yield batch
             batch_index += 1
+        self.gradient_state._remove_dataloader(self)
 
     def __len__(self):
         whole_length = super().__len__()
