@@ -403,7 +403,6 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
 if is_tpu_available(check_device=False):
     import torch_xla.distributed.parallel_loader as xpl
 
-
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
         """
         Wrapper for the xpl.MpDeviceLoader class that knows the total batch size.
