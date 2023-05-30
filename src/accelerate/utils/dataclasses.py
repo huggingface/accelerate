@@ -508,10 +508,12 @@ class DeepSpeedPlugin:
             self.offload_param_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_DEVICE", "none")
 
         if self.offload_optimizer_nvme_path is None:
-            self.offload_optimizer_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_NVME_PATH", "none")
+            self.offload_optimizer_nvme_path = os.environ.get(
+                "ACCELERATE_DEEPSPEED_OFFLOAD_OPTIMIZER_NVME_PATH", "none"
+            )
 
         if self.offload_param_nvme_path is None:
-            self.offload_param_device = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH", "none")
+            self.offload_param_nvme_path = os.environ.get("ACCELERATE_DEEPSPEED_OFFLOAD_PARAM_NVME_PATH", "none")
 
         if self.zero3_save_16bit_model is None:
             self.zero3_save_16bit_model = (
