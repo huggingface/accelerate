@@ -271,6 +271,7 @@ def launch_command_parser(subparsers=None):
         help="User-defined role for the workers.",
     )
     # Rendezvous related arguments
+    distributed_args.add_argument("--rdzv_backend", type=str, default="static", help="Rendezvous backend")
     distributed_args.add_argument(
         "--rdzv_conf",
         type=str,
@@ -903,6 +904,9 @@ def _validate_launch_command(args):
 
 def launch_command(args):
     args, defaults, mp_from_config_flag = _validate_launch_command(args)
+
+    print(args)
+    return
 
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
