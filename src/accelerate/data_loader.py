@@ -300,13 +300,16 @@ class IterableDatasetShard(IterableDataset):
 
 class DataLoaderStateMixin:
     """
-    Mixin class that adds a state to a `DataLoader` to keep track of the status inside the dataloader such as at the end of the iteration, the number of items in the dataset in the last batch relative to the batch size, and other useful information that might be needed.
-    
+    Mixin class that adds a state to a `DataLoader` to keep track of the status inside the dataloader such as at the
+    end of the iteration, the number of items in the dataset in the last batch relative to the batch size, and other
+    useful information that might be needed.
+
     **Available attributes:**
-    
+
         - **end_of_dataloader** (`bool`) -- Whether at the last iteration or batch
-        - **remainder** (`int`) -- The number of items that are remaining in the last batch, relative to the total batch size
-    
+        - **remainder** (`int`) -- The number of items that are remaining in the last batch, relative to the total
+          batch size
+
     """
 
     def __init_subclass__(cls, **kwargs):
