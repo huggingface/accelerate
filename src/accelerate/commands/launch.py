@@ -905,9 +905,6 @@ def _validate_launch_command(args):
 def launch_command(args):
     args, defaults, mp_from_config_flag = _validate_launch_command(args)
 
-    print(args)
-    return
-
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
         args.deepspeed_fields_from_accelerate_config = list(defaults.deepspeed_config.keys()) if defaults else []
