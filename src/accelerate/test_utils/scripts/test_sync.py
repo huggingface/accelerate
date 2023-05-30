@@ -239,22 +239,21 @@ def test_dataloader_break():
     second_dset = RegressionDataset(length=96)
     second_dataloader = DataLoader(second_dset, batch_size=16)
     first_dataloader, second_dataloader = accelerator.prepare(first_dataloader, second_dataloader)
+    assert accelerator.gradient_state.active_dataloader is None
     for iteration, _ in enumerate(first_dataloader):
-        # Will be True except if we are on the last batch
+        assert id(accelerator.gradient_state.active_dataloader) == id(first_dataloader)
         if iteration < len(first_dataloader) - 1:
-            assert id(accelerator.gradient_state.active_dataloader) == id(first_dataloader)
+            assert not accelerator.gradient_state.end_of_dataloader
             if iteration == 1:
                 for batch_num, _ in enumerate(second_dataloader):
+                    assert id(accelerator.gradient_state.active_dataloader) == id(second_dataloader)
                     if batch_num < len(second_dataloader) - 1:
-                        assert id(accelerator.gradient_state.active_dataloader) == id(
-                            second_dataloader
-                        ), f"First dataloader: {id(first_dataloader)}\nSecond dataloader: {id(second_dataloader)}\nActive dataloader: {id(accelerator.gradient_state.active_dataloader)}\n"
+                        assert not accelerator.gradient_state.end_of_dataloader
                     else:
-                        assert id(accelerator.gradient_state.active_dataloader) == id(
-                            first_dataloader
-                        ), f"First dataloader: {id(first_dataloader)}\nSecond dataloader: {id(second_dataloader)}\nActive dataloader: {id(accelerator.gradient_state.active_dataloader)}\n"
+                        assert accelerator.gradient_state.end_of_dataloader
         else:
-            assert accelerator.gradient_state.active_dataloader is None
+            assert accelerator.gradient_state.end_of_dataloader
+    assert accelerator.gradient_state.active_dataloader is None
 
 
 def main():
