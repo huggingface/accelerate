@@ -322,7 +322,7 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
-        if ipex_plugin is None:  # init from env variables
+        if ipex_plugin is None and is_ipex_available():  # init from env variables
             ipex_plugin = IntelPyTorchExtensionPlugin()
         else:
             if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
