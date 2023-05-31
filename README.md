@@ -219,6 +219,7 @@ If you like the simplicity of 🤗 Accelerate but would prefer a higher-level ab
 * [Open Assistant](https://projects.laion.ai/Open-Assistant/) is a chat-based assistant that understands tasks, can interact with their party systems, and retrieve information dynamically to do so. 
 * [pytorch-accelerated](https://github.com/Chris-hughes10/pytorch-accelerated) is a lightweight training library, with a streamlined feature set centred around a general-purpose [Trainer](https://pytorch-accelerated.readthedocs.io/en/latest/trainer.html), that places a huge emphasis on simplicity and transparency; enabling users to understand exactly what is going on under the hood, but without having to write and maintain the boilerplate themselves!
 * [Stable Diffusion web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) is an open-source browser-based easy-to-use interface based on the Gradio library for Stable Diffusion.
+* [torchkeras](https://github.com/lyhue1991/torchkeras)  is a simple tool for training pytorch model jusk in a keras style, a dynamic and beautiful plot is provided  in notebook to monitor your loss or metric.
 
 
 ## Installation
