@@ -229,7 +229,7 @@ def _gpu_gather(tensor):
     def _gpu_gather_one(tensor):
         if tensor.ndim == 0:
             tensor = tensor.clone()[None]
-        output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
+        output_tensors = [torch.empty_like(tensor) for _ in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather(output_tensors, tensor)
         return torch.cat(output_tensors, dim=0)
 
