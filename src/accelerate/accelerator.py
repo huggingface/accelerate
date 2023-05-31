@@ -1963,27 +1963,25 @@ class Accelerator:
         ```
         """
         tensor = self.gather(tensor)
-        if self.use_distributed:
-            if self.gradient_state.remainder == -1:
-                logger.info(
-                    "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
-                )
-                return tensor
-            try:
-                # Then see if we're on the last batch of our eval dataloader
-                if self.gradient_state.end_of_dataloader and self.gradient_state.remainder > 0:
-                    # Last batch needs to be truncated on distributed systems as it contains additional samples
-                    def _adjust_samples(tensor):
-                        return tensor[: self.gradient_state.remainder]
+        if self.gradient_state.remainder == -1:
+            logger.info(
+                "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
+            )
+            return tensor
+        try:
+            # Then see if we're on the last batch of our eval dataloader
+            if self.gradient_state.end_of_dataloader and self.gradient_state.remainder > 0:
+                # Last batch needs to be truncated on distributed systems as it contains additional samples
+                def _adjust_samples(tensor):
+                    return tensor[: self.gradient_state.remainder]
 
-                    return recursively_apply(_adjust_samples, tensor)
-                else:
-                    # Not at the end of the dataloader, no need to adjust the tensors
-                    return tensor
-            except Exception:
-                # Dataset had no length or raised an error
+                return recursively_apply(_adjust_samples, tensor)
+            else:
+                # Not at the end of the dataloader, no need to adjust the tensors
                 return tensor
-        return tensor
+        except Exception:
+            # Dataset had no length or raised an error
+            return tensor
 
     def reduce(self, tensor, reduction="sum"):
         """
