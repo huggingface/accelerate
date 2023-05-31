@@ -1,4 +1,4 @@
-name: Comment on the pull request
+name: Upload doc artifact
 
 # read-write repo token
 # access to secrets
@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v3
         with:
-          name: mytestartifcat
+          name: artifact
       - name: Display structure of downloaded files
         run: ls -R
 # upload to hf hub
