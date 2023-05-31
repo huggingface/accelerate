@@ -905,8 +905,6 @@ class GradientState:
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True
-            self.end_of_dataloader = False
-            self.remainder = -1
             self.active_dataloader = None
             self.dataloader_references = [None]
             self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
@@ -930,6 +928,20 @@ class GradientState:
         "Returns whether the `GradientState` has been initialized"
         return GradientState._shared_state != {}
 
+    @property
+    def end_of_dataloader(self) -> bool:
+        "Returns whether we have reached the end of the current dataloader"
+        if not self.in_dataloader:
+            return False
+        return self.active_dataloader.end_of_dataloader
+
+    @property
+    def remainder(self) -> int:
+        "Returns the number of extra samples that were added from padding the dataloader"
+        if not self.in_dataloader:
+            return -1
+        return self.active_dataloader.remainder
+
     def __repr__(self):
         return (
             f"Sync Gradients: {self.sync_gradients}\n"
@@ -942,25 +954,15 @@ class GradientState:
         "Private function that sets whether gradients should be synchronized. Users should not have to call this."
         self.sync_gradients = sync_gradients
 
-    def _set_end_of_dataloader(self, end_of_dataloader):
-        "Private function that sets whether the end of the current dataloader has been reached. Users should not have to call this."
-        self.end_of_dataloader = end_of_dataloader
-
-    def _set_remainder(self, remainder):
-        "Private function that sets the number of remaining samples at the end of the dataloader. Users should not have to call this."
-        self.remainder = remainder
-
     def _add_dataloader(self, dataloader):
         "Private function that adds a dataloader to `self.dataloader_references` and sets `in_dataloader` to `True`. Users should not have to call this."
         self.active_dataloader = dataloader
         self.dataloader_references.append(self.active_dataloader)
-        self._set_end_of_dataloader(False)
 
     def _remove_dataloader(self, dataloader):
         "Private function that removes a dataloader from `self.dataloader_references` and sets `in_dataloader` to `False` if there are no more dataloaders. Users should not have to call this."
         self.dataloader_references.remove(dataloader)
         self.active_dataloader = self.dataloader_references[-1]
-        self._set_end_of_dataloader(True)
 
     @property
     def in_dataloader(self) -> bool:

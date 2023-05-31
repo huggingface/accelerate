@@ -272,6 +272,12 @@ def launch_command_parser(subparsers=None):
     )
     # Rendezvous related arguments
     distributed_args.add_argument(
+        "--rdzv_backend",
+        type=str,
+        default="static",
+        help="The rendezvous method to use, such as 'static' (the default) or 'c10d'",
+    )
+    distributed_args.add_argument(
         "--rdzv_conf",
         type=str,
         default="",
