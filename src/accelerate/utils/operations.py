@@ -135,7 +135,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
     return data
 
 
-def send_to_device(tensor, device, non_blocking=False):
+def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
     """
     Recursively sends the elements in a nested list/tuple/dictionary of tensors to a given device.
 
@@ -148,17 +148,28 @@ def send_to_device(tensor, device, non_blocking=False):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
-
-    def _send_to_device(t, device, non_blocking):
+    if isinstance(tensor, (tuple, list)):
+        return honor_type(
+            tensor, (send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys) for t in tensor)
+        )
+    elif isinstance(tensor, Mapping):
+        if isinstance(skip_keys, str):
+            skip_keys = [skip_keys]
+        elif skip_keys is None:
+            skip_keys = []
+        return type(tensor)(
+            {
+                k: t if k in skip_keys else send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys)
+                for k, t in tensor.items()
+            }
+        )
+    elif hasattr(tensor, "to"):
         try:
-            return t.to(device, non_blocking=non_blocking)
+            return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
-            return t.to(device)
-
-    def _has_to_method(t):
-        return hasattr(t, "to")
-
-    return recursively_apply(_send_to_device, tensor, device, non_blocking, test_type=_has_to_method)
+            return tensor.to(device)
+    else:
+        return tensor
 
 
 def get_data_structure(data):
