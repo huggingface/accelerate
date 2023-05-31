@@ -1303,12 +1303,12 @@ class Accelerator:
         if self.native_amp:
             model._original_forward = model.forward
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
-                model.forward = MethodType(torch.cuda.amp.autocast(dtype=torch.float16)(model.forward), model)
+                model.forward = MethodType(torch.cuda.amp.autocast(dtype=torch.float16)(model.forward.__func__), model)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
                 model.forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward)
             else:
                 model.forward = torch.cuda.amp.autocast()(model.forward)
-            model.forward = MethodType(convert_outputs_to_fp32(model.forward), model)
+            model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
         elif self.mixed_precision == "fp8":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
