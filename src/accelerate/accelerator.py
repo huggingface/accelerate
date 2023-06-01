@@ -1330,7 +1330,7 @@ class Accelerator:
                     "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
                     "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                 )
-            model.forward = MethodType(fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward.__func__), model)
+            model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
