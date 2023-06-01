@@ -153,8 +153,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero_stage=3,
             offload_optimizer_device="cpu",
             offload_param_device="cpu",
-            offload_optimizer_nvme_path="/nvme",
-            offload_param_nvme_path="/nvme",
             zero3_save_16bit_model=True,
             zero3_init_flag=True,
         )
@@ -261,8 +259,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero_stage=3,
             offload_optimizer_device="cpu",
             offload_param_device="cpu",
-            offload_optimizer_nvme_path="/nvme",
-            offload_param_nvme_path="/nvme",
             zero3_save_16bit_model=True,
             zero3_init_flag=True,
         )

@@ -74,8 +74,6 @@ class HfDeepSpeedConfig:
                 [
                     self.get_value("zero_optimization.offload_optimizer.device"),
                     self.get_value("zero_optimization.offload_param.device"),
-                    self.get_value("zero_optimization.offload_param.nvme_path"),
-                    self.get_value("zero_optimization.offload_optimizer.nvme_path"),
                 ]
             )
             if len(offload_devices & offload_devices_valid) > 0:

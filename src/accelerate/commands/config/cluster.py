@@ -198,7 +198,6 @@ def get_cluster_input():
                 )
 
                 deepspeed_devices = ["none", "cpu", "nvme"]
-                deepspeed_offload_nvme_path = ["/nvme", "/local_nvme"]
                 if deepspeed_config["zero_stage"] >= 2:
                     deepspeed_config["offload_optimizer_device"] = _ask_options(
                         "Where to offload optimizer states?", deepspeed_devices, lambda x: deepspeed_devices[int(x)]
@@ -207,16 +206,16 @@ def get_cluster_input():
                         "Where to offload parameters?", deepspeed_devices, lambda x: deepspeed_devices[int(x)]
                     )
                     if deepspeed_config["offload_param_device"] == "nvme":
-                        deepspeed_config["offload_param_nvme_path"] = _ask_options(
+                        deepspeed_config["offload_param_nvme_path"] = _ask_field(
                             "Nvme Path to offload parameters?",
-                            deepspeed_offload_nvme_path,
-                            lambda x: deepspeed_offload_nvme_path[int(x)],
+                            str,
+                            default="/nvme",
                         )
                     if deepspeed_config["offload_optimizer_device"] == "nvme":
-                        deepspeed_config["offload_optimizer_nvme_path"] = _ask_options(
+                        deepspeed_config["offload_optimizer_nvme_path"] = _ask_field(
                             "Nvme Path to offload optimizer states?",
-                            deepspeed_offload_nvme_path,
-                            lambda x: deepspeed_offload_nvme_path[int(x)],
+                            str,
+                            default="/nvme",
                         )
                 deepspeed_config["gradient_accumulation_steps"] = _ask_field(
                     "How many gradient accumulation steps you're passing in your script? [1]: ",

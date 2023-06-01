@@ -565,11 +565,13 @@ class DeepSpeedPlugin:
                     "stage": self.zero_stage,
                     "offload_optimizer": {
                         "device": self.offload_optimizer_device,
-                        "nvme_path": self.offload_optimizer_nvme_path,
+                        "nvme_path": self.offload_optimizer_nvme_path
+                        if self.offload_optimizer_device == "nvme"
+                        else None,
                     },
                     "offload_param": {
                         "device": self.offload_param_device,
-                        "nvme_path": self.offload_param_nvme_path,
+                        "nvme_path": self.offload_param_nvme_path if self.offload_param_device == "nvme" else None,
                     },
                     "stage3_gather_16bit_weights_on_model_save": self.zero3_save_16bit_model,
                 },
