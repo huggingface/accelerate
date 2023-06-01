@@ -1305,9 +1305,9 @@ class Accelerator:
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
                 model.forward = MethodType(torch.cuda.amp.autocast(dtype=torch.float16)(model.forward.__func__), model)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
-                model.forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward)
+                model.forward = MethodType(torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward.__func__), model)
             else:
-                model.forward = torch.cuda.amp.autocast()(model.forward)
+                model.forward = MethodType(torch.cuda.amp.autocast()(model.forward.__func__), model)
             model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
         elif self.mixed_precision == "fp8":
             if not has_transformer_engine_layers(model):
@@ -1330,7 +1330,7 @@ class Accelerator:
                     "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
                     "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                 )
-            model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
+            model.forward = MethodType(fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward.__func__), model)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
