@@ -291,6 +291,7 @@ def dispatch_model(
     offload_dir: Optional[Union[str, os.PathLike]] = None,
     offload_index: Optional[Dict[str, str]] = None,
     offload_buffers: bool = False,
+    skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
 ):
     """
@@ -315,6 +316,8 @@ def dispatch_model(
             to the index saved in `save_folder`.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to offload the buffers with the model parameters.
+        skip_keys (`str` or `List[str]`, *optional*):
+            A list of keys to ignore when moving inputs or outputs between devices.
         preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
@@ -373,6 +376,7 @@ def dispatch_model(
         offload=offload,
         offload_buffers=offload_buffers,
         weights_map=weights_map,
+        skip_keys=skip_keys,
         preload_module_classes=preload_module_classes,
     )
     # Attaching the hook may break tied weights, so we retie them
@@ -391,6 +395,7 @@ def load_checkpoint_and_dispatch(
     offload_buffers: bool = False,
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: Optional[bool] = None,
+    skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
 ):
     """
@@ -427,6 +432,8 @@ def load_checkpoint_and_dispatch(
             If `True`, will temporarily offload the CPU state dict on the hard drive to avoid getting out of CPU RAM if
             the weight of the CPU state dict + the biggest shard does not fit. Will default to `True` if the device map
             picked contains `"disk"` values.
+        skip_keys (`str` or `List[str]`, *optional*):
+            A list of keys to ignore when moving inputs or outputs between devices.
         preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
@@ -492,5 +499,6 @@ def load_checkpoint_and_dispatch(
         device_map=device_map,
         offload_dir=offload_folder,
         offload_buffers=offload_buffers,
+        skip_keys=skip_keys,
         preload_module_classes=preload_module_classes,
     )

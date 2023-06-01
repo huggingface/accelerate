@@ -1430,7 +1430,8 @@ def gather_across_data_parallel_groups(tensor):
         if tensor.ndim == 0:
             tensor = tensor.clone()[None]
         output_tensors = [
-            tensor.clone() for _ in range(torch.distributed.get_world_size(group=mpu.get_data_parallel_group()))
+            torch.empty_like(tensor)
+            for _ in range(torch.distributed.get_world_size(group=mpu.get_data_parallel_group()))
         ]
         torch.distributed.all_gather(output_tensors, tensor, group=mpu.get_data_parallel_group())
         return torch.cat(output_tensors, dim=0)
