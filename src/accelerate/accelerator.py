@@ -1243,14 +1243,15 @@ class Accelerator:
                 has_hf_device_map = True
                 break
 
-        if getattr(model, "is_loaded_in_8bit", False) and getattr(model, "hf_device_map", False):
+        if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(model, "hf_device_map", False):
             model_devices = set(model.hf_device_map.values())
             if len(model_devices) > 1:
                 raise ValueError(
                     "You can't train a model that has been loaded in 8-bit precision on multiple devices."
                 )
-
-            current_device_index = list(model_devices)[0]
+            current_device = list(model_devices)[0]
+            current_device_index = current_device.index if isinstance(current_device,torch.device) else current_device
+            
             if torch.device(current_device_index) != self.device:
                 # if on the first device (GPU 0) we don't care
                 if (self.device.index is not None) or (current_device_index != 0):
