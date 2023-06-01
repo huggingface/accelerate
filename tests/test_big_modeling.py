@@ -620,17 +620,19 @@ class BigModelingTester(unittest.TestCase):
     @slow
     @unittest.skip("Un-skip in the next transformers release")
     def test_dipatch_model_fp4_simple(self):
-        """Tests that `dispatch_model` quantizes int8 layers"""
+        """Tests that `dispatch_model` quantizes fp4 layers"""
         from huggingface_hub import hf_hub_download
         from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
-        from transformers.utils.bitsandbytes import replace_8bit_linear
+        from transformers.utils.bitsandbytes import replace_with_bnb_linear
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
         quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
 
@@ -647,7 +649,9 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         # test with str device map
         model = load_checkpoint_and_dispatch(
@@ -662,7 +666,9 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         # test with torch.device device map
         model = load_checkpoint_and_dispatch(
