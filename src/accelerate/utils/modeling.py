@@ -191,6 +191,11 @@ def set_module_tensor_to_device(
                     elif module.bias is None:
                         # if no bias exists, we can quantize right away
                         module = module.cuda(device_index)
+            elif module.__class__.__name__ == "Linear4bit" and getattr(module.weight, "quant_state", None) is None:
+                # quantize only if necessary
+                device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
+                if not getattr(module.weight, "quant_state", None) and device_index is not None:
+                    module.weight = module.weight.cuda(device_index)
 
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
