@@ -195,7 +195,7 @@ class PartialState:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
-                if is_xpu_available():
+                if not cpu and is_xpu_available():
                     self.distributed_type = DistributedType.MULTI_XPU
                 else:
                     self.distributed_type = DistributedType.MULTI_CPU
@@ -239,7 +239,7 @@ class PartialState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
                 if self.device is None:
-                    self.device = torch.device("cpu")
+                    self.device = torch.device("cpu") if cpu else self.default_device
             else:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1

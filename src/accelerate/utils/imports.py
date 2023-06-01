@@ -226,4 +226,4 @@ def is_xpu_available(check_device=False):
             return torch.xpu.is_available()
         except RuntimeError:
             return False
-    return torch.xpu.is_available()
+    return hasattr(torch, "xpu") and torch.xpu.is_available()
