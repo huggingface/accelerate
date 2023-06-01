@@ -616,3 +616,60 @@ class BigModelingTester(unittest.TestCase):
 
         self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
         self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+
+    @slow
+    @unittest.skip("Un-skip in the next transformers release")
+    def test_dipatch_model_fp4_simple(self):
+        """Tests that `dispatch_model` quantizes int8 layers"""
+        from huggingface_hub import hf_hub_download
+        from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
+        from transformers.utils.bitsandbytes import replace_8bit_linear
+
+        with init_empty_weights():
+            model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
+
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+
+        model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
+
+        # test with auto
+        model = load_checkpoint_and_dispatch(
+            model,
+            checkpoint=model_path,
+            device_map="auto",
+        )
+
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8)
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+
+        with init_empty_weights():
+            model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
+
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+
+        # test with str device map
+        model = load_checkpoint_and_dispatch(
+            model,
+            checkpoint=model_path,
+            device_map={"": torch.device("cuda:0")},
+        )
+
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8)
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+
+        with init_empty_weights():
+            model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
+
+        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+
+        # test with torch.device device map
+        model = load_checkpoint_and_dispatch(
+            model,
+            checkpoint=model_path,
+            device_map={"": "cuda:0"},
+        )
+
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8)
+        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
