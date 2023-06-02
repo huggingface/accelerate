@@ -1640,7 +1640,7 @@ class Accelerator:
     def _prepare_ipex(self, *args):
         if not is_ipex_available():
             raise ImportError(
-                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+                "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
                 " to https://github.com/intel/intel-extension-for-pytorch."
             )
         else:
