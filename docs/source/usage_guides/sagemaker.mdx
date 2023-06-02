@@ -197,6 +197,16 @@ additional_args:
 
 *Note: Spot Instances are subject to be terminated and training to be continued from a checkpoint. This is not handled in 🤗 Accelerate out of the box. Contact us if you would like this feature.*
 
+### Use Amazon FSx for Lustre and Amazon EFS
+
+In order to use Amazon FSx for Lustre and Amazon EFS, you must specify the file system attributes in your input data file.
+
+Example:
+```
+name	path
+data	{"file_system_id": "fs-ysk123", "file_system_type": "FSxLustre", "directory_path": "/ysk123/dir1/", "file_system_access_mode": "rw"}
+```
+
 ### Remote scripts: Use scripts located on Github
 
 *undecided if feature is needed. Contact us if you would like this feature.*
