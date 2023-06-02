@@ -155,6 +155,12 @@ def launch_command_parser(subparsers=None):
     hardware_args.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
     )
+    hardware_args.add_argument(
+        "--ipex",
+        default=False,
+        action="store_true",
+        help="Whether or not this should launch a Intel PyTorch Extension (IPEX) training.",
+    )
 
     # Resource selection arguments
     resource_args = parser.add_argument_group(
@@ -230,6 +236,12 @@ def launch_command_parser(subparsers=None):
         default=False,
         action="store_true",
         help="Whether to use Megatron-LM.",
+    )
+    paradigm_args.add_argument(
+        "--use_xpu",
+        default=False,
+        action="store_true",
+        help="Whether to use IPEX plugin to speed up training on XPU specifically.",
     )
 
     # distributed GPU training arguments
@@ -573,23 +585,6 @@ def launch_command_parser(subparsers=None):
         ),
     )
 
-    # ipex args
-    ipex_args = parser.add_argument_group("IPEX Arguments", "Arguments related to IPEX.")
-    ipex_args.add_argument(
-        "--ipex_enabled",
-        default=False,
-        action="store_true",
-        help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU and XPU?",
-    )
-    # xpu args
-    xpu_args = parser.add_argument_group("XPU Arguments", "Arguments related to XPU.")
-    xpu_args.add_argument(
-        "--xpu_enabled",
-        default=False,
-        action="store_true",
-        help="Whether to use IPEX plugin to speed up training on XPU?",
-    )
-
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
 
@@ -853,8 +848,6 @@ def _validate_launch_command(args):
                         setattr(args, k, defaults.dynamo_config[k])
                     for k in defaults.ipex_config:
                         setattr(args, k, defaults.ipex_config[k])
-                    for k in defaults.xpu_config:
-                        setattr(args, k, defaults.xpu_config[k])
                     continue
 
                 # Those args are handled separately

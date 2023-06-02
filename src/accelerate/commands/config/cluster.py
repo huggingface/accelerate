@@ -104,15 +104,14 @@ def get_cluster_input():
 
     ipex_config = {}
     if use_cpu:
-        ipex_config["ipex_enabled"] = _ask_field(
+        ipex_config["ipex"] = _ask_field(
             "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU? [yes/NO]:",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
         )
-    xpu_config = {}
     if not use_cpu and is_xpu_available():
-        ipex_config["xpu_enabled"] = _ask_field(
+        ipex_config["use_xpu"] = _ask_field(
             "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
             _convert_yes_no_to_bool,
             default=False,
@@ -567,7 +566,6 @@ def get_cluster_input():
         fsdp_config=fsdp_config,
         megatron_lm_config=megatron_lm_config,
         ipex_config=ipex_config,
-        xpu_config=xpu_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
         same_network=same_network,
