@@ -103,10 +103,10 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
 
     if args.cpu or args.use_cpu:
         if args.ipex_enabled:
-            current_env["IPEX_ENABLED"] = str(args.ipex_enabled).lower()
+            current_env["ACCELERATE_USE_IPEX"] = str(args.ipex_enabled).lower()
     elif is_xpu_available():
         if args.xpu_enabled:
-            current_env["XPU_ENABLED"] = str(args.xpu_enabled).lower()
+            current_env["ACCELERATE_USE_XPU"] = str(args.xpu_enabled).lower()
     return cmd, current_env
 
 
