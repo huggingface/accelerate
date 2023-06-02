@@ -322,11 +322,12 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
-        if ipex_plugin is None:  # init from env variables
-            ipex_plugin = IntelPyTorchExtensionPlugin()
-        else:
-            if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
-                raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
+        if is_ipex_available():
+            if ipex_plugin is None:  # init from env variables
+                ipex_plugin = IntelPyTorchExtensionPlugin()
+            else:
+                if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
+                    raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
 
         # Kwargs handlers
         self.ddp_handler = None
@@ -531,7 +532,7 @@ class Accelerator:
         return self.state.mixed_precision
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+    def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -539,12 +540,13 @@ class Accelerator:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+            inputs (`list`, `tuple`, `torch.Tensor`, or `dict` of `list`/`tuple`/`torch.Tensor`):
                 The input to split between processes.
             apply_padding (`bool`, `optional`, defaults to `False`):
                 Whether to apply padding by repeating the last element of the input so that all processes have the same
-                number of elements. Useful when trying to perform actions such as `Accelerator.gather()` on the
-                outputs. If so, just remember to drop the padded elements afterwards.
+                number of elements. Useful when trying to perform actions such as `Accelerator.gather()` on the outputs
+                or passing in less inputs than there are processes. If so, just remember to drop the padded elements
+                afterwards.
 
         Example:
 
@@ -1241,14 +1243,17 @@ class Accelerator:
                 has_hf_device_map = True
                 break
 
-        if getattr(model, "is_loaded_in_8bit", False) and getattr(model, "hf_device_map", False):
+        if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
+            model, "hf_device_map", False
+        ):
             model_devices = set(model.hf_device_map.values())
             if len(model_devices) > 1:
                 raise ValueError(
                     "You can't train a model that has been loaded in 8-bit precision on multiple devices."
                 )
+            current_device = list(model_devices)[0]
+            current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
 
-            current_device_index = list(model_devices)[0]
             if torch.device(current_device_index) != self.device:
                 # if on the first device (GPU 0) we don't care
                 if (self.device.index is not None) or (current_device_index != 0):
@@ -1961,27 +1966,25 @@ class Accelerator:
         ```
         """
         tensor = self.gather(tensor)
-        if self.use_distributed:
-            if self.gradient_state.remainder == -1:
-                logger.info(
-                    "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
-                )
-                return tensor
-            try:
-                # Then see if we're on the last batch of our eval dataloader
-                if self.gradient_state.end_of_dataloader and self.gradient_state.remainder > 0:
-                    # Last batch needs to be truncated on distributed systems as it contains additional samples
-                    def _adjust_samples(tensor):
-                        return tensor[: self.gradient_state.remainder]
+        if self.gradient_state.remainder == -1:
+            logger.info(
+                "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
+            )
+            return tensor
+        try:
+            # Then see if we're on the last batch of our eval dataloader
+            if self.gradient_state.end_of_dataloader and self.gradient_state.remainder > 0:
+                # Last batch needs to be truncated on distributed systems as it contains additional samples
+                def _adjust_samples(tensor):
+                    return tensor[: self.gradient_state.remainder]
 
-                    return recursively_apply(_adjust_samples, tensor)
-                else:
-                    # Not at the end of the dataloader, no need to adjust the tensors
-                    return tensor
-            except Exception:
-                # Dataset had no length or raised an error
+                return recursively_apply(_adjust_samples, tensor)
+            else:
+                # Not at the end of the dataloader, no need to adjust the tensors
                 return tensor
-        return tensor
+        except Exception:
+            # Dataset had no length or raised an error
+            return tensor
 
     def reduce(self, tensor, reduction="sum"):
         """
@@ -2750,13 +2753,19 @@ class Accelerator:
 
         >>> accelerator = Accelerator()
         >>> dataloader, model, optimizer, scheduler = accelerator.prepare(dataloader, model, optimizer, scheduler)
-
-        >>> for input, target in accelerator.skip_first_batches(dataloader, num_batches=2):
+        >>> skipped_dataloader = accelerator.skip_first_batches(dataloader, num_batches=2)
+        >>> # for the first epoch only
+        >>> for input, target in skipped_dataloader:
         ...     optimizer.zero_grad()
         ...     output = model(input)
         ...     loss = loss_func(output, target)
         ...     accelerator.backward(loss)
         ...     optimizer.step()
+
+        >>> # subsequent epochs
+        >>> for input, target in dataloader:
+        ...     optimizer.zero_grad()
+        ...     ...
         ```
         """
         return skip_first_batches(dataloader, num_batches=num_batches)

@@ -172,9 +172,9 @@ def set_module_tensor_to_device(
         elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
-            if param_cls.__name__ == "Int8Params":
-                # downcast to fp16 if any
-                if new_value.dtype == torch.float32:
+            if param_cls.__name__ in ["Int8Params", "FP4Params"]:
+                if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
+                    # downcast to fp16 if any - needed for 8bit serialization
                     new_value = new_value.to(torch.float16)
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
@@ -191,6 +191,11 @@ def set_module_tensor_to_device(
                     elif module.bias is None:
                         # if no bias exists, we can quantize right away
                         module = module.cuda(device_index)
+            elif module.__class__.__name__ == "Linear4bit" and getattr(module.weight, "quant_state", None) is None:
+                # quantize only if necessary
+                device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
+                if not getattr(module.weight, "quant_state", None) and device_index is not None:
+                    module.weight = module.weight.cuda(device_index)
 
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):

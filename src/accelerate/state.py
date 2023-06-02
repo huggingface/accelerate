@@ -121,12 +121,17 @@ class PartialState:
             self.backend = None
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.device = torch.device(env_device) if env_device is not None else None
-            if (
-                os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
-                and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
-                and not cpu
-            ):
-                if os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") == SageMakerDistributedType.DATA_PARALLEL:
+            use_sagemaker_dp = kwargs.pop("_use_sagemaker_dp", None)
+            if use_sagemaker_dp is None:
+                use_sagemaker_dp = (
+                    os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
+                    and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
+                )
+
+            if use_sagemaker_dp and not cpu:
+                if (
+                    os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") == SageMakerDistributedType.DATA_PARALLEL
+                ) or use_sagemaker_dp:
                     self.distributed_type = DistributedType.MULTI_GPU
                     import smdistributed.dataparallel.torch.torch_smddp  # noqa
 
@@ -190,7 +195,7 @@ class PartialState:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
-                if is_xpu_available():
+                if not cpu and is_xpu_available():
                     self.distributed_type = DistributedType.MULTI_XPU
                 else:
                     self.distributed_type = DistributedType.MULTI_CPU
@@ -227,14 +232,14 @@ class PartialState:
                         )
                 if not torch.distributed.is_initialized():
                     # Backend is not set by the user, we set it here
-                    kwargs.pop("nccl_backend", None)
+                    kwargs.pop("backend", None)
                     self.backend = backend
                     torch.distributed.init_process_group(self.backend, rank=rank, world_size=size, **kwargs)
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
                 if self.device is None:
-                    self.device = torch.device("cpu")
+                    self.device = torch.device("cpu") if cpu else self.default_device
             else:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
@@ -334,7 +339,7 @@ class PartialState:
             self.wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+    def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -342,12 +347,12 @@ class PartialState:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, or `dict`):
+            inputs (`list`, `tuple`, `torch.Tensor`, or `dict` of `list`/`tuple`/`torch.Tensor`):
                 The input to split between processes.
             apply_padding (`bool`, `optional`, defaults to `False`):
                 Whether to apply padding by repeating the last element of the input so that all processes have the same
-                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
-                just remember to drop the padded elements afterwards.
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs or passing
+                in less inputs than there are processes. If so, just remember to drop the padded elements afterwards.
 
 
         Example:
@@ -393,7 +398,14 @@ class PartialState:
             if isinstance(inputs, (list, tuple, torch.Tensor)):
                 result = inputs[start_index:end_index]
                 if apply_padding:
-                    result += [result[-1]] * (num_samples_per_process - len(result))
+                    if isinstance(result, torch.Tensor):
+                        from accelerate.utils import pad_across_processes, send_to_device
+
+                        # The tensor needs to be on the device before we can pad it
+                        tensorized_result = send_to_device(result, self.device)
+                        result = pad_across_processes(tensorized_result, pad_index=inputs[-1])
+                    else:
+                        result += [result[-1]] * (num_samples_per_process - len(result))
                 return result
             elif isinstance(inputs, dict):
                 for key in inputs.keys():
@@ -708,13 +720,12 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
-            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.NO]:
-                if self.device.type == "cpu" and ipex_plugin is not None:
-                    self.ipex_plugin = ipex_plugin
-                    if self.ipex_plugin is not None:
-                        self.ipex_plugin.set_mixed_precision(mixed_precision)
-            if self.distributed_type in [DistributedType.MULTI_XPU, DistributedType.NO]:
-                if self.device.type == "xpu" and ipex_plugin is not None:
+            elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
+                if (
+                    self.device.type == "cpu"
+                    or (self.device.type == "xpu" and is_xpu_available())
+                    and ipex_plugin is not None
+                ):
                     self.ipex_plugin = ipex_plugin
                     if self.ipex_plugin is not None:
                         self.ipex_plugin.set_mixed_precision(mixed_precision)
@@ -806,7 +817,7 @@ class AcceleratorState:
         PartialState().wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict, apply_padding: bool = False):
+    def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor, apply_padding: bool = False):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -814,12 +825,12 @@ class AcceleratorState:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, or `dict` of `list`/`tuple`):
+            inputs (`list`, `tuple`, `torch.Tensor`, or `dict` of `list`/`tuple`/`torch.Tensor`):
                 The input to split between processes.
             apply_padding (`bool`, `optional`, defaults to `False`):
                 Whether to apply padding by repeating the last element of the input so that all processes have the same
-                number of elements. Useful when trying to perform actions such as `gather()` on the outputs. If so,
-                just remember to drop the padded elements afterwards.
+                number of elements. Useful when trying to perform actions such as `gather()` on the outputs or passing
+                in less inputs than there are processes. If so, just remember to drop the padded elements afterwards.
 
 
         Example:
@@ -894,8 +905,6 @@ class GradientState:
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True
-            self.end_of_dataloader = False
-            self.remainder = -1
             self.active_dataloader = None
             self.dataloader_references = [None]
             self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
@@ -919,6 +928,20 @@ class GradientState:
         "Returns whether the `GradientState` has been initialized"
         return GradientState._shared_state != {}
 
+    @property
+    def end_of_dataloader(self) -> bool:
+        "Returns whether we have reached the end of the current dataloader"
+        if not self.in_dataloader:
+            return False
+        return self.active_dataloader.end_of_dataloader
+
+    @property
+    def remainder(self) -> int:
+        "Returns the number of extra samples that were added from padding the dataloader"
+        if not self.in_dataloader:
+            return -1
+        return self.active_dataloader.remainder
+
     def __repr__(self):
         return (
             f"Sync Gradients: {self.sync_gradients}\n"
@@ -931,25 +954,15 @@ class GradientState:
         "Private function that sets whether gradients should be synchronized. Users should not have to call this."
         self.sync_gradients = sync_gradients
 
-    def _set_end_of_dataloader(self, end_of_dataloader):
-        "Private function that sets whether the end of the current dataloader has been reached. Users should not have to call this."
-        self.end_of_dataloader = end_of_dataloader
-
-    def _set_remainder(self, remainder):
-        "Private function that sets the number of remaining samples at the end of the dataloader. Users should not have to call this."
-        self.remainder = remainder
-
     def _add_dataloader(self, dataloader):
         "Private function that adds a dataloader to `self.dataloader_references` and sets `in_dataloader` to `True`. Users should not have to call this."
         self.active_dataloader = dataloader
         self.dataloader_references.append(self.active_dataloader)
-        self._set_end_of_dataloader(False)
 
     def _remove_dataloader(self, dataloader):
         "Private function that removes a dataloader from `self.dataloader_references` and sets `in_dataloader` to `False` if there are no more dataloaders. Users should not have to call this."
         self.dataloader_references.remove(dataloader)
         self.active_dataloader = self.dataloader_references[-1]
-        self._set_end_of_dataloader(True)
 
     @property
     def in_dataloader(self) -> bool:

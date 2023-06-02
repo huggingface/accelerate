@@ -225,6 +225,7 @@ class AlignDevicesHook(ModelHook):
         weights_map: Optional[Mapping] = None,
         offload_buffers: bool = False,
         place_submodules: bool = False,
+        skip_keys: Optional[Union[str, List[str]]] = None,
     ):
         self.execution_device = execution_device
         self.offload = offload
@@ -232,6 +233,7 @@ class AlignDevicesHook(ModelHook):
         self.weights_map = weights_map
         self.offload_buffers = offload_buffers
         self.place_submodules = place_submodules
+        self.skip_keys = skip_keys
 
         # Will contain the input device when `io_same_device=True`.
         self.input_device = None
@@ -242,7 +244,7 @@ class AlignDevicesHook(ModelHook):
         return (
             f"AlignDeviceHook(execution_device={self.execution_device}, offload={self.offload}, "
             f"io_same_device={self.io_same_device}, offload_buffers={self.offload_buffers}, "
-            f"place_submodules={self.place_submodules})"
+            f"place_submodules={self.place_submodules}, skip_keys={repr(self.skip_keys)})"
         )
 
     def init_hook(self, module):
@@ -279,7 +281,9 @@ class AlignDevicesHook(ModelHook):
             ):
                 set_module_tensor_to_device(module, name, self.execution_device, value=self.weights_map[name])
 
-        return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
+        return send_to_device(args, self.execution_device), send_to_device(
+            kwargs, self.execution_device, skip_keys=self.skip_keys
+        )
 
     def post_forward(self, module, output):
         if self.offload:
@@ -289,7 +293,7 @@ class AlignDevicesHook(ModelHook):
                 set_module_tensor_to_device(module, name, "meta")
 
         if self.io_same_device and self.input_device is not None:
-            output = send_to_device(output, self.input_device)
+            output = send_to_device(output, self.input_device, skip_keys=self.skip_keys)
 
         return output
 
@@ -303,6 +307,7 @@ class AlignDevicesHook(ModelHook):
 def attach_execution_device_hook(
     module: torch.nn.Module,
     execution_device: Union[int, str, torch.device],
+    skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
 ):
     """
@@ -314,6 +319,8 @@ def attach_execution_device_hook(
             The module where we want to attach the hooks.
         execution_device (`int`, `str` or `torch.device`):
             The device on which inputs and model weights should be placed before the forward pass.
+        skip_keys (`str` or `List[str]`, *optional*):
+            A list of keys to ignore when moving inputs or outputs between devices.
         preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
@@ -321,7 +328,7 @@ def attach_execution_device_hook(
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
     if not hasattr(module, "_hf_hook") and len(module.state_dict()) > 0:
-        add_hook_to_module(module, AlignDevicesHook(execution_device))
+        add_hook_to_module(module, AlignDevicesHook(execution_device, skip_keys=skip_keys))
 
     # Break the recursion if we get to a preload module.
     if preload_module_classes is not None and module.__class__.__name__ in preload_module_classes:
@@ -338,6 +345,7 @@ def attach_align_device_hook(
     weights_map: Optional[Mapping] = None,
     offload_buffers: bool = False,
     module_name: str = "",
+    skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
 ):
     """
@@ -357,6 +365,8 @@ def attach_align_device_hook(
             Whether or not to include the associated module's buffers when offloading.
         module_name (`str`, *optional*, defaults to `""`):
             The name of the module.
+        skip_keys (`str` or `List[str]`, *optional*):
+            A list of keys to ignore when moving inputs or outputs between devices.
         preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
@@ -381,6 +391,7 @@ def attach_align_device_hook(
             weights_map=prefixed_weights_map,
             offload_buffers=offload_buffers,
             place_submodules=full_offload,
+            skip_keys=skip_keys,
         )
         add_hook_to_module(module, hook, append=True)
 
@@ -399,6 +410,7 @@ def attach_align_device_hook(
             offload_buffers=offload_buffers,
             module_name=child_name,
             preload_module_classes=preload_module_classes,
+            skip_keys=skip_keys,
         )
 
 
@@ -421,6 +433,7 @@ def attach_align_device_hook_on_blocks(
     weights_map: Mapping = None,
     offload_buffers: bool = False,
     module_name: str = "",
+    skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
 ):
     """
@@ -441,6 +454,8 @@ def attach_align_device_hook_on_blocks(
             Whether or not to include the associated module's buffers when offloading.
         module_name (`str`, *optional*, defaults to `""`):
             The name of the module.
+        skip_keys (`str` or `List[str]`, *optional*):
+            A list of keys to ignore when moving inputs or outputs between devices.
         preload_module_classes (`List[str]`, *optional*):
             A list of classes whose instances should load all their weights (even in the submodules) at the beginning
             of the forward. This should only be used for classes that have submodules which are registered but not
@@ -450,7 +465,9 @@ def attach_align_device_hook_on_blocks(
     # If one device and one offload, we've got one hook.
     if not isinstance(execution_device, Mapping) and not isinstance(offload, dict):
         if not offload:
-            hook = AlignDevicesHook(execution_device=execution_device, io_same_device=True, place_submodules=True)
+            hook = AlignDevicesHook(
+                execution_device=execution_device, io_same_device=True, skip_keys=skip_keys, place_submodules=True
+            )
             add_hook_to_module(module, hook)
         else:
             attach_align_device_hook(
@@ -460,6 +477,7 @@ def attach_align_device_hook_on_blocks(
                 weights_map=weights_map,
                 offload_buffers=offload_buffers,
                 module_name=module_name,
+                skip_keys=skip_keys,
             )
         return
 
@@ -474,6 +492,7 @@ def attach_align_device_hook_on_blocks(
             offload_buffers=offload_buffers,
             io_same_device=(module_name == ""),
             place_submodules=True,
+            skip_keys=skip_keys,
         )
         add_hook_to_module(module, hook)
         attach_execution_device_hook(module, execution_device[module_name])
@@ -485,16 +504,22 @@ def attach_align_device_hook_on_blocks(
             weights_map=weights_map,
             offload_buffers=offload_buffers,
             module_name=module_name,
+            skip_keys=skip_keys,
             preload_module_classes=preload_module_classes,
         )
         if not hasattr(module, "_hf_hook"):
-            hook = AlignDevicesHook(execution_device=execution_device[module_name], io_same_device=(module_name == ""))
+            hook = AlignDevicesHook(
+                execution_device=execution_device[module_name], io_same_device=(module_name == ""), skip_keys=skip_keys
+            )
             add_hook_to_module(module, hook)
         attach_execution_device_hook(
-            module, execution_device[module_name], preload_module_classes=preload_module_classes
+            module,
+            execution_device[module_name],
+            preload_module_classes=preload_module_classes,
+            skip_keys=skip_keys,
         )
     elif module_name == "":
-        hook = AlignDevicesHook(execution_device=execution_device.get(""), io_same_device=True)
+        hook = AlignDevicesHook(execution_device=execution_device.get(""), io_same_device=True, skip_keys=skip_keys)
         add_hook_to_module(module, hook)
 
     for child_name, child in module.named_children():
@@ -507,6 +532,7 @@ def attach_align_device_hook_on_blocks(
             offload_buffers=offload_buffers,
             module_name=child_name,
             preload_module_classes=preload_module_classes,
+            skip_keys=skip_keys,
         )
 
 

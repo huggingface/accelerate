@@ -83,7 +83,7 @@ accelerate config update [arguments]
 
 **Command**:
 
-`accelerate env` or `accelerate-env`
+`accelerate env` or `accelerate-env` or `python -m accelerate.commands.env`
 
 Lists the contents of the passed 🤗 Accelerate configuration file. Should always be used when opening an issue on the [GitHub repository](https://github.com/huggingface/accelerate).
 
@@ -103,7 +103,7 @@ accelerate env [arguments]
 
 **Command**:
 
-`accelerate launch` or `accelerate-launch`
+`accelerate launch` or `accelerate-launch` or `python -m accelerate.commands.launch`
 
 Launches a specified script on a distributed system with the right parameters.
 
@@ -163,6 +163,7 @@ The following arguments are only useful when `multi_gpu` is passed or multi-gpu 
 * `--machine_rank MACHINE_RANK` (`int`) -- The rank of the machine on which this script is launched.
 * `--main_process_ip MAIN_PROCESS_IP` (`str`) -- The IP address of the machine of rank 0.
 * `--main_process_port MAIN_PROCESS_PORT` (`int`) -- The port to use to communicate with the machine of rank 0.
+* `--rdzv_backend` (`str`) -- The rendezvous method to use, such as "static" or "c10d"
 * `--rdzv_conf` (`str`) -- Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).
 * `--max_restarts` (`int`) -- Maximum number of worker group restarts before failing.
 * `--monitor_interval` (`float`) -- Interval, in seconds, to monitor the state of workers.
