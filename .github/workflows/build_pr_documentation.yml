@@ -13,5 +13,3 @@ jobs:
     with:
       pr_number: ${{ github.event.number }}
       package: accelerate
-    secrets:
-      token: ${{ secrets.HF_DOC_BUILD_PUSH }}
