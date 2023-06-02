@@ -61,6 +61,7 @@ logger = logging.getLogger(__name__)
 options_to_group = {
     "--multi-gpu": "Distributed GPUs",
     "--tpu": "TPU",
+    "--ipex": "IPEX",
     "--use_deepspeed": "DeepSpeed Arguments",
     "--use_fsdp": "FSDP Arguments",
     "--use_megatron_lm": "Megatron-LM Arguments",
@@ -154,6 +155,12 @@ def launch_command_parser(subparsers=None):
     )
     hardware_args.add_argument(
         "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
+    )
+    hardware_args.add_argument(
+        "--ipex",
+        default=False,
+        action="store_true",
+        help="Whether or not this should launch a Intel PyTorch Extension (IPEX) training.",
     )
 
     # Resource selection arguments
@@ -351,6 +358,15 @@ def launch_command_parser(subparsers=None):
         "--downcast_bf16",
         action="store_true",
         help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
+    )
+
+    # ipex args
+    ipex_args = parser.add_argument_group("IPEX", "Arguments related to training with Intel IPEX.")
+    ipex_args.add_argument(
+        "--xpu_enabled",
+        default=False,
+        action="store_true",
+        help="Whether to use IPEX plugin to speed up training on XPU specifically.",
     )
 
     # DeepSpeed arguments
@@ -571,23 +587,6 @@ def launch_command_parser(subparsers=None):
             "The full path to the script to be launched in parallel, followed by all the arguments for the training "
             "script."
         ),
-    )
-
-    # ipex args
-    ipex_args = parser.add_argument_group("IPEX Arguments", "Arguments related to IPEX.")
-    ipex_args.add_argument(
-        "--ipex_enabled",
-        default=False,
-        action="store_true",
-        help="Whether to use Intel PyTorch Extension (IPEX) to speed up training on CPU and XPU?",
-    )
-    # xpu args
-    xpu_args = parser.add_argument_group("XPU Arguments", "Arguments related to XPU.")
-    xpu_args.add_argument(
-        "--xpu_enabled",
-        default=False,
-        action="store_true",
-        help="Whether to use IPEX plugin to speed up training on XPU?",
     )
 
     # Other arguments of the training scripts
