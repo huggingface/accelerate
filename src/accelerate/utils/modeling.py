@@ -794,7 +794,6 @@ def infer_auto_device_map(
                     )
             current_memory_used += module_size
             device_map[name] = devices[current_device]
-        print(modules_to_treat)
 
     return clean_device_map(device_map)
 
