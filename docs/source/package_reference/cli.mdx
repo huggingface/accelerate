@@ -136,6 +136,7 @@ values. They can also be passed in manually.
 * `--cpu` (`bool`) -- Whether or not to force the training on the CPU.
 * `--multi_gpu` (`bool`) -- Whether or not this should launch a distributed GPU training.
 * `--tpu` (`bool`) -- Whether or not this should launch a TPU training.
+* `--ipex` (`bool`) -- Whether or not this should launch an Intel Pytorch Extension (IPEX) training.
 
 **Resource Selection Arguments**:
 
@@ -174,6 +175,12 @@ The following arguments are only useful when `tpu` is passed or TPU training is 
 
 * `--main_training_function MAIN_TRAINING_FUNCTION` (`str`) -- The name of the main function to be executed in your script.
 * `--downcast_bf16` (`bool`) -- Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.
+
+**Ipex Arguments**:
+
+The following arguments are only useful when `ipex` is passed or IPEX training is configured through `accelerate config`:
+
+* `--use_xpu` (`bool`) -- Whether to use IPEX plugin to speed up training on XPU specifically.
 
 **DeepSpeed Arguments**:
 
