@@ -61,7 +61,6 @@ logger = logging.getLogger(__name__)
 options_to_group = {
     "--multi-gpu": "Distributed GPUs",
     "--tpu": "TPU",
-    "--ipex": "IPEX",
     "--use_deepspeed": "DeepSpeed Arguments",
     "--use_fsdp": "FSDP Arguments",
     "--use_megatron_lm": "Megatron-LM Arguments",
@@ -238,6 +237,12 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Whether to use Megatron-LM.",
     )
+    paradigm_args.add_argument(
+        "--use_xpu",
+        default=False,
+        action="store_true",
+        help="Whether to use IPEX plugin to speed up training on XPU specifically.",
+    )
 
     # distributed GPU training arguments
     distributed_args = parser.add_argument_group("Distributed GPUs", "Arguments related to distributed GPU training.")
@@ -358,15 +363,6 @@ def launch_command_parser(subparsers=None):
         "--downcast_bf16",
         action="store_true",
         help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
-    )
-
-    # ipex args
-    ipex_args = parser.add_argument_group("IPEX", "Arguments related to training with Intel IPEX.")
-    ipex_args.add_argument(
-        "--use_xpu",
-        default=False,
-        action="store_true",
-        help="Whether to use IPEX plugin to speed up training on XPU specifically.",
     )
 
     # DeepSpeed arguments
