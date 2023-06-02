@@ -22,7 +22,7 @@ import torch
 
 from ..commands.config.config_args import SageMakerConfig
 from ..commands.config.config_utils import DYNAMO_BACKENDS
-from ..utils import DynamoBackend, PrecisionType, is_torch_version, is_xpu_available
+from ..utils import DynamoBackend, PrecisionType, is_ipex_available, is_torch_version, is_xpu_available
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from ..utils.other import merge_dicts
 from .dataclasses import DistributedType, SageMakerDistributedType
@@ -101,7 +101,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
-    if args.cpu or args.use_cpu:
+    if is_ipex_available():
         if args.ipex:
             current_env["ACCELERATE_USE_IPEX"] = str(args.ipex).lower()
     elif is_xpu_available():
