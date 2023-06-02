@@ -9,7 +9,9 @@ concurrency:
 
 jobs:
   build:
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@main
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@fix-token-issue
     with:
       pr_number: ${{ github.event.number }}
       package: accelerate
+    secrets:
+      token: ${{ secrets.HF_DOC_BUILD_PUSH }}
