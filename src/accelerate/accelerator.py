@@ -1643,8 +1643,7 @@ class Accelerator:
                 "Trying to use IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
                 " to https://github.com/intel/intel-extension-for-pytorch."
             )
-            result = [obj for obj in args]
-            return tuple(result)
+            return args
         else:
             import intel_extension_for_pytorch as ipex
 
@@ -1657,9 +1656,7 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
         if optimizer is not None and model is not None:
-            dtype = self.state.ipex_plugin.dtype
-            if dtype == "no":
-                dtype = torch.float32
+            dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else torch.float32
             if is_xpu_available() and self.device.type == "xpu":
                 model = model.to(self.device)
                 model, optimizer = torch.xpu.optimize(

@@ -1335,8 +1335,3 @@ class IntelPyTorchExtensionPlugin:
     """
     This plugin is used to enable Intel PyTorch Extension (IPEX).
     """
-
-    def set_mixed_precision(self, mixed_precision):
-        if mixed_precision == "fp16":
-            raise ValueError("Tried to use `fp16` but it is not supported on cpu or xpu")
-        self.dtype = mixed_precision
