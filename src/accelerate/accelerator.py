@@ -1643,6 +1643,8 @@ class Accelerator:
                 "Trying to use IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
                 " to https://github.com/intel/intel-extension-for-pytorch."
             )
+            result = [obj for obj in args]
+            return tuple(result)
         else:
             import intel_extension_for_pytorch as ipex
 
@@ -1655,19 +1657,16 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
         if optimizer is not None and model is not None:
-            if is_ipex_available():
-                if is_xpu_available() and self.device.type == "xpu":
-                    model = model.to(self.device)
-                    model, optimizer = torch.xpu.optimize(model, optimizer=optimizer, inplace=True, level="O1")
-                    model.forward = torch.xpu.amp.autocast()(model.forward)
-                else:
-                    model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
-                    model.forward = torch.cpu.amp.autocast()(model.forward)
+            dtype = self.state.ipex_plugin.dtype
+            if dtype == "no":
+                dtype = torch.float32
+            if is_xpu_available() and self.device.type == "xpu":
+                model = model.to(self.device)
+                model, optimizer = torch.xpu.optimize(
+                    model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1"
+                )
             else:
-                if is_torch_version(">=", "1.10"):
-                    model.forward = torch.autocast(self.device.type)(model.forward)
-                else:
-                    model.forward = convert_outputs_to_fp32(model.forward)
+                model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
