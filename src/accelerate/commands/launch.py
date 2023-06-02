@@ -363,7 +363,7 @@ def launch_command_parser(subparsers=None):
     # ipex args
     ipex_args = parser.add_argument_group("IPEX", "Arguments related to training with Intel IPEX.")
     ipex_args.add_argument(
-        "--xpu_enabled",
+        "--use_xpu",
         default=False,
         action="store_true",
         help="Whether to use IPEX plugin to speed up training on XPU specifically.",
