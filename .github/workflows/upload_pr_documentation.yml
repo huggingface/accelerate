@@ -1,0 +1,17 @@
+name: Upload PR Documentation
+
+on:
+  workflow_run:
+    workflows: ["Build PR Documentation"]
+    types:
+      - completed
+
+jobs:
+  build:
+    uses: huggingface/doc-builder/.github/workflows/upload_pr_documentation.yml@fix-token-issue
+    with:
+      commit_sha: ${{ github.event.pull_request.head.sha }}
+      pr_number: ${{ github.event.number }}
+      package: accelerate
+    secrets:
+      token: ${{ secrets.HF_DOC_BUILD_PUSH }}
