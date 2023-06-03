@@ -852,7 +852,14 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                     if f"stage_{i+1}" in spec:
                         cmd_stage.extend([f"--zero_stage={i+1}"])
                         break
-                cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
+                cmd_stage.extend(
+                    [
+                        "--offload_optimizer_device=none",
+                        "--offload_param_device=none",
+                        "--offload_optimizer_nvme_path=none",
+                        "--offload_param_nvme_path=none",
+                    ]
+                )
                 if "cpu_offload" in spec:
                     with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
                         ds_config = json.load(f)

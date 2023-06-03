@@ -471,6 +471,23 @@ class ModelingUtilsTester(unittest.TestCase):
         }
         self.assertDictEqual(device_map, expected)
 
+        # With weights ties in the same module
+        model = nn.Sequential(
+            OrderedDict(
+                [
+                    ("linear1", nn.Linear(4, 4)),
+                    ("linear2", nn.Linear(6, 6)),
+                    ("linear3", nn.Linear(4, 4)),
+                    ("linear4", nn.Linear(6, 6)),
+                ]
+            )
+        )
+        model.linear3.weight = model.linear1.weight
+        model.linear3.bias = model.linear1.bias
+        device_map = infer_auto_device_map(model, max_memory={0: 250, 1: 400})
+        expected = {"linear1": 0, "linear2": 1, "linear3": 0, "linear4": 1}
+        self.assertDictEqual(device_map, expected)
+
     @require_huggingface_suite
     def test_infer_auto_device_map_on_t0pp(self):
         from transformers import AutoConfig, AutoModelForSeq2SeqLM

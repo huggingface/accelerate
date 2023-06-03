@@ -731,8 +731,12 @@ def infer_auto_device_map(
                 current_memory_used += module_size_with_ties
                 device_map[name] = devices[current_device]
                 for tied_module_name in tied_module_names:
-                    tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if n == tied_module_name][0]
-                    modules_to_treat.pop(tied_module_index)
+                    if tied_module_name in [m[0] for m in modules_to_treat]:
+                        # The module may have been removed by a previous iteration of this loop.
+                        tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if n == tied_module_name][
+                            0
+                        ]
+                        modules_to_treat.pop(tied_module_index)
                     device_map[tied_module_name] = devices[current_device]
 
             else:

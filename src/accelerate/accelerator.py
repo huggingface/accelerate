@@ -25,6 +25,7 @@ import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
+from types import MethodType
 from typing import Any, Callable
 
 import torch
@@ -1159,6 +1160,16 @@ class Accelerator:
                     "it is efficient and recommended to call prepare for the model before creating the optimizer"
                 )
 
+        if self.distributed_type == DistributedType.DEEPSPEED:
+            model_count = 0
+            for obj in args:
+                if isinstance(obj, torch.nn.Module):
+                    model_count += 1
+            if model_count > 1:
+                raise AssertionError(
+                    "You can't use same `Accelerator()` instance with multiple models when using DeepSpeed"
+                )
+
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
@@ -1306,12 +1317,14 @@ class Accelerator:
         if self.native_amp:
             model._original_forward = model.forward
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
-                model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
+                model.forward = MethodType(torch.cuda.amp.autocast(dtype=torch.float16)(model.forward.__func__), model)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
-                model.forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward)
+                model.forward = MethodType(
+                    torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward.__func__), model
+                )
             else:
-                model.forward = torch.cuda.amp.autocast()(model.forward)
-            model.forward = convert_outputs_to_fp32(model.forward)
+                model.forward = MethodType(torch.cuda.amp.autocast()(model.forward.__func__), model)
+            model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
         elif self.mixed_precision == "fp8":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
@@ -1639,8 +1652,8 @@ class Accelerator:
 
     def _prepare_ipex(self, *args):
         if not is_ipex_available():
-            logger.warn(
-                "Trying to use IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
+            raise ImportError(
+                "IPEX is not installed or IPEX's version does not match current PyTorch version. Please refer"
                 " to https://github.com/intel/intel-extension-for-pytorch."
             )
         else:
@@ -1655,19 +1668,14 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
         if optimizer is not None and model is not None:
-            if is_ipex_available():
-                if is_xpu_available() and self.device.type == "xpu":
-                    model = model.to(self.device)
-                    model, optimizer = torch.xpu.optimize(model, optimizer=optimizer, inplace=True, level="O1")
-                    model.forward = torch.xpu.amp.autocast()(model.forward)
-                else:
-                    model, optimizer = ipex.optimize(model, optimizer=optimizer, inplace=True, level="O1")
-                    model.forward = torch.cpu.amp.autocast()(model.forward)
+            dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else torch.float32
+            if is_xpu_available() and self.device.type == "xpu":
+                model = model.to(self.device)
+                model, optimizer = torch.xpu.optimize(
+                    model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1"
+                )
             else:
-                if is_torch_version(">=", "1.10"):
-                    model.forward = torch.autocast(self.device.type)(model.forward)
-                else:
-                    model.forward = convert_outputs_to_fp32(model.forward)
+                model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
