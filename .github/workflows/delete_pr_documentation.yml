@@ -1,0 +1,17 @@
+name: Delete dev documentation (artifact)
+
+on:
+  workflow_run:
+    workflows: ["Delete dev documentation"]
+    types:
+      - completed
+
+
+jobs:
+  delete:
+    uses: huggingface/doc-builder/.github/workflows/delete_pr_documentation.yml@fix-token-issue
+    with:
+      pr_number: ${{ github.event.number }}
+      package_name: accelerate
+    secrets:
+      hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
