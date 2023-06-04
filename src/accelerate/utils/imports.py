@@ -210,6 +210,9 @@ def is_ipex_available():
 
 @lru_cache()
 def is_xpu_available(check_device=False):
+    "check if user disables it explicitly"
+    if not parse_flag_from_env("ACCELERATE_USE_XPU", default=True):
+        return False
     "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
     if is_ipex_available():
         import torch

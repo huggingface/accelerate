@@ -10,7 +10,6 @@ from .dataclasses import (
     GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
-    IntelPyTorchExtensionPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
