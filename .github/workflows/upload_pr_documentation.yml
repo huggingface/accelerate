@@ -13,4 +13,3 @@ jobs:
       package_name: accelerate
     secrets:
       hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
-      # token: ${{ secrets.HF_DOC_BUILD_PUSH }}
