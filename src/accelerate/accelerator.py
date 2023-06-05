@@ -1231,7 +1231,7 @@ class Accelerator:
                 any kind of mixed precision
             device_placement (`bool`, *optional*):
                 Whether or not to place the model on the proper device. Will default to `self.device_placement`.
-            apply_mixed_precision (`bool`, *optional*, defaults to `True`):
+            mixed_precision_only (`bool`, *optional*, defaults to `False`):
                 Whether or not to *only* apply mixed precision to the model, and not do any other model wrapping.
 
         Example:
