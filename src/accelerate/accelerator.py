@@ -25,7 +25,6 @@ import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
-from types import MethodType
 from typing import Any, Callable
 
 import torch
@@ -1220,7 +1219,7 @@ class Accelerator:
 
         return result if len(result) > 1 else result[0]
 
-    def prepare_model(self, model: torch.nn.Module, device_placement=None):
+    def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, apply_mixed_precision: bool = True):
         """
         Prepares a PyTorch model for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -1231,6 +1230,8 @@ class Accelerator:
                 any kind of mixed precision
             device_placement (`bool`, *optional*):
                 Whether or not to place the model on the proper device. Will default to `self.device_placement`.
+            apply_mixed_precision (`bool`, *optional*, defaults to `True`):
+                Whether or not to apply automatic mixed precision to the model based on `self.mixed_precision`.
 
         Example:
 
@@ -1314,39 +1315,9 @@ class Accelerator:
         elif self.distributed_type == DistributedType.MULTI_CPU:
             kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
             model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
-        if self.native_amp:
-            model._original_forward = model.forward
-            if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
-                model.forward = MethodType(torch.cuda.amp.autocast(dtype=torch.float16)(model.forward.__func__), model)
-            elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
-                model.forward = MethodType(
-                    torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward.__func__), model
-                )
-            else:
-                model.forward = MethodType(torch.cuda.amp.autocast()(model.forward.__func__), model)
-            model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
-        elif self.mixed_precision == "fp8":
-            if not has_transformer_engine_layers(model):
-                with torch.no_grad():
-                    convert_model(model)
-                model._converted_to_transformer_engine = True
-            model._original_forward = model.forward
-
-            kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
-            if "fp8_format" in kwargs:
-                kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
-            fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-            cuda_device_capacity = torch.cuda.get_device_capability()
-            fp8_enabled = cuda_device_capacity[0] >= 9 or (
-                cuda_device_capacity[0] == 8 and cuda_device_capacity[1] >= 9
-            )
-            if not fp8_enabled:
-                logger.warn(
-                    f"The current device has compute capability of {cuda_device_capacity} which is "
-                    "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
-                    "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
-                )
-            model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
+        if apply_mixed_precision:
+            # The check for if mixed precision should be done is in `prepare_mixed_precision`
+            model = self.prepare_mixed_precision(model)
         if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
             model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
@@ -1682,6 +1653,55 @@ class Accelerator:
             elif isinstance(result[i], (torch.optim.Optimizer)):
                 result[i] = optimizer
         return tuple(result)
+
+    def prepare_mixed_precision(self, model: torch.nn.Module):
+        """
+        Args:
+        Prepares a PyTorch model automatic mixed precision by wrapping it's forward layer and converting its output
+        layer to fp32. It is recommended to use [`Accelerator.prepare`] instead.
+            model (`torch.nn.Module`):
+                A PyTorch model to convert to mixed precision
+        Example:
+        ```python
+        >>> import torch
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator(mixed_precision="fp16")
+        >>> model = MyModel()
+        >>> model = accelerator.prepare_mixed_precision(model)
+        ```
+        """
+        if self.native_amp:
+            model._original_forward = model.forward
+            if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
+                model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
+            elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
+                model.forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward)
+            else:
+                model.forward = torch.cuda.amp.autocast()(model.forward)
+            model.forward = convert_outputs_to_fp32(model.forward)
+        elif self.mixed_precision == "fp8":
+            if not has_transformer_engine_layers(model):
+                with torch.no_grad():
+                    convert_model(model)
+                model._converted_to_transformer_engine = True
+            model._original_forward = model.forward
+
+            kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
+            if "fp8_format" in kwargs:
+                kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
+            fp8_recipe = te_recipe.DelayedScaling(**kwargs)
+            cuda_device_capacity = torch.cuda.get_device_capability()
+            fp8_enabled = cuda_device_capacity[0] >= 9 or (
+                cuda_device_capacity[0] == 8 and cuda_device_capacity[1] >= 9
+            )
+            if not fp8_enabled:
+                logger.warn(
+                    f"The current device has compute capability of {cuda_device_capacity} which is "
+                    "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
+                    "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
+                )
+            model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
 
     def prepare_data_loader(self, data_loader: torch.utils.data.DataLoader, device_placement=None):
         """
