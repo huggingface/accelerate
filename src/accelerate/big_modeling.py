@@ -469,15 +469,15 @@ def load_checkpoint_and_dispatch(
             "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
             "'sequential'."
         )
-    if device_map != "sequential":
-        max_memory = get_balanced_memory(
-            model,
-            max_memory=max_memory,
-            no_split_module_classes=no_split_module_classes,
-            dtype=dtype,
-            low_zero=(device_map == "balanced_low_0"),
-        )
     if isinstance(device_map, str):
+        if device_map != "sequential":
+            max_memory = get_balanced_memory(
+                model,
+                max_memory=max_memory,
+                no_split_module_classes=no_split_module_classes,
+                dtype=dtype,
+                low_zero=(device_map == "balanced_low_0"),
+            )
         device_map = infer_auto_device_map(
             model, max_memory=max_memory, no_split_module_classes=no_split_module_classes, dtype=dtype
         )
