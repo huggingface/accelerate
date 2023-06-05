@@ -233,6 +233,59 @@ class FindTiedParametersResult(list):
         return sum([x[1:] for x in self], [])
 
 
+def check_tied_parameters(model: nn.Module):
+    """
+    Check if there is any indication in the given model that some weights should be tied.
+
+    Args:
+        model (nn.Module): The model to inspect
+
+    Returns:
+        bool: True if the model needs to have tied weights
+    """
+
+    # based on model.tie_weights() method
+    return any(
+        [
+            getattr(model.config, "tie_word_embeddings", True) and model.get_output_embeddings(),
+            getattr(model.config, "is_encoder_decoder", False) and getattr(model.config, "tie_encoder_decoder", False),
+            any(hasattr(module, "_tie_weights") for module in model.modules()),
+        ]
+    )
+
+
+def _get_param_device(param, device_map):
+    if param in device_map:
+        return device_map[param]
+    parent_param = ".".join(param.split(".")[:-1])
+    if parent_param == param:
+        raise ValueError(f"The device_map was do not contain the module {param}.")
+    else:
+        return _get_param_device(parent_param, device_map)
+
+
+def check_tied_parameters_on_same_device(tied_params, device_map):
+    """
+    Check if tied parameters are on the same device
+
+    Args:
+        tied_params (List[List[str]]):  A list of lists of parameter names being all tied together
+        device_map (Dict[str, Union[int, str, torch.device]]): mapping between the parameters and the devices
+
+    Raises:
+        RuntimeError: If we found tied parameters in different devices
+    """
+    for tie_param in tied_params:
+        tie_param_devices = {}
+        for param in tie_param:
+            tie_param_devices[param] = _get_param_device(param, device_map)
+        if len(set(tie_param_devices.values())) > 1:
+            raise RuntimeError(
+                f"Tied parameters are in different devices: {tie_param_devices}."
+                "Please modify your custom device map or set device_map = 'auto' "
+            )
+
+
 def find_tied_parameters(model: nn.Module, **kwargs):
     """
     Find the tied parameters in a given model.
@@ -627,6 +680,12 @@ def infer_auto_device_map(
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     tied_parameters = find_tied_parameters(model)
 
+    if check_tied_parameters(model):
+        if len(tied_parameters) == 0:
+            raise RuntimeError(
+                "The model weights are not tied. Please run model.tie_weights() before using infer_auto_device."
+            )
+
     device_map = {}
     current_device = 0
     current_memory_used = 0
@@ -951,6 +1010,15 @@ def load_checkpoint_in_model(
             Whether or not to include the buffers in the weights offloaded to disk.
     """
     tied_params = find_tied_parameters(model)
+
+    if check_tied_parameters(model):
+        if len(tied_params) == 0:
+            raise RuntimeError(
+                "The model weights are not tied. Please run model.tie_weights() before using infer_auto_device."
+            )
+
+    check_tied_parameters_on_same_device()
+
     if offload_folder is None and device_map is not None and "disk" in device_map.values():
         raise ValueError(
             "At least one of the model submodule will be offloaded to disk, please pass along an `offload_folder`."
