@@ -1260,9 +1260,9 @@ class Accelerator:
             model_devices = set(model.hf_device_map.values())
             if len(model_devices) > 1 and self.distributed_type == DistributedType.MULTI_GPU:
                 raise ValueError(
-                    "You can't train a model that has been loaded in 8-bit precision on multiple devices in a multi-GPU setup (to use DDP)."
+                    "You can't train a model that has been loaded in 8-bit precision on multiple devices in any distributed mode."
                     " In order to use 8-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
-                    " Therefore you should not specify that you are under mutli GPU regime in your accelerate config."
+                    " Therefore you should not specify that you are under any distributed regime in your accelerate config."
                 )
             current_device = list(model_devices)[0]
             current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
