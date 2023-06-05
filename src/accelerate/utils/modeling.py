@@ -263,7 +263,7 @@ def _get_param_device(param, device_map):
         return device_map[param]
     parent_param = ".".join(param.split(".")[:-1])
     if parent_param == param:
-        raise ValueError(f"The device_map was do not contain the module {param}.")
+        raise ValueError(f"The `device_map` does not contain the module {param}.")
     else:
         return _get_param_device(parent_param, device_map)
 
@@ -285,8 +285,8 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
             tie_param_devices[param] = _get_param_device(param, device_map)
         if len(set(tie_param_devices.values())) > 1:
             raise RuntimeError(
-                f"Tied parameters are in different devices: {tie_param_devices}. "
-                "Please modify your custom device map or set device_map = 'auto'. "
+                f"Tied parameters are on different devices: {tie_param_devices}. "
+                "Please modify your custom device map or set `device_map='auto'`. "
             )
 
 
