@@ -30,7 +30,7 @@ import torch.nn as nn
 
 from ..state import AcceleratorState
 from .dataclasses import DistributedType
-from .imports import is_safetensors_available, is_torch_version, is_transformers_available, is_xpu_available
+from .imports import is_safetensors_available, is_torch_version, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -38,9 +38,6 @@ from .tqdm import is_tqdm_available, tqdm
 if is_safetensors_available():
     from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
-
-if is_transformers_available():
-    import transformers
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
@@ -253,7 +250,7 @@ def check_tied_parameters_in_config(model: nn.Module):
     has_tied_encoder_decoder = False
     has_tied_module = False
 
-    if transformers.modeling_utils.PreTrainedModel in inspect.getmro(model.__class__):
+    if "PreTrainedModel" in [c.__name__ for c in inspect.getmro(model.__class__)]:
         has_tied_word_embedding = (
             hasattr(model, "config")
             and getattr(model.config, "tie_word_embeddings", False)
