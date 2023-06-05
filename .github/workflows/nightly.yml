@@ -76,6 +76,7 @@ jobs:
           source activate accelerate
           make test_core
           make test_big_modeling
+          make test_cli
 
       - name: Run Integration tests on GPUs
         run: |
