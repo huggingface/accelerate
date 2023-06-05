@@ -25,6 +25,7 @@ import warnings
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
+from types import MethodType
 from typing import Any, Callable
 
 import torch
@@ -1674,12 +1675,14 @@ class Accelerator:
         if self.native_amp:
             model._original_forward = model.forward
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
-                model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
+                model.forward = MethodType(torch.cuda.amp.autocast(dtype=torch.float16)(model.forward.__func__), model)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
-                model.forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward)
+                model.forward = MethodType(
+                    torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward.__func__), model
+                )
             else:
-                model.forward = torch.cuda.amp.autocast()(model.forward)
-            model.forward = convert_outputs_to_fp32(model.forward)
+                model.forward = MethodType(torch.cuda.amp.autocast()(model.forward.__func__), model)
+            model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
         elif self.mixed_precision == "fp8":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
