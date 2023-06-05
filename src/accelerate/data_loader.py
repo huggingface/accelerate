@@ -561,6 +561,9 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
                 # We keep at least num processes elements of the first batch to be able to complete the last batch
                 first_batch = slice_tensors(batch, slice(0, self.state.num_processes))
 
+            if batch is None:
+                raise ValueError(f'Batch does not contain any data (`{batch}`). At the end of all iterable data available before expected stop iteration.')
+
             observed_batch_size = find_batch_size(batch)
             batch_size = observed_batch_size // self.state.num_processes
 
