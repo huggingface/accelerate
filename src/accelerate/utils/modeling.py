@@ -281,8 +281,8 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
             tie_param_devices[param] = _get_param_device(param, device_map)
         if len(set(tie_param_devices.values())) > 1:
             raise RuntimeError(
-                f"Tied parameters are in different devices: {tie_param_devices}."
-                "Please modify your custom device map or set device_map = 'auto' "
+                f"Tied parameters are in different devices: {tie_param_devices}. "
+                "Please modify your custom device map or set device_map = 'auto'. "
             )
 
 
