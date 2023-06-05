@@ -680,11 +680,10 @@ def infer_auto_device_map(
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     tied_parameters = find_tied_parameters(model)
 
-    if check_tied_parameters(model):
-        if len(tied_parameters) == 0:
-            raise RuntimeError(
-                "The model weights are not tied. Please run model.tie_weights() before using infer_auto_device."
-            )
+    if check_tied_parameters(model) and len(tied_parameters) == 0:
+        raise RuntimeError(
+            "The model weights are not tied. Please run model.tie_weights() before using infer_auto_device."
+        )
 
     device_map = {}
     current_device = 0
@@ -1011,11 +1010,10 @@ def load_checkpoint_in_model(
     """
     tied_params = find_tied_parameters(model)
 
-    if check_tied_parameters(model):
-        if len(tied_params) == 0:
-            raise RuntimeError(
-                "The model weights are not tied. Please run model.tie_weights() before using infer_auto_device."
-            )
+    if check_tied_parameters(model) and len(tied_params) == 0:
+        raise RuntimeError(
+            "The model weights are not tied. Please run model.tie_weights() before using infer_auto_device."
+        )
 
     check_tied_parameters_on_same_device()
 
