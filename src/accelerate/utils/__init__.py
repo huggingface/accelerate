@@ -48,7 +48,7 @@ from .imports import (
 from .modeling import (
     CustomDtype,
     check_device_map,
-    check_tied_parameters,
+    check_tied_parameters_in_config,
     check_tied_parameters_on_same_device,
     compute_module_sizes,
     convert_file_size_to_int,
