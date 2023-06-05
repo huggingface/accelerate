@@ -202,6 +202,7 @@ class AcceleratorTester(AccelerateTestCase):
             model = AutoModelForCausalLM.from_pretrained(
                 "EleutherAI/gpt-neo-125m",
             )
+            model.tie_weights()
             device_map = infer_auto_device_map(model)
             device_map["lm_head"] = "cpu"
 
@@ -223,6 +224,7 @@ class AcceleratorTester(AccelerateTestCase):
             model = AutoModelForCausalLM.from_pretrained(
                 "EleutherAI/gpt-neo-125m",
             )
+            model.tie_weights()
             device_map = infer_auto_device_map(model)
             device_map["lm_head"] = 1
 
