@@ -247,10 +247,10 @@ def check_tied_parameters(model: nn.Module):
     # based on model.tie_weights() method
     return any(
         [
-            hasattr(model.config, True)
+            hasattr(model,"config")
             and getattr(model.config, "tie_word_embeddings", False)
             and model.get_output_embeddings(),
-            hasattr(model.config, True)
+            hasattr(model,"config")
             and getattr(model.config, "is_encoder_decoder", False)
             and getattr(model.config, "tie_encoder_decoder", False),
             any(hasattr(module, "_tie_weights") for module in model.modules()),
