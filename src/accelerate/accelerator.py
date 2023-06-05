@@ -1705,6 +1705,7 @@ class Accelerator:
                     "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                 )
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
+        return model
 
     def prepare_data_loader(self, data_loader: torch.utils.data.DataLoader, device_placement=None):
         """
