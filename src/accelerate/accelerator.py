@@ -70,7 +70,6 @@ from .utils import (
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
-    is_mps_available,
     is_torch_version,
     is_tpu_available,
     is_xpu_available,
@@ -419,7 +418,7 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if not torch.cuda.is_available() and not is_mps_available():
+            if self.device.type not in ("cuda", "mps"):
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
