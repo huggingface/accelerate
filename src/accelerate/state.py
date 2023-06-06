@@ -239,7 +239,12 @@ class PartialState:
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = local_rank
                 if self.device is None:
-                    self.device = torch.device("cpu") if cpu else self.default_device
+                    if not cpu and is_xpu_available():
+                        self.device = torch.device("xpu", self.local_process_index)
+                        if self.device is not None:
+                            torch.xpu.set_device(self.device)
+                    else:
+                        self.device = torch.device("cpu") if cpu else self.default_device
             else:
                 self.distributed_type = DistributedType.NO
                 self.num_processes = 1
