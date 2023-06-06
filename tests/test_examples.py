@@ -208,7 +208,7 @@ class FeatureExamplesTests(TempDirTestCase):
             testargs = f"""
             examples/by_feature/tracking.py
             --with_tracking
-            --logging_dir {tmpdir}
+            --project_dir {tmpdir}
             """.split()
             run_command(self._launch_args + testargs)
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
