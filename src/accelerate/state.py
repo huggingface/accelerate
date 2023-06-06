@@ -180,7 +180,7 @@ class PartialState:
                         if self.device is not None:
                             torch.cuda.set_device(self.device)
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
-            elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
+            elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu and torch.cuda.is_available():
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
                     self.backend = kwargs.pop("backend", "nccl")
