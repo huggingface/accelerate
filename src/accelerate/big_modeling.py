@@ -455,6 +455,10 @@ def load_checkpoint_and_dispatch(
     >>> config = AutoConfig.from_pretrained(checkpoint)
     >>> with init_empty_weights():
     ...     model = AutoModelForCausalLM.from_config(config)
+    from accelerate.utils.modeling import infer_auto_device_map
+device_map = infer_auto_device_map(model, no_split_module_classes=["GPT2Block"])
+print(device_map)
+
 
     >>> # Load the checkpoint and dispatch it to the right devices
     >>> model = load_checkpoint_and_dispatch(
