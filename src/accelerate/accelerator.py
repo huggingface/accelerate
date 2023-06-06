@@ -49,7 +49,6 @@ from .utils import (
     GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
-    IntelPyTorchExtensionPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
@@ -165,9 +164,6 @@ class Accelerator:
         megatron_lm_plugin (`MegatronLMPlugin`, *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
-        ipex_plugin (`IntelExtensionPlugin`, *optional*):
-            Tweak your Intel Extension for PyTorch related args using this argument for CPU and XPU. This argument is
-            optional and can be configured directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -239,7 +235,6 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
-        ipex_plugin: IntelPyTorchExtensionPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
         project_dir: str | os.PathLike | None = None,
@@ -323,13 +318,6 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
-        if is_ipex_available():
-            if ipex_plugin is None:  # init from env variables
-                ipex_plugin = IntelPyTorchExtensionPlugin()
-            else:
-                if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
-                    raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
-
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -369,7 +357,6 @@ class Accelerator:
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
-            ipex_plugin=ipex_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -1191,9 +1178,9 @@ class Accelerator:
             old_named_params = self._get_named_parameters(*args)
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-            if self.device.type == "cpu" and self.state.ipex_plugin is not None:
+            if self.device.type == "cpu" and self.state.use_ipex:
                 args = self._prepare_ipex(*args)
-            elif self.device.type == "xpu" and self.state.ipex_plugin is not None and is_xpu_available():
+            elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
@@ -1220,7 +1207,7 @@ class Accelerator:
 
         return result if len(result) > 1 else result[0]
 
-    def prepare_model(self, model: torch.nn.Module, device_placement=None):
+    def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, mixed_precision_only: bool = False):
         """
         Prepares a PyTorch model for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -1231,6 +1218,8 @@ class Accelerator:
                 any kind of mixed precision
             device_placement (`bool`, *optional*):
                 Whether or not to place the model on the proper device. Will default to `self.device_placement`.
+            mixed_precision_only (`bool`, *optional*, defaults to `False`):
+                Whether or not to *only* apply mixed precision to the model, and not do any other model wrapping.
 
         Example:
 
@@ -1246,7 +1235,6 @@ class Accelerator:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
         # We check only for models loaded with `accelerate`
-
         # Checks if any of the child module has the attribute `hf_device_map`.
         has_hf_device_map = False
         for m in model.modules():
@@ -1258,9 +1246,11 @@ class Accelerator:
             model, "hf_device_map", False
         ):
             model_devices = set(model.hf_device_map.values())
-            if len(model_devices) > 1:
+            if len(model_devices) > 1 and self.distributed_type != DistributedType.NO:
                 raise ValueError(
-                    "You can't train a model that has been loaded in 8-bit precision on multiple devices."
+                    "You can't train a model that has been loaded in 8-bit precision on multiple devices in any distributed mode."
+                    " In order to use 8-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
+                    " Therefore you should not specify that you are under any distributed regime in your accelerate config."
                 )
             current_device = list(model_devices)[0]
             current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
@@ -1281,39 +1271,40 @@ class Accelerator:
         elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
 
-        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
-            if any(p.requires_grad for p in model.parameters()):
-                kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
-                model = torch.nn.parallel.DistributedDataParallel(
-                    model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
-                )
-        elif self.distributed_type == DistributedType.FSDP:
-            from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+        if not mixed_precision_only:
+            if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
+                if any(p.requires_grad for p in model.parameters()):
+                    kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                    model = torch.nn.parallel.DistributedDataParallel(
+                        model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
+                    )
+            elif self.distributed_type == DistributedType.FSDP:
+                from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
-            # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
-            # don't wrap it again
-            if type(model) != FSDP:
-                self.state.fsdp_plugin.set_auto_wrap_policy(model)
-                fsdp_plugin = self.state.fsdp_plugin
-                kwargs = {
-                    "sharding_strategy": fsdp_plugin.sharding_strategy,
-                    "cpu_offload": fsdp_plugin.cpu_offload,
-                    "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
-                    "backward_prefetch": fsdp_plugin.backward_prefetch,
-                    "mixed_precision": fsdp_plugin.mixed_precision_policy,
-                    "ignored_modules": fsdp_plugin.ignored_modules,
-                    "device_id": self.device,
-                }
-                signature = inspect.signature(FSDP.__init__).parameters.keys()
-                if "limit_all_gathers" in signature:
-                    kwargs["limit_all_gathers"] = fsdp_plugin.limit_all_gathers
-                if "use_orig_params" in signature:
-                    kwargs["use_orig_params"] = fsdp_plugin.use_orig_params
-                model = FSDP(model, **kwargs)
-            self._models[-1] = model
-        elif self.distributed_type == DistributedType.MULTI_CPU:
-            kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
-            model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
+                # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
+                # don't wrap it again
+                if type(model) != FSDP:
+                    self.state.fsdp_plugin.set_auto_wrap_policy(model)
+                    fsdp_plugin = self.state.fsdp_plugin
+                    kwargs = {
+                        "sharding_strategy": fsdp_plugin.sharding_strategy,
+                        "cpu_offload": fsdp_plugin.cpu_offload,
+                        "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
+                        "backward_prefetch": fsdp_plugin.backward_prefetch,
+                        "mixed_precision": fsdp_plugin.mixed_precision_policy,
+                        "ignored_modules": fsdp_plugin.ignored_modules,
+                        "device_id": self.device,
+                    }
+                    signature = inspect.signature(FSDP.__init__).parameters.keys()
+                    if "limit_all_gathers" in signature:
+                        kwargs["limit_all_gathers"] = fsdp_plugin.limit_all_gathers
+                    if "use_orig_params" in signature:
+                        kwargs["use_orig_params"] = fsdp_plugin.use_orig_params
+                    model = FSDP(model, **kwargs)
+                self._models[-1] = model
+            elif self.distributed_type == DistributedType.MULTI_CPU:
+                kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
             model._original_forward = model.forward
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
@@ -1347,13 +1338,14 @@ class Accelerator:
                     "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                 )
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
-        if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
-            model = xmp.MpModelWrapper(model).to(self.device)
-        # torch.compile should be called last.
-        if self.state.dynamo_plugin.backend != DynamoBackend.NO:
-            if not is_torch_version(">=", "2.0"):
-                raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
-            model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+        if not mixed_precision_only:
+            if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
+                model = xmp.MpModelWrapper(model).to(self.device)
+            # torch.compile should be called last.
+            if self.state.dynamo_plugin.backend != DynamoBackend.NO:
+                if not is_torch_version(">=", "2.0"):
+                    raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
+                model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
     def _prepare_deepspeed(self, *args):
@@ -1669,7 +1661,7 @@ class Accelerator:
                 optimizer = obj
         if optimizer is not None and model is not None:
             dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else torch.float32
-            if is_xpu_available() and self.device.type == "xpu":
+            if self.device.type == "xpu" and is_xpu_available():
                 model = model.to(self.device)
                 model, optimizer = torch.xpu.optimize(
                     model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1"

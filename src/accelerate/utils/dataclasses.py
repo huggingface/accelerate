@@ -1352,10 +1352,3 @@ class MegatronLMPlugin:
                 self.megatron_lm_default_args[key] = True
             elif key.startswith("no_log_"):
                 self.megatron_lm_default_args[key.replace("no_", "")] = True
-
-
-@dataclass
-class IntelPyTorchExtensionPlugin:
-    """
-    This plugin is used to enable Intel PyTorch Extension (IPEX).
-    """

@@ -404,11 +404,8 @@ def training_check():
     # IPEX support is only for CPU
     if is_ipex_available():
         print("ipex BF16 training check.")
-        from accelerate.utils.dataclasses import IntelPyTorchExtensionPlugin
-
         AcceleratorState._reset_state()
-        ipex_plugin = IntelPyTorchExtensionPlugin()
-        accelerator = Accelerator(mixed_precision="bf16", cpu=True, ipex_plugin=ipex_plugin)
+        accelerator = Accelerator(mixed_precision="bf16", cpu=True)
         train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -431,11 +428,8 @@ def training_check():
     # XPU support is only for XPU
     if is_xpu_available():
         print("xpu BF16 training check.")
-        from accelerate.utils.dataclasses import IntelPyTorchExtensionPlugin
-
         AcceleratorState._reset_state()
-        ipex_plugin = IntelPyTorchExtensionPlugin()
-        accelerator = Accelerator(mixed_precision="bf16", cpu=False, ipex_plugin=ipex_plugin)
+        accelerator = Accelerator(mixed_precision="bf16", cpu=False)
         train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)

@@ -100,12 +100,9 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     current_env["ACCELERATE_DYNAMO_USE_DYNAMIC"] = str(args.dynamo_use_dynamic)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
-
     if is_ipex_available():
-        if (args.cpu or args.use_cpu) and args.ipex:
-            current_env["ACCELERATE_USE_IPEX"] = str(args.ipex).lower()
-        elif args.use_xpu and is_xpu_available():
-            current_env["ACCELERATE_USE_XPU"] = str(args.use_xpu).lower()
+        current_env["ACCELERATE_USE_IPEX"] = str(args.ipex).lower()
+        current_env["ACCELERATE_USE_XPU"] = str(args.use_xpu).lower()
     return cmd, current_env
 
 
