@@ -284,7 +284,7 @@ class BigModelingTester(unittest.TestCase):
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
-            
+
     @require_mps
     def test_dispatch_model_mps(self):
         model = ModelForTest()
@@ -389,7 +389,7 @@ class BigModelingTester(unittest.TestCase):
     @require_mps
     def test_dispatch_model_with_unused_submodules_mps(self):
         model = ModelWithUnusedSubModulesForTest()
-        device_map = {"linear1": "mps", "linear2": "mps", "batchnorm": "mps", "linear3":"mps", "linear4": "disk"}
+        device_map = {"linear1": "mps", "linear2": "mps", "batchnorm": "mps", "linear3": "mps", "linear4": "disk"}
 
         x = torch.randn(2, 3)
         expected = model(x)
@@ -400,7 +400,7 @@ class BigModelingTester(unittest.TestCase):
             )
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
-            
+
     @require_multi_gpu
     def test_dispatch_model_with_unused_submodules_multi_gpu(self):
         model = ModelWithUnusedSubModulesForTest()
@@ -451,7 +451,9 @@ class BigModelingTester(unittest.TestCase):
             torch.save(model.state_dict(), checkpoint)
 
             new_model = ModelForTest()
-            new_model = load_checkpoint_and_dispatch(new_model, checkpoint, device_map=device_map, offload_folder=tmp_dir)
+            new_model = load_checkpoint_and_dispatch(
+                new_model, checkpoint, device_map=device_map, offload_folder=tmp_dir
+            )
 
             # CPU-offloaded weights are on the meta device while waiting for the forward pass.
             self.assertEqual(new_model.linear1.weight.device, torch.device("mps:0"))
@@ -509,11 +511,11 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
-    
-    @require_mps 
+
+    @require_mps
     def test_load_checkpoint_and_dispatch_with_unused_submodules_mps(self):
         model = ModelWithUnusedSubModulesForTest()
-        device_map = {"linear1": "mps", "linear2": "mps", "batchnorm":"mps", "linear3": "disk", "linear4": "disk"}
+        device_map = {"linear1": "mps", "linear2": "mps", "batchnorm": "mps", "linear3": "disk", "linear4": "disk"}
 
         x = torch.randn(2, 3)
         expected = model(x)
@@ -524,7 +526,11 @@ class BigModelingTester(unittest.TestCase):
 
             new_model = ModelWithUnusedSubModulesForTest()
             new_model = load_checkpoint_and_dispatch(
-                new_model, checkpoint, device_map=device_map, preload_module_classes=["ModuleWithUnusedSubModules"],offload_folder=tmp_dir
+                new_model,
+                checkpoint,
+                device_map=device_map,
+                preload_module_classes=["ModuleWithUnusedSubModules"],
+                offload_folder=tmp_dir,
             )
 
             # CPU-offloaded weights are on the meta device while waiting for the forward pass.
