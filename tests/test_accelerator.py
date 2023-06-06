@@ -241,6 +241,29 @@ class AcceleratorTester(AccelerateTestCase):
 
         PartialState._reset_state()
 
+    @slow
+    @require_multi_gpu
+    def test_accelerator_bnb_multi_gpu_no_distributed(self):
+        """Tests that the accelerator can be used with the BNB library."""
+        from transformers import AutoModelForCausalLM
+
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_pretrained(
+                "EleutherAI/gpt-neo-125m",
+            )
+            device_map = infer_auto_device_map(model)
+            device_map["lm_head"] = 1
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "EleutherAI/gpt-neo-125m",
+            load_in_8bit=True,
+            device_map=device_map,
+        )
+        accelerator = Accelerator()
+
+        # This should work
+        _ = accelerator.prepare(model)
+
     @require_cuda
     def test_accelerator_cpu_flag_prepare(self):
         model = torch.nn.Linear(10, 10)
