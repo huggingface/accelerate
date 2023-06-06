@@ -694,8 +694,10 @@ def infer_auto_device_map(
     # Devices that need to keep space for a potential offloaded layer.
     if "mps" in gpus:
         main_devices = ["mps"]
+    elif len(gpus) > 0:
+        main_devices = [gpus[0], "cpu"] if len(gpus) > 0
     else:
-        main_devices = [gpus[0], "cpu"] if len(gpus) > 0 else ["cpu"]
+        main_devices = ["cpu"]
 
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     tied_parameters = find_tied_parameters(model)
