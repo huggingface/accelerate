@@ -36,7 +36,7 @@ from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_b
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, GradientState, PartialState, parse_flag_from_env
+from .state import AcceleratorState, GradientState, PartialState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
@@ -70,6 +70,7 @@ from .utils import (
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
+    is_mps_available,
     is_torch_version,
     is_tpu_available,
     is_xpu_available,
@@ -418,7 +419,7 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if not torch.cuda.is_available() and not parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE"):
+            if not torch.cuda.is_available() and not is_mps_available():
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
