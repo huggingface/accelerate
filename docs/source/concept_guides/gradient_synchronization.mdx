@@ -46,7 +46,7 @@ In DDP (distributed data parallel), the specific order in which processes are pe
 at specific points and these must also occur at roughly the same time before moving on.
 
 The most direct example is when you update all of the parameters in a model through `.backward()`. All instances of the model
-need to have updated their gradients, collated, and updated again before moving onto the next batch of data. But when performing 
+need to have updated their gradients, collated, and updated again before moving on to the next batch of data. But when performing 
 gradient accumulation, you accumulate `n` losses and skip `.backward()` until `n` batches have been reached. This 
 can cause a significant slowdown since all the processes need to communicate with them more times than needed. How 
 can you avoid this overhead?
@@ -120,7 +120,7 @@ As a result, you should either use *`accelerator.accumulate` or `accelerator.no_
 
 ## Just how much of a slowdown is there, and easy mistakes you can make
 
-To setup a realistic example, consider the following setup:
+To set up a realistic example, consider the following setup:
 
 * Two single-GPU T4 nodes and one node with two GPUs
 * Each GPU is a T4, and are hosted on GCP
@@ -130,7 +130,7 @@ To setup a realistic example, consider the following setup:
 All scripts are available in [this repository](https://github.com/muellerzr/timing_experiments).
 
 If not careful about gradient synchronization and GPU communication, a *large* amount of time can be wasted 
-from when these GPUs communicate to each other during unnessisary periods.
+from when these GPUs communicate to each other during unnecessary periods.
 
 By how much?
 
@@ -147,7 +147,7 @@ Below are the average seconds per batch iterating over 29 batches of data for ea
 | Multi-Node  | 2±0.01s    | 2.13±0.08s | **0.91±0.11s** | **0.91±0.11s** |
 | Single Node | 0.50±0.01s | 0.50±0.01s | **0.41±0.015s** | **0.41±0.015s** |
 
-As you can see, if you are not careful about how you setup your gradient synchronization, you can get upwards of more than a 2x slowdown during training!
+As you can see, if you are not careful about how you set up your gradient synchronization, you can get upwards of more than a 2x slowdown during training!
 
 If you are worried about making sure everything is done properly, we highly recommend utilizing the [`~Accelerator.accumulate`] function and passing in
 `gradient_accumulation_steps` or `gradient_accumulation_plugin` to the [`Accelerator`] object so Accelerate can handle this for you.
