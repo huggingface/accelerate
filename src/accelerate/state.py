@@ -33,6 +33,7 @@ from .utils import (
     is_ccl_available,
     is_deepspeed_available,
     is_fp8_available,
+    is_ipex_available,
     is_mps_available,
     is_tpu_available,
     is_xpu_available,
@@ -669,7 +670,6 @@ class AcceleratorState:
         deepspeed_plugin=None,
         fsdp_plugin=None,
         megatron_lm_plugin=None,
-        ipex_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -682,7 +682,6 @@ class AcceleratorState:
         self._check_initialized(mixed_precision, cpu)
         if not self.initialized:
             self.deepspeed_plugin = None
-            self.ipex_plugin = None
             mixed_precision = (
                 parse_choice_from_env("ACCELERATE_MIXED_PRECISION", "no")
                 if mixed_precision is None
@@ -721,12 +720,11 @@ class AcceleratorState:
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-                if (
-                    self.device.type == "cpu"
-                    or (self.device.type == "xpu" and is_xpu_available())
-                    and ipex_plugin is not None
-                ):
-                    self.ipex_plugin = ipex_plugin
+                if is_ipex_available():
+                    "check if user disables it explicitly"
+                    self.use_ipex = parse_flag_from_env("ACCELERATE_USE_IPEX", default=True)
+                else:
+                    self.use_ipex = False
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"

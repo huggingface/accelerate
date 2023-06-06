@@ -49,7 +49,6 @@ from .utils import (
     GradientAccumulationPlugin,
     GradScalerKwargs,
     InitProcessGroupKwargs,
-    IntelPyTorchExtensionPlugin,
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
@@ -165,9 +164,6 @@ class Accelerator:
         megatron_lm_plugin (`MegatronLMPlugin`, *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
-        ipex_plugin (`IntelExtensionPlugin`, *optional*):
-            Tweak your Intel Extension for PyTorch related args using this argument for CPU and XPU. This argument is
-            optional and can be configured directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
             dataloaders. Should be one or several of:
@@ -239,7 +235,6 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
-        ipex_plugin: IntelPyTorchExtensionPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
         project_dir: str | os.PathLike | None = None,
@@ -323,13 +318,6 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
-        if is_ipex_available():
-            if ipex_plugin is None:  # init from env variables
-                ipex_plugin = IntelPyTorchExtensionPlugin()
-            else:
-                if not isinstance(ipex_plugin, IntelPyTorchExtensionPlugin):
-                    raise TypeError("`ipex_plugin` must be a IntelPyTorchExtensionPlugin object.")
-
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -369,7 +357,6 @@ class Accelerator:
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
-            ipex_plugin=ipex_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -1191,9 +1178,9 @@ class Accelerator:
             old_named_params = self._get_named_parameters(*args)
 
         if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-            if self.device.type == "cpu" and self.state.ipex_plugin is not None:
+            if self.device.type == "cpu" and self.state.use_ipex:
                 args = self._prepare_ipex(*args)
-            elif self.device.type == "xpu" and self.state.ipex_plugin is not None and is_xpu_available():
+            elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
@@ -1674,7 +1661,7 @@ class Accelerator:
                 optimizer = obj
         if optimizer is not None and model is not None:
             dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else torch.float32
-            if is_xpu_available() and self.device.type == "xpu":
+            if self.device.type == "xpu" and is_xpu_available():
                 model = model.to(self.device)
                 model, optimizer = torch.xpu.optimize(
                     model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1"
