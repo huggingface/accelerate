@@ -36,7 +36,7 @@ from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_b
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
-from .state import AcceleratorState, GradientState, PartialState, parse_flag_from_env
+from .state import AcceleratorState, GradientState, PartialState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
@@ -239,7 +239,6 @@ class Accelerator:
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
         project_dir: str | os.PathLike | None = None,
         project_config: ProjectConfiguration | None = None,
-        logging_dir: str | os.PathLike | None = None,
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
         dispatch_batches: bool | None = None,
         even_batches: bool = True,
@@ -251,13 +250,6 @@ class Accelerator:
             self.project_configuration = project_config
         else:
             self.project_configuration = ProjectConfiguration(project_dir=project_dir)
-
-        if logging_dir is not None:
-            warnings.warn(
-                "`logging_dir` is deprecated and will be removed in version 0.18.0 of 🤗 Accelerate. Use `project_dir` instead.",
-                FutureWarning,
-            )
-            self.project_configuration.logging_dir = logging_dir
         if project_dir is not None and self.project_dir is None:
             self.project_configuration.project_dir = project_dir
         if mixed_precision is not None:
@@ -413,7 +405,7 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if not torch.cuda.is_available() and not parse_flag_from_env("ACCELERATE_USE_MPS_DEVICE"):
+            if self.device.type not in ("cuda", "mps"):
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:

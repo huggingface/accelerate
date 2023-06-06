@@ -75,7 +75,7 @@ def training_function(config, args):
     # Initialize accelerator
     if args.with_tracking:
         accelerator = Accelerator(
-            cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all", logging_dir=args.logging_dir
+            cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="all", project_dir=args.project_dir
         )
     else:
         accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
@@ -305,10 +305,10 @@ def main():
         help="Whether to load in all available experiment trackers from the environment and use them for logging.",
     )
     parser.add_argument(
-        "--logging_dir",
+        "--project_dir",
         type=str,
         default="logs",
-        help="Location on where to store experiment tracking logs`",
+        help="Location on where to store experiment tracking logs` and relevent project information",
     )
     args = parser.parse_args()
     config = {"lr": 3e-2, "num_epochs": 3, "seed": 42, "batch_size": 64, "image_size": 224}
