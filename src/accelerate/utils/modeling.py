@@ -30,7 +30,7 @@ import torch.nn as nn
 
 from ..state import AcceleratorState
 from .dataclasses import DistributedType
-from .imports import is_safetensors_available, is_torch_version, is_xpu_available
+from .imports import is_mps_available, is_safetensors_available, is_torch_version, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -480,7 +480,11 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 for i in range(torch.xpu.device_count()):
                     _ = torch.tensor(0, device=torch.device("xpu", i))
                 max_memory = {i: torch.xpu.max_memory_allocated(i) for i in range(torch.xpu.device_count())}
-        max_memory["cpu"] = psutil.virtual_memory().available
+        # allocate everything in the mps device as the RAM is shared
+        if is_mps_available():
+            max_memory["mps"] = psutil.virtual_memory().available
+        else:
+            max_memory["cpu"] = psutil.virtual_memory().available
         return max_memory
 
     for key in max_memory:
@@ -572,7 +576,7 @@ def get_balanced_memory(
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
 
-    if not (torch.cuda.is_available() or is_xpu_available()):
+    if not (torch.cuda.is_available() or is_xpu_available()) or is_mps_available():
         return max_memory
 
     if not is_xpu_available():
@@ -688,7 +692,10 @@ def infer_auto_device_map(
         devices.append("disk")
 
     # Devices that need to keep space for a potential offloaded layer.
-    main_devices = [gpus[0], "cpu"] if len(gpus) > 0 else ["cpu"]
+    if "mps" in gpus:
+        main_devices = ["mps"]
+    else:
+        main_devices = [gpus[0], "cpu"] if len(gpus) > 0 else ["cpu"]
 
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     tied_parameters = find_tied_parameters(model)
