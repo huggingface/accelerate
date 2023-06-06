@@ -1220,7 +1220,7 @@ class Accelerator:
 
         return result if len(result) > 1 else result[0]
 
-    def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, mixed_precision_only: bool = False):
+    def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, evaluation_mode: bool = False):
         """
         Prepares a PyTorch model for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -1231,8 +1231,9 @@ class Accelerator:
                 any kind of mixed precision
             device_placement (`bool`, *optional*):
                 Whether or not to place the model on the proper device. Will default to `self.device_placement`.
-            mixed_precision_only (`bool`, *optional*, defaults to `False`):
-                Whether or not to *only* apply mixed precision to the model, and not do any other model wrapping.
+            evaluation_mode (`bool`, *optional*, defaults to `False`):
+                Whether or not to set the model for evaluation only, by just applying mixed precision and
+                `torch.compile` (if configured in the `Accelerator` object).
 
         Example:
 
@@ -1284,7 +1285,7 @@ class Accelerator:
         elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
 
-        if not mixed_precision_only:
+        if not evaluation_mode:
             if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
                 if any(p.requires_grad for p in model.parameters()):
                     kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
@@ -1351,14 +1352,14 @@ class Accelerator:
                     "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                 )
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
-        if not mixed_precision_only:
+        if not evaluation_mode:
             if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
-            # torch.compile should be called last.
-            if self.state.dynamo_plugin.backend != DynamoBackend.NO:
-                if not is_torch_version(">=", "2.0"):
-                    raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
-                model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
+        # torch.compile should be called last.
+        if self.state.dynamo_plugin.backend != DynamoBackend.NO:
+            if not is_torch_version(">=", "2.0"):
+                raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
+            model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
 
     def _prepare_deepspeed(self, *args):
