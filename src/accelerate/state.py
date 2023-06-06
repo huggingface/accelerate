@@ -326,6 +326,7 @@ class PartialState:
         """
         if self.distributed_type in (
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
             DistributedType.DEEPSPEED,
             DistributedType.FSDP,
