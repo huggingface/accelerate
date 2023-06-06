@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # DeepSpeed 
 
-[DeepSpeed](https://github.com/microsoft/DeepSpeed) implements everything described in the [ZeRO paper](https://arxiv.org/abs/1910.02054). Currently it provides full support for:
+[DeepSpeed](https://github.com/microsoft/DeepSpeed) implements everything described in the [ZeRO paper](https://arxiv.org/abs/1910.02054). Currently, it provides full support for:
 
 1. Optimizer state partitioning (ZeRO stage 1)
 2. Gradient partitioning (ZeRO stage 2)
@@ -26,14 +26,14 @@ Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857).
 
 DeepSpeed ZeRO-2 is primarily used only for training, as its features are of no use to inference.
 
-DeepSpeed ZeRO-3 can be used for inference as well, since it allows huge models to be loaded on multiple GPUs, which
+DeepSpeed ZeRO-3 can be used for inference as well since it allows huge models to be loaded on multiple GPUs, which
 won't be possible on a single GPU.
 
 🤗 Accelerate integrates [DeepSpeed](https://github.com/microsoft/DeepSpeed) via 2 options:
 
 1. Integration of the DeepSpeed features via `deepspeed config file` specification in `accelerate config` . You just supply your custom config file or use our template. Most of
    this document is focused on this feature. This supports all the core features of DeepSpeed and gives user a lot of flexibility. 
-   User may have to change few lines of code depending on the config.
+   User may have to change a few lines of code depending on the config.
 2. Integration via `deepspeed_plugin`.This supports subset of the DeepSpeed features and uses default options for the rest of the configurations. 
    User need not change any code and is good for those who are fine with most of the default settings of DeepSpeed.
 
@@ -57,7 +57,7 @@ Below is a short description of Data Parallelism using ZeRO - Zero Redundancy Op
 
  e. **Param Offload**: Offloads the model parameters to CPU/Disk building on top of ZERO Stage 3
 
-<u>Note</u>: With respect to Disk Offload, the disk should be an NVME for decent speed but it technically work on any Disk
+<u>Note</u>: With respect to Disk Offload, the disk should be an NVME for decent speed but it technically works on any Disk
 
 Inference:
 
@@ -352,8 +352,8 @@ accelerate launch examples/by_feature/deepspeed_with_config_support.py \
 see the [DeepSpeed Optimizers](https://deepspeed.readthedocs.io/en/latest/optimizers.html) and [DeepSpeed Schedulers](https://deepspeed.readthedocs.io/en/latest/schedulers.html) documentation.
 We will look at the changes needed in the code when using these.
    
-   a. DS Optim + DS Scheduler: The case when both `optimizer` and `scheduler` keys present in the DeepSpeed config file.
-   In this situation, those will be used and user has to use `accelerate.utils.DummyOptim` and `accelerate.utils.DummyScheduler` to replace the PyTorch/Custom optimizers and schedulers in their code.
+   a. DS Optim + DS Scheduler: The case when both `optimizer` and `scheduler` keys are present in the DeepSpeed config file.
+   In this situation, those will be used and the user has to use `accelerate.utils.DummyOptim` and `accelerate.utils.DummyScheduler` to replace the PyTorch/Custom optimizers and schedulers in their code.
    Below is the snippet from `examples/by_feature/deepspeed_with_config_support.py` showing this:
    ```python
     # Creates Dummy Optimizer if `optimizer` was spcified in the config file else creates Adam Optimizer
@@ -386,7 +386,7 @@ We will look at the changes needed in the code when using these.
    In the above example we can see that the code remains unchanged if the `optimizer` and `scheduler` keys are absent in the DeepSpeed config file.
 
    c. Custom Optim + DS Scheduler: The case when only `scheduler` key is present in the DeepSpeed config file. 
-   In this situation, user has to use `accelerate.utils.DummyScheduler` to replace the PyTorch/Custom scheduler in their code. 
+   In this situation, the user has to use `accelerate.utils.DummyScheduler` to replace the PyTorch/Custom scheduler in their code. 
 
    d. DS Optim + Custom Scheduler: The case when only `optimizer` key is present in the DeepSpeed config file. 
    This will result in an error because you can only use DS Scheduler when using DS Optim.
@@ -679,6 +679,6 @@ Papers:
 - [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840)
 - [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857)
 
-Finally, please, remember that, 🤗 `Accelerate` only integrates DeepSpeed, therefore if you
+Finally, please, remember that 🤗 `Accelerate` only integrates DeepSpeed, therefore if you
 have any problems or questions with regards to DeepSpeed usage, please, file an issue with [DeepSpeed GitHub](https://github.com/microsoft/DeepSpeed/issues).
 
