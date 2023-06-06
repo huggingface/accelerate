@@ -695,7 +695,7 @@ def infer_auto_device_map(
     if "mps" in gpus:
         main_devices = ["mps"]
     elif len(gpus) > 0:
-        main_devices = [gpus[0], "cpu"] if len(gpus) > 0
+        main_devices = [gpus[0], "cpu"]
     else:
         main_devices = ["cpu"]
 
