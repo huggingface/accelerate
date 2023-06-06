@@ -196,7 +196,6 @@ class DistributedType(str, enum.Enum):
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
     TPU = "TPU"
-    MPS = "MPS"  # here for backward compatibility. Remove in v0.18.0
     MEGATRON_LM = "MEGATRON_LM"
 
 

@@ -50,7 +50,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
     def test_init_trackers(self):
         project_name = "test_project_with_config"
         with tempfile.TemporaryDirectory() as dirpath:
-            accelerator = Accelerator(log_with="tensorboard", logging_dir=dirpath)
+            accelerator = Accelerator(log_with="tensorboard", project_dir=dirpath)
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
             accelerator.init_trackers(project_name, config)
             accelerator.end_training()
@@ -76,8 +76,6 @@ class TensorBoardTrackingTest(unittest.TestCase):
             _ = Accelerator(log_with="tensorboard")
         with tempfile.TemporaryDirectory() as dirpath:
             _ = Accelerator(log_with="tensorboard", project_dir=dirpath)
-        with tempfile.TemporaryDirectory() as dirpath:
-            _ = Accelerator(log_with="tensorboard", logging_dir=dirpath)
 
 
 @require_wandb
