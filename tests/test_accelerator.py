@@ -6,7 +6,7 @@ from unittest.mock import patch
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from accelerate import infer_auto_device_map, init_empty_weights
+from accelerate import DistributedType, infer_auto_device_map, init_empty_weights
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_multi_gpu, slow
@@ -220,6 +220,8 @@ class AcceleratorTester(AccelerateTestCase):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
 
+        PartialState._shared_state = {"distributed_type": DistributedType.MULTI_GPU}
+
         with init_empty_weights():
             model = AutoModelForCausalLM.from_pretrained(
                 "EleutherAI/gpt-neo-125m",
@@ -238,6 +240,31 @@ class AcceleratorTester(AccelerateTestCase):
         # This should not work and get value error
         with self.assertRaises(ValueError):
             _ = accelerator.prepare(model)
+
+        PartialState._reset_state()
+
+    @slow
+    @require_multi_gpu
+    def test_accelerator_bnb_multi_gpu_no_distributed(self):
+        """Tests that the accelerator can be used with the BNB library."""
+        from transformers import AutoModelForCausalLM
+
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_pretrained(
+                "EleutherAI/gpt-neo-125m",
+            )
+            device_map = infer_auto_device_map(model)
+            device_map["lm_head"] = 1
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "EleutherAI/gpt-neo-125m",
+            load_in_8bit=True,
+            device_map=device_map,
+        )
+        accelerator = Accelerator()
+
+        # This should work
+        _ = accelerator.prepare(model)
 
     @require_cuda
     def test_accelerator_cpu_flag_prepare(self):
