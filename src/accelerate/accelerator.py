@@ -244,7 +244,6 @@ class Accelerator:
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
         project_dir: str | os.PathLike | None = None,
         project_config: ProjectConfiguration | None = None,
-        logging_dir: str | os.PathLike | None = None,
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
         dispatch_batches: bool | None = None,
         even_batches: bool = True,
@@ -256,13 +255,6 @@ class Accelerator:
             self.project_configuration = project_config
         else:
             self.project_configuration = ProjectConfiguration(project_dir=project_dir)
-
-        if logging_dir is not None:
-            warnings.warn(
-                "`logging_dir` is deprecated and will be removed in version 0.18.0 of 🤗 Accelerate. Use `project_dir` instead.",
-                FutureWarning,
-            )
-            self.project_configuration.logging_dir = logging_dir
         if project_dir is not None and self.project_dir is None:
             self.project_configuration.project_dir = project_dir
         if mixed_precision is not None:
