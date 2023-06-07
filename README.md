@@ -21,7 +21,7 @@ limitations under the License.
 <p>
 
 <p align="center">
-    <!-- Uncomment when CircleCI is setup
+    <!-- Uncomment when CircleCI is set up
     <a href="https://circleci.com/gh/huggingface/accelerate">
         <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/master">
     </a>
@@ -132,7 +132,7 @@ In particular, the same code can then be run without modification on your local 
           optimizer.step()
 ```
 
-Want to learn more? Check out the [documentation](https://huggingface.co/docs/accelerate) or have look at our [examples](https://github.com/huggingface/accelerate/tree/main/examples).
+Want to learn more? Check out the [documentation](https://huggingface.co/docs/accelerate) or have a look at our [examples](https://github.com/huggingface/accelerate/tree/main/examples).
 
 ## Launching script
 
@@ -155,7 +155,7 @@ For instance, here is how you would run the GLUE example on the MRPC task (from 
 accelerate launch examples/nlp_example.py
 ```
 
-This CLI tool is **optional**, and you can still use `python my_script.py` or `python -m torchrun my_script.py` at your convenance.
+This CLI tool is **optional**, and you can still use `python my_script.py` or `python -m torchrun my_script.py` at your convenience.
 
 ## Launching multi-CPU run using MPI
 
@@ -168,12 +168,12 @@ mpirun -np 2 python examples/nlp_example.py
 
 ## Launching training using DeepSpeed
 
-🤗 Accelerate supports training on single/multiple GPUs using DeepSpeed. To use it, you don't need to change anything in your training code; you can set everything using just `accelerate config`. However, if you desire to tweak your DeepSpeed related args from your python script, we provide you the `DeepSpeedPlugin`.
+🤗 Accelerate supports training on single/multiple GPUs using DeepSpeed. To use it, you don't need to change anything in your training code; you can set everything using just `accelerate config`. However, if you desire to tweak your DeepSpeed related args from your Python script, we provide you the `DeepSpeedPlugin`.
 
 ```python
 from accelerate import Accelerator, DeepSpeedPlugin
 
-# deepspeed needs to know your gradient accumulation steps before hand, so don't forget to pass it
+# deepspeed needs to know your gradient accumulation steps beforehand, so don't forget to pass it
 # Remember you still need to do gradient accumulation by yourself, just like you would have done without deepspeed
 deepspeed_plugin = DeepSpeedPlugin(zero_stage=2, gradient_accumulation_steps=2)
 accelerator = Accelerator(mixed_precision='fp16', deepspeed_plugin=deepspeed_plugin)
@@ -200,7 +200,7 @@ An example can be found in [this notebook](https://github.com/huggingface/notebo
 
 ## Why should I use 🤗 Accelerate?
 
-You should use 🤗 Accelerate when you want to easily run your training scripts in a distributed environment without having to renounce full control over your training loop. This is not a high-level framework above PyTorch, just a thin wrapper so you don't have to learn a new library, In fact the whole API of 🤗 Accelerate is in one class, the `Accelerator` object.
+You should use 🤗 Accelerate when you want to easily run your training scripts in a distributed environment without having to renounce full control over your training loop. This is not a high-level framework above PyTorch, just a thin wrapper so you don't have to learn a new library. In fact, the whole API of 🤗 Accelerate is in one class, the `Accelerator` object.
 
 ## Why shouldn't I use 🤗 Accelerate?
 
@@ -211,15 +211,15 @@ You shouldn't use 🤗 Accelerate if you don't want to write a training loop you
 If you like the simplicity of 🤗 Accelerate but would prefer a higher-level abstraction around its capabilities, some frameworks and libraries that are built on top of 🤗 Accelerate are listed below:
 
 * [Animus](https://github.com/Scitator/animus) is a minimalistic framework to run machine learning experiments. Animus highlights common "breakpoints" in ML experiments and provides a unified interface for them within [IExperiment](https://github.com/Scitator/animus/blob/main/animus/core.py#L76).
-* [Catalyst](https://github.com/catalyst-team/catalyst#getting-started) is a PyTorch framework for Deep Learning Research and Development. It focuses on reproducibility, rapid experimentation, and codebase reuse so you can create something new rather than write yet another train loop. Catalyst provides a [Runner](https://catalyst-team.github.io/catalyst/api/core.html#runner) to connect all parts of the experiment: hardware backend, data transformations, model train, and inference logic.
+* [Catalyst](https://github.com/catalyst-team/catalyst#getting-started) is a PyTorch framework for Deep Learning Research and Development. It focuses on reproducibility, rapid experimentation, and codebase reuse so you can create something new rather than write yet another train loop. Catalyst provides a [Runner](https://catalyst-team.github.io/catalyst/api/core.html#runner) to connect all parts of the experiment: hardware backend, data transformations, model training, and inference logic.
 * [fastai](https://github.com/fastai/fastai#installing) is a PyTorch framework for Deep Learning that simplifies training fast and accurate neural nets using modern best practices. fastai provides a [Learner](https://docs.fast.ai/learner.html#Learner) to handle the training, fine-tuning, and inference of deep learning algorithms.
 * [Finetuner](https://github.com/jina-ai/finetuner) is a service that enables models to create higher-quality embeddings for semantic search, visual similarity search, cross-modal text<->image search, recommendation systems, clustering, duplication detection, anomaly detection, or other uses.
 * [InvokeAI](https://github.com/invoke-ai/InvokeAI) is a creative engine for Stable Diffusion models, offering industry-leading WebUI, terminal usage support, and serves as the foundation for many commercial products.
 * [Kornia](https://kornia.readthedocs.io/en/latest/get-started/introduction.html) is a differentiable library that allows classical computer vision to be integrated into deep learning models. Kornia provides a [Trainer](https://kornia.readthedocs.io/en/latest/x.html#kornia.x.Trainer) with the specific purpose to train and fine-tune the supported deep learning algorithms within the library.
 * [Open Assistant](https://projects.laion.ai/Open-Assistant/) is a chat-based assistant that understands tasks, can interact with their party systems, and retrieve information dynamically to do so. 
-* [pytorch-accelerated](https://github.com/Chris-hughes10/pytorch-accelerated) is a lightweight training library, with a streamlined feature set centred around a general-purpose [Trainer](https://pytorch-accelerated.readthedocs.io/en/latest/trainer.html), that places a huge emphasis on simplicity and transparency; enabling users to understand exactly what is going on under the hood, but without having to write and maintain the boilerplate themselves!
+* [pytorch-accelerated](https://github.com/Chris-hughes10/pytorch-accelerated) is a lightweight training library, with a streamlined feature set centered around a general-purpose [Trainer](https://pytorch-accelerated.readthedocs.io/en/latest/trainer.html), that places a huge emphasis on simplicity and transparency; enabling users to understand exactly what is going on under the hood, but without having to write and maintain the boilerplate themselves!
 * [Stable Diffusion web UI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) is an open-source browser-based easy-to-use interface based on the Gradio library for Stable Diffusion.
-* [torchkeras](https://github.com/lyhue1991/torchkeras)  is a simple tool for training pytorch model jusk in a keras style, a dynamic and beautiful plot is provided  in notebook to monitor your loss or metric.
+* [torchkeras](https://github.com/lyhue1991/torchkeras)  is a simple tool for training pytorch model just in a keras style, a dynamic and beautiful plot is provided in notebook to monitor your loss or metric.
 
 
 ## Installation
