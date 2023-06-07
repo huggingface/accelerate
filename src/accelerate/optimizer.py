@@ -53,24 +53,21 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     """
 
     def __init__(self, optimizer, device_placement=True, scaler=None):
-        if not isinstance(optimizer, AcceleratedOptimizer):
-            self.optimizer = optimizer
-            self.scaler = scaler
-            self.accelerator_state = AcceleratorState()
-            self.gradient_state = GradientState()
-            self.device_placement = device_placement
-            self._is_overflow = False
+        self.optimizer = optimizer
+        self.scaler = scaler
+        self.accelerator_state = AcceleratorState()
+        self.gradient_state = GradientState()
+        self.device_placement = device_placement
+        self._is_overflow = False
 
-            # Handle device placement
-            if device_placement:
-                state_dict = self.optimizer.state_dict()
-                if self.accelerator_state.distributed_type == DistributedType.TPU:
-                    xm.send_cpu_data_to_device(state_dict, self.accelerator_state.device)
-                else:
-                    state_dict = move_to_device(state_dict, self.accelerator_state.device)
-                self.optimizer.load_state_dict(state_dict)
-        else:
-            self.optimizer = optimizer.optimizer
+        # Handle device placement
+        if device_placement:
+            state_dict = self.optimizer.state_dict()
+            if self.accelerator_state.distributed_type == DistributedType.TPU:
+                xm.send_cpu_data_to_device(state_dict, self.accelerator_state.device)
+            else:
+                state_dict = move_to_device(state_dict, self.accelerator_state.device)
+            self.optimizer.load_state_dict(state_dict)
 
     @property
     def state(self):
