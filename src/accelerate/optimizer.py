@@ -69,6 +69,8 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 else:
                     state_dict = move_to_device(state_dict, self.accelerator_state.device)
                 self.optimizer.load_state_dict(state_dict)
+        else:
+            self.optimizer = optimizer.optimizer
 
     @property
     def state(self):
