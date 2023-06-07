@@ -1197,6 +1197,9 @@ class Accelerator:
         if self.distributed_type == DistributedType.FSDP and model_count == 1 and optimizer_present:
             result = self._prepare_fsdp(*result)
 
+        for item in result:
+            setattr(item, "_is_accelerate_prepared", True)
+
         return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, evaluation_mode: bool = False):
@@ -1691,6 +1694,11 @@ class Accelerator:
         >>> data_loader = accelerator.prepare_data_loader(data_loader, device_placement=True)
         ```
         """
+        # Ensure we can't double wrap a DataLoader due to `find_batch_size`
+        if getattr(data_loader, "_accelerator_prepared", False):
+            if data_loader not in self._dataloaders:
+                self._dataloaders.append(data_loader)
+            return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
         prepared_data_loader = prepare_data_loader(
@@ -1729,6 +1737,11 @@ class Accelerator:
         >>> optimizer = accelerator.prepare_optimizer(optimizer, device_placement=True)
         ```
         """
+        # Ensure we can't double wrap an optimizer due to `find_batch_size`
+        if getattr(optimizer, "_accelerator_prepared", False):
+            if optimizer not in self._optimizers:
+                self._optimizers.append(optimizer)
+            return optimizer
         if device_placement is None:
             device_placement = self.device_placement
         optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=self.scaler)
@@ -1756,6 +1769,11 @@ class Accelerator:
         >>> scheduler = accelerator.prepare_scheduler(scheduler)
         ```
         """
+        # Ensure we can't double wrap a scheduler due to `find_batch_size`
+        if getattr(scheduler, "_accelerator_prepared", False):
+            if scheduler not in self._schedulers:
+                self._schedulers.append(scheduler)
+            return scheduler
         # We try to find the optimizer associated with `scheduler`, the default is the full list.
         optimizer = self._optimizers
         for opt in self._optimizers:
@@ -2546,7 +2564,7 @@ class Accelerator:
     def free_memory(self):
         """
         Will release all references to the internal objects stored and call the garbage collector. You should call this
-        method between two trainings with different models/optimizers.
+        method between two trainings with different models/optimizers. Also will reset `Accelerator.step` to 0.
 
         Example:
 
@@ -2565,6 +2583,7 @@ class Accelerator:
         self._models = []
         self._dataloaders = []
         self.deepspeed_engine_wrapped = None
+        self.step = 0
         release_memory()
 
     def clear(self):
