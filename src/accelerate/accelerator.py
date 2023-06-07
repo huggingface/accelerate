@@ -2546,7 +2546,7 @@ class Accelerator:
     def free_memory(self):
         """
         Will release all references to the internal objects stored and call the garbage collector. You should call this
-        method between two trainings with different models/optimizers.
+        method between two trainings with different models/optimizers. Also will reset `Accelerator.step` to 0.
 
         Example:
 
@@ -2565,6 +2565,7 @@ class Accelerator:
         self._models = []
         self._dataloaders = []
         self.deepspeed_engine_wrapped = None
+        self.step = 0
         release_memory()
 
     def clear(self):
