@@ -1695,7 +1695,7 @@ class Accelerator:
         ```
         """
         # Ensure we can't double wrap a DataLoader due to `find_batch_size`
-        if not getattr(data_loader, "_accelerator_prepared", False):
+        if getattr(data_loader, "_accelerator_prepared", False):
             if data_loader not in self._dataloaders:
                 self._dataloaders.append(data_loader)
             return data_loader
@@ -1738,7 +1738,7 @@ class Accelerator:
         ```
         """
         # Ensure we can't double wrap an optimizer due to `find_batch_size`
-        if not getattr(optimizer, "_accelerator_prepared", False):
+        if getattr(optimizer, "_accelerator_prepared", False):
             if optimizer not in self._optimizers:
                 self._optimizers.append(optimizer)
             return optimizer
@@ -1770,7 +1770,7 @@ class Accelerator:
         ```
         """
         # Ensure we can't double wrap a scheduler due to `find_batch_size`
-        if not getattr(scheduler, "_accelerator_prepared", False):
+        if getattr(scheduler, "_accelerator_prepared", False):
             if scheduler not in self._schedulers:
                 self._schedulers.append(scheduler)
             return scheduler
