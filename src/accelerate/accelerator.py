@@ -32,7 +32,7 @@ import torch
 import torch.utils.hooks as hooks
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import DataLoaderDispatcher, DataLoaderShard, prepare_data_loader, skip_first_batches
+from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -119,8 +119,6 @@ if is_torch_version(">", "1.10.0"):
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
     import torch_xla.distributed.xla_multiprocessing as xmp
-
-    from .data_loader import MpDeviceLoaderWrapper
 
 
 try:
@@ -1199,6 +1197,9 @@ class Accelerator:
         if self.distributed_type == DistributedType.FSDP and model_count == 1 and optimizer_present:
             result = self._prepare_fsdp(*result)
 
+        for item in result:
+            setattr(item, "_is_accelerate_prepared", True)
+
         return result if len(result) > 1 else result[0]
 
     def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, evaluation_mode: bool = False):
@@ -1694,12 +1695,10 @@ class Accelerator:
         ```
         """
         # Ensure we can't double wrap a DataLoader due to `find_batch_size`
-        if isinstance(data_loader, (DataLoaderDispatcher, DataLoaderShard)) or (
-            is_tpu_available() and isinstance(data_loader, MpDeviceLoaderWrapper)
-        ):
+        if not getattr(data_loader, "_accelerator_prepared", False):
             if data_loader not in self._dataloaders:
                 self._dataloaders.append(data_loader)
-                return data_loader
+            return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
         prepared_data_loader = prepare_data_loader(
@@ -1739,7 +1738,7 @@ class Accelerator:
         ```
         """
         # Ensure we can't double wrap an optimizer due to `find_batch_size`
-        if isinstance(optimizer, AcceleratedOptimizer):
+        if not getattr(optimizer, "_accelerator_prepared", False):
             if optimizer not in self._optimizers:
                 self._optimizers.append(optimizer)
             return optimizer
@@ -1771,7 +1770,7 @@ class Accelerator:
         ```
         """
         # Ensure we can't double wrap a scheduler due to `find_batch_size`
-        if isinstance(scheduler, AcceleratedScheduler):
+        if not getattr(scheduler, "_accelerator_prepared", False):
             if scheduler not in self._schedulers:
                 self._schedulers.append(scheduler)
             return scheduler
