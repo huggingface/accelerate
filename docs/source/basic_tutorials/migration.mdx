@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 This tutorial will detail how to easily convert existing PyTorch code to use 🤗 Accelerate!
 You'll see that by just changing a few lines of code, 🤗 Accelerate can perform its magic and get you on 
-your way towards running your code on distributed systems with ease!
+your way toward running your code on distributed systems with ease!
 
 ## The base training loop
 
@@ -65,7 +65,7 @@ change the definition of `device` to come from [`Accelerator`]:
 
 ### Preparing your objects
 
-Next you need to pass all of the important objects related to training into [`~Accelerator.prepare`]. 🤗 Accelerate will
+Next, you need to pass all of the important objects related to training into [`~Accelerator.prepare`]. 🤗 Accelerate will
 make sure everything is setup in the current environment for you to start training:
 
 ```
@@ -73,7 +73,7 @@ model, optimizer, training_dataloader, scheduler = accelerator.prepare(
     model, optimizer, training_dataloader, scheduler
 )
 ```
-These objects are returned in the same order they were sent in with. By default when using `device_placement=True`, all of the objects that can be sent to the right device will be.
+These objects are returned in the same order they were sent in. By default when using `device_placement=True`, all of the objects that can be sent to the right device will be.
 If you need to work with data that isn't passed to [~Accelerator.prepare] but should be on the active device, you should pass in the `device` you made earlier. 
 
 <Tip warning={true}>
