@@ -36,7 +36,7 @@ for batch in training_dataloader:
 
 But how do you run this code and have it utilize the special hardware available to it?
 
-First you should rewrite the above code into a function, and make it callable as a script. For example:
+First, you should rewrite the above code into a function, and make it callable as a script. For example:
 
 ```diff
   from accelerate import Accelerator
@@ -61,7 +61,7 @@ First you should rewrite the above code into a function, and make it callable as
 +     main()
 ```
 
-Next you need to launch it with `accelerate launch`. 
+Next, you need to launch it with `accelerate launch`. 
 
 <Tip warning={true}>
 
@@ -74,7 +74,7 @@ Next you need to launch it with `accelerate launch`.
 ## Using accelerate launch
 
 🤗 Accelerate has a special CLI command to help you launch your code in your system through `accelerate launch`.
-This command wraps around all of the different commands needed to launch your script on various platforms, without you having to remember what each of them are.
+This command wraps around all of the different commands needed to launch your script on various platforms, without you having to remember what each of them is.
 
 <Tip>
 
@@ -88,7 +88,7 @@ You can launch your script quickly by using:
 accelerate launch {script_name.py} --arg1 --arg2 ...
 ```
 
-Just put `accelerate launch` at the start of your command, and pass in additional arguments and parameters to your script afterwards like normal!
+Just put `accelerate launch` at the start of your command, and pass in additional arguments and parameters to your script afterward like normal!
 
 Since this runs the various torch spawn methods, all of the expected environment variables can be modified here as well.
 For example, here is how to use `accelerate launch` with a single GPU:
