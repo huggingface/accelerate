@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader
 from accelerate import Accelerator
 from accelerate.data_loader import prepare_data_loader
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
+from accelerate.test_utils import RegressionDataset, are_the_same_tensors
 from accelerate.utils import (
     DistributedType,
     gather,
@@ -38,6 +38,13 @@ from accelerate.utils import (
     set_seed,
     synchronize_rng_states,
 )
+
+
+# TODO: remove RegressionModel4XPU once ccl support empty buffer in broadcasting.
+if is_xpu_available():
+    from accelerate.test_utils import RegressionModel4XPU as RegressionModel
+else:
+    from accelerate.test_utils import RegressionModel
 
 
 def print_main(state):

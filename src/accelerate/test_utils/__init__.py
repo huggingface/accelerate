@@ -16,7 +16,7 @@ from .testing import (
     skip,
     slow,
 )
-from .training import RegressionDataset, RegressionModel
+from .training import RegressionDataset, RegressionModel, RegressionModel4XPU
 
 
 from .scripts import test_script, test_sync, test_ops  # isort: skip
