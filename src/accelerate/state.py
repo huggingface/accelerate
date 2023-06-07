@@ -200,7 +200,10 @@ class PartialState:
                     self.distributed_type = DistributedType.MULTI_XPU
                 else:
                     self.distributed_type = DistributedType.MULTI_CPU
-                if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
+                # Actually, CCL_WORKER_COUNT is a CPU only env var in CCL, no need to set it for XPU.
+                if is_ccl_available() and (
+                    get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or self.distributed_type == DistributedType.MULTI_XPU
+                ):
                     if get_ccl_version() >= "1.12":
                         import oneccl_bindings_for_pytorch  # noqa: F401
                     else:
