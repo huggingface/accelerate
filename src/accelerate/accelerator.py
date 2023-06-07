@@ -1729,6 +1729,10 @@ class Accelerator:
         >>> optimizer = accelerator.prepare_optimizer(optimizer, device_placement=True)
         ```
         """
+        if isinstance(optimizer, AcceleratedOptimizer):
+            if optimizer not in self._optimizers:
+                self._optimizers.append(optimizer)
+            return optimizer
         if device_placement is None:
             device_placement = self.device_placement
         optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=self.scaler)
