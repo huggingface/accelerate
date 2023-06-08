@@ -903,7 +903,9 @@ class GradientState:
             self.sync_gradients = True
             self.active_dataloader = None
             self.dataloader_references = [None]
-            self.plugin_kwargs = gradient_accumulation_plugin.to_kwargs()
+            self.plugin_kwargs = (
+                gradient_accumulation_plugin.to_kwargs() if gradient_accumulation_plugin is not None else {}
+            )
 
         # Plugin args are different and can be updated
         if gradient_accumulation_plugin is not None and self.plugin_kwargs != gradient_accumulation_plugin.to_kwargs():
