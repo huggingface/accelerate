@@ -316,6 +316,10 @@ class DataLoaderStateMixin:
         cls.end_of_dataloader = False
         cls.remainder = -1
 
+    def reset(self):
+        self.end_of_dataloader = False
+        self.remainder = -1
+
 
 class DataLoaderShard(DataLoader, DataLoaderStateMixin):
     """
@@ -361,6 +365,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
+        self.reset()
         self.gradient_state._add_dataloader(self)
         # We can safely pass because the default is -1
         with suppress(Exception):
