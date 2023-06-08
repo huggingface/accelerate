@@ -45,22 +45,30 @@ training in a distributed setup. But how does this risk slowing down your code?
 In DDP (distributed data parallel), the specific order in which processes are performed and ran are expected
 at specific points and these must also occur at roughly the same time before moving on.
 
-The most direct example is when you update all of the parameters in a model through `.backward()`. All instances of the model
-need to have updated their gradients, collated, and updated again before moving on to the next batch of data. But when performing 
-gradient accumulation, you accumulate `n` losses and skip `.backward()` until `n` batches have been reached. This 
-can cause a significant slowdown since all the processes need to communicate with them more times than needed. How 
-can you avoid this overhead?
+The most direct example is when you update model parameters through
+`optimizer.step()`.
+Without gradient accumulation, all instances of the model need to have updated
+their gradients computed, collated, and updated before moving on to the next
+batch of data.
+When performing gradient accumulation, you accumulate `n` loss gradients and
+skip `optimizer.step()` until `n` batches have been reached. As all training
+processes only need to sychronize by the time `optimizer.step()` is called,
+without any modification to your training step, this neededless inter-process
+communication can cause a significant slowdown.
+
+ How can you avoid this overhead?
 
 ## Solving the slowdown problem
 
-Since you are skipping these batches, their gradients do not need to be synchronized until the point where `.backward()` is actually called. 
+Since you are skipping model parameter updates when training on these batches, their gradients do not need to be synchronized until the point where `optimizer.step()` is actually called. 
 PyTorch cannot automagically tell when you need to do this, but they do provide a tool to help through the [`no_sync`](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel.no_sync) context manager
 that is added to your model after converting it to DDP.
 
-Under this context manager, PyTorch will skip synchronizing the gradients when `.backward()` is called, and the first call to `.backward()` outside this 
+Under this context manager, PyTorch will skip synchronizing the gradients when
+`.backward()` is called, and the first call to `.backward()` outside this 
 context manager will trigger the synchronization. See an example below:
 ```python
-ddp_model, dataloader = accelerator.prepare(model, dataloader)
+ddp_model, dataloader, optimizer = accelerator.prepare(model, dataloader, optimizer)
 
 for index, batch in enumerate(dataloader):
     inputs, targets = batch
@@ -76,13 +84,14 @@ for index, batch in enumerate(dataloader):
         outputs = ddp_model(inputs)
         loss = loss_func(outputs)
         accelerator.backward(loss)
+        optimizer.step()
 ```
 
 In 🤗 Accelerate to make this an API that can be called no matter the training device (though it may not do anything if you are not in a distributed system!),
 `ddp_model.no_sync` gets replaced with [`~Accelerator.no_sync`] and operates the same way:
 
 ```diff
-  ddp_model, dataloader = accelerator.prepare(model, dataloader)
+  ddp_model, dataloader, optimizer = accelerator.prepare(model, dataloader, optimizer)
 
   for index, batch in enumerate(dataloader):
       inputs, targets = batch
@@ -99,13 +108,15 @@ In 🤗 Accelerate to make this an API that can be called no matter the training
           outputs = ddp_model(inputs)
           loss = loss_func(outputs)
           accelerator.backward(loss)
+          optimizer.step()
+          optimizer.zero_grad()
 ```
 
 As you may expect, the [`~Accelerator.accumulate`] function wraps around this conditional check by keeping track of the current batch number, leaving you with the final
 gradient accumulation API:
 
 ```python
-ddp_model, dataloader = accelerator.prepare(model, dataloader)
+ddp_model, dataloader, optimizer = accelerator.prepare(model, dataloader, optimizer)
 
 for batch in dataloader:
     with accelerator.accumulate(model):
@@ -114,6 +125,8 @@ for batch in dataloader:
         outputs = model(inputs)
         loss = loss_function(outputs, targets)
         accelerator.backward(loss)
+        optimizer.step()
+        optimizer.zero_grad()
 ```
 
 As a result, you should either use *`accelerator.accumulate` or `accelerator.no_sync`* when it comes to API choice. 
