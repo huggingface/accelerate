@@ -1,4 +1,4 @@
-__version__ = "0.20.2"
+__version__ = "0.20.3"
 
 from .accelerator import Accelerator
 from .big_modeling import (
