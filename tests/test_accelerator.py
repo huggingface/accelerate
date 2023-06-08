@@ -175,6 +175,18 @@ class AcceleratorTester(AccelerateTestCase):
             # mode.class_name is NOT loaded from config
             self.assertTrue(model.class_name != model.__class__.__name__)
 
+    def test_accelerator_none(self):
+        """Just test that passing None to accelerator.prepare() works."""
+        accelerator = Accelerator()
+        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+        dummy_obj = None
+
+        # This should work
+        model, optimizer, scheduler, train_dl, valid_dl, dummy_obj = accelerator.prepare(
+            model, optimizer, scheduler, train_dl, valid_dl, dummy_obj
+        )
+        self.assertTrue(dummy_obj is None)
+
     @slow
     def test_accelerator_bnb(self):
         """Tests that the accelerator can be used with the BNB library."""

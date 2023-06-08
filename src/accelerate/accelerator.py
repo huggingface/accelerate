@@ -1198,7 +1198,8 @@ class Accelerator:
             result = self._prepare_fsdp(*result)
 
         for item in result:
-            setattr(item, "_is_accelerate_prepared", True)
+            if item is not None:
+                setattr(item, "_is_accelerate_prepared", True)
 
         return result if len(result) > 1 else result[0]
 
