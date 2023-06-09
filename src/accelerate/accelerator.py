@@ -2553,10 +2553,12 @@ class Accelerator:
         )
         custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
         if len(custom_checkpoints) != len(self._custom_objects):
-            err = "Warning! Number of found checkpoints does not match the number of registered objects:"
+            err = "Number of custom checkpoints in folder {input_dir} does not match the number of registered objects:"
             err += f"\n\tFound checkpoints: {len(custom_checkpoints)}"
-            err += f"\n\tRegistered objects: {len(self._custom_objects)}\nSkipping."
-            logger.warning(err)
+            err += f"\n\tRegistered objects: {len(self._custom_objects)}\n"
+            err += "Please make sure to only load checkpoints from folders that were created with the same set of registered objects,"
+            err += "or avoid using `custom_checkpoint` in the filename for files in that same directory and load them in manually."
+            raise RuntimeError(err)
         else:
             logger.info(f"Loading in {len(custom_checkpoints)} custom states")
             for index, obj in enumerate(self._custom_objects):
