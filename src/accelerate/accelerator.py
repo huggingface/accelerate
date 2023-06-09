@@ -2553,7 +2553,9 @@ class Accelerator:
             map_location,
             **load_model_func_kwargs,
         )
-        custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f and not f.endswith(".bak")]
+        custom_checkpoints = [
+            f for f in os.listdir(input_dir) if re.search(r"custom_checkpoint_[0-9]+\.pkl$", f) is not None
+        ]
         if len(custom_checkpoints) != len(self._custom_objects):
             err = "Number of custom checkpoints in folder {input_dir} does not match the number of registered objects:"
             err += f"\n\tFound checkpoints: {len(custom_checkpoints)}"
