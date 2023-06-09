@@ -68,11 +68,6 @@ jobs:
           pip install -e .[testing,test_trackers] -U
           pip install pytest-reportlog tabulate
 
-      - name: Run CLI tests
-        run: |
-          source activate accelerate
-          make test_cli
-
       - name: Run test on GPUs
         run: |
           source activate accelerate

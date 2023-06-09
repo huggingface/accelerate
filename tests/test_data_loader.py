@@ -19,6 +19,7 @@ from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
 from accelerate.data_loader import (
     BatchSamplerShard,
+    DataLoaderShard,
     IterableDatasetShard,
     SkipBatchSampler,
     SkipDataLoader,
@@ -374,3 +375,12 @@ class DataLoaderTester(unittest.TestCase):
         dataloader = DataLoader(list(range(16)), batch_size=4)
         new_dataloader = skip_first_batches(dataloader, num_batches=2)
         self.assertListEqual([t.tolist() for t in new_dataloader], [[8, 9, 10, 11], [12, 13, 14, 15]])
+
+    def test_end_of_dataloader(self):
+        dataloader = DataLoaderShard(list(range(16)), batch_size=4)
+        for idx, _ in enumerate(dataloader):
+            self.assertEqual(dataloader.end_of_dataloader, idx == 3)
+
+        # Test it also works on the second iteration
+        for idx, _ in enumerate(dataloader):
+            self.assertEqual(dataloader.end_of_dataloader, idx == 3)

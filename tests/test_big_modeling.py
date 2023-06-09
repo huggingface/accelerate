@@ -285,6 +285,19 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
+    @require_mps
+    def test_dispatch_model_mps(self):
+        model = ModelForTest()
+        device_map = {"linear1": "mps", "batchnorm": "disk", "linear2": "disk"}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir)
+            output = model(x)
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
     @require_cuda
     def test_dispatch_model_tied_weights(self):
         model = ModelForTestTiedWeights()
@@ -373,6 +386,21 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
+    @require_mps
+    def test_dispatch_model_with_unused_submodules_mps(self):
+        model = ModelWithUnusedSubModulesForTest()
+        device_map = {"linear1": "mps", "linear2": "mps", "batchnorm": "mps", "linear3": "mps", "linear4": "disk"}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(
+                model, device_map, offload_dir=tmp_dir, preload_module_classes=["ModuleWithUnusedSubModules"]
+            )
+            output = model(x)
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
     @require_multi_gpu
     def test_dispatch_model_with_unused_submodules_multi_gpu(self):
         model = ModelWithUnusedSubModulesForTest()
@@ -409,6 +437,30 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_mps
+    def test_load_checkpoint_and_dispatch_mps(self):
+        model = ModelForTest()
+        device_map = {"linear1": "mps", "batchnorm": "mps", "linear2": "disk"}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            new_model = ModelForTest()
+            new_model = load_checkpoint_and_dispatch(
+                new_model, checkpoint, device_map=device_map, offload_folder=tmp_dir
+            )
+
+            # CPU-offloaded weights are on the meta device while waiting for the forward pass.
+            self.assertEqual(new_model.linear1.weight.device, torch.device("mps:0"))
+            self.assertEqual(new_model.linear2.weight.device, torch.device("meta"))
+
+            output = new_model(x)
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_multi_gpu
     def test_load_checkpoint_and_dispatch_multi_gpu(self):
@@ -459,6 +511,36 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_mps
+    def test_load_checkpoint_and_dispatch_with_unused_submodules_mps(self):
+        model = ModelWithUnusedSubModulesForTest()
+        device_map = {"linear1": "mps", "linear2": "mps", "batchnorm": "mps", "linear3": "disk", "linear4": "disk"}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            new_model = ModelWithUnusedSubModulesForTest()
+            new_model = load_checkpoint_and_dispatch(
+                new_model,
+                checkpoint,
+                device_map=device_map,
+                preload_module_classes=["ModuleWithUnusedSubModules"],
+                offload_folder=tmp_dir,
+            )
+
+            # CPU-offloaded weights are on the meta device while waiting for the forward pass.
+            self.assertEqual(new_model.linear1.linear.weight.device, torch.device("mps:0"))
+            self.assertEqual(new_model.linear2.linear.weight.device, torch.device("mps:0"))
+            self.assertEqual(new_model.linear3.linear.weight.device, torch.device("meta"))
+            self.assertEqual(new_model.linear4.linear.weight.device, torch.device("meta"))
+
+            output = new_model(x)
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_multi_gpu
     def test_load_checkpoint_and_dispatch_multi_gpu_with_unused_submodules(self):
@@ -521,14 +603,17 @@ class BigModelingTester(unittest.TestCase):
     def test_dispatch_model_bnb(self):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download
-        from transformers import AutoConfig, AutoModel
-        from transformers.utils.bitsandbytes import replace_8bit_linear
+        from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
+        from transformers.utils.bitsandbytes import replace_with_bnb_linear
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
         # TODO: @younesbelkada remove the positional arg on the next `transformers` release
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
@@ -550,17 +635,20 @@ class BigModelingTester(unittest.TestCase):
         self.assertTrue(model.h[-1].self_attention.query_key_value.weight.device.index == 1)
 
     @slow
-    def test_dipatch_model_int8_simple(self):
+    def test_dispatch_model_int8_simple(self):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download
-        from transformers import AutoConfig, AutoModel
-        from transformers.utils.bitsandbytes import replace_8bit_linear
+        from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
+        from transformers.utils.bitsandbytes import replace_with_bnb_linear
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
         # TODO: @younesbelkada remove the positional arg on the next `transformers` release
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
@@ -582,7 +670,9 @@ class BigModelingTester(unittest.TestCase):
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
         # TODO: @younesbelkada remove the positional arg on the next `transformers` release
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         for p in model.parameters():
             p.requires_grad = False
@@ -601,7 +691,9 @@ class BigModelingTester(unittest.TestCase):
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
         # TODO: @younesbelkada remove the positional arg on the next `transformers` release
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"])
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():

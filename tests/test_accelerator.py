@@ -6,7 +6,7 @@ from unittest.mock import patch
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from accelerate import infer_auto_device_map, init_empty_weights
+from accelerate import DistributedType, infer_auto_device_map, init_empty_weights
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_multi_gpu, slow
@@ -175,6 +175,18 @@ class AcceleratorTester(AccelerateTestCase):
             # mode.class_name is NOT loaded from config
             self.assertTrue(model.class_name != model.__class__.__name__)
 
+    def test_accelerator_none(self):
+        """Just test that passing None to accelerator.prepare() works."""
+        accelerator = Accelerator()
+        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+        dummy_obj = None
+
+        # This should work
+        model, optimizer, scheduler, train_dl, valid_dl, dummy_obj = accelerator.prepare(
+            model, optimizer, scheduler, train_dl, valid_dl, dummy_obj
+        )
+        self.assertTrue(dummy_obj is None)
+
     @slow
     def test_accelerator_bnb(self):
         """Tests that the accelerator can be used with the BNB library."""
@@ -202,6 +214,7 @@ class AcceleratorTester(AccelerateTestCase):
             model = AutoModelForCausalLM.from_pretrained(
                 "EleutherAI/gpt-neo-125m",
             )
+            model.tie_weights()
             device_map = infer_auto_device_map(model)
             device_map["lm_head"] = "cpu"
 
@@ -219,6 +232,35 @@ class AcceleratorTester(AccelerateTestCase):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
 
+        PartialState._shared_state = {"distributed_type": DistributedType.MULTI_GPU}
+
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_pretrained(
+                "EleutherAI/gpt-neo-125m",
+            )
+            model.tie_weights()
+            device_map = infer_auto_device_map(model)
+            device_map["lm_head"] = 1
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "EleutherAI/gpt-neo-125m",
+            load_in_8bit=True,
+            device_map=device_map,
+        )
+        accelerator = Accelerator()
+
+        # This should not work and get value error
+        with self.assertRaises(ValueError):
+            _ = accelerator.prepare(model)
+
+        PartialState._reset_state()
+
+    @slow
+    @require_multi_gpu
+    def test_accelerator_bnb_multi_gpu_no_distributed(self):
+        """Tests that the accelerator can be used with the BNB library."""
+        from transformers import AutoModelForCausalLM
+
         with init_empty_weights():
             model = AutoModelForCausalLM.from_pretrained(
                 "EleutherAI/gpt-neo-125m",
@@ -233,9 +275,8 @@ class AcceleratorTester(AccelerateTestCase):
         )
         accelerator = Accelerator()
 
-        # This should not work and get value error
-        with self.assertRaises(ValueError):
-            _ = accelerator.prepare(model)
+        # This should work
+        _ = accelerator.prepare(model)
 
     @require_cuda
     def test_accelerator_cpu_flag_prepare(self):

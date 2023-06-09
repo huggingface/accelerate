@@ -84,7 +84,10 @@ class TpuConfigTester(unittest.TestCase):
 
     @staticmethod
     def clean_output(output):
-        return "".join(output).rstrip()
+        output = "".join(output).rstrip()
+        # Tempfix for deepspeed printing that we can't disable
+        output = output.replace("Setting ds_accelerator to cuda (auto detect)\n", "")
+        return output
 
     def test_base(self):
         output = run_command(

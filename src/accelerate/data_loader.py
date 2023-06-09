@@ -316,6 +316,10 @@ class DataLoaderStateMixin:
         cls.end_of_dataloader = False
         cls.remainder = -1
 
+    def reset(self):
+        self.end_of_dataloader = False
+        self.remainder = -1
+
 
 class DataLoaderShard(DataLoader, DataLoaderStateMixin):
     """
@@ -361,6 +365,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
+        self.reset()
         self.gradient_state._add_dataloader(self)
         # We can safely pass because the default is -1
         with suppress(Exception):
@@ -560,6 +565,11 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             if not self._drop_last and first_batch is None:
                 # We keep at least num processes elements of the first batch to be able to complete the last batch
                 first_batch = slice_tensors(batch, slice(0, self.state.num_processes))
+
+            if batch is None:
+                raise ValueError(
+                    f"Batch does not contain any data (`{batch}`). At the end of all iterable data available before expected stop iteration."
+                )
 
             observed_batch_size = find_batch_size(batch)
             batch_size = observed_batch_size // self.state.num_processes

@@ -18,7 +18,7 @@ and expect your results to line up.
 
 But why?
 
-There's three reasons for this that this tutorial will cover: 
+There are three reasons for this that this tutorial will cover: 
 
 1. **Setting the right seeds**
 2. **Observed Batch Sizes**
@@ -26,7 +26,7 @@ There's three reasons for this that this tutorial will cover:
 
 ## Setting the Seed 
 
-While this issue has not come up as much, make sure to use [`utils.set_seed`] to fully set the seed in all distributed cases so training will be reproducable:
+While this issue has not come up as much, make sure to use [`utils.set_seed`] to fully set the seed in all distributed cases so training will be reproducible:
 
 ```python
 from accelerate.utils import set_seed
@@ -58,7 +58,7 @@ The below table can be used as a quick reference to try out different batch size
 
 <Tip>
 
-In this example there are two GPUs for "Multi-GPU" and a TPU pod with 8 workers
+In this example, there are two GPUs for "Multi-GPU" and a TPU pod with 8 workers
 
 </Tip>
 
@@ -90,11 +90,11 @@ optimizer = AdamW(params=model.parameters(), lr=learning_rate)
 ```
 
 You will also find that `accelerate` will step the learning rate based on the number of processes being trained on. This is because 
-of the observed batch size noted earlier. So in a case of 2 GPUs, the learning rate will be stepped twice as often as a single GPU
+of the observed batch size noted earlier. So in the case of 2 GPUs, the learning rate will be stepped twice as often as a single GPU
 to account for the batch size being twice as large (if no changes to the batch size on the single GPU instance are made).
 
 ## Gradient Accumulation and Mixed Precision
 
 When using gradient accumulation and mixed precision, due to how gradient averaging works (accumulation) and the precision loss (mixed precision), 
-some degredation in performance is expected. This will be explicitly seen when comparing the batch-wise loss between different compute 
+some degradation in performance is expected. This will be explicitly seen when comparing the batch-wise loss between different compute 
 setups. However, the overall loss, metric, and general performance at the end of training should be _roughly_ the same.
