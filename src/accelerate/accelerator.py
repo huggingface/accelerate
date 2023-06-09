@@ -2461,7 +2461,9 @@ class Accelerator:
 
         <Tip>
 
-        Should only be used in conjunction with [`Accelerator.save_state`].
+        Should only be used in conjunction with [`Accelerator.save_state`]. If a file is not registered for
+        checkpointing, it will not be loaded. If you want to keep other files in the checkpoint directory, ensure that
+        they are named exceedingly different or if they are a backup, have the .bak extension.
 
         </Tip>
 
@@ -2551,7 +2553,7 @@ class Accelerator:
             map_location,
             **load_model_func_kwargs,
         )
-        custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f]
+        custom_checkpoints = [f for f in os.listdir(input_dir) if "custom_checkpoint" in f and not f.endswith(".bak")]
         if len(custom_checkpoints) != len(self._custom_objects):
             err = "Number of custom checkpoints in folder {input_dir} does not match the number of registered objects:"
             err += f"\n\tFound checkpoints: {len(custom_checkpoints)}"
