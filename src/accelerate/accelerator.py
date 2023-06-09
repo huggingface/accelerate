@@ -2462,8 +2462,7 @@ class Accelerator:
         <Tip>
 
         Should only be used in conjunction with [`Accelerator.save_state`]. If a file is not registered for
-        checkpointing, it will not be loaded. If you want to keep other files in the checkpoint directory, ensure that
-        they are named exceedingly different or if they are a backup, have the .bak extension.
+        checkpointing, it will not be loaded if stored in the directory.
 
         </Tip>
 
