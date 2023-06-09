@@ -28,6 +28,7 @@ from accelerate.utils import (
     patch_environment,
     recursively_apply,
     send_to_device,
+    untensorify,
 )
 
 
@@ -80,6 +81,18 @@ class UtilsTester(unittest.TestCase):
         self.assertEqual(
             str(cm.exception),
             "Unsupported types (<class 'int'>) passed to `tensor`. Only nested list/tuple/dicts of objects that are valid for `is_torch_tensor` should be passed.",
+        )
+
+    def test_untensorify(self):
+        tensor = torch.tensor([1, 2, 3, 4, 5])
+        self.assertEqual(untensorify(tensor), [1, 2, 3, 4, 5])
+
+        tensor = torch.tensor([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]])
+        self.assertEqual(untensorify(tensor), [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]])
+
+        tensor = torch.tensor([[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]])
+        self.assertEqual(
+            untensorify(tensor), [[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]]
         )
 
     def test_patch_environment(self):

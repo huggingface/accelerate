@@ -95,6 +95,7 @@ from .operations import (
     reduce,
     send_to_device,
     slice_tensors,
+    untensorify,
 )
 from .versions import compare_versions, is_torch_version
 
