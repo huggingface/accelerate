@@ -224,7 +224,7 @@ def find_batch_size(data):
     return data.shape[0]
 
 
-def untensorify(data):
+def listify(data):
     """
     Recursively finds tensors in a nested list/tuple/dictionary and converts them to a list of numbers.
 
