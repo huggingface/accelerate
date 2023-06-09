@@ -32,6 +32,7 @@ from .utils import (
     is_mlflow_available,
     is_tensorboard_available,
     is_wandb_available,
+    listify,
 )
 
 
@@ -236,6 +237,7 @@ class TensorBoardTracker(GeneralTracker):
                 Additional key word arguments passed along to either `SummaryWriter.add_scaler`,
                 `SummaryWriter.add_text`, or `SummaryWriter.add_scalers` method based on the contents of `values`.
         """
+        values = listify(values)
         for k, v in values.items():
             if isinstance(v, (int, float)):
                 self.writer.add_scalar(k, v, global_step=step, **kwargs)

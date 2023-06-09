@@ -25,6 +25,8 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
+import torch
+
 # We use TF to parse the logs
 from accelerate import Accelerator
 from accelerate.test_utils.testing import (
@@ -36,11 +38,16 @@ from accelerate.test_utils.testing import (
     skip,
 )
 from accelerate.tracking import CometMLTracker, GeneralTracker
-from accelerate.utils import is_comet_ml_available
+from accelerate.utils import is_comet_ml_available, is_tensorboard_available
 
 
 if is_comet_ml_available():
     from comet_ml import OfflineExperiment
+
+if is_tensorboard_available():
+    import struct
+
+    import tensorboard.compat.proto.event_pb2 as event_pb2
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +77,35 @@ class TensorBoardTrackingTest(unittest.TestCase):
             # Names are randomly generated each time
             log = list(filter(lambda x: x.is_file(), Path(f"{dirpath}/{project_name}").iterdir()))[0]
             self.assertNotEqual(str(log), "")
+
+    def test_log_with_tensor(self):
+        project_name = "test_project_with_log"
+        with tempfile.TemporaryDirectory() as dirpath:
+            accelerator = Accelerator(log_with="tensorboard", project_dir=dirpath)
+            accelerator.init_trackers(project_name)
+            values = {"tensor": torch.tensor(1)}
+            accelerator.log(values, step=0)
+            accelerator.end_training()
+            # Logged values are stored in the outermost-tfevents file and can be read in as a TFRecord
+            # Names are randomly generated each time
+            log = list(filter(lambda x: x.is_file(), Path(f"{dirpath}/{project_name}").iterdir()))[0]
+            # Reading implementation based on https://github.com/pytorch/pytorch/issues/45327#issuecomment-703757685
+            with open(log, "rb") as f:
+                data = f.read()
+            found_tensor = False
+            while data:
+                header = struct.unpack("Q", data[:8])
+
+                event_str = data[12 : 12 + int(header[0])]  # 8+4
+                data = data[12 + int(header[0]) + 4 :]
+                event = event_pb2.Event()
+
+                event.ParseFromString(event_str)
+                if event.HasField("summary"):
+                    for value in event.summary.value:
+                        if value.simple_value == 1.0 and value.tag == "tensor":
+                            found_tensor = True
+            self.assertTrue(found_tensor, "Converted tensor was not found in the log file!")
 
     def test_project_dir(self):
         with self.assertRaisesRegex(ValueError, "Logging with `tensorboard` requires a `logging_dir`"):
