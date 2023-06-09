@@ -604,14 +604,16 @@ class BigModelingTester(unittest.TestCase):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download
         from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
-        from transformers.utils.bitsandbytes import replace_8bit_linear
+        from transformers.utils.bitsandbytes import replace_with_bnb_linear
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
         # TODO: @younesbelkada remove the positional arg on the next `transformers` release
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
@@ -637,14 +639,16 @@ class BigModelingTester(unittest.TestCase):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download
         from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
-        from transformers.utils.bitsandbytes import replace_8bit_linear
+        from transformers.utils.bitsandbytes import replace_with_bnb_linear
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
         # TODO: @younesbelkada remove the positional arg on the next `transformers` release
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
@@ -666,7 +670,9 @@ class BigModelingTester(unittest.TestCase):
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
         # TODO: @younesbelkada remove the positional arg on the next `transformers` release
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         for p in model.parameters():
             p.requires_grad = False
@@ -685,7 +691,9 @@ class BigModelingTester(unittest.TestCase):
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
         # TODO: @younesbelkada remove the positional arg on the next `transformers` release
-        model = replace_8bit_linear(model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config)
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
+        )
 
         # TODO: @younesbelkada remove this block on the next `transformers` release
         for p in model.parameters():
