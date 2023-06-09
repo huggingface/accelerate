@@ -38,11 +38,16 @@ from accelerate.test_utils.testing import (
     skip,
 )
 from accelerate.tracking import CometMLTracker, GeneralTracker
-from accelerate.utils import is_comet_ml_available
+from accelerate.utils import is_comet_ml_available, is_tensorboard_available
 
 
 if is_comet_ml_available():
     from comet_ml import OfflineExperiment
+
+if is_tensorboard_available():
+    import struct
+
+    import tensorboard.compat.proto.event_pb2 as event_pb2
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +79,6 @@ class TensorBoardTrackingTest(unittest.TestCase):
             self.assertNotEqual(str(log), "")
 
     def test_log_with_tensor(self):
-        import tensorboard.compat.proto.event_pb2 as event_pb2
-
         project_name = "test_project_with_log"
         with tempfile.TemporaryDirectory() as dirpath:
             accelerator = Accelerator(log_with="tensorboard", project_dir=dirpath)
@@ -86,10 +89,9 @@ class TensorBoardTrackingTest(unittest.TestCase):
             # Logged values are stored in the outermost-tfevents file and can be read in as a TFRecord
             # Names are randomly generated each time
             log = list(filter(lambda x: x.is_file(), Path(f"{dirpath}/{project_name}").iterdir()))[0]
+            # Reading implementation based on https://github.com/pytorch/pytorch/issues/45327#issuecomment-703757685
             with open(log, "rb") as f:
                 data = f.read()
-            import struct
-
             found_tensor = False
             while data:
                 header = struct.unpack("Q", data[:8])
