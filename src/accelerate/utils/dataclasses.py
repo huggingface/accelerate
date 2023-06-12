@@ -30,14 +30,8 @@ from distutils.util import strtobool
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
-import torch.distributed.checkpoint as dist_cp
-from torch.distributed.checkpoint.default_planner import (
-    DefaultSavePlanner,
-    DefaultLoadPlanner,
-)
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE, MODEL_NAME, OPTIMIZER_NAME
-from .versions import is_torch_version
 
 
 class KwargsHandler:
@@ -835,8 +829,8 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             BackwardPrefetch,
             CPUOffload,
-            FullStateDictConfig,
             FullOptimStateDictConfig,
+            FullStateDictConfig,
             ShardingStrategy,
             StateDictType,
         )
@@ -925,6 +919,8 @@ class FullyShardedDataParallelPlugin:
             self.mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
 
     def save_model(self, accelerator, model, output_dir, model_index=0):
+        import torch.distributed.checkpoint as dist_cp
+        from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -962,6 +958,8 @@ class FullyShardedDataParallelPlugin:
                 accelerator.print(f"Model saved to {ckpt_dir}")
 
     def load_model(self, accelerator, model, input_dir, model_index=0):
+        import torch.distributed.checkpoint as dist_cp
+        from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -1007,6 +1005,8 @@ class FullyShardedDataParallelPlugin:
             model.load_state_dict(state_dict)
 
     def save_optimizer(self, accelerator, optimizer, model, output_dir, optimizer_index=0):
+        import torch.distributed.checkpoint as dist_cp
+        from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -1034,6 +1034,8 @@ class FullyShardedDataParallelPlugin:
                 accelerator.print(f"Optimizer state saved in {ckpt_dir}")
 
     def load_optimizer(self, accelerator, optimizer, model, input_dir, optimizer_index=0):
+        import torch.distributed.checkpoint as dist_cp
+        from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 

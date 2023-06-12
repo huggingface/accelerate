@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import contextlib
-import inspect
 import math
 import os
 import re
