@@ -284,7 +284,7 @@ class Accelerator:
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
             fsdp_plugin, FullyShardedDataParallelPlugin
         ):
-            if is_torch_version("<", "1.12.0"):
+            if is_torch_version("<", "2.0.1"):
                 raise ValueError("FSDP requires PyTorch >= 2.0.1")
 
         if fsdp_plugin is None:  # init from env variables

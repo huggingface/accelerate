@@ -1035,7 +1035,7 @@ class FullyShardedDataParallelPlugin:
 
     def load_optimizer(self, accelerator, optimizer, model, input_dir, optimizer_index=0):
         import torch.distributed.checkpoint as dist_cp
-        from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
+        from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
@@ -1043,14 +1043,16 @@ class FullyShardedDataParallelPlugin:
         with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config, self.optim_state_dict_config):
             if self.state_dict_type == StateDictType.FULL_STATE_DICT:
                 optim_state = None
-                if accelerator.process_index == 0 or not self.optim_state_dict_config.rank0_only:
-                    optimizer_name = (
-                        f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
-                    )
-                    input_optimizer_file = os.path.join(input_dir, optimizer_name)
-                    print(f"Loading Optimizer state from {input_optimizer_file}")
-                    optim_state = torch.load(input_optimizer_file)
-                    print(f"Optimizer state loaded from {input_optimizer_file}")
+                # below check should work but currently it isn't working (mostly opytorch issue),
+                # in the meantime disabling it at the cost of excess memory usage
+                # if accelerator.process_index == 0 or not self.optim_state_dict_config.rank0_only:
+                optimizer_name = (
+                    f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
+                )
+                input_optimizer_file = os.path.join(input_dir, optimizer_name)
+                print(f"Loading Optimizer state from {input_optimizer_file}")
+                optim_state = torch.load(input_optimizer_file)
+                print(f"Optimizer state loaded from {input_optimizer_file}")
             else:
                 ckpt_dir = (
                     os.path.join(input_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
@@ -1058,15 +1060,14 @@ class FullyShardedDataParallelPlugin:
                     else input_dir
                 )
                 accelerator.print(f"Loading Optimizer from {ckpt_dir}")
-                optim_state = dist_cp.load_sharded_optimizer_state_dict(
+                optim_state = load_sharded_optimizer_state_dict(
                     model_state_dict=model.state_dict(),
                     optimizer_key="optimizer",
                     storage_reader=dist_cp.FileSystemReader(ckpt_dir),
-                    planner=DefaultLoadPlanner(),
                 )
-                optim_state = optim_state["optim"]
+                optim_state = optim_state["optimizer"]
                 accelerator.print(f"Optimizer loaded from {ckpt_dir}")
-            flattened_osd = FSDP.optim_state_dict_to_load(model, optimizer, optim_state)
+            flattened_osd = FSDP.optim_state_dict_to_load(optim_state, model, optimizer)
             optimizer.load_state_dict(flattened_osd)
 
 
