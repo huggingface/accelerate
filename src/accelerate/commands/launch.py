@@ -38,6 +38,7 @@ from accelerate.utils import (
     is_rich_available,
     is_sagemaker_available,
     is_torch_version,
+    is_xpu_available,
     patch_environment,
     prepare_deepspeed_cmd_env,
     prepare_multi_gpu_env,
@@ -812,7 +813,9 @@ def _validate_launch_command(args):
             and not args.use_megatron_lm
         ):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
-            args.multi_gpu = defaults.distributed_type == DistributedType.MULTI_GPU
+            args.multi_gpu = (
+                True if defaults.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU) else False
+            )
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
@@ -868,9 +871,14 @@ def _validate_launch_command(args):
             args.dynamo_backend = "no"
     else:
         if args.num_processes is None:
-            args.num_processes = torch.cuda.device_count()
+            if args.use_xpu and is_xpu_available():
+                args.num_processes = torch.xpu.device_count()
+            else:
+                args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
-        if torch.cuda.device_count() > 1 and not args.multi_gpu:
+        if not args.multi_gpu and (
+            (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1) or (torch.cuda.device_count() > 1)
+        ):
             warned.append(
                 "\t\tMore than one GPU was found, enabling multi-GPU training.\n"
                 "\t\tIf this was unintended please pass in `--num_processes=1`."
@@ -916,7 +924,6 @@ def _validate_launch_command(args):
 
 def launch_command(args):
     args, defaults, mp_from_config_flag = _validate_launch_command(args)
-
     # Use the proper launcher
     if args.use_deepspeed and not args.cpu:
         args.deepspeed_fields_from_accelerate_config = list(defaults.deepspeed_config.keys()) if defaults else []

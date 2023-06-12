@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader
 from accelerate import Accelerator
 from accelerate.data_loader import prepare_data_loader
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import RegressionDataset, RegressionModel, are_the_same_tensors
+from accelerate.test_utils import RegressionDataset, are_the_same_tensors
 from accelerate.utils import (
     DistributedType,
     gather,
@@ -38,6 +38,13 @@ from accelerate.utils import (
     set_seed,
     synchronize_rng_states,
 )
+
+
+# TODO: remove RegressionModel4XPU once ccl support empty buffer in broadcasting.
+if is_xpu_available():
+    from accelerate.test_utils import RegressionModel4XPU as RegressionModel
+else:
+    from accelerate.test_utils import RegressionModel
 
 
 def print_main(state):
@@ -144,6 +151,9 @@ def rng_sync_check():
     if state.distributed_type == DistributedType.MULTI_GPU:
         synchronize_rng_states(["cuda"])
         assert are_the_same_tensors(torch.cuda.get_rng_state()), "RNG states improperly synchronized on GPU."
+    elif state.distributed_type == DistributedType.MULTI_XPU:
+        synchronize_rng_states(["xpu"])
+        assert are_the_same_tensors(torch.xpu.get_rng_state()), "RNG states improperly synchronized on XPU."
     generator = torch.Generator()
     synchronize_rng_states(["generator"], generator=generator)
     assert are_the_same_tensors(generator.get_state()), "RNG states improperly synchronized in generator."
