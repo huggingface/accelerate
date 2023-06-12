@@ -820,7 +820,7 @@ class FullyShardedDataParallelPlugin:
     forward_prefetch: bool = field(
         default=False,
         metadata={
-            "If True, then FSDP explicitly prefetches the next upcoming "
+            "help": "If True, then FSDP explicitly prefetches the next upcoming "
             "all-gather while executing in the forward pass. only use with Static graphs."
         },
     )
