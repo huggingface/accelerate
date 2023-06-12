@@ -286,7 +286,7 @@ class Accelerator:
             fsdp_plugin, FullyShardedDataParallelPlugin
         ):
             if is_torch_version("<", "1.12.0"):
-                raise ValueError("FSDP requires PyTorch >= 1.12.0")
+                raise ValueError("FSDP requires PyTorch >= 2.0.1")
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
@@ -1287,16 +1287,17 @@ class Accelerator:
                         "sharding_strategy": fsdp_plugin.sharding_strategy,
                         "cpu_offload": fsdp_plugin.cpu_offload,
                         "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
-                        "backward_prefetch": fsdp_plugin.backward_prefetch,
                         "mixed_precision": fsdp_plugin.mixed_precision_policy,
+                        "sync_module_states": fsdp_plugin.sync_module_states,
+                        "backward_prefetch": fsdp_plugin.backward_prefetch,
+                        "forward_prefetch": fsdp_plugin.forward_prefetch,
+                        "use_orig_params": fsdp_plugin.use_orig_params,
+                        "param_init_fn": fsdp_plugin.param_init_fn,
                         "ignored_modules": fsdp_plugin.ignored_modules,
+                        "ignored_parameters": fsdp_plugin.ignored_parameters,
+                        "limit_all_gathers": fsdp_plugin.limit_all_gathers,
                         "device_id": self.device,
                     }
-                    signature = inspect.signature(FSDP.__init__).parameters.keys()
-                    if "limit_all_gathers" in signature:
-                        kwargs["limit_all_gathers"] = fsdp_plugin.limit_all_gathers
-                    if "use_orig_params" in signature:
-                        kwargs["use_orig_params"] = fsdp_plugin.use_orig_params
                     model = FSDP(model, **kwargs)
                 self._models[-1] = model
             elif self.distributed_type == DistributedType.MULTI_CPU:

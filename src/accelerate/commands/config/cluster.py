@@ -348,6 +348,7 @@ def get_cluster_input():
                 fsdp_state_dict_type_query,
                 FSDP_STATE_DICT_TYPE,
                 lambda x: FSDP_STATE_DICT_TYPE[int(x)],
+                default=2,
             )
 
     megatron_lm_config = {}
