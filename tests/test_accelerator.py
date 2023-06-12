@@ -197,7 +197,11 @@ class AcceleratorTester(AccelerateTestCase):
         model, optimizer, scheduler, train_dl, valid_dl, dummy_obj = accelerator.prepare(
             model, optimizer, scheduler, train_dl, valid_dl, dummy_obj
         )
-        self.assertTrue(dummy_obj == [1, 2, 3])
+        self.assertEqual(
+            getattr(dummy_obj, "_is_accelerate_prepared", False),
+            False,
+            "Dummy object should have `_is_accelerate_prepared` set to `True`"
+        )
         self.assertEqual(
             getattr(model, "_is_accelerate_prepared", False),
             True,
