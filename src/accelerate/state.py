@@ -231,6 +231,20 @@ class PartialState:
                             "Looks like distributed multinode run but MASTER_ADDR env not set, "
                             "please try exporting rank 0's hostname as MASTER_ADDR"
                         )
+                if (
+                    self.distributed_type == DistributedType.MULTI_CPU
+                    and get_int_from_env(["OMP_NUM_THREADS", "MKL_NUM_THREADS"], 0) == 0
+                ):
+                    import psutil
+
+                    num_cpu_threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
+                    if num_cpu_threads_per_process == 0:
+                        num_cpu_threads_per_process = 1
+                    torch.set_num_threads(num_cpu_threads_per_process)
+                    warnings.warn(
+                        f"OMP_NUM_THREADS/MKL_NUM_THREADS unset, we set it at {num_cpu_threads_per_process} to improve oob"
+                        " performance."
+                    )
                 if not torch.distributed.is_initialized():
                     # Backend is not set by the user, we set it here
                     kwargs.pop("backend", None)
