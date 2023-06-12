@@ -1092,7 +1092,7 @@ class Accelerator:
 
             device_placement (`list[bool]`, *optional*):
                 Used to customize whether automatic device placement should be performed for each object passed. Needs
-                to be a list of the same length as `args`.
+                to be a list of the same length as `args`. Not compatible with DeepSpeed or FSDP.
 
         <Tip>
 
