@@ -187,6 +187,47 @@ class AcceleratorTester(AccelerateTestCase):
         )
         self.assertTrue(dummy_obj is None)
 
+    def test_is_accelerator_prepared(self):
+        """Checks that `_is_accelerator_prepared` is set properly"""
+        accelerator = Accelerator()
+        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+        dummy_obj = [1, 2, 3]
+
+        # This should work
+        model, optimizer, scheduler, train_dl, valid_dl, dummy_obj = accelerator.prepare(
+            model, optimizer, scheduler, train_dl, valid_dl, dummy_obj
+        )
+        self.assertEqual(
+            getattr(dummy_obj, "_is_accelerate_prepared", False),
+            False,
+            "Dummy object should have `_is_accelerate_prepared` set to `True`",
+        )
+        self.assertEqual(
+            getattr(model, "_is_accelerate_prepared", False),
+            True,
+            "Model is missing `_is_accelerator_prepared` or is set to `False`",
+        )
+        self.assertEqual(
+            getattr(optimizer, "_is_accelerate_prepared", False),
+            True,
+            "Optimizer is missing `_is_accelerator_prepared` or is set to `False`",
+        )
+        self.assertEqual(
+            getattr(scheduler, "_is_accelerate_prepared", False),
+            True,
+            "Scheduler is missing `_is_accelerator_prepared` or is set to `False`",
+        )
+        self.assertEqual(
+            getattr(train_dl, "_is_accelerate_prepared", False),
+            True,
+            "Train Dataloader is missing `_is_accelerator_prepared` or is set to `False`",
+        )
+        self.assertEqual(
+            getattr(valid_dl, "_is_accelerate_prepared", False),
+            True,
+            "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`",
+        )
+
     @slow
     def test_accelerator_bnb(self):
         """Tests that the accelerator can be used with the BNB library."""

@@ -1198,7 +1198,10 @@ class Accelerator:
             result = self._prepare_fsdp(*result)
 
         for item in result:
-            if item is not None:
+            if any(
+                item in container
+                for container in (self._dataloaders, self._models, self._optimizers, self._schedulers)
+            ):
                 setattr(item, "_is_accelerate_prepared", True)
 
         return result if len(result) > 1 else result[0]
