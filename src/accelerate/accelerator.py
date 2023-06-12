@@ -1100,7 +1100,7 @@ class Accelerator:
 
         </Tip>
 
-        Example:
+        Examples:
 
         ```python
         >>> from accelerate import Accelerator
@@ -1108,6 +1108,20 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> # Assume a model, optimizer, data_loader and scheduler are defined
         >>> model, optimizer, data_loader, scheduler = accelerator.prepare(model, optimizer, data_loader, scheduler)
+        ```
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume a model, optimizer, data_loader and scheduler are defined
+        >>> device_placement = [True, True, False, False]
+        >>> # Will place the first to items passed in automatically to the right device
+        >>> # The second two will not
+        >>> model, optimizer, data_loader, scheduler = accelerator.prepare(
+        ...     model, optimizer, data_loader, scheduler, device_placement=device_placement
+        ... )
+        ```
         ```
         """
         if device_placement is None:
