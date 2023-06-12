@@ -1121,7 +1121,6 @@ class Accelerator:
         ...     model, optimizer, data_loader, scheduler, device_placement=device_placement
         ... )
         ```
-        ```
         """
         if device_placement is None:
             device_placement = [None for _ in args]
