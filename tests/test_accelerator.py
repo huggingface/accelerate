@@ -187,6 +187,18 @@ class AcceleratorTester(AccelerateTestCase):
         )
         self.assertTrue(dummy_obj is None)
 
+    def test_accelerator_immutable_object(self):
+        """Just test that passing a non-supported item or object to accelerator.prepare() works."""
+        accelerator = Accelerator()
+        model, optimizer, scheduler, train_dl, valid_dl = create_components()
+        dummy_obj = [1, 2, 3]
+
+        # This should work
+        model, optimizer, scheduler, train_dl, valid_dl, dummy_obj = accelerator.prepare(
+            model, optimizer, scheduler, train_dl, valid_dl, dummy_obj
+        )
+        self.assertTrue(dummy_obj == [1, 2, 3])
+
     @slow
     def test_accelerator_bnb(self):
         """Tests that the accelerator can be used with the BNB library."""

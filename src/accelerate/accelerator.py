@@ -1198,7 +1198,7 @@ class Accelerator:
             result = self._prepare_fsdp(*result)
 
         for item in result:
-            if item is not None:
+            if item in self._models or item in self._optimizers or item in self._schedulers:
                 setattr(item, "_is_accelerate_prepared", True)
 
         return result if len(result) > 1 else result[0]
