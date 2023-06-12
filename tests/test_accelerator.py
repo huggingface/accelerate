@@ -200,7 +200,7 @@ class AcceleratorTester(AccelerateTestCase):
         self.assertEqual(
             getattr(dummy_obj, "_is_accelerate_prepared", False),
             False,
-            "Dummy object should have `_is_accelerate_prepared` set to `True`"
+            "Dummy object should have `_is_accelerate_prepared` set to `True`",
         )
         self.assertEqual(
             getattr(model, "_is_accelerate_prepared", False),
