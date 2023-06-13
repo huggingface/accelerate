@@ -108,4 +108,5 @@ def get_logger(name: str, log_level: str = None):
     logger = logging.getLogger(name)
     if log_level is not None:
         logger.setLevel(log_level.upper())
+        logger.root.setLevel(log_level.upper())
     return MultiProcessAdapter(logger, {})
