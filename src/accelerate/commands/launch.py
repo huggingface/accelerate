@@ -507,6 +507,27 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="FSDP's state dict type. (useful only when `use_fsdp` flag is passed).",
     )
+    fsdp_args.add_argument(
+        "--fsdp_forward_prefetch",
+        default="false",
+        type=str,
+        help="If True, then FSDP explicitly prefetches the next upcoming "
+        "all-gather while executing in the forward pass (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_use_orig_params",
+        default="false",
+        type=str,
+        help="If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres."
+        " (useful only when `use_fsdp` flag is passed).",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_sync_module_states",
+        default="false",
+        type=str,
+        help="If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0."
+        " (useful only when `use_fsdp` flag is passed).",
+    )
 
     # megatron_lm args
     megatron_lm_args = parser.add_argument_group("Megatron-LM Arguments", "Arguments related to Megatron-LM.")

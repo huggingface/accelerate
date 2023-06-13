@@ -110,6 +110,7 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
+from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, save_fsdp_model, save_fsdp_optimizer
 from .launch import (
     PrepareForLaunch,
     _filter_args,
