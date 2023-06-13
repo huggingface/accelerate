@@ -31,11 +31,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 
-from ..logging import get_logger
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE, MODEL_NAME, OPTIMIZER_NAME
-
-
-logger = get_logger(__name__)
 
 
 class KwargsHandler:
@@ -936,7 +932,9 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+        from ..logging import get_logger
 
+        logger = get_logger(__name__)
         os.makedirs(output_dir, exist_ok=True)
         with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config, self.optim_state_dict_config):
             state_dict = model.state_dict()
@@ -975,7 +973,9 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+        from ..logging import get_logger
 
+        logger = get_logger(__name__)
         accelerator.wait_for_everyone()
         with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config, self.optim_state_dict_config):
             if self.state_dict_type == StateDictType.FULL_STATE_DICT:
@@ -1023,7 +1023,9 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.checkpoint.default_planner import DefaultSavePlanner
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+        from ..logging import get_logger
 
+        logger = get_logger(__name__)
         os.makedirs(output_dir, exist_ok=True)
         with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config, self.optim_state_dict_config):
             optim_state = FSDP.optim_state_dict(model, optimizer)
@@ -1052,7 +1054,9 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
         from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+        from ..logging import get_logger
 
+        logger = get_logger(__name__)
         accelerator.wait_for_everyone()
         with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config, self.optim_state_dict_config):
             if self.state_dict_type == StateDictType.FULL_STATE_DICT:
