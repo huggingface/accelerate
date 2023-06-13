@@ -31,7 +31,11 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 
+from ..logging import get_logger
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE, MODEL_NAME, OPTIMIZER_NAME
+
+
+logger = get_logger(__name__)
 
 
 class KwargsHandler:
@@ -940,9 +944,9 @@ class FullyShardedDataParallelPlugin:
                 weights_name = f"{MODEL_NAME}.bin" if model_index == 0 else f"{MODEL_NAME}_{model_index}.bin"
                 output_model_file = os.path.join(output_dir, weights_name)
                 if accelerator.process_index == 0:
-                    print(f"Saving model to {output_model_file}")
+                    logger.info(f"Saving model to {output_model_file}")
                     torch.save(state_dict, output_model_file)
-                    print(f"Model saved to {output_model_file}")
+                    logger.info(f"Model saved to {output_model_file}")
             elif self.state_dict_type == StateDictType.LOCAL_STATE_DICT:
                 weights_name = (
                     f"{MODEL_NAME}_rank{accelerator.process_index}.bin"
@@ -950,13 +954,13 @@ class FullyShardedDataParallelPlugin:
                     else f"{MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
                 )
                 output_model_file = os.path.join(output_dir, weights_name)
-                print(f"Saving model to {output_model_file}")
+                logger.info(f"Saving model to {output_model_file}")
                 torch.save(state_dict, output_model_file)
-                print(f"Model saved to {output_model_file}")
+                logger.info(f"Model saved to {output_model_file}")
             elif self.state_dict_type == StateDictType.SHARDED_STATE_DICT:
                 ckpt_dir = os.path.join(output_dir, f"{MODEL_NAME}_{model_index}")
                 os.makedirs(ckpt_dir, exist_ok=True)
-                accelerator.print(f"Saving model to {ckpt_dir}")
+                logger.info(f"Saving model to {ckpt_dir}")
                 state_dict = {"model": state_dict}
 
                 dist_cp.save_state_dict(
@@ -964,7 +968,7 @@ class FullyShardedDataParallelPlugin:
                     storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
                     planner=DefaultSavePlanner(),
                 )
-                accelerator.print(f"Model saved to {ckpt_dir}")
+                logger.info(f"Model saved to {ckpt_dir}")
 
     def load_model(self, accelerator, model, input_dir, model_index=0):
         import torch.distributed.checkpoint as dist_cp
@@ -984,9 +988,9 @@ class FullyShardedDataParallelPlugin:
                     return
                 weights_name = f"{MODEL_NAME}.bin" if model_index == 0 else f"{MODEL_NAME}_{model_index}.bin"
                 input_model_file = os.path.join(input_dir, weights_name)
-                accelerator.print(f"Loading model from {input_model_file}")
+                logger.info(f"Loading model from {input_model_file}")
                 state_dict = torch.load(input_model_file)
-                accelerator.print(f"Model loaded from {input_model_file}")
+                logger.info(f"Model loaded from {input_model_file}")
             elif self.state_dict_type == StateDictType.LOCAL_STATE_DICT:
                 weights_name = (
                     f"{MODEL_NAME}_rank{accelerator.process_index}.bin"
@@ -994,16 +998,16 @@ class FullyShardedDataParallelPlugin:
                     else f"{MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
                 )
                 input_model_file = os.path.join(input_dir, weights_name)
-                print(f"Loading model from {input_model_file}")
+                logger.info(f"Loading model from {input_model_file}")
                 state_dict = torch.load(input_model_file)
-                print(f"Model loaded from {input_model_file}")
+                logger.info(f"Model loaded from {input_model_file}")
             elif self.state_dict_type == StateDictType.SHARDED_STATE_DICT:
                 ckpt_dir = (
                     os.path.join(input_dir, f"{MODEL_NAME}_{model_index}")
                     if f"{MODEL_NAME}" not in input_dir
                     else input_dir
                 )
-                accelerator.print(f"Loading model from {ckpt_dir}")
+                logger.info(f"Loading model from {ckpt_dir}")
                 state_dict = {"model": model.state_dict()}
                 dist_cp.load_state_dict(
                     state_dict=state_dict,
@@ -1011,6 +1015,7 @@ class FullyShardedDataParallelPlugin:
                     planner=DefaultLoadPlanner(),
                 )
                 state_dict = state_dict["model"]
+                logger.info(f"Model loaded from {ckpt_dir}")
             model.load_state_dict(state_dict)
 
     def save_optimizer(self, accelerator, optimizer, model, output_dir, optimizer_index=0):
@@ -1028,19 +1033,19 @@ class FullyShardedDataParallelPlugin:
                         f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
                     )
                     output_optimizer_file = os.path.join(output_dir, optim_state_name)
-                    print(f"Saving Optimizer state to {output_optimizer_file}")
+                    logger.info(f"Saving Optimizer state to {output_optimizer_file}")
                     torch.save(optim_state, output_optimizer_file)
-                    print(f"Optimizer state saved in {output_optimizer_file}")
+                    logger.info(f"Optimizer state saved in {output_optimizer_file}")
             else:
                 ckpt_dir = os.path.join(output_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
                 os.makedirs(ckpt_dir, exist_ok=True)
-                accelerator.print(f"Saving Optimizer state to {ckpt_dir}")
+                logger.info(f"Saving Optimizer state to {ckpt_dir}")
                 dist_cp.save_state_dict(
                     state_dict={"optimizer": optim_state},
                     storage_writer=dist_cp.FileSystemWriter(ckpt_dir),
                     planner=DefaultSavePlanner(),
                 )
-                accelerator.print(f"Optimizer state saved in {ckpt_dir}")
+                logger.info(f"Optimizer state saved in {ckpt_dir}")
 
     def load_optimizer(self, accelerator, optimizer, model, input_dir, optimizer_index=0):
         import torch.distributed.checkpoint as dist_cp
@@ -1059,23 +1064,23 @@ class FullyShardedDataParallelPlugin:
                     f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
                 )
                 input_optimizer_file = os.path.join(input_dir, optimizer_name)
-                print(f"Loading Optimizer state from {input_optimizer_file}")
+                logger.info(f"Loading Optimizer state from {input_optimizer_file}")
                 optim_state = torch.load(input_optimizer_file)
-                print(f"Optimizer state loaded from {input_optimizer_file}")
+                logger.info(f"Optimizer state loaded from {input_optimizer_file}")
             else:
                 ckpt_dir = (
                     os.path.join(input_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
                     if f"{OPTIMIZER_NAME}" not in input_dir
                     else input_dir
                 )
-                accelerator.print(f"Loading Optimizer from {ckpt_dir}")
+                logger.info(f"Loading Optimizer from {ckpt_dir}")
                 optim_state = load_sharded_optimizer_state_dict(
                     model_state_dict=model.state_dict(),
                     optimizer_key="optimizer",
                     storage_reader=dist_cp.FileSystemReader(ckpt_dir),
                 )
                 optim_state = optim_state["optimizer"]
-                accelerator.print(f"Optimizer loaded from {ckpt_dir}")
+                logger.info(f"Optimizer loaded from {ckpt_dir}")
             flattened_osd = FSDP.optim_state_dict_to_load(optim_state, model, optimizer)
             optimizer.load_state_dict(flattened_osd)
 
