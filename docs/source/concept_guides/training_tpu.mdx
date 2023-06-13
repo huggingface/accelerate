@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Training on TPUs with 🤗 Accelerate
 
-Training on TPUs can be slightly different than training on multi-gpu, even with 🤗 Accelerate. This guide aims to show you 
+Training on TPUs can be slightly different from training on multi-gpu, even with 🤗 Accelerate. This guide aims to show you 
 where you should be careful and why, as well as the best practices in general.
 
 ## Training in a Notebook
@@ -24,8 +24,8 @@ While on a TPU that last part is not as important, a critical part to understand
 When launching from the command-line, you perform **spawning**, where a python process is not currently running and you *spawn* a new process in. Since your Jupyter notebook is already 
 utilizing a python process, you need to *fork* a new process from it to launch your code. 
 
-Where this becomes important is in regards to declaring your model. On forked TPU processes, it is recommended that you instantiate your model *once* and pass this into your 
-training function. This is different than training on GPUs where you create `n` models that have their gradients synced and back-propagated at certain moments. Instead one 
+Where this becomes important is in regard to declaring your model. On forked TPU processes, it is recommended that you instantiate your model *once* and pass this into your 
+training function. This is different than training on GPUs where you create `n` models that have their gradients synced and back-propagated at certain moments. Instead, one 
 model instance is shared between all the nodes and it is passed back and forth. This is important especially when training on low-resource TPUs such as those provided in Kaggle kernels or
 on Google Colaboratory. 
 
@@ -134,7 +134,7 @@ At the base level, this is enabled when passing `mixed_precision="bf16"` to `Acc
 ```python
 accelerator = Accelerator(mixed_precision="bf16")
 ```
-By default this will cast `torch.float` and `torch.double` to `bfloat16` on TPUs. 
+By default, this will cast `torch.float` and `torch.double` to `bfloat16` on TPUs. 
 The specific configuration being set is an environmental variable of `XLA_USE_BF16` is set to `1`.
 
 There is a further configuration you can perform which is setting the `XLA_DOWNCAST_BF16` environmental variable. If set to `1`, then 
