@@ -801,7 +801,11 @@ class FullyShardedDataParallelPlugin:
     )
     use_orig_params: bool = field(
         default=False,
-        metadata={"help": "If True, enables parameter-efficient fine-tuning"},
+        metadata={
+            "help": "If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. "
+            "Useful in cases such as parameter-efficient fine-tuning. "
+            "Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019)"
+        },
     )
     param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
         default=None,
@@ -835,22 +839,23 @@ class FullyShardedDataParallelPlugin:
             StateDictType,
         )
 
+        prefix = "FSDP_"
         if self.sharding_strategy is None:
-            self.sharding_strategy = ShardingStrategy(int(os.environ.get("FSDP_SHARDING_STRATEGY", 1)))
+            self.sharding_strategy = ShardingStrategy(int(os.environ.get(prefix + "SHARDING_STRATEGY", 1)))
 
         if self.cpu_offload is None:
-            if os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true":
+            if strtobool(os.environ.get(prefix + "OFFLOAD_PARAMS", "False")) == 1:
                 self.cpu_offload = CPUOffload(offload_params=True)
             else:
                 self.cpu_offload = CPUOffload(offload_params=False)
 
         if self.backward_prefetch is None:
-            prefetch_policy = os.environ.get("FSDP_BACKWARD_PREFETCH", "NO_PREFETCH")
+            prefetch_policy = os.environ.get(prefix + "BACKWARD_PREFETCH", "NO_PREFETCH")
             if prefetch_policy != FSDP_BACKWARD_PREFETCH[-1]:
                 self.backward_prefetch = BackwardPrefetch(FSDP_BACKWARD_PREFETCH.index(prefetch_policy) + 1)
 
         if self.state_dict_type is None:
-            state_dict_type_policy = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
+            state_dict_type_policy = os.environ.get(prefix + "STATE_DICT_TYPE", "FULL_STATE_DICT")
             self.state_dict_type = StateDictType(FSDP_STATE_DICT_TYPE.index(state_dict_type_policy) + 1)
 
             if self.state_dict_type == StateDictType.FULL_STATE_DICT:
@@ -858,6 +863,10 @@ class FullyShardedDataParallelPlugin:
                     self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
                 if self.optim_state_dict_config is None:
                     self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
+
+        self.use_orig_params = strtobool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
+        self.sync_module_states = strtobool(os.environ.get(prefix + "SYNC_MODULE_STATES", "False")) == 1
+        self.forward_prefetch = strtobool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
 
     @staticmethod
     def get_module_class_from_name(module, name):

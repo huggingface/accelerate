@@ -21,6 +21,7 @@ import evaluate
 import psutil
 import torch
 from datasets import load_dataset
+from torch.distributed.fsdp.fully_sharded_data_parallel import FullOptimStateDictConfig, FullStateDictConfig
 from torch.utils.data import DataLoader
 from transformers import (
     AutoModelForSequenceClassification,
@@ -126,9 +127,8 @@ def training_function(config, args):
     # New Code #
     # Pass the advanced FSDP settings not part of the accelerate config by creating fsdp_plugin
     fsdp_plugin = FullyShardedDataParallelPlugin(
-        use_orig_params=True,
-        forward_prefetch=False,
-        sync_module_states=True,
+        state_dict_config=FullStateDictConfig(offload_to_cpu=False, rank0_only=False),
+        optim_state_dict_config=FullOptimStateDictConfig(offload_to_cpu=False, rank0_only=False),
     )
 
     # Initialize accelerator
