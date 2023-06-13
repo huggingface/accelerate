@@ -85,7 +85,7 @@ The FSDP parameters will be picked based on the accelerate config file or launch
 
 Below is an example:
 
-```
+```py
 from accelerate import FullyShardedDataParallelPlugin
 from torch.distributed.fsdp.fully_sharded_data_parallel import FullOptimStateDictConfig, FullStateDictConfig
 
@@ -102,7 +102,7 @@ accelerator = Accelerator(fsdp_plugin=fsdp_plugin)
 The new recommended way of checkpointing when using FSDP models is to use `SHARDED_STATE_DICT` as `StateDictType` when setting up the accelerate config.
 Below is the code snippet to save using `save_state` utility of accelerate.
 
-```
+```py
 accelerator.save_state("ckpt")
 ```
 
@@ -122,7 +122,7 @@ ls pytorch_model_0
 
 To load them back for resuming the training, use the `load_state` utility of accelerate
 
-```
+```py
 accelerator.load_state("ckpt")
 ```
 
