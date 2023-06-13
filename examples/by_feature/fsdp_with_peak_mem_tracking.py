@@ -17,8 +17,8 @@ import gc
 import os
 import threading
 
-import psutil
 import evaluate
+import psutil
 import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader
