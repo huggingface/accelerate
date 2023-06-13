@@ -74,9 +74,54 @@ Currently, `Accelerate` supports the following config through the CLI:
 `State Dict Type`: [1] FULL_STATE_DICT, [2] LOCAL_STATE_DICT, [3] SHARDED_STATE_DICT  
 ```
 
+For additional and more nuanced control, you can specify other FSDP parameters via `FullyShardedDataParallelPlugin`. 
+When creating `FullyShardedDataParallelPlugin` object, pass it the parameters that weren't part of the accelerate config or if you want to override them.
+The FSDP parameters will be picked based on the accelerate config file or launch command arguments and other parameters that you will pass directly through the `FullyShardedDataParallelPlugin` object will set/override that.
+
+Below is an example:
+
+```
+from accelerate import FullyShardedDataParallelPlugin
+
+fsdp_plugin = FullyShardedDataParallelPlugin(
+        use_orig_params=True,
+        forward_prefetch=False,
+        sync_module_states=True,
+    )
+
+accelerator = Accelerator(fsdp_plugin=fsdp_plugin)
+```
+
 ## Saving and loading
 
-1. When using transformers `save_pretrained`, pass `state_dict=accelerator.get_state_dict(model)` to save the model state dict. 
+The new recommended way of checkpointing when using FSDP models is to use `SHARDED_STATE_DICT` as `StateDictType` when setting up the accelerate config.
+Below is the code snippet to save using `save_state` utility of accelerate.
+
+```
+accelerator.save_state("ckpt")
+```
+
+Inspect the ckeckpoint folder to see model and optimizer as shards per process:
+```
+ls ckpt 
+# optimizer_0  pytorch_model_0  random_states_0.pkl  random_states_1.pkl  scheduler.bin
+
+cd ckpt
+
+ls optimizer_0
+# __0_0.distcp  __1_0.distcp
+
+ls pytorch_model_0
+# __0_0.distcp  __1_0.distcp
+```
+
+To load them back for resuming the training, use the `load_state` utility of accelerate
+
+```
+accelerator.load_state("ckpt")
+```
+
+When using transformers `save_pretrained`, pass `state_dict=accelerator.get_state_dict(model)` to save the model state dict. 
   Below is an example:
 
 ```diff
