@@ -71,14 +71,19 @@ from .utils import (
     is_torch_version,
     is_tpu_available,
     is_xpu_available,
+    load_fsdp_model,
+    load_fsdp_optimizer,
     pad_across_processes,
     parse_choice_from_env,
     recursively_apply,
     reduce,
     release_memory,
     save,
+    save_fsdp_model,
+    save_fsdp_optimizer,
     wait_for_everyone,
 )
+from .utils.constants import FSDP_PYTORCH_VERSION
 
 
 if is_deepspeed_available():
@@ -284,8 +289,8 @@ class Accelerator:
         if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true" or isinstance(
             fsdp_plugin, FullyShardedDataParallelPlugin
         ):
-            if is_torch_version("<", "2.0.1"):
-                raise ValueError("FSDP requires PyTorch >= 2.0.1")
+            if is_torch_version("<", FSDP_PYTORCH_VERSION):
+                raise ValueError(f"FSDP requires PyTorch >= {FSDP_PYTORCH_VERSION}")
 
         if fsdp_plugin is None:  # init from env variables
             fsdp_plugin = (
@@ -2392,7 +2397,7 @@ class Accelerator:
         for i, model in enumerate(self._models):
             if self.distributed_type == DistributedType.FSDP:
                 logger.info("Saving FSDP model")
-                self.state.fsdp_plugin.save_model(self, model, output_dir, i)
+                save_fsdp_model(self.state.fsdp_plugin, self, model, output_dir, i)
                 logger.info(f"FSDP Model saved to output dir {output_dir}")
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Saving DeepSpeed Model and Optimizer")
@@ -2411,7 +2416,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.FSDP:
             for opt in self._optimizers:
                 logger.info("Saving FSDP Optimizer")
-                self.state.fsdp_plugin.save_optimizer(self, opt, self._models[i], output_dir, i)
+                save_fsdp_optimizer(self.state.fsdp_plugin, self, opt, self._models[i], output_dir, i)
                 logger.info(f"FSDP Optimizer saved to output dir {output_dir}")
         elif self.distributed_type not in [DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
             optimizers = self._optimizers
@@ -2511,7 +2516,7 @@ class Accelerator:
         for i, model in enumerate(self._models):
             if self.distributed_type == DistributedType.FSDP:
                 logger.info("Loading FSDP model")
-                self.state.fsdp_plugin.load_model(self, model, input_dir, i)
+                load_fsdp_model(self.state.fsdp_plugin, self, model, input_dir, i)
                 logger.info(f"FSDP Model loaded from input dir {input_dir}")
             elif self.distributed_type == DistributedType.DEEPSPEED:
                 logger.info("Loading DeepSpeed Model and Optimizer")
@@ -2530,7 +2535,7 @@ class Accelerator:
         if self.distributed_type == DistributedType.FSDP:
             for i, opt in enumerate(self._optimizers):
                 logger.info("Loading FSDP Optimizer")
-                self.state.fsdp_plugin.load_optimizer(self, opt, self._models[i], input_dir, i)
+                load_fsdp_optimizer(self.state.fsdp_plugin, self, opt, self._models[i], input_dir, i)
                 logger.info(f"FSDP Optimizer loaded from input dir {input_dir}")
         elif self.distributed_type not in [DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM]:
             optimizers = self._optimizers
