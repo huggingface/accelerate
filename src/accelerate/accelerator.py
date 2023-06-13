@@ -1091,7 +1091,7 @@ class Accelerator:
 
             device_placement (`list[bool]`, *optional*):
                 Used to customize whether automatic device placement should be performed for each object passed. Needs
-                to be a list of the same length as `args`.
+                to be a list of the same length as `args`. Not compatible with DeepSpeed or FSDP.
 
         <Tip>
 
@@ -1099,7 +1099,7 @@ class Accelerator:
 
         </Tip>
 
-        Example:
+        Examples:
 
         ```python
         >>> from accelerate import Accelerator
@@ -1107,6 +1107,18 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> # Assume a model, optimizer, data_loader and scheduler are defined
         >>> model, optimizer, data_loader, scheduler = accelerator.prepare(model, optimizer, data_loader, scheduler)
+        ```
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume a model, optimizer, data_loader and scheduler are defined
+        >>> device_placement = [True, True, False, False]
+        >>> # Will place the first to items passed in automatically to the right device but not the last two.
+        >>> model, optimizer, data_loader, scheduler = accelerator.prepare(
+        ...     model, optimizer, data_loader, scheduler, device_placement=device_placement
+        ... )
         ```
         """
         if device_placement is None:
@@ -1197,7 +1209,10 @@ class Accelerator:
             result = self._prepare_fsdp(*result)
 
         for item in result:
-            if item is not None:
+            if any(
+                item in container
+                for container in (self._dataloaders, self._models, self._optimizers, self._schedulers)
+            ):
                 setattr(item, "_is_accelerate_prepared", True)
 
         return result if len(result) > 1 else result[0]

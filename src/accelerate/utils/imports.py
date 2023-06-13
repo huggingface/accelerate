@@ -216,6 +216,8 @@ def is_xpu_available(check_device=False):
     else:
         return False
 
+    import intel_extension_for_pytorch  # noqa: F401
+
     if check_device:
         try:
             # Will raise a RuntimeError if no XPU  is found
