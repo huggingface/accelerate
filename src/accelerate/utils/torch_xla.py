@@ -15,7 +15,11 @@
 import subprocess
 import sys
 
-import pkg_resources
+
+if sys.version_info < (3, 8):
+    import importlib_metadata
+else:
+    import importlib.metadata as importlib_metadata
 
 
 def install_xla(upgrade: bool = False):
@@ -43,7 +47,7 @@ def install_xla(upgrade: bool = False):
             torch_install_cmd = ["pip", "install", "-U", "torch"]
             subprocess.run(torch_install_cmd, check=True)
         # get the current version of torch
-        torch_version = pkg_resources.get_distribution("torch").version
+        torch_version = importlib_metadata.version("torch")
         torch_version_trunc = torch_version[: torch_version.rindex(".")]
         xla_wheel = f"https://storage.googleapis.com/tpu-pytorch/wheels/colab/torch_xla-{torch_version_trunc}-cp37-cp37m-linux_x86_64.whl"
         xla_install_cmd = ["pip", "install", xla_wheel]
