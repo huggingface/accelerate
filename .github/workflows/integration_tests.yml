@@ -52,6 +52,7 @@ jobs:
     
     - name: Clone and install transformers
       run: |
+        cd ..
         git clone https://github.com/huggingface/transformers
         cd transformers
         if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
@@ -65,6 +66,6 @@ jobs:
 
     - name: Run Trainer tests
       run: |
-        cd transformers
+        cd ../transformers
         pytest -sv tests/trainer
 
