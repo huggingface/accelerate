@@ -474,7 +474,7 @@ def prepare_sagemager_args_inputs(
                 sagemaker_inputs[input_name] = FileSystemInput(**input_dict)
             else:
                 sagemaker_inputs[input_name] = input_value
-        except (ValueError, SyntaxError) as e:
+        except (ValueError, SyntaxError):
             sagemaker_inputs[input_name] = input_value
 
     return args, sagemaker_inputs
