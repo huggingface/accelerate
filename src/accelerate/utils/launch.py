@@ -359,7 +359,6 @@ def _convert_nargs_to_dict(nargs: List[str]) -> Dict[str, str]:
 def prepare_sagemager_args_inputs(
     sagemaker_config: SageMakerConfig, args: argparse.Namespace
 ) -> Tuple[argparse.Namespace, Dict[str, Any]]:
-
     from sagemaker.inputs import FileSystemInput
 
     # configure environment
