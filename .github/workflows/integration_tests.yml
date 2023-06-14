@@ -66,5 +66,5 @@ jobs:
     - name: Run Trainer tests
       run: |
         cd transformers
-        pytest -sv tests/test_trainer
+        pytest -sv tests/trainer
 
