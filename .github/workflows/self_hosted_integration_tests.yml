@@ -1,0 +1,78 @@
+# CI for specifically ensuring integrations work fine (`transformers` mainly) on GPUs
+# Useful tips:
+#  - `working-directory` should be set to the root of the repo, which is cloned on the actual CI runner.
+#    It follows the directory structure of `actions-runner/_work/{repo_name}/{repo_name}/{cloned_repo} on 
+#    prem, but in Actions setting `working-directory` looks just in the `{repo_name}` level.
+#  - New integrations to test should have its own job, and follow a strategy method where we check both
+#    the pypi and github versions.
+#  - Workflow call lets this be called from `build_and_run_tests.yml`
+#  - When using a docker container, it's recommended to set `--shm-size`, we use 16gb.
+name: Integration Tests (push to "main")
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+env:
+  HF_HOME: ~/hf_cache
+
+jobs:
+  run-trainer-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        transformers-version: [
+          pypi,
+          github
+        ]
+        cuda_visible_devices: [
+          "0", 
+          "0,1"
+        ]
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    defaults:
+      run:
+        shell: bash
+      steps:
+        - name: Update transformers clone & pip install
+          working-directory: transformers/
+          run: |
+            git pull
+            if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
+              git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
+            fi
+            source activate accelerate
+            pip install .[torch,deepspeed-testing]
+        
+        - name: Update accelerate clone and pip install
+          working-directory: accelerate/
+          run: 
+            source activate accelerate
+            git config --global --add safe.directory '*'
+            git fetch && git checkout ${{ github.sha }}
+            pip install -e .
+
+        - name: Show installed libraries
+          run: |
+            source activate accelerate
+            pip freeze
+
+        - name: Run trainer tests
+          working-directory: transformers/
+          env:
+            CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          run: |
+            source activate accelerate
+            pytest -sv tests/test_trainer
+
+        - name: Run deepspeed tests
+          working-directory: transformers/
+          env:
+            CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          run: |
+            source activate accelerate
+            pytest -sv tests/deepspeed
+
