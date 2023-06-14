@@ -37,14 +37,6 @@ jobs:
       with:
         python-version: 3.7
 
-    - name: Activate python cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          ${{ env.pythonLocation }}
-          ${{ env.HF_HOME }}
-        key: ${{ env.pythonLocation }}-integration-tests
-      
     - name: Install Accelerate from source
       run: |
         pip install --upgrade pip
