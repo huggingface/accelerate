@@ -81,6 +81,21 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
         current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
         current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"
 
+    if not args.use_cpu or args.cpu:
+        if args.load_in_4bit or args.load_in_8bit:
+            current_env["ACCELERATE_USE_BNB_QUANTIZATION"] = "true"
+            current_env["LOAD_IN_8BIT"] = str(args.load_in_8bit)
+            current_env["LOAD_IN_4BIT"] = str(args.load_in_4bit)
+            if args.llm_int8_threshold is not None:
+                current_env["LLM_INT8_THRESHOLD"] = str(args.llm_int8_threshold)
+            if args.llm_int8_skip_modules is not None:
+                current_env["LLM_INT8_SKIP_MODULES"] = str(args.llm_int8_skip_modules)
+            if args.bnb_4bit_compute_dtype is not None:
+                current_env["BNB_4BIT_COMPUTE_DTYPE"] = str(args.bnb_4bit_compute_dtype)
+            if args.bnb_4bit_quant_type is not None:
+                current_env["BNB_4BIT_QUANT_TYPE"] = str(args.bnb_4bit_quant_type)
+            if args.bnb_4bit_use_double_quant is not None:
+                current_env["BNB_4BIT_USE_DOUBLE_QUANT"] = str(args.bnb_4bit_use_double_quant)
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
@@ -190,6 +205,21 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env[prefix + "RECOMPUTE_ACTIVATIONS"] = str(args.megatron_lm_recompute_activations)
         if args.megatron_lm_use_distributed_optimizer is not None:
             current_env[prefix + "USE_DISTRIBUTED_OPTIMIZER"] = str(args.megatron_lm_use_distributed_optimizer)
+
+    if args.load_in_4bit or args.load_in_8bit:
+        current_env["ACCELERATE_USE_BNB_QUANTIZATION"] = "true"
+        current_env["LOAD_IN_8BIT"] = str(args.load_in_8bit)
+        current_env["LOAD_IN_4BIT"] = str(args.load_in_4bit)
+        if args.llm_int8_threshold is not None:
+            current_env["LLM_INT8_THRESHOLD"] = str(args.llm_int8_threshold)
+        if args.llm_int8_skip_modules is not None:
+            current_env["LLM_INT8_SKIP_MODULES"] = str(args.llm_int8_skip_modules)
+        if args.bnb_4bit_compute_dtype is not None:
+            current_env["BNB_4BIT_COMPUTE_DTYPE"] = str(args.bnb_4bit_compute_dtype)
+        if args.bnb_4bit_quant_type is not None:
+            current_env["BNB_4BIT_QUANT_TYPE"] = str(args.bnb_4bit_quant_type)
+        if args.bnb_4bit_use_double_quant is not None:
+            current_env["BNB_4BIT_USE_DOUBLE_QUANT"] = str(args.bnb_4bit_use_double_quant)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
     return current_env

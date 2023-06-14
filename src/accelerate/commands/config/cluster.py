@@ -30,6 +30,9 @@ from ...utils.constants import (
     FSDP_BACKWARD_PREFETCH,
     FSDP_SHARDING_STRATEGY,
     FSDP_STATE_DICT_TYPE,
+    QUANTIZATION_COMPUTE_DTYPE,
+    QUANTIZATION_LOAD_OPTIONS,
+    QUANTIZATION_QUANT_TYPE,
     TORCH_DYNAMO_MODES,
 )
 from .config_args import ClusterConfig
@@ -477,6 +480,48 @@ def get_cluster_input():
             default="all",
         )
 
+    quantization_config = {}
+    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO] and not use_cpu and not use_mps:
+        quantization_config["load_in"] = _ask_options(
+            "Do you wish to use quantization?",
+            QUANTIZATION_LOAD_OPTIONS,
+            lambda x: QUANTIZATION_LOAD_OPTIONS[int(x)],
+            default=0,
+        )
+        if quantization_config["load_in"] == "8bit":
+            quantization_config["load_in_8bit"] = True
+            quantization_config["llm_int8_threshold"] = _ask_field(
+                "What is the outlier threshold? [6]:",
+                int,
+                default=6,
+                error_message="Please enter an integer.",
+            )
+            quantization_config["llm_int8_skip_modules"] = _ask_field(
+                "Which modules do you not wish to convert in 8-bit, seperated by a comma: ",
+                default="",
+            )
+
+        elif quantization_config["load_in"] == "4bit":
+            quantization_config["load_in_4bit"] = True
+            quantization_config["bnb_4bit_quant_type"] = _ask_options(
+                "Select the quantization data type in the bnb layers: ",
+                QUANTIZATION_QUANT_TYPE,
+                lambda x: QUANTIZATION_QUANT_TYPE[int(x)],
+                default=0,
+            )
+            quantization_config["bnb_4bit_compute_dtype"] = _ask_options(
+                "Select the compute dtype: ",
+                QUANTIZATION_COMPUTE_DTYPE,
+                lambda x: QUANTIZATION_COMPUTE_DTYPE[int(x)],
+                default=0,
+            )
+            quantization_config["bnb_4bit_use_double_quant"] = _ask_field(
+                "Do you want to use double quantization? [yes/NO]: ",
+                _convert_yes_no_to_bool,
+                default=False,
+                error_message="Please enter yes or no.",
+            )
+
     if distributed_type == DistributedType.TPU:
         mixed_precision = "no"
         main_training_function = _ask_field(
@@ -556,6 +601,8 @@ def get_cluster_input():
         main_training_function = "main"
         if distributed_type == DistributedType.DEEPSPEED and use_deepspeed_config:
             mixed_precision = None
+        elif quantization_config.get("load_in", "no") != "no":
+            mixed_precision = None
         else:
             mixed_precision = _ask_options(
                 "Do you wish to use FP16 or BF16 (mixed precision)?",
@@ -589,6 +636,7 @@ def get_cluster_input():
         fsdp_config=fsdp_config,
         megatron_lm_config=megatron_lm_config,
         ipex_config=ipex_config,
+        quantization_config=quantization_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
         same_network=same_network,

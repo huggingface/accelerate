@@ -31,6 +31,10 @@ FSDP_STATE_DICT_TYPE = ["FULL_STATE_DICT", "LOCAL_STATE_DICT", "SHARDED_STATE_DI
 FSDP_PYTORCH_VERSION = "2.0.1"
 DEEPSPEED_MULTINODE_LAUNCHERS = ["pdsh", "standard", "openmpi", "mvapich"]
 TORCH_DYNAMO_MODES = ["default", "reduce-overhead", "max-autotune"]
+QUANTIZATION_QUANT_TYPE = ["fp4", "nf4"]
+QUANTIZATION_COMPUTE_DTYPE = ["fp32", "fp16", "bf16"]
+QUANTIZATION_LOAD_OPTIONS = ["no", "8bit", "4bit"]
+
 
 STR_OPERATION_TO_FUNC = {">": op.gt, ">=": op.ge, "==": op.eq, "!=": op.ne, "<=": op.le, "<": op.lt}
 

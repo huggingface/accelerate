@@ -692,6 +692,7 @@ class AcceleratorState:
         deepspeed_plugin=None,
         fsdp_plugin=None,
         megatron_lm_plugin=None,
+        bnb_quantization_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -753,6 +754,11 @@ class AcceleratorState:
                 and self.device.type == "cuda"
             ):
                 torch.backends.cuda.matmul.allow_tf32 = True
+            if os.environ.get("ACCELERATE_USE_BNB_QUANTIZATION", "false") == "true" and self.distributed_type in [
+                DistributedType.MULTI_GPU,
+                DistributedType.NO,
+            ]:
+                self.bnb_quantization_plugin = bnb_quantization_plugin
             PartialState._shared_state["distributed_type"] = self.distributed_type
 
     @property

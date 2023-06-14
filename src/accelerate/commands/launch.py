@@ -579,6 +579,62 @@ def launch_command_parser(subparsers=None):
         "(useful only when `use_megatron_lm` flag is passed).",
     )
 
+    # Quantization arguments
+    quantization_args = parser.add_argument_group("Quantization Arguments", "Arguments related to quantization.")
+    quantization_args.add_argument(
+        "--load_in_8bit",
+        default=False,
+        action="store_true",
+        help="This flag is used to enable 8-bit quantization with LLM.int8().",
+    )
+    quantization_args.add_argument(
+        "--load_in_4bit",
+        default=False,
+        action="store_true",
+        help="This flag is used to enable 4-bit quantization by replacing the Linear layers with FP4/NF4 layers from `bitsandbytes`",
+    )
+    quantization_args.add_argument(
+        "--llm_int8_threshold",
+        default=6.0,
+        type=float,
+        help="""This corresponds to the outlier threshold for outlier detection as described in `LLM.int8() : 8-bit Matrix
+            Multiplication for Transformers at Scale` paper: https://arxiv.org/abs/2208.07339 Any hidden states value
+            that is above this threshold will be considered an outlier and the operation on those values will be done
+            in fp16. Values are usually normally distributed, that is, most values are in the range [-3.5, 3.5], but
+            there are some exceptional systematic outliers that are very differently distributed for large models.
+            These outliers are often in the interval [-60, -6] or [6, 60]. Int8 quantization works well for values of
+            magnitude ~5, but beyond that, there is a significant performance penalty. A good default threshold is 6,
+            but a lower threshold might be needed for more unstable models (small models, fine-tuning)/""",
+    )
+    quantization_args.add_argument(
+        "--llm_int8_skip_modules",
+        default="",
+        type=str,
+        help="""An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such as
+            Jukebox that has several heads in different places and not necessarily at the last position. For example
+            for `CausalLM` models, the last `lm_head` is kept in its original `dtype`.""",
+    )
+    quantization_args.add_argument(
+        "--bnb_4bit_compute_dtype",
+        default="fp32",
+        type=str,
+        help="This sets the computational type which might be different than the input time. For example, inputs might be"
+        "fp32, but computation can be set to bf16 for speedups.",
+    )
+    quantization_args.add_argument(
+        "--bnb_4bit_quant_type",
+        default="fp4",
+        type=str,
+        help="This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types"
+        "which are specified by `fp4` or `nf4`. ",
+    )
+    quantization_args.add_argument(
+        "--bnb_4bit_use_double_quant",
+        default=False,
+        action="store_true",
+        help="This flag is used for nested quantization where the quantization constants from the first quantization are quantized again.",
+    )
+
     # AWS arguments
     aws_args = parser.add_argument_group("AWS Arguments", "Arguments related to AWS.")
     aws_args.add_argument(
@@ -872,6 +928,8 @@ def _validate_launch_command(args):
                         setattr(args, k, defaults.dynamo_config[k])
                     for k in defaults.ipex_config:
                         setattr(args, k, defaults.ipex_config[k])
+                    for k in defaults.quantization_config:
+                        setattr(args, k, defaults.quantization_config[k])
                     continue
 
                 # Those args are handled separately

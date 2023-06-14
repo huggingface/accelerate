@@ -1,5 +1,6 @@
 from .constants import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, SCHEDULER_NAME, TORCH_LAUNCH_PARAMS
 from .dataclasses import (
+    BnbQuantizationPlugin,
     ComputeEnvironment,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
@@ -25,6 +26,7 @@ from .imports import (
     get_ccl_version,
     is_aim_available,
     is_bf16_available,
+    is_bnb_available,
     is_boto3_available,
     is_ccl_available,
     is_comet_ml_available,
@@ -35,6 +37,7 @@ from .imports import (
     is_megatron_lm_available,
     is_mlflow_available,
     is_mps_available,
+    is_peft_available,
     is_rich_available,
     is_safetensors_available,
     is_sagemaker_available,
@@ -110,6 +113,7 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
+from .bitsandbytes import get_bnb_model, has_bnb_layers, prepare_model_for_kbit_peft_training
 from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, save_fsdp_model, save_fsdp_optimizer
 from .launch import (
     PrepareForLaunch,

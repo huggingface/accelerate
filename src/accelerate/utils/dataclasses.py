@@ -1301,3 +1301,66 @@ class MegatronLMPlugin:
                 self.megatron_lm_default_args[key] = True
             elif key.startswith("no_log_"):
                 self.megatron_lm_default_args[key.replace("no_", "")] = True
+
+
+@dataclass
+class BnbQuantizationPlugin(KwargsHandler):
+    """
+    A plugin to enable Bitsandbytes 4bit and 8bit quantization
+    """
+
+    load_in_8bit: bool = field(default=None, metadata={"help": "enable 8bit quantization."})
+    load_in_4bit: bool = field(default=None, metadata={"help": "enable 4bit quantization."})
+    llm_int8_threshold: float = field(default=None, metadata={"help": "value of the outliner threshold."})
+    llm_int8_skip_modules: List[str] = field(
+        default=None, metadata={"help": "an explicit list of the modules that we do not want to convert in 8-bit."}
+    )
+    bnb_4bit_quant_type: str = field(
+        default=None,
+        metadata={
+            "help": "set the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types."
+        },
+    )
+    bnb_4bit_use_double_quant: bool = field(
+        default=None,
+        metadata={
+            "help": "Enable nested quantization where the quantization constants from the first quantization are quantized again."
+        },
+    )
+    bnb_4bit_compute_dtype: bool = field(
+        default=None,
+        metadata={
+            "help": "Enable nested quantization where the quantization constants from the first quantization are quantized again."
+        },
+    )
+
+    def __post_init__(self):
+        if self.load_in_8bit is None:
+            self.load_in_8bit = strtobool(os.environ.get("LOAD_IN_8BIT", "False")) == 1
+        if self.load_in_4bit is None:
+            self.load_in_4bit = strtobool(os.environ.get("LOAD_IN_4BIT", "False")) == 1
+        if self.load_in_4bit and self.load_in_8bit:
+            raise ValueError("You can't set load_in_8bit and load_in_4bit to be both True")
+        if self.llm_int8_threshold is None:
+            self.llm_int8_threshold = float(os.environ.get("LLM_INT8_THRESHOLD", 6))
+        if self.llm_int8_skip_modules is None:
+            self.llm_int8_skip_modules = os.environ.get("LLM_INT8_SKIP_MODULES", "")
+            self.llm_int8_skip_modules = [
+                value.strip() for value in self.llm_int8_skip_modules.split(",") if value != ""
+            ]
+        if self.bnb_4bit_compute_dtype is None:
+            self.bnb_4bit_compute_dtype = os.environ.get("BNB_4BIT_COMPUTE_DTYPE", "fp32")
+        if self.bnb_4bit_quant_type is None:
+            self.bnb_4bit_quant_type = os.environ.get("BNB_4BIT_QUANT_TYPE", "fp4")
+        if self.bnb_4bit_use_double_quant is None:
+            self.bnb_4bit_use_double_quant = strtobool(os.environ.get("BNB_4BIT_USE_DOUBLE_QUANT", "True")) == 1
+
+        if isinstance(self.bnb_4bit_compute_dtype, str):
+            if self.bnb_4bit_compute_dtype == "fp32":
+                self.bnb_4bit_compute_dtype = torch.float32
+            if self.bnb_4bit_compute_dtype == "fp16":
+                self.bnb_4bit_compute_dtype = torch.float16
+            elif self.bnb_4bit_compute_dtype == "bf16":
+                self.bnb_4bit_compute_dtype = torch.bfloat16
+        elif not isinstance(self.bnb_4bit_compute_dtype, torch.dtype):
+            raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")

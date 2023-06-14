@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 import math
 import os
 import re
@@ -39,6 +40,7 @@ from .state import AcceleratorState, GradientState, PartialState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
+    BnbQuantizationPlugin,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -64,6 +66,7 @@ from .utils import (
     get_pretty_name,
     has_transformer_engine_layers,
     is_bf16_available,
+    is_bnb_available,
     is_deepspeed_available,
     is_fp8_available,
     is_ipex_available,
@@ -116,6 +119,9 @@ if is_megatron_lm_available():
         megatron_lm_prepare_scheduler,
     )
 
+if is_bnb_available():
+    from .utils import get_bnb_model, has_bnb_layers, prepare_model_for_kbit_peft_training
+
 if is_torch_version(">", "1.10.0"):
     from torch.distributed.algorithms.join import Join
 
@@ -167,6 +173,9 @@ class Accelerator:
             using *accelerate config*
         megatron_lm_plugin (`MegatronLMPlugin`, *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
+            directly using *accelerate config*
+        bnb_quantization_plugin(`BnbQuantizationPlugin`, *optional*):
+            Tweak your BitsAndBytes related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
             The list of random number generators to synchronize at the beginning of each iteration in your prepared
@@ -239,6 +248,7 @@ class Accelerator:
         deepspeed_plugin: DeepSpeedPlugin | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
+        bnb_quantization_plugin: BnbQuantizationPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,
         project_dir: str | os.PathLike | None = None,
@@ -314,6 +324,21 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
+        if bnb_quantization_plugin is None:
+            bnb_quantization_plugin = (
+                BnbQuantizationPlugin()
+                if os.environ.get("ACCELERATE_USE_BNB_QUANTIZATION", "false") == "true"
+                else None
+            )
+        else:
+            if not isinstance(bnb_quantization_plugin, BnbQuantizationPlugin):
+                raise TypeError("`bnb_quantization_plugin` must be a BnbQuantizationPlugin object.")
+            os.environ["ACCELERATE_USE_BNB_QUANTIZATION"] = "true"  # use BnbQuantization if plugin is provided
+
+        if bnb_quantization_plugin:
+            if not is_bnb_available():
+                raise ImportError("bitsandbytes is not installed. please build it from source.")
+
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -353,6 +378,7 @@ class Accelerator:
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
+            bnb_quantization_plugin=bnb_quantization_plugin,
             _from_accelerator=True,
             **kwargs,
         )
@@ -361,7 +387,6 @@ class Accelerator:
         if len(trackers) < 1 and log_with is not None:
             warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
         self.log_with = trackers
-
         if (
             (mixed_precision != "bf16")
             and getattr(self.state, "downcast_bfloat", False)
@@ -1190,6 +1215,9 @@ class Accelerator:
                 args = self._prepare_ipex(*args)
             elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex(*args)
+        if self.distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
+            if self.state.bnb_quantization_plugin is not None:
+                args = self._prepare_quantization(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
@@ -1258,9 +1286,8 @@ class Accelerator:
                 has_hf_device_map = True
                 break
 
-        if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
-            model, "hf_device_map", False
-        ):
+        is_quantized = getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)
+        if is_quantized and getattr(model, "hf_device_map", False):
             model_devices = set(model.hf_device_map.values())
             if len(model_devices) > 1 and self.distributed_type != DistributedType.NO:
                 raise ValueError(
@@ -1284,7 +1311,7 @@ class Accelerator:
                 raise ValueError(
                     "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
                 )
-        elif device_placement and not has_hf_device_map:
+        elif device_placement and not has_hf_device_map and not is_quantized:
             model = model.to(self.device)
 
         if not evaluation_mode:
@@ -1364,6 +1391,40 @@ class Accelerator:
                 raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
             model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
         return model
+
+    def _prepare_quantization(self, *args):
+        model = None
+        result = [obj for obj in args]
+        for obj in args:
+            if isinstance(obj, torch.nn.Module):
+                model = obj
+
+        if "PeftModel" not in [c.__name__ for c in inspect.getmro(model.__class__)]:
+            logger.warning(
+                "Training a 4-bit/8-bit model without peft is not recommended."
+                "We suggest you to convert the model to PeftModel using `get_peft` function from the peft library."
+            )
+            is_peft_model = False
+        else:
+            is_peft_model = True
+        bnb_quantization_plugin = self.state.bnb_quantization_plugin
+        bnb_config = bnb_quantization_plugin.to_dict()
+        if has_bnb_layers(model):
+            logger.warning(
+                "The model is already quantized. We won't quantize the model based on the config you provided."
+                "However, we will prepare the model for training."
+            )
+        else:
+            model = get_bnb_model(model, bnb_config, is_peft_model)
+            # use .cuda to quantize the model because of bnb requirement.
+            model.cuda(self.device)
+
+        model = prepare_model_for_kbit_peft_training(model)
+
+        for i in range(len(result)):
+            if isinstance(result[i], torch.nn.Module):
+                result[i] = model
+        return tuple(result)
 
     def _prepare_deepspeed(self, *args):
         deepspeed_plugin = self.state.deepspeed_plugin
