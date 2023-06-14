@@ -17,7 +17,7 @@ saving and loading the model, optimizer, RNG generators, and the GradScaler. Ins
 - Use [`~Accelerator.save_state`] for saving everything mentioned above to a folder location
 - Use [`~Accelerator.load_state`] for loading everything stored from an earlier `save_state`
 
-To further customize where and how states saved through [`~Accelerator.save_state`] the [`~utils.ProjectConfiguration`] class can be used. For example 
+To further customize where and how states are saved through [`~Accelerator.save_state`] the [`~utils.ProjectConfiguration`] class can be used. For example 
 if `automatic_checkpoint_naming` is enabled each saved checkpoint will be located then at `Accelerator.project_dir/checkpoints/checkpoint_{checkpoint_number}`.
 
 It should be noted that the expectation is that those states come from the same training script, they should not be from two separate scripts.
@@ -59,13 +59,13 @@ for epoch in range(num_epochs):
         my_optimizer.step()
     my_scheduler.step()
 
-# Restore previous state
+# Restore the previous state
 accelerator.load_state("my/save/path/checkpointing/checkpoint_0")
 ```
 
 ## Restoring the state of the DataLoader 
 
-After resuming from a checkpoint, it may also be desireable to resume from a particular point in the active `DataLoader` if 
+After resuming from a checkpoint, it may also be desirable to resume from a particular point in the active `DataLoader` if 
 the state was saved during the middle of an epoch. You can use [`~Accelerator.skip_first_batches`] to do so. 
 
 ```python

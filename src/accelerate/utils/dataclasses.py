@@ -31,8 +31,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 
-from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE, MODEL_NAME, OPTIMIZER_NAME
-from .versions import is_torch_version
+from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
 
 
 class KwargsHandler:
@@ -769,21 +768,28 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={"help": "A list of modules to ignore for FSDP."},
     )
-
+    ignored_parameters: Optional[Iterable[torch.nn.Parameter]] = field(
+        default=None,
+        metadata={"help": "A list of parameters to ignore for FSDP."},
+    )
     state_dict_type: "typing.Any" = field(
         default=None,
         metadata={
             "help": "FSDP State Dict Type of type `torch.distributed.fsdp.fully_sharded_data_parallel.StateDictType`"
         },
     )
-
     state_dict_config: "typing.Any" = field(
         default=None,
         metadata={
             "help": "FSDP State Dict Config of type `torch.distributed.fsdp.fully_sharded_data_parallel.StateDictConfig`"
         },
     )
-
+    optim_state_dict_config: "typing.Any" = field(
+        default=None,
+        metadata={
+            "help": "FSDP Optimizer State Dict Config of type `torch.distributed.fsdp.fully_sharded_data_parallel.OptimStateDictConfig`"
+        },
+    )
     limit_all_gathers: bool = field(
         default=False,
         metadata={
@@ -793,41 +799,74 @@ class FullyShardedDataParallelPlugin:
             "Enabling this can help lower the number of CUDA malloc retries."
         },
     )
-
     use_orig_params: bool = field(
         default=False,
-        metadata={"help": "If True, enables parameter-efficient fine-tuning"},
+        metadata={
+            "help": "If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. "
+            "Useful in cases such as parameter-efficient fine-tuning. "
+            "Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019)"
+        },
+    )
+    param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
+        default=None,
+        metadata={
+            "help": "A Callable[torch.nn.Module] -> None that specifies how modules "
+            "that are currently on the meta device should be initialized onto an actual device."
+        },
+    )
+    sync_module_states: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0 "
+            "to ensure they are the same across all ranks after initialization"
+        },
+    )
+    forward_prefetch: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, then FSDP explicitly prefetches the next upcoming "
+            "all-gather while executing in the forward pass. only use with Static graphs."
+        },
     )
 
     def __post_init__(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import (
             BackwardPrefetch,
             CPUOffload,
+            FullOptimStateDictConfig,
             FullStateDictConfig,
             ShardingStrategy,
             StateDictType,
         )
 
+        prefix = "FSDP_"
         if self.sharding_strategy is None:
-            self.sharding_strategy = ShardingStrategy(int(os.environ.get("FSDP_SHARDING_STRATEGY", 1)))
+            self.sharding_strategy = ShardingStrategy(int(os.environ.get(prefix + "SHARDING_STRATEGY", 1)))
 
         if self.cpu_offload is None:
-            if os.environ.get("FSDP_OFFLOAD_PARAMS", "false") == "true":
+            if strtobool(os.environ.get(prefix + "OFFLOAD_PARAMS", "False")) == 1:
                 self.cpu_offload = CPUOffload(offload_params=True)
             else:
                 self.cpu_offload = CPUOffload(offload_params=False)
 
         if self.backward_prefetch is None:
-            prefetch_policy = os.environ.get("FSDP_BACKWARD_PREFETCH", "NO_PREFETCH")
+            prefetch_policy = os.environ.get(prefix + "BACKWARD_PREFETCH", "NO_PREFETCH")
             if prefetch_policy != FSDP_BACKWARD_PREFETCH[-1]:
                 self.backward_prefetch = BackwardPrefetch(FSDP_BACKWARD_PREFETCH.index(prefetch_policy) + 1)
 
         if self.state_dict_type is None:
-            state_dict_type_policy = os.environ.get("FSDP_STATE_DICT_TYPE", "FULL_STATE_DICT")
+            state_dict_type_policy = os.environ.get(prefix + "STATE_DICT_TYPE", "FULL_STATE_DICT")
             self.state_dict_type = StateDictType(FSDP_STATE_DICT_TYPE.index(state_dict_type_policy) + 1)
 
-            if self.state_dict_type == StateDictType.FULL_STATE_DICT and self.state_dict_config is None:
-                self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+            if self.state_dict_type == StateDictType.FULL_STATE_DICT:
+                if self.state_dict_config is None:
+                    self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                if self.optim_state_dict_config is None:
+                    self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
+
+        self.use_orig_params = strtobool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
+        self.sync_module_states = strtobool(os.environ.get(prefix + "SYNC_MODULE_STATES", "False")) == 1
+        self.forward_prefetch = strtobool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
 
     @staticmethod
     def get_module_class_from_name(module, name):
@@ -887,95 +926,6 @@ class FullyShardedDataParallelPlugin:
 
         if self.mixed_precision_policy is None:
             self.mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
-
-    def save_model(self, accelerator, model, output_dir, model_index=0):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-        from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
-
-        if is_torch_version("<=", "1.13.5"):
-            with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config):
-                state_dict = model.state_dict()
-        else:
-            FSDP.set_state_dict_type(model, self.state_dict_type, self.state_dict_config)
-            state_dict = model.state_dict()
-
-        if self.state_dict_type == StateDictType.FULL_STATE_DICT:
-            weights_name = f"{MODEL_NAME}.bin" if model_index == 0 else f"{MODEL_NAME}_{model_index}.bin"
-            output_model_file = os.path.join(output_dir, weights_name)
-            if accelerator.process_index == 0:
-                print(f"Saving model to {output_model_file}")
-                torch.save(state_dict, output_model_file)
-                print(f"Model saved to {output_model_file}")
-        else:
-            weights_name = (
-                f"{MODEL_NAME}_rank{accelerator.process_index}.bin"
-                if model_index == 0
-                else f"{MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
-            )
-            output_model_file = os.path.join(output_dir, weights_name)
-            print(f"Saving model to {output_model_file}")
-            torch.save(state_dict, output_model_file)
-            print(f"Model saved to {output_model_file}")
-
-    def load_model(self, accelerator, model, input_dir, model_index=0):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-        from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
-
-        accelerator.wait_for_everyone()
-
-        if self.state_dict_type == StateDictType.FULL_STATE_DICT:
-            weights_name = f"{MODEL_NAME}.bin" if model_index == 0 else f"{MODEL_NAME}_{model_index}.bin"
-            input_model_file = os.path.join(input_dir, weights_name)
-            accelerator.print(f"Loading model from {input_model_file}")
-            state_dict = torch.load(input_model_file)
-            accelerator.print(f"Model loaded from {input_model_file}")
-        else:
-            weights_name = (
-                f"{MODEL_NAME}_rank{accelerator.process_index}.bin"
-                if model_index == 0
-                else f"{MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
-            )
-            input_model_file = os.path.join(input_dir, weights_name)
-            print(f"Loading model from {input_model_file}")
-            state_dict = torch.load(input_model_file)
-            print(f"Model loaded from {input_model_file}")
-
-        if is_torch_version("<=", "1.13.5"):
-            with FSDP.state_dict_type(model, self.state_dict_type, self.state_dict_config):
-                model.load_state_dict(state_dict)
-        else:
-            FSDP.set_state_dict_type(model, self.state_dict_type, self.state_dict_config)
-            model.load_state_dict(state_dict)
-
-    def save_optimizer(self, accelerator, optimizer, model, output_dir, optimizer_index=0, optim_input=None):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-
-        optim_state = FSDP.full_optim_state_dict(model, optimizer, optim_input=optim_input)
-        if accelerator.process_index == 0:
-            optim_state_name = (
-                f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
-            )
-            output_optimizer_file = os.path.join(output_dir, optim_state_name)
-            print(f"Saving Optimizer state to {output_optimizer_file}")
-            torch.save(optim_state, output_optimizer_file)
-            print(f"Optimizer state saved in {output_optimizer_file}")
-
-    def load_optimizer(self, accelerator, optimizer, model, input_dir, optimizer_index=0):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-
-        accelerator.wait_for_everyone()
-        full_osd = None
-        if accelerator.process_index == 0:
-            optimizer_name = (
-                f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
-            )
-            input_optimizer_file = os.path.join(input_dir, optimizer_name)
-            print(f"Loading Optimizer state from {input_optimizer_file}")
-            full_osd = torch.load(input_optimizer_file)
-            print(f"Optimizer state loaded from {input_optimizer_file}")
-        # called from all ranks, though only rank0 has a valid param for full_osd
-        sharded_osd = FSDP.scatter_full_optim_state_dict(full_osd, model)
-        optimizer.load_state_dict(sharded_osd)
 
 
 @dataclass

@@ -15,14 +15,22 @@
 import argparse
 import gc
 import os
+import threading
 
 import evaluate
+import psutil
 import torch
 from datasets import load_dataset
+from torch.distributed.fsdp.fully_sharded_data_parallel import FullOptimStateDictConfig, FullStateDictConfig
 from torch.utils.data import DataLoader
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    get_linear_schedule_with_warmup,
+    set_seed,
+)
 
-from accelerate import Accelerator, DistributedType
+from accelerate import Accelerator, DistributedType, FullyShardedDataParallelPlugin
 
 
 ########################################################################
@@ -63,15 +71,44 @@ class TorchTracemalloc:
         torch.cuda.empty_cache()
         torch.cuda.reset_max_memory_allocated()  # reset the peak gauge to zero
         self.begin = torch.cuda.memory_allocated()
+        self.process = psutil.Process()
+
+        self.cpu_begin = self.cpu_mem_used()
+        self.peak_monitoring = True
+        peak_monitor_thread = threading.Thread(target=self.peak_monitor_func)
+        peak_monitor_thread.daemon = True
+        peak_monitor_thread.start()
         return self
 
+    def cpu_mem_used(self):
+        """get resident set size memory for the current process"""
+        return self.process.memory_info().rss
+
+    def peak_monitor_func(self):
+        self.cpu_peak = -1
+
+        while True:
+            self.cpu_peak = max(self.cpu_mem_used(), self.cpu_peak)
+
+            # can't sleep or will not catch the peak right (this comment is here on purpose)
+            # time.sleep(0.001) # 1msec
+
+            if not self.peak_monitoring:
+                break
+
     def __exit__(self, *exc):
+        self.peak_monitoring = False
+
         gc.collect()
         torch.cuda.empty_cache()
         self.end = torch.cuda.memory_allocated()
         self.peak = torch.cuda.max_memory_allocated()
         self.used = b2mb(self.end - self.begin)
         self.peaked = b2mb(self.peak - self.begin)
+
+        self.cpu_end = self.cpu_mem_used()
+        self.cpu_used = b2mb(self.cpu_end - self.cpu_begin)
+        self.cpu_peaked = b2mb(self.cpu_peak - self.cpu_begin)
         # print(f"delta used/peak {self.used:4d}/{self.peaked:4d}")
 
 
@@ -86,13 +123,25 @@ def training_function(config, args):
     # For testing only
     if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
         config["num_epochs"] = 2
+
+    # New Code #
+    # Pass the advanced FSDP settings not part of the accelerate config by creating fsdp_plugin
+    fsdp_plugin = FullyShardedDataParallelPlugin(
+        state_dict_config=FullStateDictConfig(offload_to_cpu=False, rank0_only=False),
+        optim_state_dict_config=FullOptimStateDictConfig(offload_to_cpu=False, rank0_only=False),
+    )
+
     # Initialize accelerator
     if args.with_tracking:
         accelerator = Accelerator(
-            cpu=args.cpu, mixed_precision=args.mixed_precision, log_with="wandb", logging_dir=args.logging_dir
+            cpu=args.cpu,
+            mixed_precision=args.mixed_precision,
+            log_with="wandb",
+            project_dir=args.logging_dir,
+            fsdp_plugin=fsdp_plugin,
         )
     else:
-        accelerator = Accelerator()
+        accelerator = Accelerator(fsdp_plugin=fsdp_plugin)
     accelerator.print(accelerator.distributed_type)
 
     if hasattr(args.checkpointing_steps, "isdigit"):
@@ -175,7 +224,10 @@ def training_function(config, args):
     set_seed(seed)
 
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained(args.model_name_or_path, return_dict=True)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        args.model_name_or_path, return_dict=True, low_cpu_mem_usage=True
+    )
+
     # New Code #
     # For FSDP feature, it is highly recommended and efficient to prepare the model before creating optimizer
     model = accelerator.prepare(model)
@@ -386,7 +438,7 @@ def main():
         required=True,
     )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "seed": 1, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
     training_function(config, args)
 
 

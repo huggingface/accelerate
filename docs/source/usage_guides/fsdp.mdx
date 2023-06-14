@@ -66,17 +66,67 @@ Currently, `Accelerate` supports the following config through the CLI:
 ```bash
 `Sharding Strategy`: [1] FULL_SHARD (shards optimizer states, gradients and parameters), [2] SHARD_GRAD_OP (shards optimizer states and gradients), [3] NO_SHARD
 `Offload Params`: Decides Whether to offload parameters and gradients to CPU
-`Auto Wrap Policy`: [1] TRANSFORMER_BASED_WRAP, [2] SIZE_BASED_WRAP, [3] NO_WRAP 
+`Auto Wrap Policy`: [1] TRANSFORMER_BASED_WRAP, [2] SIZE_BASED_WRAP, [3] NO_WRAP [4] "HYBRID_SHARD" [5] "HYBRID_SHARD_ZERO2"
 `Transformer Layer Class to Wrap`: When using `TRANSFORMER_BASED_WRAP`, user specifies comma-separated string of transformer layer class names (case-sensitive) to wrap ,e.g, 
 `BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput`...
 `Min Num Params`: minimum number of parameters when using `SIZE_BASED_WRAP`
 `Backward Prefetch`: [1] BACKWARD_PRE, [2] BACKWARD_POST, [3] NO_PREFETCH
 `State Dict Type`: [1] FULL_STATE_DICT, [2] LOCAL_STATE_DICT, [3] SHARDED_STATE_DICT  
+`Use Orig Params`: If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. 
+Useful in cases such as parameter-efficient fine-tuning. 
+Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019)
+`Sync Module States`: If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0
+`Forward Prefetch`: If True, then FSDP explicitly prefetches the next upcoming all-gather while executing in the forward pass
+```
+
+For additional and more nuanced control, you can specify other FSDP parameters via `FullyShardedDataParallelPlugin`. 
+When creating `FullyShardedDataParallelPlugin` object, pass it the parameters that weren't part of the accelerate config or if you want to override them.
+The FSDP parameters will be picked based on the accelerate config file or launch command arguments and other parameters that you will pass directly through the `FullyShardedDataParallelPlugin` object will set/override that.
+
+Below is an example:
+
+```py
+from accelerate import FullyShardedDataParallelPlugin
+from torch.distributed.fsdp.fully_sharded_data_parallel import FullOptimStateDictConfig, FullStateDictConfig
+
+fsdp_plugin = FullyShardedDataParallelPlugin(
+    state_dict_config=FullStateDictConfig(offload_to_cpu=False, rank0_only=False),
+    optim_state_dict_config=FullOptimStateDictConfig(offload_to_cpu=False, rank0_only=False),
+)
+
+accelerator = Accelerator(fsdp_plugin=fsdp_plugin)
 ```
 
 ## Saving and loading
 
-1. When using transformers `save_pretrained`, pass `state_dict=accelerator.get_state_dict(model)` to save the model state dict. 
+The new recommended way of checkpointing when using FSDP models is to use `SHARDED_STATE_DICT` as `StateDictType` when setting up the accelerate config.
+Below is the code snippet to save using `save_state` utility of accelerate.
+
+```py
+accelerator.save_state("ckpt")
+```
+
+Inspect the ckeckpoint folder to see model and optimizer as shards per process:
+```
+ls ckpt 
+# optimizer_0  pytorch_model_0  random_states_0.pkl  random_states_1.pkl  scheduler.bin
+
+cd ckpt
+
+ls optimizer_0
+# __0_0.distcp  __1_0.distcp
+
+ls pytorch_model_0
+# __0_0.distcp  __1_0.distcp
+```
+
+To load them back for resuming the training, use the `load_state` utility of accelerate
+
+```py
+accelerator.load_state("ckpt")
+```
+
+When using transformers `save_pretrained`, pass `state_dict=accelerator.get_state_dict(model)` to save the model state dict. 
   Below is an example:
 
 ```diff

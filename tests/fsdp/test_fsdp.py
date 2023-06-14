@@ -253,8 +253,6 @@ class FSDPIntegrationTest(TempDirTestCase):
             state_dict_config_index = len(cmd_config)
             for state_dict_type in FSDP_STATE_DICT_TYPE:
                 cmd_config = cmd_config[:state_dict_config_index]
-                if state_dict_type == "SHARDED_STATE_DICT":
-                    continue
                 cmd_config.append(f"--fsdp_state_dict_type={state_dict_type}")
                 cmd_config.extend(
                     [
