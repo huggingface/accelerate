@@ -259,7 +259,7 @@ def check_tied_parameters_in_config(model: nn.Module):
         has_tied_encoder_decoder = (
             hasattr(model, "config")
             and getattr(model.config, "is_encoder_decoder", False)
-            and getattr(model.config, "tie_encoder_decoder", False),
+            and getattr(model.config, "tie_encoder_decoder", False)
         )
         has_tied_module = any(hasattr(module, "_tie_weights") for module in model.modules())
 
