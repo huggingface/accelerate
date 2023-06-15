@@ -118,7 +118,7 @@ def require_huggingface_suite(test_case):
 
 def require_peft(test_case):
     """
-    Decorator marking a test that requires peft. These tests are skipped when they are not.
+    Decorator marking a test that requires peft. These tests are skipped when peft is not installed.
     """
     return unittest.skipUnless(is_peft_available(), "test requires peft library")(test_case)
 
@@ -218,7 +218,7 @@ def require_comet_ml(test_case):
 
 def require_bnb(test_case):
     """
-    Decorator marking a test that requires bitsandbytes installed. These tests are skipped when comet_ml isn't
+    Decorator marking a test that requires bitsandbytes installed. These tests are skipped when bitsandbytes isn't
     installed
     """
     unittest.skipUnless(is_bnb_available(), "test requires comet_ml")(test_case)

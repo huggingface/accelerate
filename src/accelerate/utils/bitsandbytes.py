@@ -35,14 +35,14 @@ logger = logging.getLogger(__name__)
 
 def get_bnb_model(model, bnb_config, is_peft_model):
     """
-        This function quantize the input model with the parameters specified in bnb_config.
+        This function will quantize the input model with the parameters specified in bnb_config.
 
     Args:
         model (`torch.nn.Module`): Input model
         bnb_config (`dict`'): The bitsandbytes parameters
 
     Returns:
-        `torch.nn.Module`: THe quantized model
+        `torch.nn.Module`: The quantized model
     """
     if is_transformers_available():
         from transformers import BitsAndBytesConfig

@@ -1306,7 +1306,7 @@ class MegatronLMPlugin:
 @dataclass
 class BnbQuantizationPlugin(KwargsHandler):
     """
-    A plugin to enable Bitsandbytes 4bit and 8bit quantization
+    A plugin to enable BitsAndBytes 4bit and 8bit quantization
     """
 
     load_in_8bit: bool = field(default=None, metadata={"help": "enable 8bit quantization."})
