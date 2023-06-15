@@ -110,7 +110,7 @@ def get_cluster_input():
             default=False,
             error_message="Please enter yes or no.",
         )
-    if not use_cpu and is_xpu_available():
+    if not use_cpu and is_xpu_available() and distributed_type not in [DistributedType.MULTI_GPU, DistributedType.TPU]:
         ipex_config["use_xpu"] = _ask_field(
             "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
             _convert_yes_no_to_bool,
