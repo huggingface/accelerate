@@ -94,3 +94,9 @@ jobs:
         run: |
           pip install slack_sdk tabulate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
+
+  
+  run-integration-tests:
+    needs: run-merge-tests
+    if: always()
+    uses: ./.github/workflows/self_hosted_integration_tests.yml
