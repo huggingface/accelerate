@@ -1,0 +1,63 @@
+# CI for specifically ensuring integrations work fine (`transformers` mainly)
+# Useful tips:
+#  - New integrations to test should have its own job, and follow a strategy method where we check both
+#    the pypi and github versions.
+#  - When checking the latest release of the integration, use
+#    git checkout $(git describe --tags `git rev-list --tags --max-count=1`) to get the latest release.
+
+name: Integration Tests
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "examples/**"
+      - "setup.py"
+    types: [opened, synchronize, reopened]
+
+env:
+  HF_HOME: ~/hf_cache
+
+jobs:
+  run-trainer-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        transformers-version: [
+          pypi,
+          github
+        ]
+    steps:
+    - uses: actions/checkout@v3.1.0
+    - name: Set up python 3.7
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.7
+
+    - name: Install Accelerate from source
+      run: |
+        pip install --upgrade pip
+        pip install -e .
+    
+    - name: Clone and install transformers
+      run: |
+        cd ..
+        git clone https://github.com/huggingface/transformers
+        cd transformers
+        if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
+          git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
+        fi
+        pip install .[torch,testing]
+
+    - name: Show installed libraries
+      run: |
+        pip freeze
+
+    - name: Run Trainer tests
+      run: |
+        cd ../transformers
+        pytest -sv tests/trainer
+
