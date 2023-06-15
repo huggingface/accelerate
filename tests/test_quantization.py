@@ -41,7 +41,7 @@ class BitsAndBytesConfigIntegration(unittest.TestCase):
 @require_cuda
 @require_bnb
 @require_huggingface_suite
-class BaseMixedInt8Test(unittest.TestCase):
+class MixedInt8Test(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 
     # We need to test on relatively large models (aka >1b parameters otherwise the quantiztion may not work as expected)
@@ -58,17 +58,7 @@ class BaseMixedInt8Test(unittest.TestCase):
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
-        from transformers import AutoTokenizer
-
-        # Models and tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-
-
-class MixedInt8Test(BaseMixedInt8Test):
-    def setUp(self):
-        from transformers import AutoModelForCausalLM
-
-        super().setUp()
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         # Models and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(
@@ -79,6 +69,8 @@ class MixedInt8Test(BaseMixedInt8Test):
         bnb_quantization_plugin = BnbQuantizationPlugin(load_in_8bit=True)
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name)
         self.model_8bit = get_bnb_model(self.model_8bit, bnb_quantization_plugin.to_dict(), False).cuda(0)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
     def tearDown(self):
         r"""
@@ -232,7 +224,7 @@ class Bnb8BitConversion(AccelerateTestCase):
 @require_cuda
 @require_bnb
 @require_huggingface_suite
-class Base4bitTest(unittest.TestCase):
+class Bnb4BitTest(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 
     # We need to test on relatively large models (aka >1b parameters otherwise the quantiztion may not work as expected)
@@ -251,15 +243,7 @@ class Base4bitTest(unittest.TestCase):
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
-        from transformers import AutoTokenizer
-
-        # Models and tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-
-
-class Bnb4BitTest(Base4bitTest):
-    def setUp(self):
-        from transformers import AutoModelForCausalLM
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         super().setUp()
 
@@ -271,6 +255,8 @@ class Bnb4BitTest(Base4bitTest):
         bnb_quantization_plugin = BnbQuantizationPlugin(load_in_4bit=True)
         self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name)
         self.model_4bit = get_bnb_model(self.model_4bit, bnb_quantization_plugin.to_dict(), False).cuda(0)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
     def tearDown(self):
         """
