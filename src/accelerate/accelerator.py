@@ -1216,7 +1216,7 @@ class Accelerator:
             elif self.device.type == "xpu" and is_xpu_available():
                 args = self._prepare_ipex(*args)
         if self.distributed_type in [DistributedType.MULTI_GPU, DistributedType.NO]:
-            if self.state.bnb_quantization_plugin is not None:
+            if getattr(self.state,"bnb_quantization_plugin",None) is not None:
                 args = self._prepare_quantization(*args)
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
