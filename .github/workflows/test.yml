@@ -21,6 +21,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        pytorch-version: [
+          latest,
+          minimum,
+        ]
         test-kind: [
           test_prod,
           test_core,
@@ -46,7 +50,7 @@ jobs:
         path: |
           ${{ env.pythonLocation }}
           ${{ env.HF_HOME }}
-        key: ${{ env.pythonLocation }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
+        key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
     
     - name: Install the library
       run: |
@@ -54,11 +58,12 @@ jobs:
         if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
         if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
+        if [[ ${{ matrix.test-kind }} = minimum ]]; then pip install torch==1.6.0; fi
         pip install pytest-reportlog tabulate
     
     - name: Run Tests
       env: 
-        PYTORCH_VERSION: latest
+        PYTORCH_VERSION: ${{ matrix.pytorch-version }}
       run: |
         make ${{ matrix.test-kind }}
 

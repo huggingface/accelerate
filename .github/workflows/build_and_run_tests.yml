@@ -43,3 +43,8 @@ jobs:
     needs: build-docker-containers
     if: always()
     uses: ./.github/workflows/run_merge_tests.yml
+
+  run-integration-tests:
+    needs: run-merge-tests
+    if: always()
+    uses: ./.github/workflows/self_hosted_integration_tests.yml
