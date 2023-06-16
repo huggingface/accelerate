@@ -20,11 +20,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from ..logging import get_logger
 from .imports import is_safetensors_available
-
-
-logger = get_logger(__name__)
 
 
 def offload_weight(weight, weight_name, offload_folder, index=None):
@@ -171,10 +167,6 @@ class OffloadedWeightsLoader(Mapping):
         if weight_info.get("safetensors_file") is not None:
             if not is_safetensors_available():
                 raise ImportError("These offloaded weights require the use of safetensors: `pip install safetensors`.")
-
-            if "SAFETENSORS_FAST_GPU" not in os.environ:
-                logger.info("Enabling fast loading with safetensors by setting `SAFETENSORS_FAST_GPU` to 1.")
-                os.environ["SAFETENSORS_FAST_GPU"] = "1"
 
             from safetensors import safe_open
 
