@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Intel® Extension for PyTorch
 
-[IPEX](https://github.com/intel/intel-extension-for-pytorch) is optimized for CPUs with AVX-512 or above, and functionally works for CPUs with only AVX2. So, it is expected to bring performance benefit for Intel CPU generations with AVX-512 or above while CPUs with only AVX2 (e.g., AMD CPUs or older Intel CPUs) might result in a better performance under IPEX, but not guaranteed. IPEX provides performance optimizations for CPU training with both Float32 and BFloat16. The usage of BFloat16 is the main focus of the following sections.
+[IPEX](https://github.com/intel/intel-extension-for-pytorch) is optimized for CPUs with AVX-512 or above, and functionally works for CPUs with only AVX2. So, it is expected to bring performance benefits for Intel CPU generations with AVX-512 or above while CPUs with only AVX2 (e.g., AMD CPUs or older Intel CPUs) might result in a better performance under IPEX, but not guaranteed. IPEX provides performance optimizations for CPU training with both Float32 and BFloat16. The usage of BFloat16 is the main focus of the following sections.
 
 Low precision data type BFloat16 has been natively supported on the 3rd Generation Xeon® Scalable Processors (aka Cooper Lake) with AVX512 instruction set and will be supported on the next generation of Intel® Xeon® Scalable Processors with Intel® Advanced Matrix Extensions (Intel® AMX) instruction set with further boosted performance. The Auto Mixed Precision for CPU backend has been enabled since PyTorch-1.10. At the same time, the support of Auto Mixed Precision with BFloat16 for CPU and BFloat16 optimization of operators has been massively enabled in Intel® Extension for PyTorch, and partially upstreamed to PyTorch master branch. Users can get better performance and user experience with IPEX Auto Mixed Precision.
 
@@ -35,9 +35,9 @@ pip install intel_extension_for_pytorch==<version_name> -f https://developer.int
 Check more approaches for [IPEX installation](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/installation.html).
 
 
-## How It Works For Training optimization in CPU
+## How It Works For Training Optimization in CPU
 
-🤗 Accelerate has integrated [IPEX](https://github.com/intel/intel-extension-for-pytorch), all you need to do is enabling it through the config.
+🤗 Accelerate has integrated [IPEX](https://github.com/intel/intel-extension-for-pytorch), all you need to do is enable it through the config.
 
 **Scenario 1**: Acceleration of No distributed CPU training
 
@@ -46,7 +46,7 @@ Run <u>accelerate config</u> on your machine:
 ```bash
 $ accelerate config
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
-In which compute environment are you running?
+In which computing environment are you running?
 This machine
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
 Which type of machine are you using?
@@ -99,7 +99,7 @@ Run <u>accelerate config</u> on your machine(node0):
 ```bash
 $ accelerate config
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
-In which compute environment are you running?
+In which computing environment are you running?
 This machine
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
 Which type of machine are you using?
@@ -142,9 +142,9 @@ tpu_use_sudo: false
 use_cpu: true
 ```
 
-Set following env and using intel MPI to launch the training
+Set the following env and use intel MPI to launch the training
 
-In node0, you need to create a configuration file which contains the IP addresses of each node (for example hostfile) and pass that configuration file path as an argument.
+In node0, you need to create a configuration file that contains the IP addresses of each node (for example hostfile) and pass that configuration file path as an argument.
 ```bash
 $ cat hostfile
 xxx.xxx.xxx.xxx #node0 ip
@@ -168,4 +168,3 @@ mpirun -f hostfile -n 16 -ppn 4 accelerate launch examples/nlp_example.py
 - [API docs](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/api_doc.html)
 - [Tuning guide](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/performance_tuning/tuning_guide.html)
 - [Blogs & Publications](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/blogs_publications.html)
-
