@@ -542,6 +542,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         return batch, batch_info
 
     def __iter__(self):
+        self.reset()
         self.gradient_state._add_dataloader(self)
         main_iterator = None
         if self.state.process_index == 0:
