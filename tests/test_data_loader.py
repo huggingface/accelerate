@@ -17,16 +17,16 @@ import unittest
 
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
+from accelerate import Accelerator
 from accelerate.data_loader import (
     BatchSamplerShard,
-    DataLoaderShard,
     DataLoaderDispatcher,
+    DataLoaderShard,
     IterableDatasetShard,
     SkipBatchSampler,
     SkipDataLoader,
     skip_first_batches,
 )
-from accelerate import Accelerator
 
 
 class RandomIterableDataset(IterableDataset):
@@ -388,7 +388,7 @@ class DataLoaderTester(unittest.TestCase):
             self.assertEqual(dataloader.end_of_dataloader, idx == 3)
 
     def test_end_of_dataloader_dispatcher(self):
-        accelerator = Accelerator()
+        Accelerator()
         dataloader = DataLoaderDispatcher(range(16), batch_size=4)
         for idx, _ in enumerate(dataloader):
             self.assertEqual(dataloader.end_of_dataloader, idx == 3)
