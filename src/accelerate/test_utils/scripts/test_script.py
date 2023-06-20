@@ -508,6 +508,8 @@ def test_split_between_processes_nested_dict():
                     results["c"], data_copy["c"][3]
                 ), f"Did not obtain expected values on process 4, expected `{data['c'][3]}`, received: {results['c']}"
 
+    state.wait_for_everyone()
+
 
 def test_split_between_processes_tensor():
     state = AcceleratorState()
@@ -518,6 +520,7 @@ def test_split_between_processes_tensor():
                 assert torch.allclose(results, torch.tensor([0, 1, 2, 3]).to(state.device))
             else:
                 assert torch.allclose(results, torch.tensor([4, 5, 6, 7]).to(state.device))
+    state.wait_for_everyone()
 
 
 def main():
@@ -526,6 +529,7 @@ def main():
     if state.local_process_index == 0:
         print("**Initialization**")
     init_state_check()
+    state.wait_for_everyone()
 
     if state.distributed_type == DistributedType.MULTI_GPU:
         num_processes_per_node = torch.cuda.device_count()
@@ -533,17 +537,21 @@ def main():
         num_processes_per_node = state.num_processes
 
     # We only run this test on non-multinode
-    if state.process_index == 0 and num_processes_per_node == state.num_processes:
-        print("\n**Test process execution**")
+    if num_processes_per_node == state.num_processes:
+        if state.process_index == 0:
+            print("\n**Test process execution**")
         process_execution_check()
 
-        print("\n**Test split between processes as a list**")
+        if state.process_index == 0:
+            print("\n**Test split between processes as a list**")
         test_split_between_processes_list()
 
-        print("\n**Test split between processes as a dict**")
+        if state.process_index == 0:
+            print("\n**Test split between processes as a dict**")
         test_split_between_processes_nested_dict()
 
-        print("\n**Test split between processes as a tensor**")
+        if state.process_index == 0:
+            print("\n**Test split between processes as a tensor**")
         test_split_between_processes_tensor()
 
     if state.local_process_index == 0:
