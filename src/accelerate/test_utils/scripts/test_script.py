@@ -66,7 +66,6 @@ def print_on(state, process_idx):
 def process_execution_check():
     accelerator = Accelerator()
     num_processes = accelerator.num_processes
-
     # Test main_process_first context manager
     path = Path("check_main_process_first.txt")
     with accelerator.main_process_first():
@@ -78,6 +77,7 @@ def process_execution_check():
             with open(path, "a+") as f:
                 f.write("Now on another process\n")
     accelerator.wait_for_everyone()
+
     if accelerator.is_main_process:
         with open(path, "r") as f:
             text = "".join(f.readlines())
@@ -86,8 +86,8 @@ def process_execution_check():
             if num_processes > 1:
                 assert text.endswith("Now on another process\n"), "Main process was not first"
             assert (
-                text.count("Now on another process\n") == num_processes - 1
-            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {num_processes}"
+                text.count("Now on another process\n") == accelerator.num_processes - 1
+            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {accelerator.num_processes}"
         except AssertionError:
             path.unlink()
             raise
@@ -508,6 +508,8 @@ def test_split_between_processes_nested_dict():
                     results["c"], data_copy["c"][3]
                 ), f"Did not obtain expected values on process 4, expected `{data['c'][3]}`, received: {results['c']}"
 
+    state.wait_for_everyone()
+
 
 def test_split_between_processes_tensor():
     state = AcceleratorState()
@@ -518,6 +520,7 @@ def test_split_between_processes_tensor():
                 assert torch.allclose(results, torch.tensor([0, 1, 2, 3]).to(state.device))
             else:
                 assert torch.allclose(results, torch.tensor([4, 5, 6, 7]).to(state.device))
+    state.wait_for_everyone()
 
 
 def main():
@@ -526,21 +529,30 @@ def main():
     if state.local_process_index == 0:
         print("**Initialization**")
     init_state_check()
-    if state.local_process_index == 0:
-        print("\n**Test process execution**")
-    process_execution_check()
+    state.wait_for_everyone()
 
-    if state.local_process_index == 0:
-        print("\n**Test split between processes as a list**")
-    test_split_between_processes_list()
+    if state.distributed_type == DistributedType.MULTI_GPU:
+        num_processes_per_node = torch.cuda.device_count()
+    else:
+        num_processes_per_node = state.num_processes
 
-    if state.local_process_index == 0:
-        print("\n**Test split between processes as a dict**")
-    test_split_between_processes_nested_dict()
+    # We only run this test on non-multinode
+    if num_processes_per_node == state.num_processes:
+        if state.process_index == 0:
+            print("\n**Test process execution**")
+        process_execution_check()
 
-    if state.local_process_index == 0:
-        print("\n**Test split between processes as a tensor**")
-    test_split_between_processes_tensor()
+        if state.process_index == 0:
+            print("\n**Test split between processes as a list**")
+        test_split_between_processes_list()
+
+        if state.process_index == 0:
+            print("\n**Test split between processes as a dict**")
+        test_split_between_processes_nested_dict()
+
+        if state.process_index == 0:
+            print("\n**Test split between processes as a tensor**")
+        test_split_between_processes_tensor()
 
     if state.local_process_index == 0:
         print("\n**Test random number generator synchronization**")
