@@ -527,26 +527,23 @@ def main():
         print("**Initialization**")
     init_state_check()
 
-    if accelerator.state.distributed_type == DistributedType.MULTI_GPU:
-        num_gpus_per_node = torch.cuda.device_count()
+    if state.distributed_type == DistributedType.MULTI_GPU:
+        num_processes_per_node = torch.cuda.device_count()
     else:
-        num_gpus_per_node = accelerator.state.num_processes
+        num_processes_per_node = state.num_processes
+
     # We only run this test on non-multinode
-    if num_gpus_per_node == accelerator.state.num_processes:
-        if state.local_process_index == 0:
-            print("\n**Test process execution**")
+    if state.process_index == 0 and num_processes_per_node == state.num_processes:
+        print("\n**Test process execution**")
         process_execution_check()
 
-        if state.local_process_index == 0:
-            print("\n**Test split between processes as a list**")
+        print("\n**Test split between processes as a list**")
         test_split_between_processes_list()
 
-        if state.local_process_index == 0:
-            print("\n**Test split between processes as a dict**")
+        print("\n**Test split between processes as a dict**")
         test_split_between_processes_nested_dict()
 
-        if state.local_process_index == 0:
-            print("\n**Test split between processes as a tensor**")
+        print("\n**Test split between processes as a tensor**")
         test_split_between_processes_tensor()
 
     if state.local_process_index == 0:
