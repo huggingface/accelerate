@@ -591,6 +591,10 @@ def get_balanced_memory(
             ]
         )
 
+    if num_devices == 1:
+        # We cannot do low_zero on just one GPU
+        low_zero = False
+
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
 
