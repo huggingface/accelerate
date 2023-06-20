@@ -63,7 +63,7 @@ def print_on(state, process_idx):
     print(f"Printing from process {process_idx}: {state.process_index}")
 
 
-def process_execution_check(num_gpus_per_node):
+def process_execution_check():
     accelerator = Accelerator()
     num_processes = accelerator.num_processes
     # Test main_process_first context manager
@@ -86,8 +86,8 @@ def process_execution_check(num_gpus_per_node):
             if num_processes > 1:
                 assert text.endswith("Now on another process\n"), "Main process was not first"
             assert (
-                text.count("Now on another process\n") == num_gpus_per_node - 1
-            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {num_gpus_per_node}"
+                text.count("Now on another process\n") == accelerator.num_processes - 1
+            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {accelerator.num_processes}"
         except AssertionError:
             path.unlink()
             raise
