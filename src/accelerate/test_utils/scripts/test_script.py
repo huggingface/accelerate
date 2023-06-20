@@ -78,6 +78,7 @@ def process_execution_check():
             with open(path, "a+") as f:
                 f.write("Now on another process\n")
     accelerator.wait_for_everyone()
+
     if accelerator.is_main_process:
         with open(path, "r") as f:
             text = "".join(f.readlines())
@@ -85,9 +86,11 @@ def process_execution_check():
             assert text.startswith("Currently in the main process\n"), "Main process was not first"
             if num_processes > 1:
                 assert text.endswith("Now on another process\n"), "Main process was not first"
-            assert (
-                text.count("Now on another process\n") == num_processes - 1
-            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {num_processes}"
+            if accelerator.state.distributed_type == DistributedType.MULTI_GPU:
+                num_gpus_per_node = torch.cuda.device_count()
+                assert (
+                    text.count("Now on another process\n") == num_gpus_per_node - 1
+                ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {num_gpus_per_node}"
         except AssertionError:
             path.unlink()
             raise
