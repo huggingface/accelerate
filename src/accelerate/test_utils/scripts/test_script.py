@@ -82,21 +82,21 @@ def process_execution_check():
     if accelerator.is_main_process:
         with open(path, "r") as f:
             text = "".join(f.readlines())
-        try:
-            assert text.startswith("Currently in the main process\n"), "Main process was not first"
-            if num_processes > 1:
-                assert text.endswith("Now on another process\n"), "Main process was not first"
-            if accelerator.state.distributed_type == DistributedType.MULTI_GPU:
-                num_gpus_per_node = torch.cuda.device_count()
-                assert (
-                    text.count("Now on another process\n") == num_gpus_per_node - 1
-                ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {num_gpus_per_node}"
-        except AssertionError:
-            path.unlink()
-            raise
+        # try:
+        assert text.startswith("Currently in the main process\n"), "Main process was not first"
+        if num_processes > 1:
+            assert text.endswith("Now on another process\n"), "Main process was not first"
+        if accelerator.state.distributed_type == DistributedType.MULTI_GPU:
+            num_gpus_per_node = torch.cuda.device_count()
+            assert (
+                text.count("Now on another process\n") == num_gpus_per_node - 1
+            ), f"Only wrote to file {text.count('Now on another process') + 1} times, not {num_gpus_per_node}"
+        # except AssertionError:
+        #     path.unlink()
+        #     raise
 
-    if accelerator.is_main_process and path.exists():
-        path.unlink()
+    # if accelerator.is_main_process and path.exists():
+    #     path.unlink()
     accelerator.wait_for_everyone()
     # Test the decorators
     f = io.StringIO()
