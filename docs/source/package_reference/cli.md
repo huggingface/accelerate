@@ -1,0 +1,278 @@
+<!--Copyright 2021 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+-->
+
+# The Command Line 
+
+Below is a list of all the available commands 🤗 Accelerate with their parameters
+
+## accelerate config
+
+**Command**:
+
+`accelerate config` or `accelerate-config`
+
+Launches a series of prompts to create and save a `default_config.yml` configuration file for your training system. Should 
+always be ran first on your machine.
+
+**Usage**: 
+
+```bash
+accelerate config [arguments]
+```
+
+**Optional Arguments**:
+* `--config_file CONFIG_FILE` (`str`) -- The path to use to store the config file. Will default to a file named default_config.yaml in the cache location, which is the content
+                        of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
+                        (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
+* `-h`, `--help` (`bool`) -- Show a help message and exit
+
+## accelerate config default
+
+**Command**:
+
+`accelerate config default` or `accelerate-config default`
+
+Create a default config file for Accelerate with only a few flags set.
+
+**Usage**: 
+
+```bash
+accelerate config default [arguments]
+```
+
+**Optional Arguments**:
+* `--config_file CONFIG_FILE` (`str`) -- The path to use to store the config file. Will default to a file named default_config.yaml in the cache location, which is the content
+                        of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
+                        (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
+
+* `-h`, `--help` (`bool`) -- Show a help message and exit
+* `--mixed_precision {no,fp16,bf16}` (`str`) -- Whether or not to use mixed precision training. Choose between FP16 and BF16 (bfloat16) training. BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.
+
+## accelerate config update
+
+**Command**:
+
+`accelerate config update` or `accelerate-config update`
+
+Update an existing config file with the latest defaults while maintaining the old configuration.
+
+**Usage**: 
+
+```bash
+accelerate config update [arguments]
+```
+
+**Optional Arguments**:
+* `--config_file CONFIG_FILE` (`str`) -- The path to the config file to update. Will default to a file named default_config.yaml in the cache location, which is the content
+                        of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
+                        (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
+
+* `-h`, `--help` (`bool`) -- Show a help message and exit
+
+
+## accelerate env
+
+**Command**:
+
+`accelerate env` or `accelerate-env` or `python -m accelerate.commands.env`
+
+Lists the contents of the passed 🤗 Accelerate configuration file. Should always be used when opening an issue on the [GitHub repository](https://github.com/huggingface/accelerate).
+
+**Usage**:
+
+```bash
+accelerate env [arguments]
+```
+
+**Optional Arguments**:
+* `--config_file CONFIG_FILE` (`str`) -- The path to use to store the config file. Will default to a file named default_config.yaml in the cache location, which is the content
+                        of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
+                        (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
+* `-h`, `--help` (`bool`) -- Show a help message and exit
+
+## accelerate launch
+
+**Command**:
+
+`accelerate launch` or `accelerate-launch` or `python -m accelerate.commands.launch`
+
+Launches a specified script on a distributed system with the right parameters.
+
+**Usage**: 
+
+```bash
+accelerate launch [arguments] {training_script} --{training_script-argument-1} --{training_script-argument-2} ...
+```
+
+**Positional Arguments**:
+
+- `{training_script}` -- The full path to the script to be launched in parallel
+- `--{training_script-argument-1}` -- Arguments of the training script
+
+**Optional Arguments**:
+
+* `-h`, `--help` (`bool`) -- Show a help message and exit
+* `--config_file CONFIG_FILE` (`str`)-- The config file to use for the default values in the launching script.
+* `-m`, `--module` (`bool`) -- Change each process to interpret the launch script as a Python module, executing with the same behavior as 'python -m'.
+* `--no_python` (`bool`) -- Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.
+* `--debug` (`bool`) -- Whether to print out the torch.distributed stack trace when something fails.
+* `-q`, `--quiet` (`bool`) -- Silence subprocess errors from the launch stack trace to only show the relevant tracebacks. (Only applicable to DeepSpeed and single-process configurations).
+
+
+The rest of these arguments are configured through `accelerate config` and are read in from the specified `--config_file` (or default configuration) for their 
+values. They can also be passed in manually.
+
+**Hardware Selection Arguments**:
+
+* `--cpu` (`bool`) -- Whether or not to force the training on the CPU.
+* `--multi_gpu` (`bool`) -- Whether or not this should launch a distributed GPU training.
+* `--tpu` (`bool`) -- Whether or not this should launch a TPU training.
+* `--ipex` (`bool`) -- Whether or not this should launch an Intel Pytorch Extension (IPEX) training.
+
+**Resource Selection Arguments**:
+
+The following arguments are useful for fine-tuning how available hardware should be used
+
+* `--mixed_precision {no,fp16,bf16}` (`str`) -- Whether or not to use mixed precision training. Choose between FP16 and BF16 (bfloat16) training. BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.
+* `--num_processes NUM_PROCESSES` (`int`) -- The total number of processes to be launched in parallel.
+* `--num_machines NUM_MACHINES` (`int`) -- The total number of machines used in this training.
+* `--num_cpu_threads_per_process NUM_CPU_THREADS_PER_PROCESS` (`int`) -- The number of CPU threads per process. Can be tuned for optimal performance.
+
+**Training Paradigm Arguments**:
+
+The following arguments are useful for selecting which training paradigm to use.
+
+* `--use_deepspeed` (`bool`) -- Whether or not to use DeepSpeed for training.
+* `--use_fsdp` (`bool`) -- Whether or not to use FullyShardedDataParallel for training.
+* `--use_megatron_lm` (`bool`) -- Whether or not to use Megatron-LM for training.
+* `--use_xpu` (`bool`) -- Whether to use IPEX plugin to speed up training on XPU specifically.
+
+**Distributed GPU Arguments**:
+
+The following arguments are only useful when `multi_gpu` is passed or multi-gpu training is configured through `accelerate config`: 
+
+* `--gpu_ids` (`str`) -- What GPUs (by id) should be used for training on this machine as a comma-seperated list
+* `--same_network` (`bool`) -- Whether all machines used for multinode training exist on the same local network.
+* `--machine_rank MACHINE_RANK` (`int`) -- The rank of the machine on which this script is launched.
+* `--main_process_ip MAIN_PROCESS_IP` (`str`) -- The IP address of the machine of rank 0.
+* `--main_process_port MAIN_PROCESS_PORT` (`int`) -- The port to use to communicate with the machine of rank 0.
+* `--rdzv_backend` (`str`) -- The rendezvous method to use, such as "static" or "c10d"
+* `--rdzv_conf` (`str`) -- Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).
+* `--max_restarts` (`int`) -- Maximum number of worker group restarts before failing.
+* `--monitor_interval` (`float`) -- Interval, in seconds, to monitor the state of workers.
+
+**TPU Arguments**:
+
+The following arguments are only useful when `tpu` is passed or TPU training is configured through `accelerate config`: 
+
+* `--main_training_function MAIN_TRAINING_FUNCTION` (`str`) -- The name of the main function to be executed in your script.
+* `--downcast_bf16` (`bool`) -- Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.
+
+**DeepSpeed Arguments**:
+
+The following arguments are only useful when `use_deepspeed` is passed or `deepspeed` is configured through `accelerate config`: 
+
+* `--deepspeed_config_file` (`str`) -- DeepSpeed config file.
+* `--zero_stage` (`int`) -- DeepSpeed's ZeRO optimization stage.
+* `--offload_optimizer_device` (`str`) -- Decides where (none|cpu|nvme) to offload optimizer states.
+* `--offload_param_device` (`str`) -- Decides where (none|cpu|nvme) to offload parameters.
+* `--gradient_accumulation_steps` (`int`) -- No of gradient_accumulation_steps used in your training script.
+* `--gradient_clipping` (`float`) -- Gradient clipping value used in your training script.
+* `--zero3_init_flag` (`str`) -- Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models. Only applicable with DeepSpeed ZeRO Stage-3.
+* `--zero3_save_16bit_model` (`str`) -- Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3. Only applicable with DeepSpeed ZeRO Stage-3.
+* `--deepspeed_hostfile` (`str`) -- DeepSpeed hostfile for configuring multi-node compute resources.
+* `--deepspeed_exclusion_filter` (`str`) -- DeepSpeed exclusion filter string when using mutli-node setup.
+* `--deepspeed_inclusion_filter` (`str`) -- DeepSpeed inclusion filter string when using mutli-node setup.
+* `--deepspeed_multinode_launcher` (`str`) -- DeepSpeed multi-node launcher to use.
+
+**Fully Sharded Data Parallelism Arguments**:
+
+The following arguments are only useful when `use_fdsp` is passed or Fully Sharded Data Parallelism is configured through `accelerate config`:
+
+* `--fsdp_offload_params` (`str`) -- Decides Whether (true|false) to offload parameters and gradients to CPU.
+* `--fsdp_min_num_params` (`int`) -- FSDP's minimum number of parameters for Default Auto Wrapping.
+* `--fsdp_sharding_strategy` (`int`) -- FSDP's Sharding Strategy.
+* `--fsdp_auto_wrap_policy` (`str`) -- FSDP's auto wrap policy.
+* `--fsdp_transformer_layer_cls_to_wrap` (`str`) -- Transformer layer class name (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`, `T5Block` ...
+* `--fsdp_backward_prefetch_policy` (`str`) -- FSDP's backward prefetch policy.
+* `--fsdp_state_dict_type` (`str`) -- FSDP's state dict type.
+
+**Megatron-LM Arguments**:
+
+The following arguments are only useful when `use_megatron_lm` is passed or Megatron-LM is configured through `accelerate config`:
+
+* `--megatron_lm_tp_degree` (``) -- Megatron-LM's Tensor Parallelism (TP) degree.
+* `--megatron_lm_pp_degree` (``) -- Megatron-LM's Pipeline Parallelism (PP) degree.
+* `--megatron_lm_num_micro_batches` (``) -- Megatron-LM's number of micro batches when PP degree > 1.
+* `--megatron_lm_sequence_parallelism` (``) -- Decides Whether (true|false) to enable Sequence Parallelism when TP degree > 1.
+* `--megatron_lm_recompute_activations` (``) -- Decides Whether (true|false) to enable Selective Activation Recomputation.
+* `--megatron_lm_use_distributed_optimizer` (``) -- Decides Whether (true|false) to use distributed optimizer which shards optimizer state and gradients across Data Pralellel (DP) ranks.
+* `--megatron_lm_gradient_clipping` (``) -- Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable).
+
+**AWS SageMaker Arguments**:
+
+The following arguments are only useful when training in SageMaker
+
+* `--aws_access_key_id AWS_ACCESS_KEY_ID` (`str`) -- The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job
+* `--aws_secret_access_key AWS_SECRET_ACCESS_KEY` (`str`) -- The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job
+
+## accelerate tpu-config
+
+`accelerate tpu-config`
+
+**Usage**:
+
+```bash
+accelerate tpu-config [arguments]
+```
+
+**Optional Arguments**:
+* `-h`, `--help` (`bool`) -- Show a help message and exit
+
+**Config Arguments**:
+
+Arguments that can be configured through `accelerate config`.
+
+* `--config_file` (`str`) -- Path to the config file to use for accelerate.
+* `--tpu_name` (`str`) -- The name of the TPU to use. If not specified, will use the TPU specified in the config file.
+* `--tpu_zone` (`str`) -- The zone of the TPU to use. If not specified, will use the zone specified in the config file.
+
+**TPU Arguments**:
+
+Arguments for options ran inside the TPU.
+
+* `--command_file` (`str`) -- The path to the file containing the commands to run on the pod on startup.
+* `--command` (`str`) -- A command to run on the pod. Can be passed multiple times.
+* `--install_accelerate` (`bool`) -- Whether to install accelerate on the pod. Defaults to False.
+* `--accelerate_version` (`str`) -- The version of accelerate to install on the pod. If not specified, will use the latest pypi version. Specify 'dev' to install from GitHub.
+* `--debug` (`bool`) -- If set, will print the command that would be run instead of running it.
+
+## accelerate test
+
+`accelerate test` or `accelerate-test`
+
+Runs `accelerate/test_utils/test_script.py` to verify that 🤗 Accelerate has been properly configured on your system and runs. 
+
+**Usage**: 
+
+```bash
+accelerate test [arguments]
+```
+
+**Optional Arguments**:
+* `--config_file CONFIG_FILE` (`str`) -- The path to use to store the config file. Will default to a file named default_config.yaml in the cache location, which is the content
+                        of the environment `HF_HOME` suffixed with 'accelerate', or if you don't have such an environment variable, your cache directory
+                        (`~/.cache` or the content of `XDG_CACHE_HOME`) suffixed with `huggingface`.
+* `-h`, `--help` (`bool`) -- Show a help message and exit
