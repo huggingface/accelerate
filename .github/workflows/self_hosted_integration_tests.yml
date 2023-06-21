@@ -18,7 +18,7 @@ env:
 
 jobs:
   run-trainer-tests:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
     strategy:
       fail-fast: false
       matrix:
@@ -36,43 +36,46 @@ jobs:
     defaults:
       run:
         shell: bash
-      steps:
-        - name: Update transformers clone & pip install
-          working-directory: transformers/
-          run: |
-            git pull
-            if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
-              git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
-            fi
-            source activate accelerate
-            pip install .[torch,deepspeed-testing]
-        
-        - name: Update accelerate clone and pip install
-          working-directory: accelerate/
-          run: 
-            source activate accelerate
-            git config --global --add safe.directory '*'
-            git fetch && git checkout ${{ github.sha }}
-            pip install -e .
+    steps:
+      - name: Update transformers clone & pip install
+        working-directory: transformers/
+        run: |
+          source activate accelerate
+          git config --global --add safe.directory '*'
+          git fetch
+          if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
+            git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
+          fi
+          pip install .[torch,deepspeed-testing]
+      
+      - name: Update accelerate clone and pip install
+        working-directory: accelerate/
+        run: 
+          source activate accelerate;
+          git config --global --add safe.directory '*';
+          git fetch && git checkout ${{ github.sha }};
+          pip install -e .;
 
-        - name: Show installed libraries
-          run: |
-            source activate accelerate
-            pip freeze
+      - name: Show installed libraries
+        run: |
+          source activate accelerate;
+          pip freeze
 
-        - name: Run trainer tests
-          working-directory: transformers/
-          env:
-            CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
-          run: |
-            source activate accelerate
-            pytest -sv tests/trainer
+      - name: Run trainer tests
+        working-directory: transformers/
+        env:
+          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          WANDB_DISABLED: true
+        run: |
+          source activate accelerate;
+          pytest -sv tests/trainer
 
-        - name: Run deepspeed tests
-          working-directory: transformers/
-          env:
-            CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
-          run: |
-            source activate accelerate
-            pytest -sv tests/deepspeed
+      - name: Run deepspeed tests
+        working-directory: transformers/
+        env:
+          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          WANDB_DISABLED: true
+        run: |
+          source activate accelerate;
+          pytest -sv tests/deepspeed
 
