@@ -255,7 +255,7 @@ class Accelerator:
         else:
             self.project_configuration = ProjectConfiguration(project_dir=project_dir)
         if project_dir is not None and self.project_dir is None:
-            self.project_configuration.project_dir = project_dir
+            self.project_configuration.set_directories(project_dir)
         if mixed_precision is not None:
             mixed_precision = str(mixed_precision)
             if mixed_precision not in PrecisionType:
