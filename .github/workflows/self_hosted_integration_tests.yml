@@ -18,7 +18,7 @@ env:
 
 jobs:
   run-trainer-tests:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
     strategy:
       fail-fast: false
       matrix:
