@@ -857,10 +857,7 @@ class Accelerator:
 
     def _do_sync(self):
         "Sets the right `sync_gradients` context and either resets or increases `self.step`"
-        if (
-            self.gradient_state.plugin_kwargs.get("sync_with_dataloader", True)
-            and self.gradient_state.end_of_dataloader
-        ):
+        if self.gradient_state.sync_with_dataloader and self.gradient_state.end_of_dataloader:
             self.step = 0
             self.gradient_state._set_sync_gradients(True)
         else:
