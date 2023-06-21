@@ -38,7 +38,7 @@ from accelerate.test_utils.testing import (
     skip,
 )
 from accelerate.tracking import CometMLTracker, GeneralTracker
-from accelerate.utils import is_comet_ml_available, is_tensorboard_available
+from accelerate.utils import ProjectConfiguration, is_comet_ml_available, is_tensorboard_available
 
 
 if is_comet_ml_available():
@@ -112,6 +112,11 @@ class TensorBoardTrackingTest(unittest.TestCase):
             _ = Accelerator(log_with="tensorboard")
         with tempfile.TemporaryDirectory() as dirpath:
             _ = Accelerator(log_with="tensorboard", project_dir=dirpath)
+
+    def test_project_dir_with_config(self):
+        config = ProjectConfiguration(total_limit=30)
+        with tempfile.TemporaryDirectory() as dirpath:
+            _ = Accelerator(log_with="tensorboard", project_dir=dirpath, project_config=config)
 
 
 @require_wandb

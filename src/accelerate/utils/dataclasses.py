@@ -377,9 +377,14 @@ class ProjectConfiguration:
         metadata={"help": "The current save iteration."},
     )
 
-    def __post_init__(self):
+    def set_directories(self, project_dir: str = None):
+        "Sets `self.project_dir` and `self.logging_dir` to the appropriate values."
+        self.project_dir = project_dir
         if self.logging_dir is None:
-            self.logging_dir = self.project_dir
+            self.logging_dir = project_dir
+
+    def __post_init__(self):
+        self.set_directories(self.project_dir)
 
 
 @dataclass
