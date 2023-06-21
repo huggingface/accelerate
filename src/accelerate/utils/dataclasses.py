@@ -395,6 +395,12 @@ class GradientAccumulationPlugin(KwargsHandler):
             "help": "Whether to adjust the scheduler steps to account for the number of steps being accumulated. Should be `True` if the used scheduler was not adjusted for gradient accumulation."
         },
     )
+    sync_with_dataloader: int = field(
+        default=True,
+        metadata={
+            "help": "Whether to synchronize setting the gradients when at the end of the dataloader. Should only be set to `False` if you know what you're doing."
+        },
+    )
 
 
 @dataclass
