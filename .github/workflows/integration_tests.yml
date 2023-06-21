@@ -57,6 +57,8 @@ jobs:
         pip freeze
 
     - name: Run Trainer tests
+      env:
+        WANDB_DISABLED: true
       run: |
         cd ../transformers
         pytest -sv tests/trainer

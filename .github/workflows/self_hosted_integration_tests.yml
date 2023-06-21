@@ -65,6 +65,7 @@ jobs:
         working-directory: transformers/
         env:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          WANDB_DISABLED: true
         run: |
           source activate accelerate;
           pytest -sv tests/trainer
@@ -73,6 +74,7 @@ jobs:
         working-directory: transformers/
         env:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          WANDB_DISABLED: true
         run: |
           source activate accelerate;
           pytest -sv tests/deepspeed
