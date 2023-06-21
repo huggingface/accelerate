@@ -51,14 +51,14 @@ jobs:
       - name: Update accelerate clone and pip install
         working-directory: accelerate/
         run: 
-          source activate accelerate
-          git config --global --add safe.directory '*'
-          git fetch && git checkout ${{ github.sha }}
-          pip install -e .
+          source activate accelerate;
+          git config --global --add safe.directory '*';
+          git fetch && git checkout ${{ github.sha }};
+          pip install -e .;
 
       - name: Show installed libraries
         run: |
-          source activate accelerate
+          source activate accelerate;
           pip freeze
 
       - name: Run trainer tests
@@ -66,7 +66,7 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
         run: |
-          source activate accelerate
+          source activate accelerate;
           pytest -sv tests/trainer
 
       - name: Run deepspeed tests
@@ -74,6 +74,6 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
         run: |
-          source activate accelerate
+          source activate accelerate;
           pytest -sv tests/deepspeed
 
