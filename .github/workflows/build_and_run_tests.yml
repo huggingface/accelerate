@@ -33,16 +33,16 @@ jobs:
             fi
           done
           
-  # build-docker-containers:
-  #   needs: check-for-source
-  #   if: (github.event_name == 'push') && (needs.check-for-source.outputs.changed == '1')
-  #   uses: ./.github/workflows/build_docker_images.yml
-  #   secrets: inherit
+  build-docker-containers:
+    needs: check-for-source
+    if: (github.event_name == 'push') && (needs.check-for-source.outputs.changed == '1')
+    uses: ./.github/workflows/build_docker_images.yml
+    secrets: inherit
 
-  # run-merge-tests:
-  #   needs: build-docker-containers
-  #   if: always()
-  #   uses: ./.github/workflows/run_merge_tests.yml
+  run-merge-tests:
+    needs: build-docker-containers
+    if: always()
+    uses: ./.github/workflows/run_merge_tests.yml
 
   run-integration-tests:
     needs: check-for-source
