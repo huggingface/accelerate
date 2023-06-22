@@ -163,7 +163,6 @@ def set_module_tensor_to_device(
     with torch.no_grad():
         if value is None:
             new_value = old_value.to(device)
-            # change the dtype of a tensor on meta device
             if dtype is not None and device in ["meta", torch.device("meta")]:
                 new_value = new_value.to(dtype)
                 if not is_buffer:
