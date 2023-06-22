@@ -1223,7 +1223,7 @@ def load_checkpoint_in_model(
                     if keep_in_fp32_modules is not None and dtype == torch.float16:
                         proceed = False
                         for key in keep_in_fp32_modules:
-                            if ((key in param_name) and (key + "." in param_name)) or key==param_name:
+                            if ((key in param_name) and (key + "." in param_name)) or key == param_name:
                                 proceed = True
                                 break
                         if proceed:

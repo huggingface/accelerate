@@ -14,7 +14,6 @@
 
 import gc
 import unittest
-import tempfile
 
 import torch
 import torch.nn as nn
@@ -28,10 +27,11 @@ from accelerate.utils.dataclasses import BnbQuantizationConfig
 class BitsAndBytesConfigIntegration(unittest.TestCase):
     def test_BnbQuantizationConfig(self):
         with self.assertRaises(ValueError):
-            bnb_quantization_config = BnbQuantizationConfig(
+            BnbQuantizationConfig(
                 load_in_8bit=True,
                 load_in_4bit=True,
             )
+
 
 @slow
 @require_cuda
@@ -61,7 +61,9 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16, device_map="auto")
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(
+            self.model_name, torch_dtype=torch.float16, device_map="auto"
+        )
 
         # create model on meta device
         with init_empty_weights():
@@ -70,9 +72,12 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         self.weights_location = hf_hub_download(self.model_name, "pytorch_model.bin")
         self.bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
 
-        # Need to select the transformer layer because the weights at weights_location describe the transformer layer
         self.model_8bit = get_quantized_model(
-            self.model_8bit, self.bnb_quantization_config, weights_location=self.weights_location, device_map="auto",no_split_module_classes=['BloomBlock']
+            self.model_8bit,
+            self.bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map="auto",
+            no_split_module_classes=["BloomBlock"],
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-1b7")
@@ -112,34 +117,40 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
         for name, module in self.model_8bit.named_modules():
             if isinstance(module, torch.nn.Linear):
-                modules_not_converted = self.bnb_quantization_config.keep_in_fp32_modules + self.bnb_quantization_config.skip_modules
+                modules_not_converted = (
+                    self.bnb_quantization_config.keep_in_fp32_modules + self.bnb_quantization_config.skip_modules
+                )
                 if name not in modules_not_converted:
                     self.assertTrue(module.weight.dtype == torch.int8)
-                    
+
     def test_llm_skip(self):
         r"""
         A simple test to check if `llm_int8_skip_modules` works as expected
         """
         import bitsandbytes as bnb
-        from transformers import AutoModelForCausalLM,AutoConfig
+        from transformers import AutoConfig, AutoModelForCausalLM
 
-        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, skip_modules=["lm_head","transformer.word_embeddings"])
-        
+        bnb_quantization_config = BnbQuantizationConfig(
+            load_in_8bit=True, skip_modules=["lm_head", "transformer.word_embeddings"]
+        )
+
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
-        
+
         model = get_quantized_model(
-            model, bnb_quantization_config, weights_location=self.weights_location, device_map="auto", no_split_module_classes=['BloomBlock']
+            model,
+            bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map="auto",
+            no_split_module_classes=["BloomBlock"],
         )
-        
+
         self.assertTrue(model.transformer.h[1].mlp.dense_4h_to_h.weight.dtype == torch.int8)
-        self.assertTrue(
-            isinstance(model.transformer.h[1].mlp.dense_4h_to_h, bnb.nn.Linear8bitLt)
-        )
+        self.assertTrue(isinstance(model.transformer.h[1].mlp.dense_4h_to_h, bnb.nn.Linear8bitLt))
         self.assertTrue(isinstance(model.lm_head, nn.Linear))
         self.assertTrue(model.lm_head.weight.dtype != torch.int8)
-    
-    def check_inference_correctness(self,model):
+
+    def check_inference_correctness(self, model):
         r"""
         Test the generation quality of the quantized model and see that we are matching the expected output.
         Given that we are operating on small numbers + the testing model is relatively small, we might not get
@@ -154,28 +165,33 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         # Get the generation
         output_text = self.tokenizer.decode(output_parallel[0], skip_special_tokens=True)
         self.assertEqual(output_text, self.EXPECTED_OUTPUT)
-        
+
     def test_generate_quality(self):
         self.check_inference_correctness(self.model_8bit)
-        
+
     def test_fp32_8bit_conversion(self):
         r"""
         Test whether it is possible to mix both `8bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        from transformers import AutoModelForCausalLM,AutoConfig
-         
+        from transformers import AutoConfig, AutoModelForCausalLM
+
         bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, keep_in_fp32_modules=["lm_head"])
-        
+
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
-        
+
         model = get_quantized_model(
-            model, bnb_quantization_config, weights_location=self.weights_location, device_map="auto", no_split_module_classes=['BloomBlock']
+            model,
+            bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map="auto",
+            no_split_module_classes=["BloomBlock"],
         )
         self.assertTrue(model.lm_head.weight.dtype == torch.float32)
 
     def test_cpu_gpu_loading_random_device_map(self):
-        from transformers import AutoModelForCausalLM, AutoConfig
+        from transformers import AutoConfig, AutoModelForCausalLM
+
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
         """
@@ -215,13 +231,18 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        # Need to select the transformer layer because the weights at weights_location describe the transformer layer
         model_8bit = get_quantized_model(
-            model_8bit, bnb_quantization_config, weights_location=self.weights_location, device_map=device_map,no_split_module_classes=['BloomBlock'])
+            model_8bit,
+            bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map=device_map,
+            no_split_module_classes=["BloomBlock"],
+        )
         self.check_inference_correctness(model_8bit)
-        
+
     def test_cpu_gpu_loading_custom_device_map(self):
-        from transformers import AutoModelForCausalLM, AutoConfig
+        from transformers import AutoConfig, AutoModelForCausalLM
+
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
         """
@@ -238,13 +259,16 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        # Need to select the transformer layer because the weights at weights_location describe the transformer layer
         model_8bit = get_quantized_model(
-            model_8bit, bnb_quantization_config, weights_location=self.weights_location, device_map=device_map,no_split_module_classes=['BloomBlock'])
+            model_8bit,
+            bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map=device_map,
+            no_split_module_classes=["BloomBlock"],
+        )
         self.check_inference_correctness(model_8bit)
-        
-        
-        
+
+
 @slow
 @require_cuda
 @require_bnb
@@ -272,14 +296,16 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16, device_map="auto")
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(
+            self.model_name, torch_dtype=torch.float16, device_map="auto"
+        )
 
         self.bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
-        
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
-        self.model_8bit = get_quantized_model(self.model_8bit,self.bnb_quantization_config)
 
-        self.tokenizer = AutoTokenizer.from_pretrained('bigscience/bloom-1b7')
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
+        self.model_8bit = get_quantized_model(self.model_8bit, self.bnb_quantization_config)
+
+        self.tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-1b7")
 
     def tearDown(self):
         r"""
@@ -316,10 +342,12 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
 
         for name, module in self.model_8bit.named_modules():
             if isinstance(module, torch.nn.Linear):
-                modules_not_converted = self.bnb_quantization_config.keep_in_fp32_modules + self.bnb_quantization_config.skip_modules
+                modules_not_converted = (
+                    self.bnb_quantization_config.keep_in_fp32_modules + self.bnb_quantization_config.skip_modules
+                )
                 if name not in modules_not_converted:
                     self.assertTrue(module.weight.dtype == torch.int8)
-                    
+
     def test_generate_quality(self):
         r"""
         Test the generation quality of the quantized model and see that we are matching the expected output.
@@ -327,22 +355,25 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
         the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
         """
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        
-        output_sequences = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(self.model_8bit.device), max_new_tokens=10)
+
+        output_sequences = self.model_8bit.generate(
+            input_ids=encoded_input["input_ids"].to(self.model_8bit.device), max_new_tokens=10
+        )
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-        
+
     def test_fp32_8bit_conversion(self):
         r"""
         Test whether it is possible to mix both `8bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
         from transformers import AutoModelForCausalLM
-         
+
         bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, keep_in_fp32_modules=["lm_head"])
-        
+
         model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
         model = get_quantized_model(model, bnb_quantization_config)
         self.assertTrue(model.lm_head.weight.dtype == torch.float32)
+
 
 @slow
 @require_cuda
@@ -373,7 +404,9 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         super().setUp()
 
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16, device_map="auto")
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(
+            self.model_name, torch_dtype=torch.float16, device_map="auto"
+        )
 
         # create model on meta device
         with init_empty_weights():
@@ -382,12 +415,15 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         self.weights_location = hf_hub_download(self.model_name, "pytorch_model.bin")
         self.bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True)
 
-        # Need to select the transformer layer because the weights at weights_location describe the transformer layer.
         self.model_4bit = get_quantized_model(
-            self.model_4bit, self.bnb_quantization_config, weights_location=self.weights_location, device_map="auto",no_split_module_classes=['BloomBlock']
+            self.model_4bit,
+            self.bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map="auto",
+            no_split_module_classes=["BloomBlock"],
         )
 
-        self.tokenizer = AutoTokenizer.from_pretrained('bigscience/bloom-1b7')
+        self.tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-1b7")
 
     def tearDown(self):
         """
@@ -425,13 +461,12 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
 
         # Check the exactness of the results
         output_sequences = self.model_4bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
-        
+
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
-    
     def test_generate_quality(self):
         self.check_inference_correctness(self.model_4bit)
-        
+
     def test_linear_are_4bit(self):
         r"""
         A simple test to check if the model conversion has been done correctly by checking on the
@@ -450,24 +485,29 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
                 ):
                     # 4-bit parameters are packed in uint8 variables
                     self.assertTrue(module.weight.dtype == torch.uint8)
-                    
+
     def test_fp32_4bit_conversion(self):
         r"""
         Test whether it is possible to mix both `4bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        from transformers import AutoModelForCausalLM,AutoConfig
-         
+        from transformers import AutoConfig, AutoModelForCausalLM
+
         bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, keep_in_fp32_modules=["lm_head"])
-        
+
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
         model = get_quantized_model(
-            model, bnb_quantization_config, weights_location=self.weights_location, device_map="auto", no_split_module_classes=['BloomBlock']
+            model,
+            bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map="auto",
+            no_split_module_classes=["BloomBlock"],
         )
         self.assertTrue(model.lm_head.weight.dtype == torch.float32)
-        
+
     def test_cpu_gpu_loading_random_device_map(self):
-        from transformers import AutoModelForCausalLM, AutoConfig
+        from transformers import AutoConfig, AutoModelForCausalLM
+
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
         """
@@ -507,13 +547,18 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        # Need to select the transformer layer because the weights at weights_location describe the transformer layer
         model_4bit = get_quantized_model(
-            model_4bit, bnb_quantization_config, weights_location=self.weights_location, device_map=device_map,no_split_module_classes=['BloomBlock'])
+            model_4bit,
+            bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map=device_map,
+            no_split_module_classes=["BloomBlock"],
+        )
         self.check_inference_correctness(model_4bit)
-        
+
     def test_cpu_gpu_loading_custom_device_map(self):
-        from transformers import AutoModelForCausalLM, AutoConfig
+        from transformers import AutoConfig, AutoModelForCausalLM
+
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
         """
@@ -530,11 +575,16 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        # Need to select the transformer layer because the weights at weights_location describe the transformer layer
         model_4bit = get_quantized_model(
-            model_4bit, bnb_quantization_config, weights_location=self.weights_location, device_map=device_map,no_split_module_classes=['BloomBlock'])
+            model_4bit,
+            bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map=device_map,
+            no_split_module_classes=["BloomBlock"],
+        )
         self.check_inference_correctness(model_4bit)
-        
+
+
 @slow
 @require_cuda
 @require_bnb
@@ -566,14 +616,16 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
         super().setUp()
 
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16, device_map="auto")
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(
+            self.model_name, torch_dtype=torch.float16, device_map="auto"
+        )
 
         self.bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True)
 
         self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
         self.model_4bit = get_quantized_model(self.model_4bit, self.bnb_quantization_config)
 
-        self.tokenizer = AutoTokenizer.from_pretrained('bigscience/bloom-1b7')
+        self.tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-1b7")
 
     def tearDown(self):
         """
@@ -618,7 +670,7 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
                 ):
                     # 4-bit parameters are packed in uint8 variables
                     self.assertTrue(module.weight.dtype == torch.uint8)
-                    
+
     def test_generate_quality(self):
         r"""
         Test the generation quality of the quantized model and see that we are matching the expected output.
@@ -626,19 +678,19 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
         the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
         """
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        
+
         output_sequences = self.model_4bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
-        
+
     def test_fp32_4bit_conversion(self):
         r"""
         Test whether it is possible to mix both `4bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
         from transformers import AutoModelForCausalLM
-         
+
         bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, keep_in_fp32_modules=["lm_head"])
-        
+
         model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
         model = get_quantized_model(model, bnb_quantization_config)
         self.assertTrue(model.lm_head.weight.dtype == torch.float32)

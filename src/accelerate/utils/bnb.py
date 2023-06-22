@@ -33,7 +33,7 @@ def get_quantized_model(
     no_split_module_classes: Optional[List[str]] = None,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
-    offload_state_dict: bool = False
+    offload_state_dict: bool = False,
 ):
     """
         This function will quantize the input model with the associated config passed in `bnb_quantization_config`. If
@@ -109,16 +109,14 @@ def get_quantized_model(
     if model.device.type != "meta":
         # quantization of an already loaded model
         logger.warning("It is not recommended to quantize a loaded model. There might be some memory issues.")
-        model = replace_with_bnb_layers(
-            model, bnb_quantization_config, modules_to_not_convert=modules_to_not_convert
-        )
+        model = replace_with_bnb_layers(model, bnb_quantization_config, modules_to_not_convert=modules_to_not_convert)
         # convert param to the right dtype
         dtype = bnb_quantization_config.torch_dtype
         for name, param in model.state_dict().items():
             if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
                 param.to(torch.float32)
                 if param.dtype != torch.float32:
-                    name = name.replace('.weight',"").replace('.bias',"")
+                    name = name.replace(".weight", "").replace(".bias", "")
                     param = getattr(model, name, None)
                     if param is not None:
                         param.to(torch.float32)
@@ -159,7 +157,7 @@ def get_quantized_model(
             print
             if offload_state_dict is None and device_map is not None and "disk" in device_map.values():
                 offload_state_dict = True
-                
+
             load_checkpoint_in_model(
                 model,
                 weights_location,
@@ -167,9 +165,10 @@ def get_quantized_model(
                 dtype=bnb_quantization_config.torch_dtype,
                 offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
-                keep_in_fp32_modules=bnb_quantization_config.keep_in_fp32_modules
+                keep_in_fp32_modules=bnb_quantization_config.keep_in_fp32_modules,
             )
             return dispatch_model(model, device_map=device_map, offload_dir=offload_folder)
+
 
 def get_quantized_model_device_map(
     model, bnb_quantization_config, device_map=None, max_memory=None, no_split_module_classes=None
@@ -298,7 +297,9 @@ def _replace_with_bnb_layers(
             current_key_name_str = ".".join(current_key_name)
             proceed = True
             for key in modules_to_not_convert:
-                if ((key in current_key_name_str) and (key + "." in current_key_name_str)) or key==current_key_name_str:
+                if (
+                    (key in current_key_name_str) and (key + "." in current_key_name_str)
+                ) or key == current_key_name_str:
                     proceed = False
                     break
             if proceed:
@@ -309,7 +310,7 @@ def _replace_with_bnb_layers(
                         module.out_features,
                         module.bias is not None,
                         has_fp16_weights=False,
-                        threshold=bnb_quantization_config.llm_int8_threshold
+                        threshold=bnb_quantization_config.llm_int8_threshold,
                     )
                 elif bnb_quantization_config.load_in_4bit:
                     bnb_module = bnb.nn.Linear4bit(
@@ -335,6 +336,7 @@ def _replace_with_bnb_layers(
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model, has_been_replaced
+
 
 def get_keys_to_not_convert(model):
     r"""
