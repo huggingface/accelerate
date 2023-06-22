@@ -740,7 +740,7 @@ def prepare_data_loader(
                 sampler = dataloader.batch_sampler.sampler
             if hasattr(sampler, "generator"):
                 if sampler.generator is None:
-                    sampler.generator = torch.Generator()
+                    sampler.generator = torch.Generator(device=device)
                 synchronized_generator = sampler.generator
 
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
