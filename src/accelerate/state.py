@@ -911,10 +911,12 @@ class GradientState:
         - **sync_gradients** (`bool`) -- Whether the gradients should be synced across all devices
         - **active_dataloader** (`Optional[DataLoader]`) -- The dataloader that is currently being iterated over
         - **dataloader_references** (`List[Optional[DataLoader]]`) -- A list of references to the dataloaders that are
-          being iterated over
+            being iterated over
         - **num_steps** (`int`) -- The number of steps to accumulate over
         - **adjust_scheduler** (`bool`) -- Whether the scheduler should be adjusted to account for the gradient
-          accumulation
+            accumulation
+        - **sync_with_dataloader** (`bool`) -- Whether the gradients should be synced at the end of the dataloader
+            iteration and the number of total steps reset
     """
 
     _shared_state = SharedDict()
@@ -942,6 +944,11 @@ class GradientState:
     def adjust_scheduler(self) -> bool:
         "Returns whether the scheduler should be adjusted"
         return self.plugin_kwargs.get("adjust_scheduler", False)
+
+    @property
+    def sync_with_dataloader(self) -> bool:
+        "Returns whether the gradients should be synced at the end of the dataloader iteration and the number of total steps reset"
+        return self.plugin_kwargs.get("sync_with_dataloader", True)
 
     @property
     def initialized(self) -> bool:
