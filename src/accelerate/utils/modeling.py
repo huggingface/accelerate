@@ -163,6 +163,12 @@ def set_module_tensor_to_device(
     with torch.no_grad():
         if value is None:
             new_value = old_value.to(device)
+            # change the dtype of a tensor on meta device
+            if dtype is not None and device in ["meta", torch.device("meta")]:
+                new_value = new_value.to(dtype)
+                if not is_buffer:
+                    param_cls = type(module._parameters[tensor_name])
+                    module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
             new_value = value.to(device)
         else:
@@ -1118,10 +1124,10 @@ def load_checkpoint_in_model(
 
                 if param_device == "disk":
                     if offload_buffers or param_name not in buffer_names:
-                        set_module_tensor_to_device(model, param_name, "meta")
+                        set_module_tensor_to_device(model, param_name, "meta", dtype=dtype)
                     offload_weight(param, param_name, offload_folder, index=offload_index)
                 elif param_device == "cpu" and offload_state_dict:
-                    set_module_tensor_to_device(model, param_name, "meta")
+                    set_module_tensor_to_device(model, param_name, "meta", dtype=dtype)
                     offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
                 else:
                     set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=dtype)
