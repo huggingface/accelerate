@@ -1124,9 +1124,13 @@ def load_checkpoint_in_model(
 
                 if param_device == "disk":
                     if offload_buffers or param_name not in buffer_names:
+                        if dtype is None:
+                            dtype = param.dtype
                         set_module_tensor_to_device(model, param_name, "meta", dtype=dtype)
                     offload_weight(param, param_name, offload_folder, index=offload_index)
                 elif param_device == "cpu" and offload_state_dict:
+                    if dtype is None:
+                        dtype = param.dtype
                     set_module_tensor_to_device(model, param_name, "meta", dtype=dtype)
                     offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
                 else:
