@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import tempfile
 import unittest
 
 import torch
@@ -244,7 +245,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         from transformers import AutoConfig, AutoModelForCausalLM
 
         r"""
-        A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
         """
         device_map = {
             "transformer.word_embeddings": "cpu",
@@ -267,6 +268,37 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             no_split_module_classes=["BloomBlock"],
         )
         self.check_inference_correctness(model_8bit)
+
+    def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
+        This time we also add `disk` on the device_map - using the kwargs directly instead of the quantization config
+        """
+        device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": "cpu",
+            "lm_head": 0,
+            "transformer.h": 1,
+            "transformer.ln_f": "cpu",
+        }
+        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_fp32_cpu_offload=True)
+
+        with init_empty_weights():
+            model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name),torch_dtype=torch.float16)
+        
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model_8bit = get_quantized_model(
+                model_8bit,
+                bnb_quantization_config,
+                weights_location=self.weights_location,
+                device_map=device_map,
+                no_split_module_classes=["BloomBlock"],
+                offload_folder=tmpdirname,
+                offload_state_dict=True,
+            )
+            self.check_inference_correctness(model_8bit)
 
 
 @slow
@@ -583,6 +615,36 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             no_split_module_classes=["BloomBlock"],
         )
         self.check_inference_correctness(model_4bit)
+        
+    def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
+        This time we also add `disk` on the device_map - using the kwargs directly instead of the quantization config
+        """
+        device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": "disk",
+            "lm_head": 0,
+            "transformer.h": 1,
+            "transformer.ln_f": "cpu",
+        }
+        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_fp32_cpu_offload=True)
+
+        with init_empty_weights():
+            model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model_4bit = get_quantized_model(
+                model_4bit,
+                bnb_quantization_config,
+                weights_location=self.weights_location,
+                device_map=device_map,
+                no_split_module_classes=["BloomBlock"],
+                offload_folder=tmpdirname,
+                offload_state_dict=True,
+            )
+            self.check_inference_correctness(model_4bit)
 
 
 @slow
