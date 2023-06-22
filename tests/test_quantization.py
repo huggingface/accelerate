@@ -30,6 +30,7 @@ class BitsAndBytesConfigIntegration(unittest.TestCase):
         with self.assertRaises(ValueError):
             BnbQuantizationConfig(load_in_8bit=True, load_in_4bit=True)
 
+
 @slow
 @require_cuda
 @require_bnb
