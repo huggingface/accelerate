@@ -127,7 +127,7 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
-from .bnb import get_quantized_model
+from .bnb import quantize_model
 from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, save_fsdp_model, save_fsdp_optimizer
 from .launch import (
     PrepareForLaunch,

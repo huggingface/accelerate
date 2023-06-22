@@ -1,3 +1,18 @@
+# Copyright 2023 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 import logging
 import os
 from typing import Dict, List, Optional, Union
@@ -25,7 +40,7 @@ from copy import deepcopy
 logger = logging.getLogger(__name__)
 
 
-def get_quantized_model(
+def quantize_model(
     model: torch.nn.Module,
     bnb_quantization_config: BnbQuantizationConfig,
     weights_location: Union[str, os.PathLike] = None,
@@ -36,9 +51,9 @@ def get_quantized_model(
     offload_state_dict: bool = False,
 ):
     """
-        This function will quantize the input model with the associated config passed in `bnb_quantization_config`. If
-        the model is in the meta device, we will load and dispatch the weights according to the `device_map` passed. If
-        the model is already loaded, we will quantize the model and put the model on the GPU,
+    This function will quantize the input model with the associated config passed in `bnb_quantization_config`. If the
+    model is in the meta device, we will load and dispatch the weights according to the `device_map` passed. If the
+    model is already loaded, we will quantize the model and put the model on the GPU,
 
     Args:
         model (`torch.nn.Module`):
@@ -108,7 +123,10 @@ def get_quantized_model(
 
     if model.device.type != "meta":
         # quantization of an already loaded model
-        logger.warning("It is not recommended to quantize a loaded model. There might be some memory issues.")
+        logger.warning(
+            "It is not recommended to quantize a loaded model. "
+            "The model should be instantiated under the `init_empty_weights` context manager."
+        )
         model = replace_with_bnb_layers(model, bnb_quantization_config, modules_to_not_convert=modules_to_not_convert)
         # convert param to the right dtype
         dtype = bnb_quantization_config.torch_dtype
@@ -135,39 +153,39 @@ def get_quantized_model(
             "We move the model to cuda."
         )
         return model
-    else:
-        if weights_location is None:
-            raise RuntimeError(
-                f"`weights_location` needs to be the folder path containing the weights of the model, but we found {weights_location} "
-            )
-        else:
-            with init_empty_weights():
-                model = replace_with_bnb_layers(
-                    model, bnb_quantization_config, modules_to_not_convert=modules_to_not_convert
-                )
-            # Make sure tied weights are tied before creating the device map.
-            model.tie_weights()
-            device_map = get_quantized_model_device_map(
-                model,
-                bnb_quantization_config,
-                device_map,
-                max_memory=max_memory,
-                no_split_module_classes=no_split_module_classes,
-            )
-            print
-            if offload_state_dict is None and device_map is not None and "disk" in device_map.values():
-                offload_state_dict = True
 
-            load_checkpoint_in_model(
-                model,
-                weights_location,
-                device_map,
-                dtype=bnb_quantization_config.torch_dtype,
-                offload_folder=offload_folder,
-                offload_state_dict=offload_state_dict,
-                keep_in_fp32_modules=bnb_quantization_config.keep_in_fp32_modules,
+    elif weights_location is None:
+        raise RuntimeError(
+            f"`weights_location` needs to be the folder path containing the weights of the model, but we found {weights_location} "
+        )
+
+    else:
+        with init_empty_weights():
+            model = replace_with_bnb_layers(
+                model, bnb_quantization_config, modules_to_not_convert=modules_to_not_convert
             )
-            return dispatch_model(model, device_map=device_map, offload_dir=offload_folder)
+        # Make sure tied weights are tied before creating the device map.
+        model.tie_weights()
+        device_map = get_quantized_model_device_map(
+            model,
+            bnb_quantization_config,
+            device_map,
+            max_memory=max_memory,
+            no_split_module_classes=no_split_module_classes,
+        )
+        if offload_state_dict is None and device_map is not None and "disk" in device_map.values():
+            offload_state_dict = True
+
+        load_checkpoint_in_model(
+            model,
+            weights_location,
+            device_map,
+            dtype=bnb_quantization_config.torch_dtype,
+            offload_folder=offload_folder,
+            offload_state_dict=offload_state_dict,
+            keep_in_fp32_modules=bnb_quantization_config.keep_in_fp32_modules,
+        )
+        return dispatch_model(model, device_map=device_map, offload_dir=offload_folder)
 
 
 def get_quantized_model_device_map(
@@ -252,10 +270,10 @@ def replace_with_bnb_layers(model, bnb_quantization_config, modules_to_not_conve
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`List[`str`]`):
+        modules_to_not_convert (`List[str]`):
             Names of the modules to not quantize convert. In practice we keep the `lm_head` in full precision for
             numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
+        current_key_name (`List[str]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert.
     """
