@@ -734,7 +734,9 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
         """
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
-        output_sequences = self.model_4bit.generate(input_ids=encoded_input["input_ids"].to(self.model_4bit.device), max_new_tokens=10)
+        output_sequences = self.model_4bit.generate(
+            input_ids=encoded_input["input_ids"].to(self.model_4bit.device), max_new_tokens=10
+        )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
