@@ -61,6 +61,8 @@ class AcceleratedScheduler:
         if not self.gradient_state.sync_gradients:
             if self.gradient_state.adjust_scheduler:
                 self.scheduler._step_count += 1
+                if self.scheduler.num_batches is not None:
+                    self.scheduler.num_batches += 1  # Update the num_batches attribute of the scheduler
             return
 
         for opt in self.optimizers:
@@ -69,6 +71,8 @@ class AcceleratedScheduler:
         if self.split_batches:
             # Split batches -> the training dataloader batch size is not changed so one step per training step
             self.scheduler.step(*args, **kwargs)
+            if self.scheduler.num_batches is not None:
+                self.scheduler.num_batches += 1  # Update the num_batches attribute of the scheduler
         else:
             # Otherwise the training dataloader batch size was multiplied by `num_processes`, so we need to do
             # num_processes steps per training step
@@ -78,9 +82,14 @@ class AcceleratedScheduler:
                 if hasattr(self.scheduler, "total_steps"):
                     if self.scheduler._step_count <= self.scheduler.total_steps:
                         self.scheduler.step(*args, **kwargs)
+                        if self.scheduler.num_batches is not None:
+                            self.scheduler.num_batches += 1  # Update the num_batches attribute of the scheduler
                 else:
                     self.scheduler.step(*args, **kwargs)
+                    if self.scheduler.num_batches is not None:
+                        self.scheduler.num_batches += 1  # Update the num_batches attribute of the scheduler
 
+    
     # Passthroughs
     def get_last_lr(self):
         return self.scheduler.get_last_lr()
