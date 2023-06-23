@@ -129,7 +129,12 @@ def find_executable_batch_size(function: callable = None, starting_batch_size: i
             if batch_size == 0:
                 raise RuntimeError("No executable batch size found, reached zero.")
             try:
-                return function(batch_size, *args, **kwargs)
+                output = function(batch_size, *args, **kwargs)
+                if accelerator._schedulers:
+                    for scheduler in output.learning_rate_schedulers:
+                        if hasattr(scheduler, 'num_batches'):
+                            scheduler.num_batches = batch_size
+                return output
             except Exception as e:
                 if should_reduce_batch_size(e):
                     gc.collect()
