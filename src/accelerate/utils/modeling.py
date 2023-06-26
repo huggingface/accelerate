@@ -645,11 +645,11 @@ def get_balanced_memory(
     last_gpu = max(i for i in max_memory if isinstance(i, int) and max_memory[i] > 0)
     # The last device is left with max_memory just in case the buffer is not enough.
     for i in range(last_gpu):
-        max_memory[i] = min(0 if low_zero and i == 0 else per_gpu, max_memory[i])
+        max_memory[i] = min(max_memory[0] if low_zero and i == 0 else per_gpu, max_memory[i])
 
     if low_zero:
         min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
-        max_memory[0] = max(min_zero, max_memory[0])
+        max_memory[0] = min(min_zero, max_memory[0])
 
     return max_memory
 
