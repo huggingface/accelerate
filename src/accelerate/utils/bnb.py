@@ -142,9 +142,9 @@ def quantize_model(
                 param.to(dtype)
         if model.device.type == "cuda":
             # move everything to cpu in the first place because we can't do quantization if the weights are already on cuda
-            model.to("cpu")
+            model.cuda(torch.cuda.current_device())
             torch.cuda.empty_cache()
-        if torch.cuda.is_available():
+        elif torch.cuda.is_available():
             model.to(torch.cuda.current_device())
         else:
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
@@ -406,3 +406,11 @@ def get_keys_to_not_convert(model):
         filtered_module_names.append(name)
 
     return filtered_module_names
+
+
+def has_4bit_bnb_layers(model):
+    """Check if we have `bnb.nn.Linear4bit` or `bnb.nn.Linear8bitLt` layers inside our model"""
+    for m in model.modules():
+        if isinstance(m, bnb.nn.Linear4bit):
+            return True
+    return False
