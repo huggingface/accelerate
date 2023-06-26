@@ -252,19 +252,27 @@ def set_module_tensor_to_device(
         elif not str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
             value = value.to(dtype)
 
+    param = module._parameters[tensor_name] if tensor_name in module._parameters else None
+    param_cls = type(param)
+
+    device_quantization = None
     with torch.no_grad():
+        # leave it on cpu first before moving them to cuda
+        if param is not None and param.device.type != "cuda" and param_cls.__name__ in ["Int8Params", "FP4Params"]:
+            device_quantization = device
+            device = "cpu"
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
                 new_value = new_value.to(dtype)
                 if not is_buffer:
-                    param_cls = type(module._parameters[tensor_name])
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
             new_value = value.to(device)
         else:
             new_value = torch.tensor(value, device=device)
-
+        if device_quantization is not None:
+            device = device_quantization
         if is_buffer:
             module._buffers[tensor_name] = new_value
         elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
@@ -1096,7 +1104,7 @@ def load_state_dict(checkpoint_file, device_map=None):
 
             return tensors
     else:
-        return torch.load(checkpoint_file)
+        return torch.load(checkpoint_file, map_location=torch.device("cpu"))
 
 
 def load_checkpoint_in_model(
@@ -1247,9 +1255,15 @@ def load_checkpoint_in_model(
                     set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
                     offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
                 else:
-                    set_module_tensor_to_device(
-                        model, param_name, param_device, value=param, dtype=new_dtype, fp16_statistics=fp16_statistics
-                    )
+                    if "SCB" not in param_name:
+                        set_module_tensor_to_device(
+                            model,
+                            param_name,
+                            param_device,
+                            value=param,
+                            dtype=new_dtype,
+                            fp16_statistics=fp16_statistics,
+                        )
 
         # Force Python to clean up.
         del checkpoint
