@@ -97,6 +97,6 @@ jobs:
 
   
   run-integration-tests:
-    needs: run-merge-tests
+    needs: [run_all_tests_single_gpu, run_all_tests_multi_gpu]
     if: always()
     uses: ./.github/workflows/self_hosted_integration_tests.yml
