@@ -162,9 +162,7 @@ def set_module_tensor_to_device(
 
     with torch.no_grad():
         if value is None:
-            if not is_xpu_available():
-                device = torch.device("cuda")
-            else:
+            if is_xpu_available():
                 device = torch.device("xpu")
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
@@ -173,24 +171,18 @@ def set_module_tensor_to_device(
                     param_cls = type(module._parameters[tensor_name])
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
-            if not is_xpu_available():
-                device = torch.device("cuda")
-            else:
+            if is_xpu_available():
                 device = torch.device("xpu")
             new_value = value.to(device)
         else:
-            if not is_xpu_available():
-                device = torch.device("cuda")
-            else:
+            if is_xpu_available():
                 device = torch.device("xpu")
             new_value = torch.tensor(value, device=device)
 
         if is_buffer:
             module._buffers[tensor_name] = new_value
         elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
-            if not is_xpu_available():
-                device = torch.device("cuda")
-            else:
+            if is_xpu_available():
                 device = torch.device("xpu")
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
