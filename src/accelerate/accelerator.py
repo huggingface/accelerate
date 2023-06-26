@@ -1331,12 +1331,12 @@ class Accelerator:
                 new_forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model_forward_func)
             else:
                 new_forward = torch.cuda.amp.autocast()(model_forward_func)
-            model.forward = MethodType(new_forward, model) if hasattr(model.forward, "__func__") else new_forward
-            model.forward = (
-                MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
-                if hasattr(model.forward, "__func__")
-                else convert_outputs_to_fp32(model.forward)
-            )
+
+            if hasattr(model.forward, "__func__"):
+                model.forward = MethodType(new_forward, model)
+                model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
+            else:
+                model.forward = convert_outputs_to_fp32(new_forward)
         elif self.mixed_precision == "fp8":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
