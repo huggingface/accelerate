@@ -163,7 +163,7 @@ def set_module_tensor_to_device(
     with torch.no_grad():
         if value is None:
             if is_xpu_available():
-                device =  torch.device("xpu")
+                device = torch.device("xpu")
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
                 new_value = new_value.to(dtype)
@@ -172,18 +172,18 @@ def set_module_tensor_to_device(
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
             if is_xpu_available():
-                device =  torch.device("xpu")
+                device = torch.device("xpu")
             new_value = value.to(device)
         else:
             if is_xpu_available():
-                device =  torch.device("xpu")
+                device = torch.device("xpu")
             new_value = torch.tensor(value, device=device)
 
         if is_buffer:
             module._buffers[tensor_name] = new_value
         elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
             if is_xpu_available():
-                device =  torch.device("xpu")
+                device = torch.device("xpu")
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
             if param_cls.__name__ in ["Int8Params", "FP4Params"]:
@@ -599,8 +599,11 @@ def get_balanced_memory(
             [
                 d
                 for d in max_memory
-                if (torch.device(d).type == "xpu" or torch.xpu.get_device_properties(d).dev_type == "gpu"
-                and max_memory[d] > 0)
+                if (
+                    torch.device(d).type == "xpu"
+                    or torch.xpu.get_device_properties(d).dev_type == "gpu"
+                    and max_memory[d] > 0
+                )
             ]
         )
 
