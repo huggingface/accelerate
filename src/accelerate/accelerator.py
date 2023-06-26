@@ -88,7 +88,7 @@ from .utils.constants import FSDP_PYTORCH_VERSION
 
 if is_deepspeed_available():
     import deepspeed
-    from deepspeed.runtime.utils import clone_tensors_for_torch_save
+    from deepspeed.checkpoint.utils import clone_tensors_for_torch_save
 
     from .utils import (
         DeepSpeedEngineWrapper,
