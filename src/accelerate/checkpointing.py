@@ -35,13 +35,13 @@ from .utils import (
     SCHEDULER_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    convert_file_size_to_int,
+    dtype_byte_size,
     get_pretty_name,
     is_safetensors_available,
     is_tpu_available,
     is_xpu_available,
     save,
-    dtype_byte_size,
-    convert_file_size_to_int
 )
 
 
@@ -341,11 +341,12 @@ def save_model(
     keys_to_ignore_on_save: Optional[List[str]] = None,
 ):
     """
-    Save an unwrapped model and its configuration file to a directory, so that it can be re-loaded using load_checkpoint_in_model
+    Save an unwrapped model and so that it can be re-loaded using load_checkpoint_in_model
 
     Arguments:
         model: (`nn.Module`):
-            Unwrapped model to be saved. You can unwarp your model using the `.unwrap_model(model)` method from Accelerator()
+            Unwrapped model to be saved. You can unwarp your model using the `.unwrap_model(model)` method from
+            Accelerator()
         save_directory (`str` or `os.PathLike`):
             Directory to which to save. Will be created if it doesn't exist.
         is_main_process (`bool`, *optional*, defaults to `True`):
@@ -380,7 +381,7 @@ def save_model(
     if os.path.isfile(save_directory):
         logger_simple.error(f"Provided path ({save_directory}) should be a directory, not a file")
         return
-    
+
     os.makedirs(save_directory, exist_ok=True)
 
     # Save the model
