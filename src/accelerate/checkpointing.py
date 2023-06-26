@@ -40,6 +40,8 @@ from .utils import (
     is_tpu_available,
     is_xpu_available,
     save,
+    dtype_byte_size,
+    convert_file_size_to_int
 )
 
 
@@ -232,26 +234,6 @@ def load_custom_state(obj, path, index: int = 0):
     obj.load_state_dict(torch.load(load_location, map_location="cpu"))
 
 
-def dtype_byte_size(dtype):
-    """
-    Returns the size (in bytes) occupied by one parameter of type `dtype`.
-
-    Example:
-
-    ```py
-    >>> dtype_byte_size(torch.float32)
-    4
-    ```
-    """
-    if dtype == torch.bool:
-        return 1 / 8
-    bit_search = re.search(r"[^\d](\d+)$", str(dtype))
-    if bit_search is None:
-        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
-    bit_size = int(bit_search.groups()[0])
-    return bit_size // 8
-
-
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
         splits = weights_name.split(".")
@@ -269,39 +251,6 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     non-overlapping lifetimes may have the same id.
     """
     return tensor.device, storage_ptr(tensor), storage_size(tensor)
-
-
-def convert_file_size_to_int(size: Union[int, str]):
-    """
-    Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
-
-    Args:
-        size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
-
-    Example:
-    ```py
-    >>> convert_file_size_to_int("1MiB")
-    1048576
-    ```
-    """
-    if isinstance(size, int):
-        return size
-    if size.upper().endswith("GIB"):
-        return int(size[:-3]) * (2**30)
-    if size.upper().endswith("MIB"):
-        return int(size[:-3]) * (2**20)
-    if size.upper().endswith("KIB"):
-        return int(size[:-3]) * (2**10)
-    if size.upper().endswith("GB"):
-        int_size = int(size[:-2]) * (10**9)
-        return int_size // 8 if size.endswith("b") else int_size
-    if size.upper().endswith("MB"):
-        int_size = int(size[:-2]) * (10**6)
-        return int_size // 8 if size.endswith("b") else int_size
-    if size.upper().endswith("KB"):
-        int_size = int(size[:-2]) * (10**3)
-        return int_size // 8 if size.endswith("b") else int_size
-    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
 def shard_checkpoint(
@@ -381,25 +330,10 @@ def shard_checkpoint(
     return shards, index
 
 
-def unwrap_model(model: nn.Module) -> nn.Module:
-    """
-    Recursively unwraps a model from potential containers (as used in distributed training).
-
-    Args:
-        model (`torch.nn.Module`): The model to unwrap.
-    """
-    # since there could be multiple levels of wrapping, unwrap recursively
-    if hasattr(model, "module"):
-        return unwrap_model(model.module)
-    else:
-        return model
-
-
 def save_model(
     model: nn.Module,
     save_directory: Union[str, os.PathLike],
     is_main_process: bool = True,
-    state_dict: Optional[dict] = None,
     max_shard_size: Union[int, str] = "10GB",
     save_function: Callable = torch.save,
     safe_serialization: bool = False,
@@ -407,19 +341,17 @@ def save_model(
     keys_to_ignore_on_save: Optional[List[str]] = None,
 ):
     """
-    Save a model and its configuration file to a directory, so that it can be re-loaded using load_checkpoint_in_model
+    Save an unwrapped model and its configuration file to a directory, so that it can be re-loaded using load_checkpoint_in_model
 
     Arguments:
+        model: (`nn.Module`):
+            Unwrapped model to be saved. You can unwarp your model using the `.unwrap_model(model)` method from Accelerator()
         save_directory (`str` or `os.PathLike`):
             Directory to which to save. Will be created if it doesn't exist.
         is_main_process (`bool`, *optional*, defaults to `True`):
             Whether the process calling this is the main process or not. Useful when in distributed training like TPUs
             and need to call this function on all processes. In this case, set `is_main_process=True` only on the main
             process to avoid race conditions.
-        state_dict (nested dictionary of `torch.Tensor`):
-            The state dictionary of the model to save. Will default to `self.state_dict()`, but can be used to only
-            save parts of the model or if special precautions need to be taken when recovering the state dictionary of
-            a model (like when using model parallelism).
         save_function (`Callable`):
             The function to use to save the state dictionary. Useful on distributed training like TPUs when one need to
             replace `torch.save` by another method.
@@ -448,15 +380,11 @@ def save_model(
     if os.path.isfile(save_directory):
         logger_simple.error(f"Provided path ({save_directory}) should be a directory, not a file")
         return
-
+    
     os.makedirs(save_directory, exist_ok=True)
 
-    # Only save the model itself if we are using distributed training
-    model_to_save = unwrap_model(model)
-
     # Save the model
-    if state_dict is None:
-        state_dict = model_to_save.state_dict()
+    state_dict = model.state_dict()
 
     # Handle the case where some state_dict keys shouldn't be saved
     if keys_to_ignore_on_save is not None:
@@ -474,19 +402,6 @@ def save_model(
         shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
         warn_names = set()
         for names in shared_ptrs.values():
-            # Removing the keys which are declared as known duplicates on
-            # load. This allows to make sure the name which is kept is consistent.
-
-            keys_to_ignore_on_load_missing = None
-            if keys_to_ignore_on_load_missing is not None:
-                found = 0
-                for name in sorted(names):
-                    matches_pattern = any(re.search(pat, name) for pat in keys_to_ignore_on_load_missing)
-                    if matches_pattern and name in state_dict:
-                        found += 1
-                        if found < len(names):
-                            del state_dict[name]
-
             # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
             # If the link between tensors was done at runtime then `from_pretrained` will not get
             # the key back leading to random tensor. A proper warning will be shown
