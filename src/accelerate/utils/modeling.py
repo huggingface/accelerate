@@ -162,10 +162,10 @@ def set_module_tensor_to_device(
 
     with torch.no_grad():
         if value is None:
-            if not torch.cuda.is_available():
-                device = "xpu"
+            if not is_xpu_available():
+                device = torch.device("cuda")
             else:
-                device = "cuda"
+                device = torch.device("xpu")
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
                 new_value = new_value.to(dtype)
@@ -173,25 +173,25 @@ def set_module_tensor_to_device(
                     param_cls = type(module._parameters[tensor_name])
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
-            if not torch.cuda.is_available():
-                device = "xpu"
+            if not is_xpu_available():
+                device = torch.device("cuda")
             else:
-                device = "cuda"
+                device = torch.device("xpu")
             new_value = value.to(device)
         else:
-            if not torch.cuda.is_available():
-                device = "xpu"
+            if not is_xpu_available():
+                device = torch.device("cuda")
             else:
-                device = "cuda"
+                device = torch.device("xpu")
             new_value = torch.tensor(value, device=device)
 
         if is_buffer:
             module._buffers[tensor_name] = new_value
         elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
-            if not torch.cuda.is_available():
-                device = "xpu"
+            if not is_xpu_available():
+                device = torch.device("cuda")
             else:
-                device = "cuda"
+                device = torch.device("xpu")
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
             if param_cls.__name__ in ["Int8Params", "FP4Params"]:
