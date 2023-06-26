@@ -345,8 +345,8 @@ def save_model(
 
     Arguments:
         model: (`nn.Module`):
-            Unwrapped model to be saved. You can unwarp your model using the `.unwrap_model(model)` method from
-            Accelerator()
+            Unwrapped model to be saved. You can unwarp your model using the `unwrap_model(model)` method from
+            `Accelerator()`
         save_directory (`str` or `os.PathLike`):
             Directory to which to save. Will be created if it doesn't exist.
         is_main_process (`bool`, *optional*, defaults to `True`):
