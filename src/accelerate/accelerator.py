@@ -1325,15 +1325,19 @@ class Accelerator:
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
             model._original_forward = model.forward
+            model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
             if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
-                model.forward = MethodType(torch.cuda.amp.autocast(dtype=torch.float16)(model.forward.__func__), model)
+                new_forward = torch.cuda.amp.autocast(dtype=torch.float16)(model_forward_func)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
-                model.forward = MethodType(
-                    torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model.forward.__func__), model
-                )
+                new_forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model_forward_func)
             else:
-                model.forward = MethodType(torch.cuda.amp.autocast()(model.forward.__func__), model)
-            model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
+                new_forward = torch.cuda.amp.autocast()(model_forward_func)
+
+            if hasattr(model.forward, "__func__"):
+                model.forward = MethodType(new_forward, model)
+                model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
+            else:
+                model.forward = convert_outputs_to_fp32(new_forward)
         elif self.mixed_precision == "fp8":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
