@@ -40,7 +40,7 @@ from copy import deepcopy
 logger = logging.getLogger(__name__)
 
 
-def quantize_model(
+def load_and_quantize_model(
     model: torch.nn.Module,
     bnb_quantization_config: BnbQuantizationConfig,
     weights_location: Union[str, os.PathLike] = None,

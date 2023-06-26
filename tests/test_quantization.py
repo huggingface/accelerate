@@ -21,7 +21,7 @@ import torch.nn as nn
 
 from accelerate import init_empty_weights
 from accelerate.test_utils import require_bnb, require_cuda, require_huggingface_suite, slow
-from accelerate.utils.bnb import quantize_model
+from accelerate.utils.bnb import load_and_quantize_model
 from accelerate.utils.dataclasses import BnbQuantizationConfig
 
 
@@ -69,7 +69,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         self.weights_location = hf_hub_download(self.model_name, "pytorch_model.bin")
         self.bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
 
-        self.model_8bit = quantize_model(
+        self.model_8bit = load_and_quantize_model(
             self.model_8bit,
             self.bnb_quantization_config,
             weights_location=self.weights_location,
@@ -134,7 +134,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        model = quantize_model(
+        model = load_and_quantize_model(
             model,
             bnb_quantization_config,
             weights_location=self.weights_location,
@@ -177,7 +177,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        model = quantize_model(
+        model = load_and_quantize_model(
             model,
             bnb_quantization_config,
             weights_location=self.weights_location,
@@ -228,7 +228,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        model_8bit = quantize_model(
+        model_8bit = load_and_quantize_model(
             model_8bit,
             bnb_quantization_config,
             weights_location=self.weights_location,
@@ -256,7 +256,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        model_8bit = quantize_model(
+        model_8bit = load_and_quantize_model(
             model_8bit,
             bnb_quantization_config,
             weights_location=self.weights_location,
@@ -285,7 +285,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            model_8bit = quantize_model(
+            model_8bit = load_and_quantize_model(
                 model_8bit,
                 bnb_quantization_config,
                 weights_location=self.weights_location,
@@ -330,7 +330,7 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
         self.bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
 
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
-        self.model_8bit = quantize_model(self.model_8bit, self.bnb_quantization_config)
+        self.model_8bit = load_and_quantize_model(self.model_8bit, self.bnb_quantization_config)
 
         self.tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-1b7")
 
@@ -398,7 +398,7 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
         bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, keep_in_fp32_modules=["lm_head"])
 
         model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
-        model = quantize_model(model, bnb_quantization_config)
+        model = load_and_quantize_model(model, bnb_quantization_config)
         self.assertTrue(model.lm_head.weight.dtype == torch.float32)
 
 
@@ -441,7 +441,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         self.weights_location = hf_hub_download(self.model_name, "pytorch_model.bin")
         self.bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True)
 
-        self.model_4bit = quantize_model(
+        self.model_4bit = load_and_quantize_model(
             self.model_4bit,
             self.bnb_quantization_config,
             weights_location=self.weights_location,
@@ -522,7 +522,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
 
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
-        model = quantize_model(
+        model = load_and_quantize_model(
             model,
             bnb_quantization_config,
             weights_location=self.weights_location,
@@ -573,7 +573,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        model_4bit = quantize_model(
+        model_4bit = load_and_quantize_model(
             model_4bit,
             bnb_quantization_config,
             weights_location=self.weights_location,
@@ -601,7 +601,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
 
-        model_4bit = quantize_model(
+        model_4bit = load_and_quantize_model(
             model_4bit,
             bnb_quantization_config,
             weights_location=self.weights_location,
@@ -629,7 +629,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
         with tempfile.TemporaryDirectory() as tmpdirname:
-            model_4bit = quantize_model(
+            model_4bit = load_and_quantize_model(
                 model_4bit,
                 bnb_quantization_config,
                 weights_location=self.weights_location,
@@ -678,7 +678,7 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
         self.bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True)
 
         self.model_4bit = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
-        self.model_4bit = quantize_model(self.model_4bit, self.bnb_quantization_config)
+        self.model_4bit = load_and_quantize_model(self.model_4bit, self.bnb_quantization_config)
 
         self.tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-1b7")
 
@@ -749,5 +749,5 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
         bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, keep_in_fp32_modules=["lm_head"])
 
         model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
-        model = quantize_model(model, bnb_quantization_config)
+        model = load_and_quantize_model(model, bnb_quantization_config)
         self.assertTrue(model.lm_head.weight.dtype == torch.float32)
