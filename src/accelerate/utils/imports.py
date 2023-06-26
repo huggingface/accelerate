@@ -117,11 +117,14 @@ def is_bf16_available(ignore_tpu=False):
 
 def is_megatron_lm_available():
     if strtobool(os.environ.get("ACCELERATE_USE_MEGATRON_LM", "False")) == 1:
-        package_exists = _is_package_available("megatron")
+        package_exists = importlib.util.find_spec("megatron") is not None
         if package_exists:
-            megatron_version = parse(importlib_metadata.version("megatron-lm"))
-            return compare_versions(megatron_version, ">=", "2.2.0")
-    return False
+            try:
+                megatron_version = parse(importlib_metadata.version("megatron-lm"))
+                return compare_versions(megatron_version, ">=", "2.2.0")
+            except Exception as e:
+                warnings.warn(f"Parse Megatron version failed. Exception:{e}")
+                return False
 
 
 def is_safetensors_available():
