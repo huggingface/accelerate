@@ -111,6 +111,7 @@ jobs:
             git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
           fi
           pip install .[testing]
+          pip install flaky
 
       - name: Show installed libraries
         run: |
