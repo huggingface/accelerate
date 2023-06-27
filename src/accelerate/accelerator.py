@@ -2316,7 +2316,7 @@ class Accelerator:
         safe_serialization: bool = False,
     ):
         """
-        Save a model and so that it can be re-loaded using load_checkpoint_in_model
+        Save a model so that it can be re-loaded using load_checkpoint_in_model
 
         Arguments:
             model: (`torch.nn.Module`):
