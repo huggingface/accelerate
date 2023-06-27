@@ -2345,8 +2345,6 @@ class Accelerator:
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
 
-        # unwrap model
-
         os.makedirs(save_directory, exist_ok=True)
 
         # get the state_dict of the model
