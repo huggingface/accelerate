@@ -1,4 +1,15 @@
-from .constants import MODEL_NAME, OPTIMIZER_NAME, RNG_STATE_NAME, SCALER_NAME, SCHEDULER_NAME, TORCH_LAUNCH_PARAMS
+from .constants import (
+    MODEL_NAME,
+    OPTIMIZER_NAME,
+    RNG_STATE_NAME,
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
+    SCALER_NAME,
+    SCHEDULER_NAME,
+    TORCH_LAUNCH_PARAMS,
+    WEIGHTS_INDEX_NAME,
+    WEIGHTS_NAME,
+)
 from .dataclasses import (
     ComputeEnvironment,
     DeepSpeedPlugin,
@@ -57,6 +68,7 @@ from .modeling import (
     get_max_layer_size,
     get_max_memory,
     get_mixed_precision_context_manager,
+    id_tensor_storage,
     infer_auto_device_map,
     load_checkpoint_in_model,
     load_offloaded_weights,
@@ -64,6 +76,7 @@ from .modeling import (
     named_module_tensors,
     retie_parameters,
     set_module_tensor_to_device,
+    shard_checkpoint,
 )
 from .offload import (
     OffloadedWeightsLoader,
