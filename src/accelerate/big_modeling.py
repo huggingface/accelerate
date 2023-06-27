@@ -387,12 +387,10 @@ def dispatch_model(
         retie_parameters(model, tied_params)
     else:
         device = device_map.values()[0]
-        if device!="disk":
+        if device != "disk":
             model.to(device)
         else:
-            raise ValueError(
-                "You can't offload the whole model to the disk"
-            )
+            raise ValueError("You can't offload the whole model to the disk")
     model.hf_device_map = device_map
     return model
 
