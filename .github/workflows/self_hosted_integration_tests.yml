@@ -110,7 +110,7 @@ jobs:
           if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
             git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
           fi
-          pip install .
+          pip install .[testing]
 
       - name: Show installed libraries
         run: |
