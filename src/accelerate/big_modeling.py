@@ -390,7 +390,9 @@ def dispatch_model(
         if device != "disk":
             model.to(device)
         else:
-            raise ValueError("You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead.")
+            raise ValueError(
+                "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
+            )
     model.hf_device_map = device_map
     return model
 
