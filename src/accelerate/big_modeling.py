@@ -386,7 +386,7 @@ def dispatch_model(
         # Attaching the hook may break tied weights, so we retie them
         retie_parameters(model, tied_params)
     else:
-        device = device_map.values()[0]
+        device = list(device_map.values())[0]
         if device != "disk":
             model.to(device)
         else:
