@@ -81,7 +81,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    needs: setup-env
     strategy:
       fail-fast: false
       matrix:
