@@ -29,11 +29,11 @@ import torch
 import torch.nn as nn
 
 from ..state import AcceleratorState
+from .constants import WEIGHTS_NAME
 from .dataclasses import DistributedType
 from .imports import is_mps_available, is_safetensors_available, is_torch_version, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
-from .constants import WEIGHTS_NAME
 
 
 if is_safetensors_available():
@@ -112,7 +112,7 @@ def dtype_byte_size(dtype: torch.dtype):
     bit_size = int(bit_search.groups()[0])
     return bit_size // 8
 
-    
+
 def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     """
     Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For

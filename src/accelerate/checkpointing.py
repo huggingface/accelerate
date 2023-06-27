@@ -12,17 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections
-import json
 import os
 import random
-import re
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import List
 
 import numpy as np
 import torch
-import torch.nn as nn
 from torch.cuda.amp import GradScaler
 
 from .utils import (
@@ -41,16 +37,11 @@ from .utils import (
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
-
-import logging
-
 from .logging import get_logger
 from .state import PartialState
 
 
 logger = get_logger(__name__)
-
-logger_simple = logging.getLogger(__name__)
 
 
 def save_accelerator_state(
@@ -172,7 +163,7 @@ def load_accelerator_state(
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         input_optimizer_file = os.path.join(input_dir, optimizer_name)
-        optimizer_state = torch.load(input_optimizer_file)
+        optimizer_state = torch.load(input_optimizer_file, map_location=map_location)
         optimizers[i].load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
 
@@ -223,4 +214,3 @@ def load_custom_state(obj, path, index: int = 0):
     load_location = f"{path}/custom_checkpoint_{index}.pkl"
     logger.info(f"Loading the state of {get_pretty_name(obj)} from {load_location}")
     obj.load_state_dict(torch.load(load_location, map_location="cpu"))
-

@@ -68,6 +68,7 @@ from .modeling import (
     get_max_layer_size,
     get_max_memory,
     get_mixed_precision_context_manager,
+    id_tensor_storage,
     infer_auto_device_map,
     load_checkpoint_in_model,
     load_offloaded_weights,
@@ -76,8 +77,6 @@ from .modeling import (
     retie_parameters,
     set_module_tensor_to_device,
     shard_checkpoint,
-    id_tensor_storage
-    
 )
 from .offload import (
     OffloadedWeightsLoader,

@@ -14,15 +14,15 @@
 
 from __future__ import annotations
 
+import collections
 import contextlib
+import json
 import math
 import os
 import re
 import shutil
 import sys
-import json
 import warnings
-import collections
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
@@ -41,10 +41,10 @@ from .state import AcceleratorState, GradientState, PartialState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
-    SAFE_WEIGHTS_INDEX_NAME, 
+    SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
+    WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
-    WEIGHTS_INDEX_NAME, 
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -69,15 +69,16 @@ from .utils import (
     get_mixed_precision_context_manager,
     get_pretty_name,
     has_transformer_engine_layers,
+    id_tensor_storage,
     is_bf16_available,
     is_deepspeed_available,
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
+    is_safetensors_available,
     is_torch_version,
     is_tpu_available,
     is_xpu_available,
-    is_safetensors_available,
     load_fsdp_model,
     load_fsdp_optimizer,
     pad_across_processes,
@@ -88,9 +89,8 @@ from .utils import (
     save,
     save_fsdp_model,
     save_fsdp_optimizer,
-    wait_for_everyone,
     shard_checkpoint,
-    id_tensor_storage
+    wait_for_everyone,
 )
 from .utils.constants import FSDP_PYTORCH_VERSION
 
@@ -2307,13 +2307,13 @@ class Accelerator:
         ```
         """
         save(obj, f)
-    
+
     def save_model(
         self,
         model: torch.nn.Module,
         save_directory: Union[str, os.PathLike],
         max_shard_size: Union[int, str] = "10GB",
-        safe_serialization: bool = False
+        safe_serialization: bool = False,
     ):
         """
         Save a model and so that it can be re-loaded using load_checkpoint_in_model
@@ -2324,8 +2324,8 @@ class Accelerator:
             save_directory (`str` or `os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
             max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
-                The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size lower
-                than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
+                The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
+                lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
 
                 <Tip warning={true}>
 
@@ -2344,8 +2344,8 @@ class Accelerator:
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
-        
-        #unwrap model
+
+        # unwrap model
         model_to_save = self.unwrap_model(model)
 
         os.makedirs(save_directory, exist_ok=True)
@@ -2382,7 +2382,7 @@ class Accelerator:
                 )
 
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
-        
+
         # Shard the model if it is too big.
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
 
@@ -2402,7 +2402,7 @@ class Accelerator:
                 and os.path.isfile(full_filename)
                 and filename not in shards.keys()
                 and reg.fullmatch(filename_no_suffix) is not None
-                and  PartialState().is_main_process
+                and PartialState().is_main_process
             ):
                 os.remove(full_filename)
 
