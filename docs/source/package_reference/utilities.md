@@ -105,3 +105,9 @@ These utilities relate to setting and synchronizing of all the random states.
 These include utilities that are useful while using PyTorch with XLA.
 
 [[autodoc]] utils.install_xla
+
+## Load model
+
+These include utilities that are useful to load checkpoints
+
+[[autodoc]] utils.load_checkpoint_in_model
