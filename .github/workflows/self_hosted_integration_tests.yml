@@ -88,10 +88,6 @@ jobs:
           pypi,
           github
         ]
-        cuda_visible_devices: [
-          "0", 
-          "0,1"
-        ]
     steps:
       - name: Update accelerate clone and pip install
         working-directory: accelerate/
@@ -120,8 +116,6 @@ jobs:
 
       - name: Run skorch tests
         working-directory: skorch/
-        env:
-          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
         run: |
           source activate accelerate;
           pytest -sv -k TestAccelerate
