@@ -75,6 +75,9 @@ from .modeling import (
     named_module_tensors,
     retie_parameters,
     set_module_tensor_to_device,
+    shard_checkpoint,
+    id_tensor_storage
+    
 )
 from .offload import (
     OffloadedWeightsLoader,

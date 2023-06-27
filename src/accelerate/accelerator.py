@@ -20,12 +20,14 @@ import os
 import re
 import shutil
 import sys
+import json
 import warnings
+import collections
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
-from typing import Any, Callable
+from typing import Any, Callable, Union
 
 import torch
 import torch.utils.hooks as hooks
@@ -39,6 +41,10 @@ from .state import AcceleratorState, GradientState, PartialState
 from .tracking import LOGGER_TYPE_TO_CLASS, GeneralTracker, filter_trackers
 from .utils import (
     MODEL_NAME,
+    SAFE_WEIGHTS_INDEX_NAME, 
+    SAFE_WEIGHTS_NAME,
+    WEIGHTS_NAME,
+    WEIGHTS_INDEX_NAME, 
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -71,6 +77,7 @@ from .utils import (
     is_torch_version,
     is_tpu_available,
     is_xpu_available,
+    is_safetensors_available,
     load_fsdp_model,
     load_fsdp_optimizer,
     pad_across_processes,
@@ -82,6 +89,8 @@ from .utils import (
     save_fsdp_model,
     save_fsdp_optimizer,
     wait_for_everyone,
+    shard_checkpoint,
+    id_tensor_storage
 )
 from .utils.constants import FSDP_PYTORCH_VERSION
 
@@ -2298,6 +2307,124 @@ class Accelerator:
         ```
         """
         save(obj, f)
+    
+    def save_model(
+        self,
+        model: torch.nn.Module,
+        save_directory: Union[str, os.PathLike],
+        max_shard_size: Union[int, str] = "10GB",
+        safe_serialization: bool = False
+    ):
+        """
+        Save a model and so that it can be re-loaded using load_checkpoint_in_model
+
+        Arguments:
+            model: (`torch.nn.Module`):
+                Model to be saved. The model can be wrapped or unwraped.
+            save_directory (`str` or `os.PathLike`):
+                Directory to which to save. Will be created if it doesn't exist.
+            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+                The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size lower
+                than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
+
+                <Tip warning={true}>
+
+                If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
+                which will be bigger than `max_shard_size`.
+
+                </Tip>
+
+            safe_serialization (`bool`, *optional*, defaults to `False`):
+                Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
+        """
+
+        if safe_serialization and not is_safetensors_available():
+            raise ImportError("`safe_serialization` requires the `safetensors library: `pip install safetensors`.")
+
+        if os.path.isfile(save_directory):
+            logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
+            return
+        
+        #unwrap model
+        model_to_save = self.unwrap_model(model)
+
+        os.makedirs(save_directory, exist_ok=True)
+
+        # Save the model
+        state_dict = model_to_save.state_dict()
+
+        if safe_serialization:
+            # Safetensors does not allow tensor aliasing.
+            # We're going to remove aliases before saving
+            ptrs = collections.defaultdict(list)
+            for name, tensor in state_dict.items():
+                ptrs[id_tensor_storage(tensor)].append(name)
+
+            # These are all the pointers of shared tensors.
+            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+            warn_names = set()
+            for names in shared_ptrs.values():
+                # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
+                # If the link between tensors was done at runtime then `from_pretrained` will not get
+                # the key back leading to random tensor. A proper warning will be shown
+                # during reload (if applicable), but since the file is not necessarily compatible with
+                # the config, better show a proper warning.
+                found = 0
+                for name in names:
+                    if name in state_dict:
+                        found += 1
+                        if found > 1:
+                            del state_dict[name]
+                            warn_names.add(name)
+            if len(warn_names) > 0:
+                logger.warning_once(
+                    f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
+                )
+
+        weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
+        
+        # Shard the model if it is too big.
+        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
+
+        # Clean the folder from a previous save
+        for filename in os.listdir(save_directory):
+            full_filename = os.path.join(save_directory, filename)
+            # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
+            # in distributed settings to avoid race conditions.
+            weights_no_suffix = weights_name.replace(".bin", "")
+
+            # make sure that file to be deleted matches format of sharded file, e.g. pytorch_model-00001-of-00005
+            filename_no_suffix = filename.replace(".bin", "")
+            reg = re.compile(r"(.*?)-\d{5}-of-\d{5}")
+
+            if (
+                filename.startswith(weights_no_suffix)
+                and os.path.isfile(full_filename)
+                and filename not in shards.keys()
+                and reg.fullmatch(filename_no_suffix) is not None
+                and  PartialState().is_main_process
+            ):
+                os.remove(full_filename)
+
+        # Save the model
+        for shard_file, shard in shards.items():
+            self.save(shard, os.path.join(save_directory, shard_file))
+
+        if index is None:
+            path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
+            logger.info(f"Model weights saved in {path_to_weights}")
+        else:
+            save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
+            save_index_file = os.path.join(save_directory, save_index_file)
+            # Save the index as well
+            with open(save_index_file, "w", encoding="utf-8") as f:
+                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                f.write(content)
+            logger.info(
+                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"index located at {save_index_file}."
+            )
 
     def register_save_state_pre_hook(self, hook: Callable[..., None]) -> hooks.RemovableHandle:
         """
