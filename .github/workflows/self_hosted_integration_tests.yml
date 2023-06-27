@@ -90,8 +90,13 @@ jobs:
   #         pytest -sv tests/deepspeed
 
   run-skorch-tests:
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
-    requires: setup-env
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    defaults:
+      run:
+        shell: bash
+    needs: setup-env
     strategy:
       fail-fast: false
       matrix:
