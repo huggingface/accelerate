@@ -106,7 +106,7 @@ These include utilities that are useful while using PyTorch with XLA.
 
 [[autodoc]] utils.install_xla
 
-## Load model
+## Loading model weights
 
 These include utilities that are useful to load checkpoints.
 
