@@ -1677,6 +1677,8 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
         if optimizer is not None and model is not None:
+            if not model.training:
+                model.train()
             dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else torch.float32
             if self.device.type == "xpu" and is_xpu_available():
                 model = model.to(self.device)
