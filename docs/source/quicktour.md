@@ -370,7 +370,8 @@ If your script contains logic to load a checkpoint, we also recommend you load y
 
 ```python
 unwrapped_model = accelerator.unwrap_model(model)
-unwrapped_model.load_state_dict(torch.load(save_directory+"/pytorch_model.bin"))
+path_to_checkpoint = os.path.join(save_directory,"pytorch_model.bin")
+unwrapped_model.load_state_dict(torch.load(path_to_checkpoint))
 ```
 
 Note that since all the model parameters are references to tensors, this will load your weights inside `model`.
