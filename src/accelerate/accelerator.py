@@ -2346,11 +2346,10 @@ class Accelerator:
             return
 
         # unwrap model
-        model_to_save = self.unwrap_model(model)
 
         os.makedirs(save_directory, exist_ok=True)
 
-        # Save the model
+        # get the state_dict of the model
         state_dict = self.get_state_dict(model)
 
         if safe_serialization:
