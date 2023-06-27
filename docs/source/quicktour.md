@@ -375,7 +375,7 @@ unwrapped_model.load_state_dict(torch.load(save_directory+"/pytorch_model.bin"))
 
 Note that since all the model parameters are references to tensors, this will load your weights inside `model`.
 
-If you want to load a sharded checkpoint or a checkpoint with safetensors format into the model with a specific `device`, we recommend you to load the checkpoint with [`~utils.load_checkpoint_in_model`] function. Here's an example:
+If you want to load a sharded checkpoint or a checkpoint with safetensors format into the model with a specific `device`, we recommend you to load it with [`~utils.load_checkpoint_in_model`] function. Here's an example:
 
 ```python
 load_checkpoint_in_model(unwrapped_model, save_directory, device_map={"":device})
