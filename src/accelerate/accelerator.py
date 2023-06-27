@@ -2351,7 +2351,7 @@ class Accelerator:
         os.makedirs(save_directory, exist_ok=True)
 
         # Save the model
-        state_dict = model_to_save.state_dict()
+        state_dict = self.get_state_dict(model)
 
         if safe_serialization:
             # Safetensors does not allow tensor aliasing.
