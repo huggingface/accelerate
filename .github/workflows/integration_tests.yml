@@ -62,4 +62,3 @@ jobs:
       run: |
         cd ../transformers
         pytest -sv tests/trainer
-

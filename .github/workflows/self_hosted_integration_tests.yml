@@ -16,8 +16,15 @@ on:
 env:
   HF_HOME: ~/hf_cache
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   run-trainer-tests:
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     strategy:
       fail-fast: false
@@ -30,32 +37,26 @@ jobs:
           "0", 
           "0,1"
         ]
-    container:
-      image: huggingface/accelerate-gpu:latest
-      options: --gpus all --shm-size "16gb"
-    defaults:
-      run:
-        shell: bash
     steps:
-      - name: Update transformers clone & pip install
-        working-directory: transformers/
-        run: |
-          source activate accelerate
-          git config --global --add safe.directory '*'
-          git fetch
-          if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
-            git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
-          fi
-          pip install .[torch,deepspeed-testing]
-      
       - name: Update accelerate clone and pip install
         working-directory: accelerate/
         run: 
           source activate accelerate;
           git config --global --add safe.directory '*';
-          git fetch && git checkout ${{ github.sha }};
+          git checkout main && git fetch && git checkout ${{ github.sha }};
           pip install -e .;
 
+      - name: Update transformers clone & pip install
+        working-directory: transformers/
+        run: |
+          source activate accelerate
+          git config --global --add safe.directory '*'
+          git checkout main && git fetch
+          if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
+            git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
+          fi
+          pip install .[torch,deepspeed-testing]
+      
       - name: Show installed libraries
         run: |
           source activate accelerate;
@@ -79,3 +80,46 @@ jobs:
           source activate accelerate;
           pytest -sv tests/deepspeed
 
+  run-skorch-tests:
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    strategy:
+      fail-fast: false
+      matrix:
+        skorch-version: [
+          pypi,
+          github
+        ]
+    steps:
+      - name: Update accelerate clone and pip install
+        working-directory: accelerate/
+        run: 
+          source activate accelerate;
+          git config --global --add safe.directory '*';
+          git checkout main && git fetch && git checkout ${{ github.sha }};
+          pip install -e .;
+
+      - name: Update skorch clone & pip install
+        working-directory: skorch/
+        run: |
+          source activate accelerate
+          git config --global --add safe.directory '*'
+          git checkout main && git fetch
+          if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
+            git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
+          fi
+          pip install .[testing]
+          pip install flaky
+
+      - name: Show installed libraries
+        run: |
+          source activate accelerate;
+          pip freeze
+
+      - name: Run skorch tests
+        working-directory: skorch/
+        run: |
+          source activate accelerate;
+          pytest -sv -k TestAccelerate
