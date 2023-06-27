@@ -108,6 +108,6 @@ These include utilities that are useful while using PyTorch with XLA.
 
 ## Load model
 
-These include utilities that are useful to load checkpoints
+These include utilities that are useful to load checkpoints.
 
 [[autodoc]] utils.load_checkpoint_in_model
