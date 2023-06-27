@@ -326,10 +326,10 @@ def dispatch_model(
     """
     # Error early if the device map is incomplete.
     check_device_map(model, device_map)
-    
-    # We attach hooks if the device_map have at least 2 different devices. Otherwise, the model in already loaded 
+
+    # We attach hooks if the device_map have at least 2 different devices. Otherwise, the model in already loaded
     # in the unique device and the user can decide where to dispatch the model.
-    if len(device_map.values())>1:
+    if len(device_map.values()) > 1:
         if not is_torch_version(">=", "1.9.0"):
             raise NotImplementedError("Model dispatching requires torch >= 1.9.0")
 
