@@ -324,63 +324,75 @@ def dispatch_model(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
-    if not is_torch_version(">=", "1.9.0"):
-        raise NotImplementedError("Model dispatching requires torch >= 1.9.0")
     # Error early if the device map is incomplete.
     check_device_map(model, device_map)
 
-    if main_device is None:
-        if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
-            main_device = "cpu"
+    # We attach hooks if the device_map have at least 2 different devices. Otherwise, the model in already loaded
+    # in the unique device and the user can decide where to dispatch the model.
+    if len(device_map.values()) > 1:
+        if not is_torch_version(">=", "1.9.0"):
+            raise NotImplementedError("Model dispatching requires torch >= 1.9.0")
+
+        if main_device is None:
+            if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
+                main_device = "cpu"
+            else:
+                main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]
+
+        if main_device != "cpu":
+            cpu_modules = [name for name, device in device_map.items() if device == "cpu"]
+            if state_dict is None and len(cpu_modules) > 0:
+                state_dict = extract_submodules_state_dict(model.state_dict(), cpu_modules)
+
+        disk_modules = [name for name, device in device_map.items() if device == "disk"]
+        if offload_dir is None and offload_index is None and len(disk_modules) > 0:
+            raise ValueError(
+                "We need an `offload_dir` to dispatch this model according to this `device_map`, the following submodules "
+                f"need to be offloaded: {', '.join(disk_modules)}."
+            )
+        if (
+            len(disk_modules) > 0
+            and offload_index is None
+            and (not os.path.isdir(offload_dir) or not os.path.isfile(os.path.join(offload_dir, "index.json")))
+        ):
+            disk_state_dict = extract_submodules_state_dict(model.state_dict(), disk_modules)
+            offload_state_dict(offload_dir, disk_state_dict)
+
+        execution_device = {
+            name: main_device if device in ["cpu", "disk"] else device for name, device in device_map.items()
+        }
+        execution_device[""] = main_device
+        offloaded_devices = ["disk"] if main_device == "cpu" or main_device == "mps" else ["cpu", "disk"]
+        offload = {name: device in offloaded_devices for name, device in device_map.items()}
+        save_folder = offload_dir if len(disk_modules) > 0 else None
+        if state_dict is not None or save_folder is not None or offload_index is not None:
+            device = main_device if offload_index is not None else None
+            weights_map = OffloadedWeightsLoader(
+                state_dict=state_dict, save_folder=save_folder, index=offload_index, device=device
+            )
         else:
-            main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]
+            weights_map = None
 
-    if main_device != "cpu":
-        cpu_modules = [name for name, device in device_map.items() if device == "cpu"]
-        if state_dict is None and len(cpu_modules) > 0:
-            state_dict = extract_submodules_state_dict(model.state_dict(), cpu_modules)
-
-    disk_modules = [name for name, device in device_map.items() if device == "disk"]
-    if offload_dir is None and offload_index is None and len(disk_modules) > 0:
-        raise ValueError(
-            "We need an `offload_dir` to dispatch this model according to this `device_map`, the following submodules "
-            f"need to be offloaded: {', '.join(disk_modules)}."
+        tied_params = find_tied_parameters(model)
+        attach_align_device_hook_on_blocks(
+            model,
+            execution_device=execution_device,
+            offload=offload,
+            offload_buffers=offload_buffers,
+            weights_map=weights_map,
+            skip_keys=skip_keys,
+            preload_module_classes=preload_module_classes,
         )
-    if (
-        len(disk_modules) > 0
-        and offload_index is None
-        and (not os.path.isdir(offload_dir) or not os.path.isfile(os.path.join(offload_dir, "index.json")))
-    ):
-        disk_state_dict = extract_submodules_state_dict(model.state_dict(), disk_modules)
-        offload_state_dict(offload_dir, disk_state_dict)
-
-    execution_device = {
-        name: main_device if device in ["cpu", "disk"] else device for name, device in device_map.items()
-    }
-    execution_device[""] = main_device
-    offloaded_devices = ["disk"] if main_device == "cpu" or main_device == "mps" else ["cpu", "disk"]
-    offload = {name: device in offloaded_devices for name, device in device_map.items()}
-    save_folder = offload_dir if len(disk_modules) > 0 else None
-    if state_dict is not None or save_folder is not None or offload_index is not None:
-        device = main_device if offload_index is not None else None
-        weights_map = OffloadedWeightsLoader(
-            state_dict=state_dict, save_folder=save_folder, index=offload_index, device=device
-        )
+        # Attaching the hook may break tied weights, so we retie them
+        retie_parameters(model, tied_params)
     else:
-        weights_map = None
-
-    tied_params = find_tied_parameters(model)
-    attach_align_device_hook_on_blocks(
-        model,
-        execution_device=execution_device,
-        offload=offload,
-        offload_buffers=offload_buffers,
-        weights_map=weights_map,
-        skip_keys=skip_keys,
-        preload_module_classes=preload_module_classes,
-    )
-    # Attaching the hook may break tied weights, so we retie them
-    retie_parameters(model, tied_params)
+        device = device_map.values()[0]
+        if device != "disk":
+            model.to(device)
+        else:
+            raise ValueError(
+                "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
+            )
     model.hf_device_map = device_map
     return model
 
