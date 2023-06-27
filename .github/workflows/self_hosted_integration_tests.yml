@@ -17,22 +17,6 @@ env:
   HF_HOME: ~/hf_cache
 
 jobs:
-  setup-env:
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
-    container:
-      image: huggingface/accelerate-gpu:latest
-      options: --gpus all --shm-size "16gb"
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Update accelerate clone and pip install
-        working-directory: accelerate/
-        run: 
-          source activate accelerate;
-          git config --global --add safe.directory '*';
-          git checkout main && git fetch && git checkout ${{ github.sha }};
-          pip install -e .;
 
   # run-trainer-tests:
   #   runs-on: [self-hosted, docker-gpu, multi-gpu]
@@ -110,6 +94,14 @@ jobs:
           "0,1"
         ]
     steps:
+      - name: Update accelerate clone and pip install
+        working-directory: accelerate/
+        run: 
+          source activate accelerate;
+          git config --global --add safe.directory '*';
+          git checkout main && git fetch && git checkout ${{ github.sha }};
+          pip install -e .;
+
       - name: Update skorch clone & pip install
         working-directory: skorch/
         run: |
@@ -132,4 +124,4 @@ jobs:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
         run: |
           source activate accelerate;
-          pytest -sv skorch/tests/test_hf.py::TestAccelerate
+          pytest -sv -k TestAccelerate
