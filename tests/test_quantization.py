@@ -19,7 +19,7 @@ import unittest
 import torch
 import torch.nn as nn
 
-from accelerate import init_empty_weights
+from accelerate import Accelerator, init_empty_weights
 from accelerate.test_utils import require_bnb, require_cuda, require_huggingface_suite, slow
 from accelerate.utils.bnb import load_and_quantize_model
 from accelerate.utils.dataclasses import BnbQuantizationConfig
@@ -78,6 +78,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-1b7")
+        self.accelerate = Accelerator()
 
     def tearDown(self):
         r"""
@@ -295,6 +296,68 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
                 offload_state_dict=True,
             )
             self.check_inference_correctness(model_8bit)
+
+    def test_int8_serialization(self):
+        r"""
+        Test whether it is possible to serialize a model in 8-bit.
+        """
+        from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # saving state dict for now but will save config and other in the future
+            self.accelerate.save_model(self.model_8bit, tmpdirname)
+
+            with init_empty_weights():
+                # let's suppose that we can get the right config
+                model_8bit_from_saved = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
+
+            bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
+
+            model_8bit_from_saved = load_and_quantize_model(
+                model_8bit_from_saved,
+                bnb_quantization_config,
+                weights_location=tmpdirname + "/pytorch_model.bin",
+                device_map="auto",
+                no_split_module_classes=["BloomBlock"],
+            )
+
+            self.assertTrue(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+            self.assertTrue(hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
+            self.assertTrue(hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "CB"))
+
+            self.check_inference_correctness(model_8bit_from_saved)
+
+    def test_int8_serialization_shard(self):
+        r"""
+        Test whether it is possible to serialize a model in 8-bit.
+        """
+        from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # saving state dict for now but will save config and other in the future
+            self.accelerate.save_model(self.model_8bit, tmpdirname, max_shard_size="1GB")
+
+            with init_empty_weights():
+                # let's suppose that we can get the right config
+                model_8bit_from_saved = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
+
+            bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
+
+            model_8bit_from_saved = load_and_quantize_model(
+                model_8bit_from_saved,
+                bnb_quantization_config,
+                weights_location=tmpdirname,
+                device_map="auto",
+                no_split_module_classes=["BloomBlock"],
+            )
+
+            self.assertTrue(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+            self.assertTrue(hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
+            self.assertTrue(hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "CB"))
+
+            self.check_inference_correctness(model_8bit_from_saved)
 
 
 @slow
