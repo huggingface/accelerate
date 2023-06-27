@@ -16,71 +16,75 @@ on:
 env:
   HF_HOME: ~/hf_cache
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
+  run-trainer-tests:
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    strategy:
+      fail-fast: false
+      matrix:
+        transformers-version: [
+          pypi,
+          github
+        ]
+        cuda_visible_devices: [
+          "0", 
+          "0,1"
+        ]
+    steps:
+      - name: Update accelerate clone and pip install
+        working-directory: accelerate/
+        run: 
+          source activate accelerate;
+          git config --global --add safe.directory '*';
+          git checkout main && git fetch && git checkout ${{ github.sha }};
+          pip install -e .;
 
-  # run-trainer-tests:
-  #   runs-on: [self-hosted, docker-gpu, multi-gpu]
-  #   requires: setup-env
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       transformers-version: [
-  #         pypi,
-  #         github
-  #       ]
-  #       cuda_visible_devices: [
-  #         "0", 
-  #         "0,1"
-  #       ]
-  #   container:
-  #     image: huggingface/accelerate-gpu:latest
-  #     options: --gpus all --shm-size "16gb"
-  #   defaults:
-  #     run:
-  #       shell: bash
-  #   steps:
-  #     - name: Update transformers clone & pip install
-  #       working-directory: transformers/
-  #       run: |
-  #         source activate accelerate
-  #         git config --global --add safe.directory '*'
-  #         git checkout main && git fetch
-  #         if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
-  #           git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
-  #         fi
-  #         pip install .[torch,deepspeed-testing]
+      - name: Update transformers clone & pip install
+        working-directory: transformers/
+        run: |
+          source activate accelerate
+          git config --global --add safe.directory '*'
+          git checkout main && git fetch
+          if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
+            git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
+          fi
+          pip install .[torch,deepspeed-testing]
       
-  #     - name: Show installed libraries
-  #       run: |
-  #         source activate accelerate;
-  #         pip freeze
+      - name: Show installed libraries
+        run: |
+          source activate accelerate;
+          pip freeze
 
-  #     - name: Run trainer tests
-  #       working-directory: transformers/
-  #       env:
-  #         CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
-  #         WANDB_DISABLED: true
-  #       run: |
-  #         source activate accelerate;
-  #         pytest -sv tests/trainer
+      - name: Run trainer tests
+        working-directory: transformers/
+        env:
+          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          WANDB_DISABLED: true
+        run: |
+          source activate accelerate;
+          pytest -sv tests/trainer
 
-  #     - name: Run deepspeed tests
-  #       working-directory: transformers/
-  #       env:
-  #         CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
-  #         WANDB_DISABLED: true
-  #       run: |
-  #         source activate accelerate;
-  #         pytest -sv tests/deepspeed
+      - name: Run deepspeed tests
+        working-directory: transformers/
+        env:
+          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          WANDB_DISABLED: true
+        run: |
+          source activate accelerate;
+          pytest -sv tests/deepspeed
 
   run-skorch-tests:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
     runs-on: [self-hosted, docker-gpu, multi-gpu]
-    defaults:
-      run:
-        shell: bash
     strategy:
       fail-fast: false
       matrix:
