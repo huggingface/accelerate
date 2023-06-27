@@ -348,26 +348,39 @@ point in the script as shown above, and then, you should unwrap your model befor
 through the [`~Accelerator.prepare`] method, your model may have been placed inside a bigger model,
 which deals with the distributed training. This in turn means that saving your model state dictionary without taking
 any precaution will take that potential extra layer into account, and you will end up with weights you can't load back
-in your base model.
+in your base model. The [`~Accelerator.save_model`] method will help you to achieve that. It will unwrap your model and save
+the model state dictionnary.
 
-This is why it's recommended to *unwrap* your model first. Here is an example:
-
+Here is an example:
 ```
 accelerator.wait_for_everyone()
-unwrapped_model = accelerator.unwrap_model(model)
-accelerator.save(unwrapped_model.state_dict(), filename)
+accelerator.save_model(model, save_directory)
+```
+The [`~Accelerator.save_model`] method can also save a model into sharded checkpoints or with safetensors format.
+Here is an example: 
+
+```python
+accelerator.wait_for_everyone()
+accelerator.save_model(model, save_directory, max_shard_size="1GB", safe_serialization=True)
 ```
 
 If your script contains logic to load a checkpoint, we also recommend you load your weights in the unwrapped model
 (this is only useful if you use the load function after making your model go through
 [`~Accelerator.prepare`]). Here is an example:
 
-```
+```python
 unwrapped_model = accelerator.unwrap_model(model)
-unwrapped_model.load_state_dict(torch.load(filename))
+path_to_checkpoint = os.path.join(save_directory,"pytorch_model.bin")
+unwrapped_model.load_state_dict(torch.load(path_to_checkpoint))
 ```
 
 Note that since all the model parameters are references to tensors, this will load your weights inside `model`.
+
+If you want to load a sharded checkpoint or a checkpoint with safetensors format into the model with a specific `device`, we recommend you to load it with [`~utils.load_checkpoint_in_model`] function. Here's an example:
+
+```python
+load_checkpoint_in_model(unwrapped_model, save_directory, device_map={"":device})
+```
 
 ## Saving/loading entire states
 
