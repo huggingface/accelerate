@@ -132,7 +132,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     if is_port_in_use(master_port):
         raise ConnectionError(
             f"Tried to launch distributed communication on port `{master_port}`, but another process is utilizing it. "
-            "Please specify a different port (such as using the `--master_port` flag or specifying a different `main_process_port` in your config file)"
+            "Please specify a different port (such as using the `----main_process_port` flag or specifying a different `main_process_port` in your config file)"
             " and rerun your script."
         )
 
@@ -264,7 +264,7 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     if is_port_in_use(master_port):
         raise ConnectionError(
             f"Tried to launch distributed communication on port `{master_port}`, but another process is utilizing it. "
-            "Please specify a different port (such as using the `--master_port` flag or specifying a different `main_process_port` in your config file)"
+            "Please specify a different port (such as using the `--main_process_port` flag or specifying a different `main_process_port` in your config file)"
             " and rerun your script."
         )
 
