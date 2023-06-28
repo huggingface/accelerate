@@ -370,7 +370,7 @@ class DataLoaderTester(unittest.TestCase):
         self.assertListEqual(list(new_batch_sampler), [[8, 9, 10, 11], [12, 13, 14, 15]])
 
     def test_skip_data_loader(self):
-        dataloader = SkipDataLoader(list(range(16)), batch_size=4, skip_batches=2)
+        dataloader = SkipDataLoader(DataLoader(list(range(16)), batch_size=4), skip_batches=2)
         self.assertListEqual([t.tolist() for t in dataloader], [[8, 9, 10, 11], [12, 13, 14, 15]])
 
     def test_skip_first_batches(self):
@@ -379,7 +379,7 @@ class DataLoaderTester(unittest.TestCase):
         self.assertListEqual([t.tolist() for t in new_dataloader], [[8, 9, 10, 11], [12, 13, 14, 15]])
 
     def test_end_of_dataloader(self):
-        dataloader = DataLoaderShard(list(range(16)), batch_size=4)
+        dataloader = DataLoaderShard(DataLoader(list(range(16)), batch_size=4))
         for idx, _ in enumerate(dataloader):
             self.assertEqual(dataloader.end_of_dataloader, idx == 3)
 
@@ -389,7 +389,7 @@ class DataLoaderTester(unittest.TestCase):
 
     def test_end_of_dataloader_dispatcher(self):
         Accelerator()
-        dataloader = DataLoaderDispatcher(range(16), batch_size=4)
+        dataloader = DataLoaderDispatcher(DataLoader(range(16), batch_size=4))
         for idx, _ in enumerate(dataloader):
             self.assertEqual(dataloader.end_of_dataloader, idx == 3)
 

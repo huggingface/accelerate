@@ -321,13 +321,30 @@ class DataLoaderStateMixin:
         self.remainder = -1
 
 
-class DataLoaderShard(DataLoader, DataLoaderStateMixin):
+class _DataLoaderWrapper:
+    dataloader: DataLoader
+    wrapper_attrs: tuple
+
+    def __getattr__(self, name, *args, **kwargs):
+        # NOTE `__getattr__` is only called when `name` is not found.
+        try:
+            return getattr(self.dataloader, name, *args, **kwargs)
+        except AttributeError:
+            raise AttributeError(f"{self.__class__.__name__} object has no attribute `{name}`")
+
+    def __setattr__(self, attr, val):
+        if attr in self.wrapper_attrs:
+            self.__dict__[attr] = val
+        setattr(self.dataloader, attr, val)
+
+
+class DataLoaderShard(_DataLoaderWrapper, DataLoaderStateMixin):
     """
-    Subclass of a PyTorch `DataLoader` that will deal with device placement and current distributed setup.
+    Wrapper for a PyTorch `DataLoader` that will deal with device placement and current distributed setup.
 
     Args:
-        dataset (`torch.utils.data.dataset.Dataset`):
-            The dataset to use to build this datalaoder.
+        dataloader (`torch.utils.data.dataloader.DataLoader`):
+            The dataloader to be wrapped.
         device (`torch.device`, *optional*):
             If passed, the device to put all batches on.
         rng_types (list of `str` or [`~utils.RNGType`]):
@@ -343,7 +360,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         split_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
         kwargs:
-            All other keyword arguments to pass to the regular `DataLoader` initialization.
+            No longer in use
 
     **Available attributes:**
 
@@ -354,8 +371,19 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
-    def __init__(self, dataset, device=None, rng_types=None, synchronized_generator=None, skip_batches=0, **kwargs):
-        super().__init__(dataset, **kwargs)
+    wrapper_attrs = (
+        "end_of_dataloader",
+        "remainder",
+        "dataloader",
+        "device",
+        "rng_types",
+        "synchronized_generator",
+        "skip_batches",
+        "gradient_state",
+    )
+
+    def __init__(self, dataloader, device=None, rng_types=None, synchronized_generator=None, skip_batches=0, **kwargs):
+        self.dataloader = dataloader
         self.device = device
         self.rng_types = rng_types
         self.synchronized_generator = synchronized_generator
@@ -371,7 +399,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         with suppress(Exception):
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
             self.remainder = length % self.total_batch_size
-        dataloader_iter = super().__iter__()
+        dataloader_iter = iter(self.dataloader)
         # We iterate one batch ahead to check when we are at the end
         try:
             current_batch = next(dataloader_iter)
@@ -453,9 +481,9 @@ if is_tpu_available(check_device=False):
             return self._loader.total_dataset_length
 
 
-class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
+class DataLoaderDispatcher(_DataLoaderWrapper, DataLoaderStateMixin):
     """
-    Subclass of a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
+    Wrapper for a PyTorch `DataLoader` that will iterate and preprocess on process 0 only, then dispatch on each
     process their part of the batch.
 
     Args:
@@ -478,31 +506,28 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
-    def __init__(self, dataset, split_batches: bool = False, skip_batches=0, _drop_last: bool = False, **kwargs):
-        shuffle = False
-        if is_torch_version(">=", "1.11.0"):
-            from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
+    wrapper_attrs = (
+        "end_of_dataloader",
+        "remainder",
+        "dataloader",
+        "split_batches",
+        "gradient_state",
+        "state",
+        "_drop_last",
+        "skip_batches",
+    )
 
-            # We need to save the shuffling state of the DataPipe
-            if isinstance(dataset, ShufflerIterDataPipe):
-                shuffle = dataset._shuffle_enabled
-        super().__init__(dataset, **kwargs)
-        self.split_batches = split_batches
+    def __init__(self, dataloader, split_batches: bool = False, skip_batches=0, _drop_last: bool = False, **kwargs):
         if is_torch_version("<", "1.8.0"):
             raise ImportError(
                 f"Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
             )
-        if shuffle:
-            torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
-
+        self.dataloader = dataloader
+        self.split_batches = split_batches
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
         self._drop_last = _drop_last
         self.skip_batches = skip_batches
-        # We can safely pass because the default is -1
-        with suppress(Exception):
-            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-            self.remainder = length % self.total_batch_size
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
@@ -544,10 +569,14 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     def __iter__(self):
         self.reset()
         self.gradient_state._add_dataloader(self)
-        main_iterator = None
-        if self.state.process_index == 0:
-            # We only iterate through the DataLoader on process 0.
-            main_iterator = super().__iter__()
+        # We can safely pass because the default is -1
+        with suppress(Exception):
+            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+            self.remainder = length % self.total_batch_size
+        # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
+        # shared seed to all dist processes. Thus, we need to create iterator for all dist processes.
+        # But, we only iterate through the DataLoader on process 0.
+        main_iterator = iter(self.dataloader)
         stop_iteration = False
         self._stop_iteration = False
         first_batch = None
@@ -602,7 +631,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         self.gradient_state._remove_dataloader(self)
 
     def __len__(self):
-        whole_length = super().__len__()
+        whole_length = len(self.dataloader)
         if self.split_batches:
             return whole_length
         elif self._drop_last:
@@ -612,9 +641,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
 
     @property
     def total_batch_size(self):
-        return (
-            self.dataset.batch_size if self.split_batches else (self.dataset.batch_size * self.dataset.num_processes)
-        )
+        return self.batch_size if self.split_batches else (self.batch_size * self.state.num_processes)
 
     @property
     def total_dataset_length(self):
@@ -721,11 +748,10 @@ def prepare_data_loader(
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
-            if getattr(dataloader.dataset, "generator", None) is not None:
-                synchronized_generator = dataloader.dataset.generator
+            synchronized_generator = getattr(dataloader.dataset, "generator", None)
             new_dataset = IterableDatasetShard(
                 new_dataset,
-                batch_size=dataloader.batch_size,
+                batch_size=dataloader.batch_size if dataloader.batch_size else 1,
                 drop_last=dataloader.drop_last,
                 num_processes=num_processes,
                 process_index=process_index,
@@ -733,77 +759,55 @@ def prepare_data_loader(
             )
         else:
             # New batch sampler for the current process.
-            sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+            sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler) or dataloader.batch_sampler is None
             if sampler_is_batch_sampler:
-                sampler = dataloader.sampler.sampler
+                sampler = getattr(dataloader.sampler, "sampler", None)
             else:
-                sampler = dataloader.batch_sampler.sampler
+                sampler = getattr(dataloader.batch_sampler, "sampler", None)
             if hasattr(sampler, "generator"):
                 if sampler.generator is None:
                     sampler.generator = torch.Generator()
                 synchronized_generator = sampler.generator
 
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
-            new_batch_sampler = BatchSamplerShard(
-                batch_sampler,
-                num_processes=num_processes,
-                process_index=process_index,
-                split_batches=split_batches,
-                even_batches=even_batches,
-            )
-
-    # We ignore all of those since they are all dealt with by our new_batch_sampler
-    ignore_kwargs = [
-        "batch_size",
-        "shuffle",
-        "sampler",
-        "batch_sampler",
-        "drop_last",
-    ]
+            if batch_sampler is not None:
+                new_batch_sampler = BatchSamplerShard(
+                    batch_sampler,
+                    num_processes=num_processes,
+                    process_index=process_index,
+                    split_batches=split_batches,
+                    even_batches=even_batches,
+                )
 
     if rng_types is not None and synchronized_generator is None and "generator" in rng_types:
         rng_types.remove("generator")
 
-    kwargs = {
-        k: getattr(dataloader, k, _PYTORCH_DATALOADER_KWARGS[k])
-        for k in _PYTORCH_DATALOADER_KWARGS
-        if k not in ignore_kwargs
-    }
-
-    # Need to provide batch_size as batch_sampler is None for Iterable dataset
-    if new_batch_sampler is None:
-        kwargs["drop_last"] = dataloader.drop_last
-        kwargs["batch_size"] = (
-            dataloader.batch_size // num_processes if split_batches and not dispatch_batches else dataloader.batch_size
-        )
+    # NOTE Since we only wrap `IterableDataset` and the sampler/batch_sampler come with
+    # `IterableDataset` are just placeholders, we can safely update `dataset`.
+    _dataloader_forcibly_setattr(dataloader, "dataset", new_dataset)
+    if new_batch_sampler is not None:
+        if sampler_is_batch_sampler:
+            _dataloader_forcibly_setattr(dataloader, "sampler", new_batch_sampler)
+            if dataloader.batch_sampler is not None:
+                # NOTE User cannot present both sampler and batch_sampler to `DataLoader`,
+                # Thus, the `batch_sampler` in this case can only be the default `BatchSampler`
+                # holding a reference to `sampler`
+                dataloader.batch_sampler.sampler = new_batch_sampler
+        else:
+            _dataloader_forcibly_setattr(dataloader, "batch_sampler", new_batch_sampler)
 
     if dispatch_batches:
-        kwargs.pop("generator")
         dataloader = DataLoaderDispatcher(
-            new_dataset,
+            dataloader,
             split_batches=split_batches,
-            batch_sampler=new_batch_sampler,
             _drop_last=dataloader.drop_last,
-            **kwargs,
-        )
-    elif sampler_is_batch_sampler:
-        dataloader = DataLoaderShard(
-            new_dataset,
-            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
-            sampler=new_batch_sampler,
-            batch_size=dataloader.batch_size,
-            rng_types=rng_types,
-            synchronized_generator=synchronized_generator,
-            **kwargs,
         )
     else:
         dataloader = DataLoaderShard(
-            new_dataset,
+            dataloader,
             device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
-            batch_sampler=new_batch_sampler,
             rng_types=rng_types,
             synchronized_generator=synchronized_generator,
-            **kwargs,
         )
 
     if state.distributed_type == DistributedType.TPU:
@@ -811,9 +815,16 @@ def prepare_data_loader(
     return dataloader
 
 
+def _dataloader_forcibly_setattr(dataloader, name, val):
+    # NOTE After initialization, `DataLoader` prevents one from updating its internal attrs
+    # We need to be careful of what we are doing here.
+    super(DataLoader, dataloader).__setattr__(name, val)
+
+
 class SkipBatchSampler(BatchSampler):
     """
-    A `torch.utils.data.BatchSampler` that skips the first `n` batches of another `torch.utils.data.BatchSampler`.
+    A `torch.utils.data.BatchSampler` that skips the first `n` batches of another `torch.utils.data.BatchSampler`
+    for the first epoch.
     """
 
     def __init__(self, batch_sampler, skip_batches=0):
@@ -824,6 +835,7 @@ class SkipBatchSampler(BatchSampler):
         for index, samples in enumerate(self.batch_sampler):
             if index >= self.skip_batches:
                 yield samples
+        self.skip_batches = 0
 
     @property
     def total_length(self):
@@ -833,27 +845,30 @@ class SkipBatchSampler(BatchSampler):
         return len(self.batch_sampler) - self.skip_batches
 
 
-class SkipDataLoader(DataLoader):
+class SkipDataLoader(_DataLoaderWrapper):
     """
-    Subclass of a PyTorch `DataLoader` that will skip the first batches.
+    Wrapper for a PyTorch `DataLoader` that will skip the first batches for the first epoch.
 
     Args:
-        dataset (`torch.utils.data.dataset.Dataset`):
-            The dataset to use to build this datalaoder.
+        dataloader (`torch.utils.data.dataloader.DataLoader`):
+            The dataloader to be wrapped.
         skip_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
         kwargs:
-            All other keyword arguments to pass to the regular `DataLoader` initialization.
+            No longer in use
     """
 
-    def __init__(self, dataset, skip_batches=0, **kwargs):
-        super().__init__(dataset, **kwargs)
+    wrapper_attrs = ("dataloader", "skip_batches")
+
+    def __init__(self, dataloader, skip_batches=0, **kwargs):
+        self.dataloader = dataloader
         self.skip_batches = skip_batches
 
     def __iter__(self):
-        for index, batch in enumerate(super().__iter__()):
+        for index, batch in enumerate(self.dataloader):
             if index >= self.skip_batches:
                 yield batch
+        self.skip_batches = 0
 
 
 def skip_first_batches(dataloader, num_batches=0):
@@ -865,62 +880,22 @@ def skip_first_batches(dataloader, num_batches=0):
     if isinstance(dataset, IterableDataset):
         new_batch_sampler = None
     else:
-        sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+        sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler) or dataloader.batch_sampler is None
         batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
         new_batch_sampler = SkipBatchSampler(batch_sampler, skip_batches=num_batches)
 
-    # We ignore all of those since they are all dealt with by our new_batch_sampler
-    ignore_kwargs = [
-        "batch_size",
-        "shuffle",
-        "sampler",
-        "batch_sampler",
-        "drop_last",
-    ]
-
-    kwargs = {
-        k: getattr(dataloader, k, _PYTORCH_DATALOADER_KWARGS[k])
-        for k in _PYTORCH_DATALOADER_KWARGS
-        if k not in ignore_kwargs
-    }
-
-    # Need to provide batch_size as batch_sampler is None for Iterable dataset
-    if new_batch_sampler is None:
-        kwargs["drop_last"] = dataloader.drop_last
-        kwargs["batch_size"] = dataloader.batch_size
-
-    if isinstance(dataloader, DataLoaderDispatcher):
-        if new_batch_sampler is None:
-            # Need to manually skip batches in the dataloader
-            kwargs["skip_batches"] = num_batches
-        dataloader = DataLoaderDispatcher(
-            dataset,
-            split_batches=dataloader.split_batches,
-            batch_sampler=new_batch_sampler,
-            _drop_last=dataloader._drop_last,
-            **kwargs,
-        )
-    elif isinstance(dataloader, DataLoaderShard):
-        if new_batch_sampler is None:
-            # Need to manually skip batches in the dataloader
-            kwargs["skip_batches"] = num_batches
-        elif sampler_is_batch_sampler:
-            kwargs["sampler"] = new_batch_sampler
-            kwargs["batch_size"] = dataloader.batch_size
+    if new_batch_sampler is not None:
+        if sampler_is_batch_sampler:
+            _dataloader_forcibly_setattr(dataloader, "sampler", new_batch_sampler)
+            if dataloader.batch_sampler is not None:
+                # NOTE User cannot present both sampler and batch_sampler to `DataLoader`,
+                # Thus, the `batch_sampler` in this case can only be the default `BatchSampler`
+                # holding a reference to `sampler`
+                dataloader.batch_sampler.sampler = new_batch_sampler
         else:
-            kwargs["batch_sampler"] = new_batch_sampler
-        dataloader = DataLoaderShard(
-            dataset,
-            device=dataloader.device,
-            rng_types=dataloader.rng_types,
-            synchronized_generator=dataloader.synchronized_generator,
-            **kwargs,
-        )
+            _dataloader_forcibly_setattr(dataloader, "batch_sampler", new_batch_sampler)
+
+        return dataloader
     else:
-        if new_batch_sampler is None:
-            # Need to manually skip batches in the dataloader
-            dataloader = SkipDataLoader(dataset, skip_batches=num_batches, **kwargs)
-        else:
-            dataloader = DataLoader(dataset, batch_sampler=new_batch_sampler, **kwargs)
-
-    return dataloader
+        # Need to manually skip batches in the dataloader
+        return SkipDataLoader(dataloader, skip_batches=num_batches)
