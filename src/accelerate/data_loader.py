@@ -217,7 +217,17 @@ class BatchSamplerShard(BatchSampler):
                     idx += 1
 
 
-class IterableDatasetShard(IterableDataset):
+if is_torch_version(">=", "1.11.0"):
+    from torch.utils.data import IterDataPipe
+
+    # Inherit from `IterDataPipe` so that we can benefit from `DataLoader`'s forward compatibilities
+    # (e.g. use synced seeds to shuffle the datapipe every epoch)
+    IterableDatasetShardBaseClass = IterDataPipe
+else:
+    IterableDatasetShardBaseClass = IterableDataset
+
+
+class IterableDatasetShard(IterableDatasetShardBaseClass):
     """
     Wraps a PyTorch `IterableDataset` to generate samples for one of the processes only. Instances of this class will
     always yield a number of samples that is a round multiple of the actual batch size (depending of the value of
