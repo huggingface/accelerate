@@ -2336,6 +2336,16 @@ class Accelerator:
 
             safe_serialization (`bool`, *optional*, defaults to `False`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> model = ...
+        >>> accelerator.save_model(model, save_directory)
+        ```
         """
 
         if safe_serialization and not is_safetensors_available():

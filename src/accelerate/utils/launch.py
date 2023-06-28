@@ -24,7 +24,7 @@ from ..commands.config.config_args import SageMakerConfig
 from ..commands.config.config_utils import DYNAMO_BACKENDS
 from ..utils import DynamoBackend, PrecisionType, is_ipex_available, is_torch_version, is_xpu_available
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
-from ..utils.other import merge_dicts
+from ..utils.other import is_port_in_use, merge_dicts
 from .dataclasses import DistributedType, SageMakerDistributedType
 
 
@@ -127,6 +127,16 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         setattr(args, "nproc_per_node", str(num_processes))
         if main_process_port is not None:
             setattr(args, "master_port", str(main_process_port))
+
+    if main_process_port is None:
+        main_process_port = 29500
+
+    if is_port_in_use(main_process_port):
+        raise ConnectionError(
+            f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
+            "Please specify a different port (such as using the `----main_process_port` flag or specifying a different `main_process_port` in your config file)"
+            " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
+        )
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
@@ -251,6 +261,16 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         setattr(args, "nproc_per_node", str(num_processes))
         if main_process_port is not None:
             setattr(args, "master_port", str(main_process_port))
+
+    if main_process_port is None:
+        main_process_port = 29500
+
+    if is_port_in_use(main_process_port):
+        raise ConnectionError(
+            f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
+            "Please specify a different port (such as using the `----main_process_port` flag or specifying a different `main_process_port` in your config file)"
+            " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
+        )
 
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
