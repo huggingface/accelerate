@@ -387,11 +387,11 @@ def dispatch_model(
         retie_parameters(model, tied_params)
     else:
         device = list(device_map.values())[0]
-        if device != "disk" and not (
-            getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
-        ):
+        # for backward compatibility
+        is_quantized = getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
+        if device != "disk" and not is_quantized:
             model.to(device)
-        elif getattr(model, "is_quantized", False):
+        elif is_quantized:
             pass
         else:
             raise ValueError(
