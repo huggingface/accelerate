@@ -121,7 +121,8 @@ def load_and_quantize_model(
     keep_in_fp32_modules = bnb_quantization_config.keep_in_fp32_modules
     modules_to_not_convert.extend(keep_in_fp32_modules)
 
-    if model.device.type != "meta":
+    model_device = get_parameter_device(model)
+    if model_device.type != "meta":
         # quantization of an already loaded model
         logger.warning(
             "It is not recommended to quantize a loaded model. "
@@ -140,7 +141,7 @@ def load_and_quantize_model(
                         param.to(torch.float32)
             elif torch.is_floating_point(param):
                 param.to(dtype)
-        if model.device.type == "cuda":
+        if model_device.type == "cuda":
             # move everything to cpu in the first place because we can't do quantization if the weights are already on cuda
             model.cuda(torch.cuda.current_device())
             torch.cuda.empty_cache()
@@ -149,7 +150,7 @@ def load_and_quantize_model(
         else:
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
         logger.info(
-            f"The model device type is {model.device.type}. However, cuda is needed for quantization."
+            f"The model device type is {model_device.type}. However, cuda is needed for quantization."
             "We move the model to cuda."
         )
         return model
@@ -413,3 +414,6 @@ def has_4bit_bnb_layers(model):
         if isinstance(m, bnb.nn.Linear4bit):
             return True
     return False
+
+def get_parameter_device(parameter: nn.Module):
+    return next(parameter.parameters()).device
