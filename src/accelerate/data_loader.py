@@ -833,7 +833,12 @@ def prepare_data_loader(
 def _dataloader_forcibly_setattr(dataloader, name, val):
     # NOTE After initialization, `DataLoader` prevents one from updating its internal attrs
     # We need to be careful of what we are doing here.
-    super(DataLoader, dataloader).__setattr__(name, val)
+    if isinstance(dataloader, DataLoader):
+        super(DataLoader, dataloader).__setattr__(name, val)
+    elif isinstance(dataloader, _DataLoaderWrapper):
+        _dataloader_forcibly_setattr(dataloader.dataloader, name, val)
+    else:
+        raise NotImplementedError
 
 
 class SkipBatchSampler(BatchSampler):
