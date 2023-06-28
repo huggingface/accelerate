@@ -347,6 +347,10 @@ class _DataLoaderWrapper:
             self.__dict__[attr] = val
         setattr(self.dataloader, attr, val)
 
+    def __len__(self):
+        # Make `len()` work with dataloader wrapper
+        return len(self.dataloader)
+
 
 class DataLoaderShard(_DataLoaderWrapper, DataLoaderStateMixin):
     """
