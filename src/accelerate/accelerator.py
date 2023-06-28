@@ -97,7 +97,6 @@ from .utils.constants import FSDP_PYTORCH_VERSION
 
 if is_deepspeed_available():
     import deepspeed
-    from deepspeed.checkpoint.utils import clone_tensors_for_torch_save
 
     from .utils import (
         DeepSpeedEngineWrapper,
@@ -2834,6 +2833,8 @@ class Accelerator:
                         "To save the full checkpoint, run `model.save_checkpoint(save_dir)` and use `zero_to_fp32.py` to recover weights."
                     )
             else:
+                from deepspeed.checkpoint.utils import clone_tensors_for_torch_save
+
                 state_dict = clone_tensors_for_torch_save(self.unwrap_model(model).state_dict())
         else:
             if unwrap:
