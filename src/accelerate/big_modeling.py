@@ -391,9 +391,7 @@ def dispatch_model(
         is_quantized = getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
         if device != "disk" and not is_quantized:
             model.to(device)
-        elif is_quantized:
-            pass
-        else:
+        elif not is_quantized:
             raise ValueError(
                 "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
             )
