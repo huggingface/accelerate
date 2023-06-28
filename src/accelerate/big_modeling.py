@@ -387,8 +387,10 @@ def dispatch_model(
         retie_parameters(model, tied_params)
     else:
         device = list(device_map.values())[0]
-        if device != "disk":
+        if device != "disk" and not getattr(model, "is_quantized", False):
             model.to(device)
+        elif getattr(model, "is_quantized", False):
+            pass
         else:
             raise ValueError(
                 "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
