@@ -1330,7 +1330,7 @@ class BnbQuantizationConfig:
 
     load_in_8bit: bool = field(default=False, metadata={"help": "enable 8bit quantization."})
 
-    llm_int8_threshold: float = field(default=6.0, metadata={"help": "value of the outliner threshold."})
+    llm_int8_threshold: float = field(default=6.0, metadata={"help": "value of the outliner threshold. only relevant when load_in_8bit=True"})
 
     load_in_4bit: bool = field(default=False, metadata={"help": "enable 4bit quantization."})
 
@@ -1357,15 +1357,16 @@ class BnbQuantizationConfig:
     )
 
     torch_dtype: torch.dtype = field(
-        default=torch.float16,
+        default= None,
         metadata={
-            "help": "this sets the dtype of the remaining non quantized layers. `bitsandbytes` library suggests to set the value to `torch.float16`."
+            "help": "this sets the dtype of the remaining non quantized layers. `bitsandbytes` library suggests to set the value"
+            "to `torch.float16` for 8 bit model and use the same dtype as the compute dtype for 4 bit model "
         },
     )
 
     skip_modules: List[str] = field(
         default=None,
-        metadata={"help": "an explicit list of the modules that we don't quantize. We keep them in `torch.dtype`."},
+        metadata={"help": "an explicit list of the modules that we don't quantize. The dtype of these modules will be `torch_dtype`."},
     )
 
     keep_in_fp32_modules: List[str] = field(
@@ -1382,9 +1383,6 @@ class BnbQuantizationConfig:
             this flag. This is useful for offloading large models such as `google/flan-t5-xxl`. Note that the int8
             operations will not be run on CPU."""
         },
-    )
-    target_dtype: Union[torch.dtype, CustomDtype] = field(
-        default=None, metadata={"help": "dtype of the quantized layers"}
     )
 
     def __post_init__(self):
@@ -1404,7 +1402,6 @@ class BnbQuantizationConfig:
             raise ValueError("load_in_4bit and load_in_8 can't be both False")
 
         if not isinstance(self.llm_int8_threshold, (int, float)):
-            print(type(self.llm_int8_threshold))
             raise ValueError("llm_int8_threshold must be a float or an int")
 
         if not isinstance(self.enable_fp32_cpu_offload, bool):
@@ -1432,9 +1429,6 @@ class BnbQuantizationConfig:
         elif not isinstance(self.bnb_4bit_compute_dtype, torch.dtype):
             raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
 
-        if not isinstance(self.torch_dtype, torch.dtype):
-            raise ValueError("torch_dtype must be a torch.dtype")
-
         if self.skip_modules is not None and not isinstance(self.skip_modules, list):
             raise ValueError("skip_modules must be a list of strings")
 
@@ -1449,3 +1443,26 @@ class BnbQuantizationConfig:
 
         if self.load_in_8bit:
             self.target_dtype = torch.int8
+            
+        if self.load_in_4bit and self.llm_int8_threshold!=6.0:
+            warnings.warn("llm_int8_threshold can only be used for model loaded in 8bit")
+
+        if isinstance(self.torch_dtype, str):
+            if self.torch_dtype == "fp32":
+                self.torch_dtype = torch.float32
+            elif self.torch_dtype == "fp16":
+                self.torch_dtype = torch.float16
+            elif self.torch_dtype == "bf16":
+                self.torch_dtype = torch.bfloat16
+            else:
+                raise ValueError(
+                    f"torch_dtype must be in ['fp32','fp16','bf16'] but found {self.torch_dtype}"
+                )
+        if self.load_in_8bit and self.torch_dtype is None:
+            self.torch_dtype = torch.float16
+            
+        if self.load_in_4bit and self.torch_dtype is None:
+            self.torch_dtype = self.bnb_4bit_compute_dtype
+            
+        if not isinstance(self.torch_dtype, torch.dtype):
+            raise ValueError("torch_dtype must be a torch.dtype")
