@@ -379,7 +379,9 @@ def get_keys_to_not_convert(model):
     has_tied_params = len(tied_keys) > 0
 
     # Check if it is a base model
-    is_base_model = not hasattr(model, model.base_model_prefix)
+    is_base_model = False
+    if hasattr(model, "base_model_prefix"):
+        is_base_model = not hasattr(model, model.base_model_prefix)
 
     # Ignore this for base models (BertModel, GPT2Model, etc.)
     if (not has_tied_params) and is_base_model:
