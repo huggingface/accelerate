@@ -26,13 +26,11 @@ from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_gpu,
     require_single_gpu,
-    require_torch_min_version,
 )
 from accelerate.utils import patch_environment
 
 
 @require_huggingface_suite
-@require_torch_min_version(version="1.8.0")
 class MetricTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)

@@ -27,7 +27,7 @@ from accelerate.hooks import (
     remove_hook_from_module,
     remove_hook_from_submodules,
 )
-from accelerate.test_utils import require_multi_gpu, require_torch_min_version
+from accelerate.test_utils import require_multi_gpu
 
 
 class ModelForTest(nn.Module):
@@ -51,7 +51,6 @@ class PostForwardHook(ModelHook):
         return output + 1
 
 
-@require_torch_min_version(version="1.9.0")
 class HooksModelTester(unittest.TestCase):
     def test_add_and_remove_hooks(self):
         test_model = ModelForTest()

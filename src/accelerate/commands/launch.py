@@ -651,6 +651,7 @@ def multi_gpu_launcher(args):
 
 def deepspeed_launcher(args):
     import torch.distributed.run as distrib_run
+
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
 

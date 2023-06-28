@@ -126,8 +126,7 @@ if is_megatron_lm_available():
         megatron_lm_prepare_scheduler,
     )
 
-if is_torch_version(">", "1.10.0"):
-    from torch.distributed.algorithms.join import Join
+from torch.distributed.algorithms.join import Join
 
 
 if is_tpu_available(check_device=False):
@@ -401,10 +400,6 @@ class Accelerator:
         self.device_placement = device_placement
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
-        if dispatch_batches is True and is_torch_version("<", "1.8.0"):
-            raise ImportError(
-                "Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
-            )
         self.even_batches = even_batches
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
@@ -434,7 +429,7 @@ class Accelerator:
             DistributedType.MEGATRON_LM,
         ):
             if self.device.type in ["cpu", "xpu"]:
-                self.native_amp = is_torch_version(">=", "1.10")
+                self.native_amp = True
             else:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
@@ -971,9 +966,6 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        if is_torch_version("<", "1.10.0"):
-            raise ValueError(f"Joining uneven inputs requires PyTorch >= 1.10.0, You have {torch.__version__}.")
-
         if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
             dl_even_batches_values = []
 
@@ -1335,7 +1327,7 @@ class Accelerator:
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
-            if self.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
+            if self.mixed_precision == "fp16":
                 new_forward = torch.cuda.amp.autocast(dtype=torch.float16)(model_forward_func)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
                 new_forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model_forward_func)
