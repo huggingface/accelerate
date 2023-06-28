@@ -164,8 +164,7 @@ def load_and_quantize_model(
             model = replace_with_bnb_layers(
                 model, bnb_quantization_config, modules_to_not_convert=modules_to_not_convert
             )
-        # Make sure tied weights are tied before creating the device map.
-        model.tie_weights()
+
         device_map = get_quantized_model_device_map(
             model,
             bnb_quantization_config,
@@ -367,11 +366,9 @@ def get_keys_to_not_convert(model):
     model (`torch.nn.Module`):
         Input model
     """
-    # Create a copy of the model and tie the weights, then
-    # check if it contains tied weights
+    # Create a copy of the model
     with init_empty_weights():
         tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
-    tied_model.tie_weights()
 
     tied_params = find_tied_parameters(tied_model)
     # For compatibility with Accelerate < 0.18
