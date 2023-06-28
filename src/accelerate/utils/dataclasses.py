@@ -1351,7 +1351,7 @@ class BnbQuantizationConfig:
     )
 
     bnb_4bit_compute_dtype: bool = field(
-        default="fp32",
+        default="fp16",
         metadata={
             "help": "This sets the computational type which might be different than the input time. For example, inputs might be "
             "fp32, but computation can be set to bf16 for speedups. Options are {'fp32','fp16','bf16'}."

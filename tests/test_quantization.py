@@ -508,7 +508,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             self.model_4bit,
             self.bnb_quantization_config,
             weights_location=self.weights_location,
-            device_map="auto",
+            device_map={"":0},
             no_split_module_classes=["BloomBlock"],
         )
 
@@ -549,7 +549,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         # Check the exactness of the results
-        output_sequences = self.model_4bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
