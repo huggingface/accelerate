@@ -415,5 +415,6 @@ def has_4bit_bnb_layers(model):
             return True
     return False
 
+
 def get_parameter_device(parameter: nn.Module):
     return next(parameter.parameters()).device
