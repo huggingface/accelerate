@@ -391,7 +391,7 @@ def dispatch_model(
         retie_parameters(model, tied_params)
     else:
         device = list(device_map.values())[0]
-        if device != "disk" and not is_quantized:
+        if device != "disk":
             model.to(device)
         else:
             raise ValueError(
