@@ -508,7 +508,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             self.model_4bit,
             self.bnb_quantization_config,
             weights_location=self.weights_location,
-            device_map={"":0},
+            device_map={"": 0},
             no_split_module_classes=["BloomBlock"],
         )
 
