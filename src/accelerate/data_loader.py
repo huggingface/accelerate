@@ -741,8 +741,7 @@ def prepare_data_loader(
         )
 
     new_dataset = dataloader.dataset
-    # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
-    new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
+    new_batch_sampler = dataloader.batch_sampler
     sampler_is_batch_sampler = False
     synchronized_generator = None
     # No change if no multiprocess
@@ -757,6 +756,8 @@ def prepare_data_loader(
                 process_index=process_index,
                 split_batches=split_batches,
             )
+            if new_batch_sampler is not None and split_batches:
+                new_batch_sampler.batch_size = new_batch_sampler.batch_size // num_processes
         else:
             # New batch sampler for the current process.
             sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler) or dataloader.batch_sampler is None
