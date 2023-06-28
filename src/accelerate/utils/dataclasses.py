@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from distutils.util import strtobool
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypedDict
 
 import torch
 
@@ -343,8 +343,7 @@ class RNGType(BaseEnum):
 # data classes
 
 
-@dataclass
-class TensorInformation:
+class TensorInformation(TypedDict):
     shape: torch.Size
     dtype: torch.dtype
 

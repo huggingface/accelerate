@@ -50,7 +50,7 @@ setup(
             "accelerate-launch=accelerate.commands.launch:main",
         ]
     },
-    python_requires=">=3.7.0",
+    python_requires=">=3.8.0",
     install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.6.0"],
     extras_require=extras,
     classifiers=[
@@ -61,7 +61,7 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
 )
