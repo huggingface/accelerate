@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from distutils.util import strtobool
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 
@@ -1330,7 +1330,9 @@ class BnbQuantizationConfig:
 
     load_in_8bit: bool = field(default=False, metadata={"help": "enable 8bit quantization."})
 
-    llm_int8_threshold: float = field(default=6.0, metadata={"help": "value of the outliner threshold. only relevant when load_in_8bit=True"})
+    llm_int8_threshold: float = field(
+        default=6.0, metadata={"help": "value of the outliner threshold. only relevant when load_in_8bit=True"}
+    )
 
     load_in_4bit: bool = field(default=False, metadata={"help": "enable 4bit quantization."})
 
@@ -1357,7 +1359,7 @@ class BnbQuantizationConfig:
     )
 
     torch_dtype: torch.dtype = field(
-        default= None,
+        default=None,
         metadata={
             "help": "this sets the dtype of the remaining non quantized layers. `bitsandbytes` library suggests to set the value"
             "to `torch.float16` for 8 bit model and use the same dtype as the compute dtype for 4 bit model "
@@ -1366,7 +1368,9 @@ class BnbQuantizationConfig:
 
     skip_modules: List[str] = field(
         default=None,
-        metadata={"help": "an explicit list of the modules that we don't quantize. The dtype of these modules will be `torch_dtype`."},
+        metadata={
+            "help": "an explicit list of the modules that we don't quantize. The dtype of these modules will be `torch_dtype`."
+        },
     )
 
     keep_in_fp32_modules: List[str] = field(
@@ -1443,8 +1447,8 @@ class BnbQuantizationConfig:
 
         if self.load_in_8bit:
             self.target_dtype = torch.int8
-            
-        if self.load_in_4bit and self.llm_int8_threshold!=6.0:
+
+        if self.load_in_4bit and self.llm_int8_threshold != 6.0:
             warnings.warn("llm_int8_threshold can only be used for model loaded in 8bit")
 
         if isinstance(self.torch_dtype, str):
@@ -1455,14 +1459,12 @@ class BnbQuantizationConfig:
             elif self.torch_dtype == "bf16":
                 self.torch_dtype = torch.bfloat16
             else:
-                raise ValueError(
-                    f"torch_dtype must be in ['fp32','fp16','bf16'] but found {self.torch_dtype}"
-                )
+                raise ValueError(f"torch_dtype must be in ['fp32','fp16','bf16'] but found {self.torch_dtype}")
         if self.load_in_8bit and self.torch_dtype is None:
             self.torch_dtype = torch.float16
-            
+
         if self.load_in_4bit and self.torch_dtype is None:
             self.torch_dtype = self.bnb_4bit_compute_dtype
-            
+
         if not isinstance(self.torch_dtype, torch.dtype):
             raise ValueError("torch_dtype must be a torch.dtype")
