@@ -320,9 +320,13 @@ def dispatch_model(
     # Error early if the device map is incomplete.
     check_device_map(model, device_map)
 
+    # for backward compatibility
+    is_quantized = getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
+
     # We attach hooks if the device_map have at least 2 different devices. Otherwise, the model in already loaded
     # in the unique device and the user can decide where to dispatch the model.
-    if len(device_map.values()) > 1:
+    # If the model is quantized, we always force-dispatch the model
+    if (len(set(device_map.values())) > 1) or is_quantized:
         if main_device is None:
             if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
                 main_device = "cpu"
@@ -377,11 +381,9 @@ def dispatch_model(
         retie_parameters(model, tied_params)
     else:
         device = list(device_map.values())[0]
-        # for backward compatibility
-        is_quantized = getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
-        if device != "disk" and not is_quantized:
+        if device != "disk":
             model.to(device)
-        elif not is_quantized:
+        else:
             raise ValueError(
                 "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
             )
