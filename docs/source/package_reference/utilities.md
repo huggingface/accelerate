@@ -116,6 +116,6 @@ These include utilities that are useful to load checkpoints.
 
 These include utilities that are useful to quantize model.
 
-[[autodoc]] utils.load_and_quantize
+[[autodoc]] utils.load_and_quantize_model
 
 [[autodoc]] utils.BnbQuantizationConfig
