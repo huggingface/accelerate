@@ -1413,8 +1413,8 @@ class BnbQuantizationConfig:
 
         if not isinstance(self.bnb_4bit_quant_type, str):
             raise ValueError("bnb_4bit_quant_type must be a string")
-        elif self.bnb_4bit_quant_type not in ["fp4", "np4"]:
-            raise ValueError(f"bnb_4bit_quant_type must be in ['fp4','np4'] but found {self.bnb_4bit_quant_type}")
+        elif self.bnb_4bit_quant_type not in ["fp4", "nf4"]:
+            raise ValueError(f"bnb_4bit_quant_type must be in ['fp4','nf4'] but found {self.bnb_4bit_quant_type}")
 
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise ValueError("bnb_4bit_use_double_quant must be a boolean")
