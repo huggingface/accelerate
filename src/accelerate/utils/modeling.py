@@ -111,6 +111,7 @@ def dtype_byte_size(dtype: torch.dtype):
     bit_size = int(bit_search.groups()[0])
     return bit_size // 8
 
+
 def storage_ptr(tensor: torch.Tensor) -> int:
     try:
         return tensor.untyped_storage().data_ptr()
@@ -120,21 +121,22 @@ def storage_ptr(tensor: torch.Tensor) -> int:
             return tensor.storage().data_ptr()
         except NotImplementedError:
             # Fallback for meta storage
-            return 0    
-        
+            return 0
+
+
 def storage_size(tensor: torch.Tensor) -> int:
     _SIZE = {
-            torch.int64: 8,
-            torch.float32: 4,
-            torch.int32: 4,
-            torch.bfloat16: 2,
-            torch.float16: 2,
-            torch.int16: 2,
-            torch.uint8: 1,
-            torch.int8: 1,
-            torch.bool: 1,
-            torch.float64: 8,
-        }
+        torch.int64: 8,
+        torch.float32: 4,
+        torch.int32: 4,
+        torch.bfloat16: 2,
+        torch.float16: 2,
+        torch.int16: 2,
+        torch.uint8: 1,
+        torch.int8: 1,
+        torch.bool: 1,
+        torch.float64: 8,
+    }
     try:
         return tensor.untyped_storage().nbytes()
     except AttributeError:
@@ -145,7 +147,8 @@ def storage_size(tensor: torch.Tensor) -> int:
             # Fallback for meta storage
             # On torch >=2.0 this is the tensor size
             return tensor.nelement() * _SIZE[tensor.dtype]
-        
+
+
 def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     """
     Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
