@@ -112,19 +112,13 @@ def dtype_byte_size(dtype: torch.dtype):
     return bit_size // 8
 
 
-def storage_ptr(tensor: torch.Tensor) -> int:
-    try:
-        return tensor.untyped_storage().data_ptr()
-    except Exception:
-        # Fallback for torch==1.10
-        try:
-            return tensor.storage().data_ptr()
-        except NotImplementedError:
-            # Fallback for meta storage
-            return 0
-
-
-def storage_size(tensor: torch.Tensor) -> int:
+def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+    """
+    Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
+    example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
+    guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
+    non-overlapping lifetimes may have the same id.
+    """
     _SIZE = {
         torch.int64: 8,
         torch.float32: 4,
@@ -138,25 +132,20 @@ def storage_size(tensor: torch.Tensor) -> int:
         torch.float64: 8,
     }
     try:
-        return tensor.untyped_storage().nbytes()
-    except AttributeError:
+        storage_ptr = tensor.untyped_storage().data_ptr()
+        storage_size = tensor.untyped_storage().nbytes()
+    except Exception:
         # Fallback for torch==1.10
         try:
-            return tensor.storage().size() * _SIZE[tensor.dtype]
+            storage_ptr = tensor.storage().data_ptr()
+            storage_size = tensor.storage().size() * _SIZE[tensor.dtype]
         except NotImplementedError:
             # Fallback for meta storage
+            storage_ptr = 0
             # On torch >=2.0 this is the tensor size
-            return tensor.nelement() * _SIZE[tensor.dtype]
+            storage_size = tensor.nelement() * _SIZE[tensor.dtype]
 
-
-def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
-    """
-    Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
-    example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
-    guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
-    non-overlapping lifetimes may have the same id.
-    """
-    return tensor.device, storage_ptr(tensor), storage_size(tensor)
+    return tensor.device, storage_ptr, storage_size
 
 
 def shard_checkpoint(
