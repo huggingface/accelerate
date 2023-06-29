@@ -33,7 +33,7 @@ You will need to install the following requirements:
 
 ### How it works
 
-First, we need to initialize our model. To save memory, we can initialize an empty model using the context manager [init_empty_weights]
+First, we need to initialize our model. To save memory, we can initialize an empty model using the context manager [`init_empty_weights`]:
 
 ```py
 from accelerate import init_empty_weights
