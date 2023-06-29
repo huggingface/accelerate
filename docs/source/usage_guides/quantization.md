@@ -50,13 +50,13 @@ weights_location = ...
 
 Finally, you need to set your quantization configuration with ['~utils.BnbQuantizationConfig'].
 
-Here's an example for 8 bit quantization:
+Here's an example for 8-bit quantization:
 ```py
 from accelerate.utils import BnbQuantizationConfig
 quantization_config = BnbQuantizationConfig(load_in_8bit=True, llm_int8_threshold = 6)
 ```
 
-Here's an example for 4 bit quantization:
+Here's an example for 4-bit quantization:
 ```py
 from accelerate.utils import BnbQuantizationConfig
 quantization_config = BnbQuantizationConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True, bnb_4bit_quant_type="nf4")
@@ -69,9 +69,9 @@ from accelerate.utils import load_and_quantize
 quantized_model = load_and_quantize(empty_model, weight_location=weight_location, quantization_config=quantization_config, device_map = "auto")
 ```
 
-### Saving and loading 8 bit model
+### Saving and loading 8-bit model
 
-You can save your 8 bit model with accelerate using [`~Accelerator.save_model`]. 
+You can save your 8-bit model with accelerate using [`~Accelerator.save_model`]. 
 
 ```py
 from accelerate import Accelerator
@@ -82,7 +82,7 @@ accelerate.save_model(quantized_model, new_weight_location)
 quantized_model_from_saved = load_and_quantize(empty_model, weight_location=new_weight_location, quantization_config=quantization_config, device_map = "auto")
 ```
 
-Note that 4 bit model serialization is currently not supported.
+Note that 4-bit model serialization is currently not supported.
 
 ### Fine-tune a quantized model
 
@@ -92,4 +92,4 @@ Note that you don’t need to pass `device_map` when loading the model for train
 
 ### Example demo - running GPT2 1.5b on a Google Colab
 
-Check out the Google Colab [demo](https://colab.research.google.com/drive/1T1pOgewAWVpR9gKpaEWw4orOrzPFb3yM?usp=sharing) for running quantized models on a GTP2 model. The GPT2-1.5B model checkpoint is in FP32 which uses 6GB of memory. After quantization, it uses 1.5GB with 8 bit modules and 0.9GB with 4 bit modules.
+Check out the Google Colab [demo](https://colab.research.google.com/drive/1T1pOgewAWVpR9gKpaEWw4orOrzPFb3yM?usp=sharing) for running quantized models on a GTP2 model. The GPT2-1.5B model checkpoint is in FP32 which uses 6GB of memory. After quantization, it uses 1.5GB with 8-bit modules and 0.9GB with 4-bit modules.
