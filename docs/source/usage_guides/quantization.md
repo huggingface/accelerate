@@ -30,22 +30,34 @@ You will need to install the following requirements:
 `pip install bitsandbytes==0.39.0`
 - Install latest `accelerate` from source
 `pip install git+https://github.com/huggingface/accelerate.git`
+- Install `minGPT` and `huggingface_hub` to run examples
+`git clone https://github.com/karpathy/minGPT.git`
+`pip install minGPT/`
+`pip install huggingface_hub`
 
 ### How it works
 
-First, we need to initialize our model. To save memory, we can initialize an empty model using the context manager [`init_empty_weights`]:
+First, we need to initialize our model. To save memory, we can initialize an empty model using the context manager [`init_empty_weights`]. 
+Let's take the GPT2 model from minGPT library
 
 ```py
 from accelerate import init_empty_weights
+from mingpt.model import GPT
+
+model_config = GPT.get_default_config()
+model_config.model_type = 'gpt2-xl'
+model_config.vocab_size = 50257
+model_config.block_size = 1024
 
 with init_empty_weights():
-    empty_model = ModelClass(...)
+    empty_model = GPT(model_config)
 ```
 
 Then, we need to get the path to the weights of your model. The path can be the state_dict file (e.g. "pytorch_model.bin") or a folder containing the sharded checkpoints. 
 
 ```py
-weights_location = ...
+from huggingface_hub import snapshot_download
+weights_location = snapshot_download(repo_id="marcsun13/gpt2-xl-linear-sharded")
 ```
 
 Finally, you need to set your quantization configuration with ['~utils.BnbQuantizationConfig'].
@@ -66,7 +78,7 @@ To quantize your empty model with the selected configuration, you need to use [`
 
 ```py
 from accelerate.utils import load_and_quantize_model
-quantized_model = load_and_quantize_model(empty_model, weight_location=weight_location, quantization_config=quantization_config, device_map = "auto")
+quantized_model = load_and_quantize_model(empty_model, weights_location=weights_location, quantization_config=quantization_config, device_map = "auto")
 ```
 
 ### Saving and loading 8-bit model
@@ -76,10 +88,10 @@ You can save your 8-bit model with accelerate using [`~Accelerator.save_model`].
 ```py
 from accelerate import Accelerator
 accelerate = Accelerator()
-new_weight_location = "path/to/save_directory"
-accelerate.save_model(quantized_model, new_weight_location)
+new_weights_location = "path/to/save_directory"
+accelerate.save_model(quantized_model, new_weights_location)
 
-quantized_model_from_saved = load_and_quantize_model(empty_model, weight_location=new_weight_location, quantization_config=quantization_config, device_map = "auto")
+quantized_model_from_saved = load_and_quantize_model(empty_model, weights_location=new_weights_location, quantization_config=quantization_config, device_map = "auto")
 ```
 
 Note that 4-bit model serialization is currently not supported.
@@ -92,4 +104,4 @@ Note that you don’t need to pass `device_map` when loading the model for train
 
 ### Example demo - running GPT2 1.5b on a Google Colab
 
-Check out the Google Colab [demo](https://colab.research.google.com/drive/1T1pOgewAWVpR9gKpaEWw4orOrzPFb3yM?usp=sharing) for running quantized models on a GTP2 model. The GPT2-1.5B model checkpoint is in FP32 which uses 6GB of memory. After quantization, it uses 1.5GB with 8-bit modules and 0.9GB with 4-bit modules.
+Check out the Google Colab [demo](https://colab.research.google.com/drive/1T1pOgewAWVpR9gKpaEWw4orOrzPFb3yM?usp=sharing) for running quantized models on a GTP2 model. The GPT2-1.5B model checkpoint is in FP32 which uses 6GB of memory. After quantization, it uses 1.6GB with 8-bit modules and 1.2GB with 4-bit modules.
