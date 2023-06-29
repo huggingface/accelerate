@@ -52,12 +52,12 @@ _PYTORCH_DATALOADER_KWARGS = {
     "worker_init_fn": None,
     "multiprocessing_context": None,
     "generator": None,
+    "prefetch_factor": 2,
+    "persistent_workers": False,
 }
 
 # kwargs added after by version
-_PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {
-    "1.7.0": {"prefetch_factor": 2, "persistent_workers": False},
-}
+_PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {}
 
 for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
     if is_torch_version(">=", v):
@@ -488,10 +488,6 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
                 shuffle = dataset._shuffle_enabled
         super().__init__(dataset, **kwargs)
         self.split_batches = split_batches
-        if is_torch_version("<", "1.8.0"):
-            raise ImportError(
-                f"Using `DataLoaderDispatcher` requires PyTorch 1.8.0 minimum. You have {torch.__version__}."
-            )
         if shuffle:
             torch.utils.data.graph_settings.apply_shuffle_settings(dataset, shuffle=shuffle)
 
@@ -692,7 +688,7 @@ def prepare_data_loader(
     </Tip>
     """
     if dispatch_batches is None:
-        if is_torch_version("<", "1.8.0") or not put_on_device:
+        if not put_on_device:
             dispatch_batches = False
         else:
             dispatch_batches = isinstance(dataloader.dataset, IterableDataset)

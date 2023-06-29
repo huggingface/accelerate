@@ -31,7 +31,7 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import WEIGHTS_NAME
 from .dataclasses import DistributedType
-from .imports import is_mps_available, is_safetensors_available, is_torch_version, is_xpu_available
+from .imports import is_mps_available, is_safetensors_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -39,7 +39,6 @@ from .tqdm import is_tqdm_available, tqdm
 if is_safetensors_available():
     from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
-    from safetensors.torch import storage_ptr, storage_size
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
@@ -120,7 +119,33 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
     """
-    return tensor.device, storage_ptr(tensor), storage_size(tensor)
+    _SIZE = {
+        torch.int64: 8,
+        torch.float32: 4,
+        torch.int32: 4,
+        torch.bfloat16: 2,
+        torch.float16: 2,
+        torch.int16: 2,
+        torch.uint8: 1,
+        torch.int8: 1,
+        torch.bool: 1,
+        torch.float64: 8,
+    }
+    try:
+        storage_ptr = tensor.untyped_storage().data_ptr()
+        storage_size = tensor.untyped_storage().nbytes()
+    except Exception:
+        # Fallback for torch==1.10
+        try:
+            storage_ptr = tensor.storage().data_ptr()
+            storage_size = tensor.storage().size() * _SIZE[tensor.dtype]
+        except NotImplementedError:
+            # Fallback for meta storage
+            storage_ptr = 0
+            # On torch >=2.0 this is the tensor size
+            storage_size = tensor.nelement() * _SIZE[tensor.dtype]
+
+    return tensor.device, storage_ptr, storage_size
 
 
 def shard_checkpoint(
@@ -1291,7 +1316,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, cache_enabled:
     """
     state = AcceleratorState()
     if native_amp:
-        if state.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
+        if state.mixed_precision == "fp16":
             return torch.autocast(device_type=state.device.type, dtype=torch.float16, cache_enabled=cache_enabled)
         elif state.mixed_precision == "bf16" and state.distributed_type in [
             DistributedType.NO,

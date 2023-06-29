@@ -23,7 +23,6 @@ import torch.nn as nn
 
 from accelerate import init_empty_weights
 from accelerate.test_utils import require_cuda, require_huggingface_suite, require_multi_gpu, require_safetensors
-from accelerate.test_utils.testing import require_torch_min_version
 from accelerate.utils.modeling import (
     check_device_map,
     clean_device_map,
@@ -55,7 +54,6 @@ def sequential_model(num_layers):
     return nn.Sequential(layers)
 
 
-@require_torch_min_version(version="1.9.0")
 class ModelingUtilsTester(unittest.TestCase):
     def check_set_module_tensor_for_device(self, model, device1, device2):
         self.assertEqual(model.linear1.weight.device, torch.device(device1))

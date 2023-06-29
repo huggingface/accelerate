@@ -17,7 +17,6 @@
 import torch
 
 from accelerate import PartialState
-from accelerate.utils.imports import is_torch_version
 from accelerate.utils.operations import broadcast, gather, gather_object, pad_across_processes, reduce
 
 
@@ -88,9 +87,8 @@ def main():
     state.print(f"State: {state}")
     state.print("testing gather")
     test_gather(state)
-    if is_torch_version(">=", "1.7.0"):
-        state.print("testing gather_object")
-        test_gather_object(state)
+    state.print("testing gather_object")
+    test_gather_object(state)
     state.print("testing broadcast")
     test_broadcast(state)
     state.print("testing pad_across_processes")

@@ -37,7 +37,6 @@ from accelerate.utils import (
     is_deepspeed_available,
     is_rich_available,
     is_sagemaker_available,
-    is_torch_version,
     is_xpu_available,
     patch_environment,
     prepare_deepspeed_cmd_env,
@@ -628,13 +627,7 @@ def simple_launcher(args):
 
 
 def multi_gpu_launcher(args):
-    if is_torch_version(">=", "1.9.1"):
-        import torch.distributed.run as distrib_run
-    else:
-        raise NotImplementedError(
-            "Native multi-GPU training through `accelerate launch` requires pytorch>=1.9.1. "
-            "Please call `torch.distributed.launch` directly instead."
-        )
+    import torch.distributed.run as distrib_run
 
     current_env = prepare_multi_gpu_env(args)
 
@@ -657,8 +650,8 @@ def multi_gpu_launcher(args):
 
 
 def deepspeed_launcher(args):
-    if is_torch_version(">=", "1.9.1"):
-        import torch.distributed.run as distrib_run
+    import torch.distributed.run as distrib_run
+
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
 
@@ -679,9 +672,6 @@ def deepspeed_launcher(args):
             else:
                 sys.exit(1)
     else:
-        if is_torch_version("<", "1.9.1"):
-            raise NotImplementedError("Multi-node training requires pytorch>=1.9.1")
-
         debug = getattr(args, "debug", False)
         args = _filter_args(
             args,
