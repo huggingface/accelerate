@@ -101,11 +101,9 @@ def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
     if is_tpu_available():
         return not ignore_tpu
-    if is_torch_version(">=", "1.10"):
-        if torch.cuda.is_available():
-            return torch.cuda.is_bf16_supported()
-        return True
-    return False
+    if torch.cuda.is_available():
+        return torch.cuda.is_bf16_supported()
+    return True
 
 
 def is_megatron_lm_available():

@@ -26,13 +26,11 @@ from accelerate.test_utils import (
     require_huggingface_suite,
     require_multi_gpu,
     require_single_gpu,
-    require_torch_min_version,
 )
-from accelerate.utils import get_launch_prefix, patch_environment
+from accelerate.utils import patch_environment
 
 
 @require_huggingface_suite
-@require_torch_min_version(version="1.8.0")
 class MetricTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
@@ -59,6 +57,6 @@ class MetricTester(unittest.TestCase):
     @require_multi_gpu
     def test_metric_gpu_multi(self):
         print(f"Found {torch.cuda.device_count()} devices.")
-        cmd = get_launch_prefix() + [f"--nproc_per_node={torch.cuda.device_count()}", self.test_file_path]
+        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())

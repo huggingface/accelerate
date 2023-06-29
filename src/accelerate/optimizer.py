@@ -18,7 +18,7 @@ import warnings
 import torch
 
 from .state import AcceleratorState, GradientState
-from .utils import DistributedType, honor_type, is_torch_version, is_tpu_available
+from .utils import DistributedType, honor_type, is_tpu_available
 
 
 if is_tpu_available(check_device=False):
@@ -106,23 +106,15 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def zero_grad(self, set_to_none=None):
         if self.gradient_state.sync_gradients:
-            if is_torch_version("<", "1.7.0"):
-                if set_to_none is not None:
-                    raise ValueError(
-                        "`set_to_none` for Optimizer.zero_grad` was introduced in PyTorch 1.7.0 and can't be used for "
-                        f"earlier versions (found version {torch.__version__})."
-                    )
-                self.optimizer.zero_grad()
+            accept_arg = "set_to_none" in inspect.signature(self.optimizer.zero_grad).parameters
+            if accept_arg:
+                if set_to_none is None:
+                    set_to_none = False
+                self.optimizer.zero_grad(set_to_none=set_to_none)
             else:
-                accept_arg = "set_to_none" in inspect.signature(self.optimizer.zero_grad).parameters
-                if accept_arg:
-                    if set_to_none is None:
-                        set_to_none = False
-                    self.optimizer.zero_grad(set_to_none=set_to_none)
-                else:
-                    if set_to_none is not None:
-                        raise ValueError("`set_to_none` for Optimizer.zero_grad` is not supported by this optimizer.")
-                    self.optimizer.zero_grad()
+                if set_to_none is not None:
+                    raise ValueError("`set_to_none` for Optimizer.zero_grad` is not supported by this optimizer.")
+                self.optimizer.zero_grad()
 
     def step(self, closure=None):
         if self.gradient_state.sync_gradients:

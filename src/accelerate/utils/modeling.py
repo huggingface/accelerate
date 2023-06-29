@@ -31,7 +31,7 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import WEIGHTS_NAME
 from .dataclasses import DistributedType
-from .imports import is_mps_available, is_safetensors_available, is_torch_version, is_xpu_available
+from .imports import is_mps_available, is_safetensors_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -1250,7 +1250,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, cache_enabled:
     """
     state = AcceleratorState()
     if native_amp:
-        if state.mixed_precision == "fp16" and is_torch_version(">=", "1.10"):
+        if state.mixed_precision == "fp16":
             return torch.autocast(device_type=state.device.type, dtype=torch.float16, cache_enabled=cache_enabled)
         elif state.mixed_precision == "bf16" and state.distributed_type in [
             DistributedType.NO,

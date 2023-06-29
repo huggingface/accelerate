@@ -38,7 +38,6 @@ from .utils import (
     offload_state_dict,
     retie_parameters,
 )
-from .utils.versions import is_torch_version
 
 
 @contextmanager
@@ -69,8 +68,6 @@ def init_empty_weights(include_buffers: bool = False):
 
     </Tip>
     """
-    if not is_torch_version(">=", "1.9.0"):
-        raise NotImplementedError("Initializing empty weights to a meta device requires torch >= 1.9.0")
     with init_on_device(torch.device("meta"), include_buffers=include_buffers) as f:
         yield f
 
@@ -171,8 +168,6 @@ def cpu_offload(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
-    if not is_torch_version(">=", "1.9.0"):
-        raise NotImplementedError("CPU offloading requires torch >= 1.9.0")
     if execution_device is None:
         execution_device = next(iter(model.parameters())).device
     if state_dict is None:
@@ -262,8 +257,6 @@ def disk_offload(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
-    if not is_torch_version(">=", "1.9.0"):
-        raise NotImplementedError("Disk offloading requires torch >= 1.9.0")
     if not os.path.isdir(offload_dir) or not os.path.isfile(os.path.join(offload_dir, "index.json")):
         offload_state_dict(offload_dir, model.state_dict())
     if execution_device is None:
@@ -334,9 +327,6 @@ def dispatch_model(
     # in the unique device and the user can decide where to dispatch the model.
     # If the model is quantized, we always force-dispatch the model
     if (len(set(device_map.values())) > 1) or is_quantized:
-        if not is_torch_version(">=", "1.9.0"):
-            raise NotImplementedError("Model dispatching requires torch >= 1.9.0")
-
         if main_device is None:
             if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
                 main_device = "cpu"
@@ -478,8 +468,6 @@ def load_checkpoint_and_dispatch(
     ... )
     ```
     """
-    if not is_torch_version(">=", "1.9.0"):
-        raise NotImplementedError("Loading and dispatching requires torch >= 1.9.0")
     if isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
         raise ValueError(
             "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "

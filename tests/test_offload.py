@@ -22,7 +22,6 @@ import torch.nn as nn
 from accelerate.utils import (
     OffloadedWeightsLoader,
     extract_submodules_state_dict,
-    is_torch_version,
     load_offloaded_weight,
     offload_state_dict,
     offload_weight,
@@ -55,9 +54,7 @@ class OffloadTester(unittest.TestCase):
                 # TODO: add tests on the fact weights are properly loaded
 
     def test_offload_weight(self):
-        dtypes = [torch.float16, torch.float32]
-        if is_torch_version(">=", "1.10"):
-            dtypes.append(torch.bfloat16)
+        dtypes = [torch.float16, torch.float32, torch.bfloat16]
 
         for dtype in dtypes:
             weight = torch.randn(2, 3, dtype=dtype)

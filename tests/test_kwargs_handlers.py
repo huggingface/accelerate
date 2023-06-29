@@ -22,7 +22,7 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import execute_subprocess_async, require_cuda, require_multi_gpu
-from accelerate.utils import KwargsHandler, get_launch_prefix
+from accelerate.utils import KwargsHandler
 
 
 @dataclass
@@ -60,8 +60,7 @@ class DataLoaderTester(unittest.TestCase):
 
     @require_multi_gpu
     def test_ddp_kwargs(self):
-        cmd = get_launch_prefix()
-        cmd += [f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
+        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd, env=os.environ.copy())
 
 

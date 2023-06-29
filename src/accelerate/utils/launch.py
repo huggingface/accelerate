@@ -22,24 +22,10 @@ import torch
 
 from ..commands.config.config_args import SageMakerConfig
 from ..commands.config.config_utils import DYNAMO_BACKENDS
-from ..utils import DynamoBackend, PrecisionType, is_ipex_available, is_torch_version, is_xpu_available
+from ..utils import DynamoBackend, PrecisionType, is_ipex_available, is_xpu_available
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 from ..utils.other import is_port_in_use, merge_dicts
 from .dataclasses import DistributedType, SageMakerDistributedType
-
-
-def get_launch_prefix():
-    """
-    Grabs the correct launcher for starting a distributed command, such as either `torchrun`, `python -m
-    torch.distributed.run`, etc
-    """
-    if is_torch_version(">=", "1.10.0"):
-        cmd = ["torchrun"]
-    elif is_torch_version(">=", "1.9.0"):
-        cmd = [sys.executable, "-m", "torch.distributed.run"]
-    else:
-        cmd = [sys.executable, "-m", "torch.distributed.launch", "--use_env"]
-    return cmd
 
 
 def _filter_args(args, parser, default_args=[]):

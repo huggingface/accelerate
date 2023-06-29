@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
 from accelerate.test_utils import execute_subprocess_async, require_cuda
-from accelerate.utils import ProjectConfiguration, get_launch_prefix, set_seed
+from accelerate.utils import ProjectConfiguration, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -255,8 +255,7 @@ class CheckpointTest(unittest.TestCase):
 
     @require_cuda
     def test_map_location(self):
-        cmd = get_launch_prefix()
-        cmd += [f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
+        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd, env=os.environ.copy())
 
 
