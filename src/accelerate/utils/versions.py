@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
+import importlib.metadata
 from typing import Union
 
 from packaging.version import Version, parse
@@ -20,12 +20,7 @@ from packaging.version import Version, parse
 from .constants import STR_OPERATION_TO_FUNC
 
 
-if sys.version_info < (3, 8):
-    import importlib_metadata
-else:
-    import importlib.metadata as importlib_metadata
-
-torch_version = parse(importlib_metadata.version("torch"))
+torch_version = parse(importlib.metadata.version("torch"))
 
 
 def compare_versions(library_or_version: Union[str, Version], operation: str, requirement_version: str):
@@ -44,7 +39,7 @@ def compare_versions(library_or_version: Union[str, Version], operation: str, re
         raise ValueError(f"`operation` must be one of {list(STR_OPERATION_TO_FUNC.keys())}, received {operation}")
     operation = STR_OPERATION_TO_FUNC[operation]
     if isinstance(library_or_version, str):
-        library_or_version = parse(importlib_metadata.version(library_or_version))
+        library_or_version = parse(importlib.metadata.version(library_or_version))
     return operation(library_or_version, parse(requirement_version))
 
 
