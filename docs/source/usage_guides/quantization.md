@@ -62,11 +62,11 @@ from accelerate.utils import BnbQuantizationConfig
 quantization_config = BnbQuantizationConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True, bnb_4bit_quant_type="nf4")
 ```
 
-To quantize your empty model with the selected configuration, you need to use [`~utils.load_and_quantize`]. 
+To quantize your empty model with the selected configuration, you need to use [`~utils.load_and_quantize_model`]. 
 
 ```py
-from accelerate.utils import load_and_quantize
-quantized_model = load_and_quantize(empty_model, weight_location=weight_location, quantization_config=quantization_config, device_map = "auto")
+from accelerate.utils import load_and_quantize_model
+quantized_model = load_and_quantize_model(empty_model, weight_location=weight_location, quantization_config=quantization_config, device_map = "auto")
 ```
 
 ### Saving and loading 8-bit model
@@ -79,7 +79,7 @@ accelerate = Accelerator()
 new_weight_location = "path/to/save_directory"
 accelerate.save_model(quantized_model, new_weight_location)
 
-quantized_model_from_saved = load_and_quantize(empty_model, weight_location=new_weight_location, quantization_config=quantization_config, device_map = "auto")
+quantized_model_from_saved = load_and_quantize_model(empty_model, weight_location=new_weight_location, quantization_config=quantization_config, device_map = "auto")
 ```
 
 Note that 4-bit model serialization is currently not supported.
