@@ -111,3 +111,11 @@ These include utilities that are useful while using PyTorch with XLA.
 These include utilities that are useful to load checkpoints.
 
 [[autodoc]] utils.load_checkpoint_in_model
+
+## Quantization
+
+These include utilities that are useful to quantize model.
+
+[[autodoc]] utils.load_and_quantize
+
+[[autodoc]] utils.BnbQuantizationConfig
