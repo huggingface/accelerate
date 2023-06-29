@@ -1331,8 +1331,6 @@ class Accelerator:
                 new_forward = torch.cuda.amp.autocast(dtype=torch.float16)(model_forward_func)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
                 new_forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model_forward_func)
-            else:
-                new_forward = torch.cuda.amp.autocast()(model_forward_func)
 
             if hasattr(model.forward, "__func__"):
                 model.forward = MethodType(new_forward, model)
