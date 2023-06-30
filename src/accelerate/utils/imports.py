@@ -106,6 +106,26 @@ def is_bf16_available(ignore_tpu=False):
     return True
 
 
+def is_4bit_bnb_available():
+    package_exists = _is_package_available("bitsandbytes")
+    if package_exists:
+        bnb_version = version.parse(importlib.metadata.version("bitsandbytes"))
+        return compare_versions(bnb_version, ">=", "0.39.0")
+    return False
+
+
+def is_8bit_bnb_available():
+    package_exists = _is_package_available("bitsandbytes")
+    if package_exists:
+        bnb_version = version.parse(importlib.metadata.version("bitsandbytes"))
+        return compare_versions(bnb_version, ">=", "0.37.2")
+    return False
+
+
+def is_bnb_available():
+    return _is_package_available("bitsandbytes")
+
+
 def is_megatron_lm_available():
     if strtobool(os.environ.get("ACCELERATE_USE_MEGATRON_LM", "False")) == 1:
         package_exists = importlib.util.find_spec("megatron") is not None

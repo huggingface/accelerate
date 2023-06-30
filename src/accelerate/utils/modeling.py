@@ -231,6 +231,7 @@ def set_module_tensor_to_device(
     device: Union[int, str, torch.device],
     value: Optional[torch.Tensor] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
+    fp16_statistics: Optional[torch.HalfTensor] = None,
 ):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
@@ -248,6 +249,8 @@ def set_module_tensor_to_device(
         dtype (`torch.dtype`, *optional*):
             If passed along the value of the parameter will be cast to this `dtype`. Otherwise, `value` will be cast to
             the dtype of the existing parameter in the model.
+        fp16_statistics (`torch.HalfTensor`, *optional*):
+            The list of fp16 statistics to set on the module, used for 8 bit model serialization.
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -274,19 +277,27 @@ def set_module_tensor_to_device(
         elif not str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
             value = value.to(dtype)
 
+    param = module._parameters[tensor_name] if tensor_name in module._parameters else None
+    param_cls = type(param)
+
+    device_quantization = None
     with torch.no_grad():
+        # leave it on cpu first before moving them to cuda
+        if param is not None and param.device.type != "cuda" and param_cls.__name__ in ["Int8Params", "FP4Params"]:
+            device_quantization = device
+            device = "cpu"
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
                 new_value = new_value.to(dtype)
                 if not is_buffer:
-                    param_cls = type(module._parameters[tensor_name])
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
             new_value = value.to(device)
         else:
             new_value = torch.tensor(value, device=device)
-
+        if device_quantization is not None:
+            device = device_quantization
         if is_buffer:
             module._buffers[tensor_name] = new_value
         elif value is not None or torch.device(device) != module._parameters[tensor_name].device:
@@ -300,6 +311,9 @@ def set_module_tensor_to_device(
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
             module._parameters[tensor_name] = new_value
+
+            if fp16_statistics is not None:
+                setattr(module.weight, "SCB", fp16_statistics.to(device))
 
             if module.__class__.__name__ == "Linear8bitLt" and getattr(module.weight, "SCB", None) is None:
                 # quantize only if necessary
@@ -1115,7 +1129,7 @@ def load_state_dict(checkpoint_file, device_map=None):
 
             return tensors
     else:
-        return torch.load(checkpoint_file)
+        return torch.load(checkpoint_file, map_location=torch.device("cpu"))
 
 
 def load_checkpoint_in_model(
@@ -1126,6 +1140,7 @@ def load_checkpoint_in_model(
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: bool = False,
     offload_buffers: bool = False,
+    keep_in_fp32_modules: List[str] = None,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -1156,8 +1171,11 @@ def load_checkpoint_in_model(
         offload_state_dict (`bool`, *optional*, defaults to `False`):
             If `True`, will temporarily offload the CPU state dict on the hard drive to avoid getting out of CPU RAM if
             the weight of the CPU state dict + the biggest shard does not fit.
-        offload_buffers (`bool`, *optional*, defaults to `False):
+        offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to include the buffers in the weights offloaded to disk.
+        keep_in_fp32_modules(`List[str]`, *optional*):
+            A list of the modules that we keep in `torch.float32` dtype.
+
     """
     tied_params = find_tied_parameters(model)
 
@@ -1219,7 +1237,6 @@ def load_checkpoint_in_model(
         state_dict_index = {}
 
     buffer_names = [name for name, _ in model.named_buffers()]
-
     for checkpoint_file in checkpoint_files:
         checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
         if device_map is None:
@@ -1234,20 +1251,44 @@ def load_checkpoint_in_model(
                     # TODO: group all errors and raise at the end.
                     raise ValueError(f"{param_name} doesn't have any device set.")
                 param_device = device_map[module_name]
+                new_dtype = dtype
+                if dtype is not None and torch.is_floating_point(param):
+                    if keep_in_fp32_modules is not None and dtype == torch.float16:
+                        proceed = False
+                        for key in keep_in_fp32_modules:
+                            if ((key in param_name) and (key + "." in param_name)) or key == param_name:
+                                proceed = True
+                                break
+                        if proceed:
+                            new_dtype = torch.float32
+
+                if "weight" in param_name and param_name.replace("weight", "SCB") in checkpoint.keys():
+                    if param.dtype == torch.int8:
+                        fp16_statistics = checkpoint[param_name.replace("weight", "SCB")]
+                else:
+                    fp16_statistics = None
 
                 if param_device == "disk":
                     if offload_buffers or param_name not in buffer_names:
-                        if dtype is None:
-                            dtype = param.dtype
-                        set_module_tensor_to_device(model, param_name, "meta", dtype=dtype)
+                        if new_dtype is None:
+                            new_dtype = param.dtype
+                        set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
                     offload_weight(param, param_name, offload_folder, index=offload_index)
                 elif param_device == "cpu" and offload_state_dict:
-                    if dtype is None:
-                        dtype = param.dtype
-                    set_module_tensor_to_device(model, param_name, "meta", dtype=dtype)
+                    if new_dtype is None:
+                        new_dtype = param.dtype
+                    set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
                     offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
                 else:
-                    set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=dtype)
+                    if "SCB" not in param_name:
+                        set_module_tensor_to_device(
+                            model,
+                            param_name,
+                            param_device,
+                            value=param,
+                            dtype=new_dtype,
+                            fp16_statistics=fp16_statistics,
+                        )
 
         # Force Python to clean up.
         del checkpoint

@@ -11,7 +11,9 @@ from .constants import (
     WEIGHTS_NAME,
 )
 from .dataclasses import (
+    BnbQuantizationConfig,
     ComputeEnvironment,
+    CustomDtype,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -34,8 +36,11 @@ from .dataclasses import (
 from .environment import get_int_from_env, parse_choice_from_env, parse_flag_from_env
 from .imports import (
     get_ccl_version,
+    is_4bit_bnb_available,
+    is_8bit_bnb_available,
     is_aim_available,
     is_bf16_available,
+    is_bnb_available,
     is_boto3_available,
     is_ccl_available,
     is_comet_ml_available,
@@ -56,7 +61,6 @@ from .imports import (
     is_xpu_available,
 )
 from .modeling import (
-    CustomDtype,
     check_device_map,
     check_tied_parameters_in_config,
     check_tied_parameters_on_same_device,
@@ -123,6 +127,7 @@ if is_deepspeed_available():
         HfDeepSpeedConfig,
     )
 
+from .bnb import has_4bit_bnb_layers, load_and_quantize_model
 from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, save_fsdp_model, save_fsdp_optimizer
 from .launch import (
     PrepareForLaunch,

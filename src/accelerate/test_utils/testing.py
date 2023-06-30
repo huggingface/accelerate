@@ -30,6 +30,7 @@ import torch
 from ..state import AcceleratorState, PartialState
 from ..utils import (
     gather,
+    is_bnb_available,
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
@@ -112,6 +113,13 @@ def require_huggingface_suite(test_case):
     return unittest.skipUnless(
         is_transformers_available() and is_datasets_available(), "test requires the Hugging Face suite"
     )(test_case)
+
+
+def require_bnb(test_case):
+    """
+    Decorator marking a test that requires bitsandbytes. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(is_bnb_available(), "test requires the bitsandbytes library")(test_case)
 
 
 def require_tpu(test_case):
