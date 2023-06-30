@@ -149,8 +149,8 @@ model = accelerator.prepare(model)
 
 # ...fine-tune with PyTorch...
 
-model = accelerator.unwrap_model(model)
-model.save_pretrained(
+unwrapped_model = accelerator.unwrap_model(model)
+unwrapped_model.save_pretrained(
     "path/to/my_model_directory",
     is_main_process=accelerator.is_main_process,
     save_function=accelerator.save,
