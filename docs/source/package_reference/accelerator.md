@@ -137,6 +137,34 @@ Use [`~Accelerator.save`] instead of `torch.save`:
 + accelerator.save(state_dict, "my_state.pkl")
 ```
 
+#### `transformers` models
+
+If you are using models from the [🤗 Transformers](https://huggingface.co/docs/transformers/) library, you can use the `.save_pretrained()` method.
+
+```python
+from transformers import AutoModel
+
+model = AutoModel.from_pretrained("bert-base-cased")
+model = accelerator.prepare(model)
+
+# ...fine-tune with PyTorch...
+
+model = accelerator.unwrap_model(model)
+model.save_pretrained(
+    "path/to/my_model_directory",
+    is_main_process=accelerator.is_main_process,
+    save_function=accelerator.save,
+)
+```
+
+This will ensure your model stays compatible with other 🤗 Transformers functionality like the `.from_pretrained()` method.
+
+```python
+from transformers import AutoModel
+
+model = AutoModel.from_pretrained("path/to/my_model_directory")
+```
+
 ### Operations
 
 Use [`~Accelerator.clip_grad_norm_`] instead of ``torch.nn.utils.clip_grad_norm_`` and [`~Accelerator.clip_grad_value_`] instead of ``torch.nn.utils.clip_grad_value``
