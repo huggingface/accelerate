@@ -99,43 +99,47 @@ and `first_state_dict.bin` containing the weights for `"linear1.weight"` and `"l
 
 The second tool 🤗 Accelerate introduces is a function [`load_checkpoint_and_dispatch`], that will allow you to load a checkpoint inside your empty model. This supports full checkpoints (a single file containing the whole state dict) as well as sharded checkpoints. It will also automatically dispatch those weights across the devices you have available (GPUs, CPU RAM), so if you are loading a sharded checkpoint, the maximum RAM usage will be the size of the biggest shard.
 
-Here is how we can use this to load the [GPT-J-6B](https://huggingface.co/EleutherAI/gpt-j-6B) model. You clone the sharded version of this model with:
+Here is how we can use this to load the [GPT2-1.5B](https://huggingface.co/marcsun13/gpt2-xl-linear-sharded) model.
+
+Let's download the sharded version of this model.
 
 ```bash
-git clone https://huggingface.co/sgugger/sharded-gpt-j-6B
-cd sharded-gpt-j-6B
-git-lfs install
-git lfs pull
+pip install huggingface_hub
 ```
 
-then we can initialize the model with
+```py
+from huggingface_hub import snapshot_download
+checkpoint = "marcsun13/gpt2-xl-linear-sharded"
+weights_location = snapshot_download(repo_id=checkpoint)
+```
+
+In order to initialize the model, we will use the library minGTP. 
+
+```bash
+git clone https://github.com/karpathy/minGPT.git
+pip install minGPT/
+```
 
 ```py
 from accelerate import init_empty_weights
-from transformers import AutoConfig, AutoModelForCausalLM
+from mingpt.model import GPT
 
-checkpoint = "EleutherAI/gpt-j-6B"
-config = AutoConfig.from_pretrained(checkpoint)
+model_config = GPT.get_default_config()
+model_config.model_type = 'gpt2-xl'
+model_config.vocab_size = 50257
+model_config.block_size = 1024
 
 with init_empty_weights():
-    model = AutoModelForCausalLM.from_config(config)
+    model = GPT(model_config)
 ```
 
-Note that loading the model with `from_config` in Transformers does not tie the weights, which may cause an issue when
-loading a checkpoint that does not contain duplicate keys for the tied weights. So you should tie the weights before
-loading the checkpoint.
-
-```py
-model.tie_weights()
-```
-
-Then load the checkpoint we just downloaded with:
+Then, load the checkpoint we just downloaded with:
 
 ```py
 from accelerate import load_checkpoint_and_dispatch
 
 model = load_checkpoint_and_dispatch(
-    model, "sharded-gpt-j-6B", device_map="auto", no_split_module_classes=["GPTJBlock"]
+    model, checkpoint = weights_location, device_map="auto", no_split_module_classes=['Block']
 )
 ```
 
@@ -144,7 +148,7 @@ By passing `device_map="auto"`, we tell 🤗 Accelerate to determine automatical
 - if we still need space, we store the remaining weights on the CPU
 - if there is not enough RAM, we store the remaining weights on the hard drive as memory-mapped tensors
 
-`no_split_module_classes=["GPTJBlock"]` indicates that the modules that are `GPTJBlock` should not be split on different devices. You should set here all blocks that include a residual connection of some kind.
+`no_split_module_classes=["Block"]` indicates that the modules that are `Block` should not be split on different devices. You should set here all blocks that include a residual connection of some kind.
 
 You can see the `device_map` that 🤗 Accelerate picked by accessing the `hf_device_map` attribute of your model:
 
@@ -154,6 +158,7 @@ model.hf_device_map
 
 ```python out
 {'transformer.wte': 0,
+ 'transformer.wpe': 0,
  'transformer.drop': 0,
  'transformer.h.0': 0,
  'transformer.h.1': 0,
@@ -171,26 +176,46 @@ model.hf_device_map
  'transformer.h.13': 0,
  'transformer.h.14': 0,
  'transformer.h.15': 0,
- 'transformer.h.16': 0,
- 'transformer.h.17': 0,
- 'transformer.h.18': 0,
- 'transformer.h.19': 0,
- 'transformer.h.20': 0,
- 'transformer.h.21': 0,
- 'transformer.h.22': 0,
- 'transformer.h.23': 0,
- 'transformer.h.24': 1,
- 'transformer.h.25': 1,
- 'transformer.h.26': 1,
- 'transformer.h.27': 1,
- 'transformer.ln_f': 1,
+ 'transformer.h.16': 0, 
+ 'transformer.h.17': 0, 
+ 'transformer.h.18': 0, 
+ 'transformer.h.19': 0, 
+ 'transformer.h.20': 0, 
+ 'transformer.h.21': 0, 
+ 'transformer.h.22': 1, 
+ 'transformer.h.23': 1, 
+ 'transformer.h.24': 1, 
+ 'transformer.h.25': 1, 
+ 'transformer.h.26': 1, 
+ 'transformer.h.27': 1, 
+ 'transformer.h.28': 1, 
+ 'transformer.h.29': 1, 
+ 'transformer.h.30': 1, 
+ 'transformer.h.31': 1, 
+ 'transformer.h.32': 1, 
+ 'transformer.h.33': 1, 
+ 'transformer.h.34': 1, 
+ 'transformer.h.35': 1, 
+ 'transformer.h.36': 1, 
+ 'transformer.h.37': 1, 
+ 'transformer.h.38': 1, 
+ 'transformer.h.39': 1, 
+ 'transformer.h.40': 1, 
+ 'transformer.h.41': 1, 
+ 'transformer.h.42': 1, 
+ 'transformer.h.43': 1, 
+ 'transformer.h.44': 1, 
+ 'transformer.h.45': 1, 
+ 'transformer.h.46': 1, 
+ 'transformer.h.47': 1, 
+ 'transformer.ln_f': 1, 
  'lm_head': 1}
  ```
 
 You can also design your `device_map` yourself if you prefer to explicitly decide where each layer should be. In this case, the command above becomes:
 
 ```py
-model = load_checkpoint_and_dispatch(model, "sharded-gpt-j-6B", device_map=my_device_map)
+model = load_checkpoint_and_dispatch(model, checkpoint = weights_location, device_map=my_device_map)
 ```
 
 ### Run the model
@@ -198,13 +223,12 @@ model = load_checkpoint_and_dispatch(model, "sharded-gpt-j-6B", device_map=my_de
 Now that we have done this, our model lies across several devices, and maybe the hard drive. But it can still be used as a regular PyTorch model:
 
 ```py
-from transformers import AutoTokenizer
+from mingpt.bpe import BPETokenizer
+tokenizer = BPETokenizer()
+inputs = tokenizer("Hello, my name is").to(0)
 
-tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-inputs = tokenizer("Hello, my name is", return_tensors="pt")
-inputs = inputs.to(0)
-output = model.generate(inputs["input_ids"])
-tokenizer.decode(output[0].tolist())
+outputs = model.generate(x1, max_new_tokens=10, do_sample=False)[0]
+tokenizer.decode(outputs.cpu().squeeze())
 ```
 
 Behind the scenes, 🤗 Accelerate added hooks to the model, so that:
