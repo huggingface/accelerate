@@ -27,19 +27,25 @@ To learn more about how the `bitsandbytes` quantization works, check out the blo
 You will need to install the following requirements:
 
 - Install `bitsandbytes` library
-`pip install bitsandbytes==0.39.0`
+```
+pip install bitsandbytes==0.39.0
+```
 - Install latest `accelerate` from source
-`pip install git+https://github.com/huggingface/accelerate.git`
+```
+pip install git+https://github.com/huggingface/accelerate.git
+```
 - Install `minGPT` and `huggingface_hub` to run examples
-`git clone https://github.com/karpathy/minGPT.git`
-`pip install minGPT/`
-`pip install huggingface_hub`
+```
+git clone https://github.com/karpathy/minGPT.git
+pip install minGPT/
+pip install huggingface_hub
+```
 
 ### How it works
 
 First, we need to initialize our model. To save memory, we can initialize an empty model using the context manager [`init_empty_weights`]. 
-Let's take the GPT2 model from minGPT library
 
+Let's take the GPT2 model from minGPT library.
 ```py
 from accelerate import init_empty_weights
 from mingpt.model import GPT
@@ -60,7 +66,7 @@ from huggingface_hub import snapshot_download
 weights_location = snapshot_download(repo_id="marcsun13/gpt2-xl-linear-sharded")
 ```
 
-Finally, you need to set your quantization configuration with ['~utils.BnbQuantizationConfig'].
+Finally, you need to set your quantization configuration with [`~utils.BnbQuantizationConfig`].
 
 Here's an example for 8-bit quantization:
 ```py
