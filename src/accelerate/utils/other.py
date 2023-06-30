@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import socket
 from contextlib import contextmanager
 
 import torch
@@ -170,3 +171,14 @@ def merge_dicts(source, destination):
             destination[key] = value
 
     return destination
+
+
+def is_port_in_use(port: int = None) -> bool:
+    """
+    Checks if a port is in use on `localhost`. Useful for checking if multiple `accelerate launch` commands have been
+    run and need to see if the port is already in use.
+    """
+    if port is None:
+        port = 29500
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("localhost", port)) == 0

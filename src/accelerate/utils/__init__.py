@@ -127,7 +127,6 @@ from .fsdp_utils import load_fsdp_model, load_fsdp_optimizer, save_fsdp_model, s
 from .launch import (
     PrepareForLaunch,
     _filter_args,
-    get_launch_prefix,
     prepare_deepspeed_cmd_env,
     prepare_multi_gpu_env,
     prepare_sagemager_args_inputs,
@@ -156,6 +155,7 @@ from .memory import find_executable_batch_size, release_memory
 from .other import (
     extract_model_from_parallel,
     get_pretty_name,
+    is_port_in_use,
     merge_dicts,
     patch_environment,
     save,

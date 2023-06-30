@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import importlib
+import importlib.metadata
 import os
-import sys
 import warnings
 from distutils.util import strtobool
 from functools import lru_cache
@@ -25,13 +25,6 @@ from packaging.version import parse
 
 from .environment import parse_flag_from_env
 from .versions import compare_versions, is_torch_version
-
-
-# The package importlib_metadata is in a different place, depending on the Python version.
-if sys.version_info < (3, 8):
-    import importlib_metadata
-else:
-    import importlib.metadata as importlib_metadata
 
 
 try:
@@ -51,9 +44,9 @@ def _is_package_available(pkg_name):
     package_exists = importlib.util.find_spec(pkg_name) is not None
     if package_exists:
         try:
-            _ = importlib_metadata.metadata(pkg_name)
+            _ = importlib.metadata.metadata(pkg_name)
             return True
-        except importlib_metadata.PackageNotFoundError:
+        except importlib.metadata.PackageNotFoundError:
             return False
 
 
@@ -77,14 +70,14 @@ def is_ccl_available():
 
 
 def get_ccl_version():
-    return importlib_metadata.version("oneccl_bind_pt")
+    return importlib.metadata.version("oneccl_bind_pt")
 
 
 def is_fp8_available():
     return _is_package_available("transformer_engine")
 
 
-@lru_cache()
+@lru_cache
 def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     # Due to bugs on the amp series GPUs, we disable torch-xla on them
@@ -108,11 +101,9 @@ def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
     if is_tpu_available():
         return not ignore_tpu
-    if is_torch_version(">=", "1.10"):
-        if torch.cuda.is_available():
-            return torch.cuda.is_bf16_supported()
-        return True
-    return False
+    if torch.cuda.is_available():
+        return torch.cuda.is_bf16_supported()
+    return True
 
 
 def is_megatron_lm_available():
@@ -120,7 +111,7 @@ def is_megatron_lm_available():
         package_exists = importlib.util.find_spec("megatron") is not None
         if package_exists:
             try:
-                megatron_version = parse(importlib_metadata.version("megatron-lm"))
+                megatron_version = parse(importlib.metadata.version("megatron-lm"))
                 return compare_versions(megatron_version, ">=", "2.2.0")
             except Exception as e:
                 warnings.warn(f"Parse Megatron version failed. Exception:{e}")
@@ -190,13 +181,13 @@ def is_ipex_available():
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
 
-    _torch_version = importlib_metadata.version("torch")
+    _torch_version = importlib.metadata.version("torch")
     if importlib.util.find_spec("intel_extension_for_pytorch") is None:
         return False
     _ipex_version = "N/A"
     try:
-        _ipex_version = importlib_metadata.version("intel_extension_for_pytorch")
-    except importlib_metadata.PackageNotFoundError:
+        _ipex_version = importlib.metadata.version("intel_extension_for_pytorch")
+    except importlib.metadata.PackageNotFoundError:
         return False
     torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
     ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
@@ -209,7 +200,7 @@ def is_ipex_available():
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_xpu_available(check_device=False):
     "check if user disables it explicitly"
     if not parse_flag_from_env("ACCELERATE_USE_XPU", default=True):

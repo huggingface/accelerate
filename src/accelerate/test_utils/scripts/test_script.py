@@ -33,7 +33,6 @@ from accelerate.utils import (
     gather,
     is_bf16_available,
     is_ipex_available,
-    is_torch_version,
     is_xpu_available,
     set_seed,
     synchronize_rng_states,
@@ -561,7 +560,7 @@ def main():
     if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
-    if state.distributed_type != DistributedType.TPU and is_torch_version(">=", "1.8.0"):
+    if state.distributed_type != DistributedType.TPU:
         central_dl_preparation_check()
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
