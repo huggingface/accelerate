@@ -202,7 +202,7 @@ run the script to automatically launch multi GPU training on remote hardware.
 This script uses [Runhouse](https://github.com/run-house/runhouse) to launch on self-hosted hardware (e.g. in your own
 cloud account or on-premise cluster) but there are other options for running remotely as well. Runhouse can be installed
 with `pip install runhouse`, and you can refer to
-[hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/main/rh_primitives/cluster.html#hardware-setup)
+[hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/latest/api/python/cluster.html#hardware-setup)
 for hardware setup instructions, or this
 [Colab tutorial](https://colab.research.google.com/drive/1qVwYyLTCPYPSdz9ZX7BZl9Qm0A3j7RJe) for a more in-depth walkthrough.
 
