@@ -27,15 +27,15 @@ To learn more about how the `bitsandbytes` quantization works, check out the blo
 You will need to install the following requirements:
 
 - Install `bitsandbytes` library
-```
+```bash
 pip install bitsandbytes==0.39.0
 ```
 - Install latest `accelerate` from source
-```
+```bash
 pip install git+https://github.com/huggingface/accelerate.git
 ```
 - Install `minGPT` and `huggingface_hub` to run examples
-```
+```bash
 git clone https://github.com/karpathy/minGPT.git
 pip install minGPT/
 pip install huggingface_hub
