@@ -71,7 +71,7 @@ def load_and_quantize_model(
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
-         max_memory (`Dict`, *optional*):
+        max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
         offload_folder (`str` or `os.PathLike`, *optional*):
             If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
