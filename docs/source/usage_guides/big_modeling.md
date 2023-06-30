@@ -139,7 +139,7 @@ Then, load the checkpoint we just downloaded with:
 from accelerate import load_checkpoint_and_dispatch
 
 model = load_checkpoint_and_dispatch(
-    model, checkpoint = weights_location, device_map="auto", no_split_module_classes=['Block']
+    model, checkpoint=weights_location, device_map="auto", no_split_module_classes=['Block']
 )
 ```
 
@@ -215,7 +215,7 @@ model.hf_device_map
 You can also design your `device_map` yourself if you prefer to explicitly decide where each layer should be. In this case, the command above becomes:
 
 ```py
-model = load_checkpoint_and_dispatch(model, checkpoint = weights_location, device_map=my_device_map)
+model = load_checkpoint_and_dispatch(model, checkpoint=weights_location, device_map=my_device_map)
 ```
 
 ### Run the model
