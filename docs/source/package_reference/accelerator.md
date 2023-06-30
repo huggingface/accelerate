@@ -120,23 +120,24 @@ Use [`~Accelerator.wait_for_everyone`] to make sure all processes join that poin
 
 ### Saving and loading
 
-Use [`~Accelerator.unwrap_model`] before saving to remove all special model wrappers added during the distributed process. 
-
 ```python
 model = MyModel()
 model = accelerator.prepare(model)
-# Unwrap
-model = accelerator.unwrap_model(model)
 ```
 
-Use [`~Accelerator.save`] instead of `torch.save`:
+Use [`~Accelerator.save_model`] instead of `torch.save` to save a model. It will remove all model wrappers added during the distributed process, get the state_dict of the model and save it.
 
 ```diff
-  state_dict = model.state_dict()
 - torch.save(state_dict, "my_state.pkl")
-+ accelerator.save(state_dict, "my_state.pkl")
++ accelerator.save_model(model, save_directory)
 ```
 
+[`~Accelerator.save_model`] can also save a model into sharded checkpoints or with safetensors format.
+Here is an example: 
+
+```python
+accelerator.save_model(model, save_directory, max_shard_size="1GB", safe_serialization=True)
+```
 ### Operations
 
 Use [`~Accelerator.clip_grad_norm_`] instead of ``torch.nn.utils.clip_grad_norm_`` and [`~Accelerator.clip_grad_value_`] instead of ``torch.nn.utils.clip_grad_value``
