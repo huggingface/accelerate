@@ -36,6 +36,7 @@ from accelerate.utils import (
     _filter_args,
     is_bf16_available,
     is_deepspeed_available,
+    is_npu_available,
     is_rich_available,
     is_sagemaker_available,
     is_torch_version,
@@ -828,7 +829,7 @@ def _validate_launch_command(args):
         ):
             args.use_deepspeed = defaults.distributed_type == DistributedType.DEEPSPEED
             args.multi_gpu = (
-                True if defaults.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU) else False
+                True if defaults.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_XPU) else False
             )
             args.tpu = defaults.distributed_type == DistributedType.TPU
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
@@ -896,11 +897,15 @@ def _validate_launch_command(args):
         if args.num_processes is None:
             if args.use_xpu and is_xpu_available():
                 args.num_processes = torch.xpu.device_count()
+            elif is_npu_available():
+                args.num_processes = torch.npu.device_count()
             else:
                 args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
         if not args.multi_gpu and (
-            (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1) or (torch.cuda.device_count() > 1)
+            (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
+            or (is_npu_available() and torch.npu.device_count > 1)
+            or (torch.cuda.device_count() > 1)
         ):
             warned.append(
                 "\t\tMore than one GPU was found, enabling multi-GPU training.\n"

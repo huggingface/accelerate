@@ -35,6 +35,7 @@ from .utils import (
     is_fp8_available,
     is_ipex_available,
     is_mps_available,
+    is_npu_available,
     is_tpu_available,
     is_xpu_available,
     parse_choice_from_env,
@@ -195,6 +196,19 @@ class PartialState:
                 if self.device is None:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
+            elif is_npu_available() and not cpu and int(os.environ.get("LOCAL_RANK", -1)) != -1:
+                self.distributed_type = DistributedType.MULTI_NPU
+                if not torch.distributed.is_initialized():
+                    # Backend is not set by the user, we set it here
+                    kwargs.pop("backend", None)
+                    self.backend = "hccl"
+                    torch.distributed.init_process_group(backend=self.backend, **kwargs)
+                self.num_processes = torch.distributed.get_world_size()
+                self.process_index = torch.distributed.get_rank()
+                self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
+                if self.device is None:
+                    self.device = torch.device("npu", self.local_process_index)
+                torch.npu.set_device(self.device)
             elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
                 if not cpu and is_xpu_available():
                     self.distributed_type = DistributedType.MULTI_XPU
@@ -343,6 +357,7 @@ class PartialState:
         """
         if self.distributed_type in (
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
             DistributedType.DEEPSPEED,
@@ -649,6 +664,7 @@ class PartialState:
         Returns the default device which is:
         - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` both return True.
         - CUDA if `torch.cuda.is_available()`
+        - NPU if `is_npu_available()`
         - CPU otherwise
         """
         if is_mps_available():
@@ -658,6 +674,8 @@ class PartialState:
             return torch.device("cuda")
         elif is_xpu_available():
             return torch.device("xpu:0")
+        elif is_npu_available():
+            return torch.device("npu")
         else:
             return torch.device("cpu")
 

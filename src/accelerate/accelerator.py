@@ -75,6 +75,7 @@ from .utils import (
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
+    is_npu_available,
     is_safetensors_available,
     is_torch_version,
     is_tpu_available,
@@ -413,13 +414,15 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("cuda", "mps"):
+            if self.device.type not in ("cuda", "mps", "npu"):
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
                 from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
 
                 self.scaler = ShardedGradScaler(**kwargs)
+            elif is_npu_available():
+                self.scaler = torch.npu.amp.GradScaler(**kwargs)
             else:
                 self.scaler = torch.cuda.amp.GradScaler(**kwargs)
 
@@ -965,7 +968,7 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
+        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_XPU):
             dl_even_batches_values = []
 
             if even_batches is not None:
@@ -1292,7 +1295,10 @@ class Accelerator:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
             if self.mixed_precision == "fp16":
-                new_forward = torch.cuda.amp.autocast(dtype=torch.float16)(model_forward_func)
+                if is_npu_available():
+                    new_forward = torch.npu.amp.autocast(dtype=torch.float16)(model_forward_func)
+                else:
+                    new_forward = torch.cuda.amp.autocast(dtype=torch.float16)(model_forward_func)
             elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
                 new_forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model_forward_func)
 
@@ -1324,7 +1330,11 @@ class Accelerator:
                 )
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if not evaluation_mode:
-            if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
+            if self.distributed_type in (
+                    DistributedType.MULTI_GPU,
+                    DistributedType.MULTI_NPU,
+                    DistributedType.MULTI_XPU
+            ):
                 if any(p.requires_grad for p in model.parameters()):
                     kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                     model = torch.nn.parallel.DistributedDataParallel(
@@ -2686,7 +2696,10 @@ class Accelerator:
 
         map_location = load_model_func_kwargs.pop("map_location", None)
         if map_location is None:
-            if self.num_processes > 1 and self.distributed_type == DistributedType.MULTI_GPU:
+            if self.num_processes > 1 and self.distributed_type in (
+                DistributedType.MULTI_GPU,
+                DistributedType.MULTI_NPU,
+            ):
                 map_location = "on_device"
             else:
                 map_location = "cpu"
