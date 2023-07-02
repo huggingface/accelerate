@@ -60,8 +60,12 @@ def get_cluster_input():
     rdzv_backend = "static"
     same_network = True
 
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_GPU,
-                            DistributedType.MULTI_XPU, DistributedType.MULTI_CPU]:
+    if distributed_type in [
+        DistributedType.MULTI_GPU,
+        DistributedType.MULTI_GPU,
+        DistributedType.MULTI_XPU,
+        DistributedType.MULTI_CPU,
+    ]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
             int,
@@ -111,7 +115,9 @@ def get_cluster_input():
             default=False,
             error_message="Please enter yes or no.",
         )
-    if (not use_cpu and is_xpu_available()
+    if (
+        not use_cpu
+        and is_xpu_available()
         and distributed_type not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.TPU]
     ):
         ipex_config["use_xpu"] = _ask_field(
@@ -472,7 +478,8 @@ def get_cluster_input():
         num_processes = 1
 
     if (
-        distributed_type in [
+        distributed_type
+        in [
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
