@@ -1331,9 +1331,9 @@ class Accelerator:
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if not evaluation_mode:
             if self.distributed_type in (
-                    DistributedType.MULTI_GPU,
-                    DistributedType.MULTI_NPU,
-                    DistributedType.MULTI_XPU
+                DistributedType.MULTI_GPU,
+                DistributedType.MULTI_NPU,
+                DistributedType.MULTI_XPU,
             ):
                 if any(p.requires_grad for p in model.parameters()):
                     kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
