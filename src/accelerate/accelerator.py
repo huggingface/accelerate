@@ -1288,7 +1288,7 @@ class Accelerator:
         elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
         
-        # Store the original forward function before potential wrapping for parallel training
+        # Store the original forward function before DDP/FSDP wraps it
         if self.native_amp or self.mixed_precision == "fp8":
             model._original_forward = model.forward
 
