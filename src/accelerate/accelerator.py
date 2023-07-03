@@ -1287,10 +1287,6 @@ class Accelerator:
                 )
         elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
-        
-        # Store the original forward function before DDP/FSDP wraps it
-        if self.native_amp or self.mixed_precision == "fp8":
-            model._original_forward = model.forward
 
         if not evaluation_mode:
             if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
@@ -1328,6 +1324,7 @@ class Accelerator:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
+            model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
             if self.mixed_precision == "fp16":
                 new_forward = torch.cuda.amp.autocast(dtype=torch.float16)(model_forward_func)
@@ -1344,6 +1341,7 @@ class Accelerator:
                 with torch.no_grad():
                     convert_model(model)
                 model._converted_to_transformer_engine = True
+            model._original_forward = model.forward
 
             kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
             if "fp8_format" in kwargs:
