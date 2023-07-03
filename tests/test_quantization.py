@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 
 from accelerate import Accelerator, init_empty_weights
-from accelerate.test_utils import require_bnb, require_cuda, require_huggingface_suite, require_multi_gpu, skip, slow
+from accelerate.test_utils import require_bnb, require_cuda, require_huggingface_suite, require_multi_gpu, slow
 from accelerate.utils.bnb import load_and_quantize_model
 from accelerate.utils.dataclasses import BnbQuantizationConfig
 
@@ -306,7 +306,6 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             )
             self.check_inference_correctness(model_8bit)
 
-    @skip
     def test_int8_serialization(self):
         r"""
         Test whether it is possible to serialize a model in 8-bit.
@@ -339,7 +338,6 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
             self.check_inference_correctness(model_8bit_from_saved)
 
-    @skip
     def test_int8_serialization_shard(self):
         r"""
         Test whether it is possible to serialize a model in 8-bit.
