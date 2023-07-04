@@ -1287,7 +1287,7 @@ class Accelerator:
                 )
         elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
-            
+
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
