@@ -138,6 +138,35 @@ Here is an example:
 ```python
 accelerator.save_model(model, save_directory, max_shard_size="1GB", safe_serialization=True)
 ```
+
+#### 🤗 Transformers models
+
+If you are using models from the [🤗 Transformers](https://huggingface.co/docs/transformers/) library, you can use the `.save_pretrained()` method.
+
+```python
+from transformers import AutoModel
+
+model = AutoModel.from_pretrained("bert-base-cased")
+model = accelerator.prepare(model)
+
+# ...fine-tune with PyTorch...
+
+unwrapped_model = accelerator.unwrap_model(model)
+unwrapped_model.save_pretrained(
+    "path/to/my_model_directory",
+    is_main_process=accelerator.is_main_process,
+    save_function=accelerator.save,
+)
+```
+
+This will ensure your model stays compatible with other 🤗 Transformers functionality like the `.from_pretrained()` method.
+
+```python
+from transformers import AutoModel
+
+model = AutoModel.from_pretrained("path/to/my_model_directory")
+```
+
 ### Operations
 
 Use [`~Accelerator.clip_grad_norm_`] instead of ``torch.nn.utils.clip_grad_norm_`` and [`~Accelerator.clip_grad_value_`] instead of ``torch.nn.utils.clip_grad_value``
