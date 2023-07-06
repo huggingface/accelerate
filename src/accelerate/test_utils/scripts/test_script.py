@@ -377,18 +377,25 @@ def training_check():
                 loss = torch.nn.functional.mse_loss(output, batch["y"])
                 accelerator.backward(loss)
                 optimizer.step()
-        
-        # Unwrap the model to check if the model is still with mixed precision wrapper.
-        model_with_fp32_wrapper = accelerator.unwrap_model(model, keep_fp32_wrapper=True)
-        # Run forward with fp16 as input.
-        # When the model is with mixed precision wrapper, no error will be raised.
-        x = torch.FloatTensor([train_set[0]["x"]]).squeeze(0)
-        x_fp16 = x.to(dtype=torch.float16, device=accelerator.device)
-        output = model_with_fp32_wrapper(x_fp16)
 
         model = accelerator.unwrap_model(model).cpu()
         assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
+    
+    if torch.cuda.is_available():
+        # Mostly a test that model.forward will have autocast when running unwrap_model(model, keep_fp32_wrapper=True)
+        print("Keep fp32 wrapper check.")
+        AcceleratorState._reset_state()
+        accelerator = Accelerator(mixed_precision="fp16")
+
+        model = torch.nn.Linear(2, 4)
+        model = accelerator.prepare(model)
+        model_with_fp32_wrapper = accelerator.unwrap_model(model, keep_fp32_wrapper=True)
+
+        # Run forward with fp16 as input.
+        # When the model is with mixed precision wrapper, no error will be raised.
+        input_tensor = torch.Tensor([1, 2]).to(dtype=torch.float16, device=accelerator.device)
+        output = model_with_fp32_wrapper(input_tensor)
 
     # BF16 support is only for CPU + TPU, and some GPU
     if is_bf16_available():
