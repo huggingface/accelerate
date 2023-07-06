@@ -382,7 +382,7 @@ def training_check():
         model_with_fp32_wrapper = accelerator.unwrap_model(model, keep_fp32_wrapper=True)
         # Run forward with fp16 as input.
         # When the model is with mixed precision wrapper, no error will be raised.
-        input_fp16 = train_set[0]["x"].to(dtype=torch.float16, device=accelerator.device)
+        input_fp16 = torch.from_numpy(train_set[0]["x"]).to(dtype=torch.float16, device=accelerator.device)
         output = model_with_fp32_wrapper(input_fp16)
 
         model = accelerator.unwrap_model(model).cpu()
