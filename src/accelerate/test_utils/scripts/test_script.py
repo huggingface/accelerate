@@ -377,6 +377,13 @@ def training_check():
                 loss = torch.nn.functional.mse_loss(output, batch["y"])
                 accelerator.backward(loss)
                 optimizer.step()
+        
+        # Unwrap the model to check if the model is still with mixed precision wrapper.
+        model_with_fp32_wrapper = accelerator.unwrap_model(model, keep_fp32_wrapper=True)
+        # Run forward with fp16 as input.
+        # When the model is with mixed precision wrapper, no error will be raised.
+        input_fp16 = train_set[0]["x"].to(dtype=torch.float16, device=accelerator.device)
+        output = model_with_fp32_wrapper(input_fp16)
 
         model = accelerator.unwrap_model(model).cpu()
         assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
