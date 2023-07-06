@@ -381,7 +381,7 @@ def training_check():
         model = accelerator.unwrap_model(model).cpu()
         assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on CPU or distributed training."
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on CPU or distributed training."
-    
+
     if torch.cuda.is_available():
         # Mostly a test that model.forward will have autocast when running unwrap_model(model, keep_fp32_wrapper=True)
         print("Keep fp32 wrapper check.")
