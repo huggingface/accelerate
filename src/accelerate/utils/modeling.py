@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import contextlib
-import enum
 import gc
 import inspect
 import json
@@ -30,7 +29,7 @@ import torch.nn as nn
 
 from ..state import AcceleratorState
 from .constants import WEIGHTS_NAME
-from .dataclasses import DistributedType
+from .dataclasses import CustomDtype, DistributedType
 from .imports import is_mps_available, is_safetensors_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
@@ -44,14 +43,6 @@ WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
 
 logger = logging.getLogger(__name__)
-
-
-class CustomDtype(enum.Enum):
-    r"""
-    An enum that contains multiple custom dtypes that can be used for `infer_auto_device_map`.
-    """
-    FP8 = "fp8"
-    INT4 = "int4"
 
 
 def convert_file_size_to_int(size: Union[int, str]):
