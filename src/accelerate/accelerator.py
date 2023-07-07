@@ -2352,8 +2352,10 @@ class Accelerator:
             # Safetensors does not allow tensor aliasing.
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
+            # when bnb serialization is used the weights in the state dict can be strings
             for name, tensor in state_dict.items():
-                ptrs[id_tensor_storage(tensor)].append(name)
+                if not isinstance(tensor, str):
+                    ptrs[id_tensor_storage(tensor)].append(name)
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
