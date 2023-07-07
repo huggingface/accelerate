@@ -16,7 +16,14 @@
 Main driver for the selection menu, based on https://github.com/bchao1/bullet
 """
 import sys
-
+input2 = input
+in_colab = False
+try:
+    from google.colab import drive
+    in_colab = True
+except:
+    pass
+    
 from . import cursor, input
 from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, reset_cursor, writeColor
 from .keymap import KEYMAP
@@ -115,7 +122,10 @@ class BulletMenu:
         move_cursor(len(self.choices) - self.position, "UP")
         with cursor.hide():
             while True:
-                choice = self.handle_input()
+                if in_colab:
+                    choice = int(input2())
+                else:
+                    choice = self.handle_input()
                 if choice is not None:
                     reset_cursor()
                     for _ in range(len(self.choices) + 1):
