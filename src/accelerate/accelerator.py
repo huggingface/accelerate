@@ -2939,3 +2939,7 @@ class Accelerator:
         ```
         """
         return skip_first_batches(dataloader, num_batches=num_batches)
+
+    def __deepcopy__(self, memo):
+        logger.warning("Deep copying the `Accelerator` object, note that this will point to the same original object.")
+        return self
