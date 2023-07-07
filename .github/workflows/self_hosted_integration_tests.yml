@@ -51,7 +51,7 @@ jobs:
         run: |
           source activate accelerate
           git config --global --add safe.directory '*'
-          git checkout main && git fetch
+          git checkout main && git pull
           if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
             git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
           fi
@@ -106,7 +106,7 @@ jobs:
         run: |
           source activate accelerate
           git config --global --add safe.directory '*'
-          git checkout main && git fetch
+          git checkout main && git pull
           if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
             git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
           fi
