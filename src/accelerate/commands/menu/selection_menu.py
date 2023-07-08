@@ -16,7 +16,7 @@
 Main driver for the selection menu, based on https://github.com/bchao1/bullet
 """
 import sys
-input2 = input
+original_input = input
 in_colab = False
 try:
     from google.colab import drive
@@ -123,7 +123,7 @@ class BulletMenu:
         with cursor.hide():
             while True:
                 if in_colab:
-                    choice = int(input2())
+                    choice = int(original_input())
                 else:
                     choice = self.handle_input()
                 if choice is not None:
