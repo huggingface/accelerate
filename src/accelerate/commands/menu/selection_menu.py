@@ -23,7 +23,7 @@ try:
     in_colab = True
 except:
     pass
-    
+
 from . import cursor, input
 from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, reset_cursor, writeColor
 from .keymap import KEYMAP
