@@ -28,7 +28,14 @@ from accelerate.utils.imports import (
 
 from ..big_modeling import dispatch_model, init_empty_weights
 from .dataclasses import BnbQuantizationConfig
-from .modeling import find_tied_parameters, get_balanced_memory, infer_auto_device_map, load_checkpoint_in_model
+from .modeling import (
+    find_tied_parameters,
+    get_balanced_memory,
+    infer_auto_device_map,
+    load_checkpoint_in_model,
+    offload_weight,
+    set_module_tensor_to_device,
+)
 
 
 if is_bnb_available():
@@ -98,24 +105,32 @@ def load_and_quantize_model(
         )
 
     modules_on_cpu = []
+    # custom device map
     if isinstance(device_map, dict) and len(device_map.keys()) > 1:
         modules_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
-        if len(modules_on_cpu) > 0 and not bnb_quantization_config.enable_fp32_cpu_offload:
-            raise ValueError(
-                "If you want to offload some keys to `cpu` or `disk`, you need to set "
-                " `enable_fp32_cpu_offload=True`. Note that these modules will not be "
-                " converted to 8-bit but kept in 32-bit."
-            )
+        if len(modules_on_cpu) > 0 and not bnb_quantization_config.enable_offload:
+            if load_in_4bit:
+                raise ValueError(
+                    "If you want to offload some keys to `cpu` or `disk`, you need to set "
+                    " `enable_offload=True`. Note that these modules will not be converted "
+                    " to 4-bit but kept in `torch_dtype` as 4-bit serialization is not supported yet."
+                )
+            else:
+                raise ValueError(
+                    "If you want to offload some keys to `cpu` or `disk`, you need to set "
+                    "`enable_offload=True`. Note that these modules will be converted to 8-bit."
+                )
 
     # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
     if bnb_quantization_config.skip_modules is None:
         bnb_quantization_config.skip_modules = get_keys_to_not_convert(model)
 
-    # add cpu modules to skip modules (after looking into the code on transformers, we don't really keep the cpu module in fp32)
-    bnb_quantization_config.skip_modules.extend(modules_on_cpu)
+    # add cpu modules to skip modules only for 4-bit modules
+    if load_in_4bit:
+        bnb_quantization_config.skip_modules.extend(modules_on_cpu)
     modules_to_not_convert = bnb_quantization_config.skip_modules
-    # We add the modules we want to keep in full precision
 
+    # We add the modules we want to keep in full precision
     if bnb_quantization_config.keep_in_fp32_modules is None:
         bnb_quantization_config.keep_in_fp32_modules = []
     keep_in_fp32_modules = bnb_quantization_config.keep_in_fp32_modules
@@ -184,6 +199,7 @@ def load_and_quantize_model(
             offload_folder=offload_folder,
             offload_state_dict=offload_state_dict,
             keep_in_fp32_modules=bnb_quantization_config.keep_in_fp32_modules,
+            offload_8bit_bnb=load_in_8bit and bnb_quantization_config.enable_offload,
         )
         return dispatch_model(model, device_map=device_map, offload_dir=offload_folder)
 
@@ -247,18 +263,27 @@ def get_quantized_model_device_map(
         }
         for device in ["cpu", "disk"]:
             if device in device_map_without_some_modules.values():
-                raise ValueError(
-                    """
-                    Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the
-                    quantized model. If you want to dispatch the model on the CPU or the disk while keeping these
-                    modules in 32-bit, you need to set `load_in_8bit_fp32_cpu_offload=True` and pass a custom
-                    `device_map` to `from_pretrained`. Check
-                    https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu
-                    for more details.
-                    """
-                )
+                if bnb_quantization_config.load_in_4bit:
+                    raise ValueError(
+                        """
+                        Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit
+                        the quantized model. If you want to dispatch the model on the CPU or the disk while keeping
+                        these modules in `torch_dtype`, you need to set `enable_offload=True` and pass a custom
+                        `device_map` to `load_and_quantize_model`. Check
+                        https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu
+                        for more details.
+                        """
+                    )
+                else:
+                    if not bnb_quantization_config.enable_offload:
+                        raise ValueError(
+                            "Some modules are dispatched on the CPU or the disk. You need to set `enable_offload=True`"
+                            "if you want to offload modules. Note that these modules will be converted to 8-bit."
+                        )
+                    logger.info(
+                        "Some modules are are offloaded to the CPU or the disk. Note that these modules will be converted to 8-bit"
+                    )
         del device_map_without_some_modules
-
     return device_map
 
 
@@ -348,9 +373,10 @@ def _replace_with_bnb_layers(
                 setattr(model, name, bnb_module)
                 has_been_replaced = True
         if len(list(module.children())) > 0:
-            _, has_been_replaced = _replace_with_bnb_layers(
+            _, _has_been_replaced = _replace_with_bnb_layers(
                 module, bnb_quantization_config, modules_to_not_convert, current_key_name
             )
+            has_been_replaced = has_been_replaced | _has_been_replaced
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model, has_been_replaced
@@ -418,3 +444,28 @@ def has_4bit_bnb_layers(model):
 
 def get_parameter_device(parameter: nn.Module):
     return next(parameter.parameters()).device
+
+
+def quantize_and_offload_8bit(model, param, param_name, new_dtype, offload_folder, offload_index):
+    set_module_tensor_to_device(model, param_name, 0, dtype=new_dtype, value=param)
+    tensor_name = param_name
+    module = model
+    if "." in tensor_name:
+        splits = tensor_name.split(".")
+        for split in splits[:-1]:
+            new_module = getattr(module, split)
+            if new_module is None:
+                raise ValueError(f"{module} has no attribute {split}.")
+            module = new_module
+        tensor_name = splits[-1]
+    # offload weights
+    module._parameters[tensor_name].requires_grad = False
+    offload_weight(module._parameters[tensor_name], param_name, offload_folder, index=offload_index)
+    if hasattr(module._parameters[tensor_name], "SCB"):
+        offload_weight(
+            module._parameters[tensor_name].SCB,
+            param_name.replace("weight", "SCB"),
+            offload_folder,
+            index=offload_index,
+        )
+    set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype, value=torch.empty(*param.size()))

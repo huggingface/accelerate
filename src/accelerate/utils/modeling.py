@@ -279,7 +279,13 @@ def set_module_tensor_to_device(
     device_quantization = None
     with torch.no_grad():
         # leave it on cpu first before moving them to cuda
-        if param is not None and param.device.type != "cuda" and param_cls.__name__ in ["Int8Params", "FP4Params"]:
+        # # fix the case where the device is meta, we don't want to put it on cpu because there is no data =0
+        if (
+            param is not None
+            and param.device.type != "cuda"
+            and torch.device(device).type == "cuda"
+            and param_cls.__name__ in ["Int8Params", "FP4Params"]
+        ):
             device_quantization = device
             device = "cpu"
         if value is None:
@@ -303,15 +309,25 @@ def set_module_tensor_to_device(
                 if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
                     # downcast to fp16 if any - needed for 8bit serialization
                     new_value = new_value.to(torch.float16)
-                new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+                # quantize module that are going to stay on the cpu so that we offload quantized weights
+                if device == "cpu" and param_cls.__name__ == "Int8Params":
+                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(0).to("cpu")
+                    new_value.CB = new_value.CB.to("cpu")
+                    new_value.SCB = new_value.SCB.to("cpu")
+                else:
+                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
             module._parameters[tensor_name] = new_value
-
             if fp16_statistics is not None:
-                setattr(module.weight, "SCB", fp16_statistics.to(device))
-
-            if module.__class__.__name__ == "Linear8bitLt" and getattr(module.weight, "SCB", None) is None:
+                setattr(module._parameters[tensor_name], "SCB", fp16_statistics.to(device))
+                del fp16_statistics
+            # as we put the weight to meta, it doesn't have SCB attr anymore. make sure that it is not a meta weight
+            if (
+                module.__class__.__name__ == "Linear8bitLt"
+                and getattr(module.weight, "SCB", None) is None
+                and str(module.weight.device) != "meta"
+            ):
                 # quantize only if necessary
                 device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
                 if not getattr(module.weight, "SCB", None) and device_index is not None:
@@ -326,6 +342,8 @@ def set_module_tensor_to_device(
                 device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
                     module.weight = module.weight.cuda(device_index)
+    # clean pre and post foward hook
+    torch.cuda.empty_cache()
 
 
 def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
@@ -660,11 +678,18 @@ def load_offloaded_weights(model, index, offload_folder):
     if index is None or len(index) == 0:
         # Nothing to do
         return
-
     for param_name, metadata in index.items():
+        if "SCB" in param_name:
+            continue
+        fp16_statistics = None
+        if "weight" in param_name and param_name.replace("weight", "SCB") in index.keys():
+            weight_name = param_name.replace("weight", "SCB")
+            fp16_statistics = load_offloaded_weight(
+                os.path.join(offload_folder, f"{weight_name}.dat"), index[weight_name]
+            )
         tensor_file = os.path.join(offload_folder, f"{param_name}.dat")
         weight = load_offloaded_weight(tensor_file, metadata)
-        set_module_tensor_to_device(model, param_name, "cpu", value=weight)
+        set_module_tensor_to_device(model, param_name, "cpu", value=weight, fp16_statistics=fp16_statistics)
 
 
 def get_balanced_memory(
@@ -1137,6 +1162,7 @@ def load_checkpoint_in_model(
     offload_state_dict: bool = False,
     offload_buffers: bool = False,
     keep_in_fp32_modules: List[str] = None,
+    offload_8bit_bnb: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -1171,8 +1197,13 @@ def load_checkpoint_in_model(
             Whether or not to include the buffers in the weights offloaded to disk.
         keep_in_fp32_modules(`List[str]`, *optional*):
             A list of the modules that we keep in `torch.float32` dtype.
+        offload_8bit_bnb(`bool`, *optional*):
+            Enable offload of 8-bit modules on cpu/disk
 
     """
+    if offload_8bit_bnb:
+        from .bnb import quantize_and_offload_8bit
+
     tied_params = find_tied_parameters(model)
 
     if check_tied_parameters_in_config(model) and len(tied_params) == 0:
@@ -1239,6 +1270,10 @@ def load_checkpoint_in_model(
             model.load_state_dict(checkpoint, strict=False)
         else:
             for param_name, param in checkpoint.items():
+                # skip SCB parameter (for 8-bit serialization)
+                if "SCB" in param_name:
+                    continue
+
                 module_name = param_name
 
                 while len(module_name) > 0 and module_name not in device_map:
@@ -1268,23 +1303,33 @@ def load_checkpoint_in_model(
                     if offload_buffers or param_name not in buffer_names:
                         if new_dtype is None:
                             new_dtype = param.dtype
-                        set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
-                    offload_weight(param, param_name, offload_folder, index=offload_index)
+                        if offload_8bit_bnb:
+                            quantize_and_offload_8bit(
+                                model, param, param_name, new_dtype, offload_folder, offload_index
+                            )
+                            continue
+                        else:
+                            set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
+                        offload_weight(param, param_name, offload_folder, index=offload_index)
                 elif param_device == "cpu" and offload_state_dict:
                     if new_dtype is None:
                         new_dtype = param.dtype
-                    set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
-                    offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
-                else:
-                    if "SCB" not in param_name:
-                        set_module_tensor_to_device(
-                            model,
-                            param_name,
-                            param_device,
-                            value=param,
-                            dtype=new_dtype,
-                            fp16_statistics=fp16_statistics,
+                    if offload_8bit_bnb:
+                        quantize_and_offload_8bit(
+                            model, param, param_name, new_dtype, state_dict_folder, state_dict_index
                         )
+                    else:
+                        set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)
+                        offload_weight(param, param_name, state_dict_folder, index=state_dict_index)
+                else:
+                    set_module_tensor_to_device(
+                        model,
+                        param_name,
+                        param_device,
+                        value=param,
+                        dtype=new_dtype,
+                        fp16_statistics=fp16_statistics,
+                    )
 
         # Force Python to clean up.
         del checkpoint

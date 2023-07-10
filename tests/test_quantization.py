@@ -191,19 +191,75 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         self.assertTrue(model.lm_head.weight.dtype == torch.float32)
 
     @require_multi_gpu
-    def test_cpu_gpu_loading_random_device_map(self):
+    def test_cpu_gpu_loading_custom_device_map(self):
+        from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
 
         r"""
-        A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
         """
         device_map = {
             "transformer.word_embeddings": "cpu",
             "transformer.word_embeddings_layernorm": 0,
             "lm_head": "cpu",
-            "transformer.h.0": 0,
-            "transformer.h.1": 0,
-            "transformer.h.2": 0,
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": "cpu",
+            "transformer.h.3": 0,
+            "transformer.h.4": 0,
+            "transformer.h.5": 0,
+            "transformer.h.6": 0,
+            "transformer.h.7": 0,
+            "transformer.h.8": 0,
+            "transformer.h.9": 1,
+            "transformer.h.10": 0,
+            "transformer.h.11": 1,
+            "transformer.h.12": 0,
+            "transformer.h.13": 0,
+            "transformer.h.14": 1,
+            "transformer.h.15": 0,
+            "transformer.h.16": 0,
+            "transformer.h.17": 1,
+            "transformer.h.18": 1,
+            "transformer.h.19": 0,
+            "transformer.h.20": 1,
+            "transformer.h.21": 1,
+            "transformer.h.22": 0,
+            "transformer.h.23": 0,
+            "transformer.ln_f": 1,
+        }
+        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_offload=True)
+
+        with init_empty_weights():
+            model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
+
+        model_8bit.tie_weights()
+        model_8bit = load_and_quantize_model(
+            model_8bit,
+            bnb_quantization_config,
+            weights_location=self.weights_location,
+            device_map=device_map,
+            no_split_module_classes=["BloomBlock"],
+        )
+        self.assertTrue(model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        self.assertTrue(model_8bit.transformer.h[1].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        self.check_inference_correctness(model_8bit)
+
+    @require_multi_gpu
+    def test_cpu_gpu_loading_custom_device_map_offload_state_dict(self):
+        from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map` and offload_state_dict=True.
+        """
+        device_map = {
+            "transformer.word_embeddings": "cpu",
+            "transformer.word_embeddings_layernorm": 0,
+            "lm_head": "cpu",
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": "cpu",
             "transformer.h.3": 0,
             "transformer.h.4": 0,
             "transformer.h.5": 0,
@@ -228,7 +284,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             "transformer.ln_f": 1,
         }
 
-        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_fp32_cpu_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_offload=True)
 
         with init_empty_weights():
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
@@ -240,41 +296,15 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             weights_location=self.weights_location,
             device_map=device_map,
             no_split_module_classes=["BloomBlock"],
+            offload_state_dict=True,
         )
-        self.check_inference_correctness(model_8bit)
-
-    @require_multi_gpu
-    def test_cpu_gpu_loading_custom_device_map(self):
-        from transformers import AutoConfig, AutoModelForCausalLM
-
-        r"""
-        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
-        """
-        device_map = {
-            "transformer.word_embeddings": "cpu",
-            "transformer.word_embeddings_layernorm": "cpu",
-            "lm_head": "cpu",
-            "transformer.h": 0,
-            "transformer.ln_f": 1,
-        }
-
-        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_fp32_cpu_offload=True)
-
-        with init_empty_weights():
-            model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
-
-        model_8bit.tie_weights()
-        model_8bit = load_and_quantize_model(
-            model_8bit,
-            bnb_quantization_config,
-            weights_location=self.weights_location,
-            device_map=device_map,
-            no_split_module_classes=["BloomBlock"],
-        )
+        self.assertTrue(model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        self.assertTrue(model_8bit.transformer.h[1].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
         self.check_inference_correctness(model_8bit)
 
     @require_multi_gpu
     def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
+        from bitsandbytes.nn import Int8Params
         from transformers import AutoConfig, AutoModelForCausalLM
 
         r"""
@@ -282,13 +312,36 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         This time we also add `disk` on the device_map - using the kwargs directly instead of the quantization config
         """
         device_map = {
-            "transformer.word_embeddings": 0,
-            "transformer.word_embeddings_layernorm": "cpu",
-            "lm_head": 0,
-            "transformer.h": 1,
-            "transformer.ln_f": "cpu",
+            "transformer.word_embeddings": "cpu",
+            "transformer.word_embeddings_layernorm": 0,
+            "lm_head": "cpu",
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": "cpu",
+            "transformer.h.3": "disk",
+            "transformer.h.4": "disk",
+            "transformer.h.5": "disk",
+            "transformer.h.6": 0,
+            "transformer.h.7": 0,
+            "transformer.h.8": 0,
+            "transformer.h.9": 1,
+            "transformer.h.10": 0,
+            "transformer.h.11": 1,
+            "transformer.h.12": 0,
+            "transformer.h.13": 0,
+            "transformer.h.14": 1,
+            "transformer.h.15": 0,
+            "transformer.h.16": 0,
+            "transformer.h.17": 1,
+            "transformer.h.18": 1,
+            "transformer.h.19": 0,
+            "transformer.h.20": 1,
+            "transformer.h.21": 1,
+            "transformer.h.22": 0,
+            "transformer.h.23": 0,
+            "transformer.ln_f": 1,
         }
-        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_fp32_cpu_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_offload=True)
 
         with init_empty_weights():
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
@@ -304,6 +357,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
                 offload_folder=tmpdirname,
                 offload_state_dict=True,
             )
+            self.assertTrue(model_8bit.transformer.h[4].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+            self.assertTrue(model_8bit.transformer.h[5].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
             self.check_inference_correctness(model_8bit)
 
     def test_int8_serialization(self):
@@ -647,7 +702,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             "transformer.ln_f": 1,
         }
 
-        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_fp32_cpu_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_offload=True)
 
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
@@ -677,7 +732,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             "transformer.ln_f": 1,
         }
 
-        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_fp32_cpu_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_offload=True)
 
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
@@ -707,7 +762,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             "transformer.h": 1,
             "transformer.ln_f": "cpu",
         }
-        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_fp32_cpu_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_offload=True)
 
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
