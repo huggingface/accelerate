@@ -2939,7 +2939,4 @@ class Accelerator:
         ```
         """
 
-
-
-        
         return skip_first_batches(dataloader, num_batches=num_batches)
