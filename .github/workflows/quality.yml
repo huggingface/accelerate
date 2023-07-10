@@ -17,6 +17,6 @@ jobs:
       run: make quality
     - name: Check if failure
       if: ${{ failure() }}
-      run: 
+      run: |
         echo "Quality check failed. Please ensure the right dependency versions are installed with `pip install -e .[quality]` and rerun `make style; make quality;`" >> $GITHUB_STEP_SUMMARY
 
