@@ -33,12 +33,22 @@ jobs:
           pip install -e . --no-deps
           pip install pytest-reportlog tabulate
 
+      - name: Run test on GPUs
+        run: |
+          source activate accelerate
+          make test
+          
       - name: Run examples on GPUs
         run: |
           source activate accelerate
           pip uninstall comet_ml -y
-          pytest -sv tests/test_examples.py -k cross_validation
+          make test_examples
           
+      - name: Generate Report
+        if: always()
+        run: |
+          pip install slack_sdk tabulate
+          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
@@ -60,9 +70,33 @@ jobs:
           git fetch && git checkout ${{ github.sha }}
           pip install -e . --no-deps
           pip install pytest-reportlog tabulate
-      - name: Run tests
+
+      - name: Run core and big modeling tests on GPUs
+        run: |
+          source activate accelerate
+          make test_core
+          make test_big_modeling
+          make test_cli
+
+      - name: Run Integration tests on GPUs
+        run: |
+          source activate accelerate
+          make test_integrations
+
+      - name: Run examples on GPUs
         run: |
           source activate accelerate
           pip uninstall comet_ml -y
-          pytest -sv tests/test_examples.py -k cross_validation
-          
+          make test_examples
+
+      - name: Generate Report
+        if: always()
+        run: |
+          pip install slack_sdk tabulate
+          python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
+
+  
+  run-integration-tests:
+    needs: [run_all_tests_single_gpu, run_all_tests_multi_gpu]
+    if: always()
+    uses: ./.github/workflows/self_hosted_integration_tests.yml
