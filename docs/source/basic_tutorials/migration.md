@@ -124,3 +124,6 @@ for batch in training_dataloader:
     scheduler.step()
 ```
 
+## More Resources
+
+To check out more ways on how to migrate to 🤗 Accelerate, check out our [interactive migration tutorial](https://huggingface.co/docs/accelerate/usage_guides/explore) which showcases other items that need to be watched for when using Accelerate and how to do so quickly.
