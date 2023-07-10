@@ -28,7 +28,7 @@ You will need to install the following requirements:
 
 - Install `bitsandbytes` library
 ```bash
-pip install bitsandbytes==0.39.0
+pip install bitsandbytes
 ```
 - Install latest `accelerate` from source
 ```bash
