@@ -194,6 +194,8 @@ class FeatureExamplesTests(TempDirTestCase):
         """.split()
         with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
             output = run_command(self._launch_args + testargs, return_stdout=True)
+            print(f'Output: {output}')
+            print(f'Result: {re.findall("({.+})", output)}')
             results = ast.literal_eval(re.findall("({.+})", output)[-1])
             self.assertGreaterEqual(results["accuracy"], 0.75)
 
