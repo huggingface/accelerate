@@ -16,10 +16,12 @@
 Main driver for the selection menu, based on https://github.com/bchao1/bullet
 """
 import sys
+
 original_input = input
 in_colab = False
 try:
     from google.colab import drive
+
     in_colab = True
 except:
     pass
