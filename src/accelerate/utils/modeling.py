@@ -1305,7 +1305,7 @@ def load_checkpoint_in_model(
                             new_dtype = param.dtype
                         if offload_8bit_bnb:
                             quantize_and_offload_8bit(
-                                model, param, param_name, new_dtype, offload_folder, offload_index
+                                model, param, param_name, new_dtype, offload_folder, offload_index, fp16_statistics
                             )
                             continue
                         else:
@@ -1316,7 +1316,7 @@ def load_checkpoint_in_model(
                         new_dtype = param.dtype
                     if offload_8bit_bnb:
                         quantize_and_offload_8bit(
-                            model, param, param_name, new_dtype, state_dict_folder, state_dict_index
+                            model, param, param_name, new_dtype, state_dict_folder, state_dict_index, fp16_statistics
                         )
                     else:
                         set_module_tensor_to_device(model, param_name, "meta", dtype=new_dtype)

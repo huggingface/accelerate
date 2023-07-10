@@ -393,6 +393,67 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
             self.check_inference_correctness(model_8bit_from_saved)
 
+    def test_int8_serialization_offload(self):
+        r"""
+        Test whether it is possible to serialize a model in 8-bit and offload weights to cpu/disk
+        """
+
+        from bitsandbytes.nn import Int8Params
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # saving state dict for now but will save config and other in the future
+            self.accelerate.save_model(self.model_8bit, tmpdirname)
+
+            with init_empty_weights():
+                # let's suppose that we can get the right config
+                model_8bit_from_saved = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
+            model_8bit_from_saved.tie_weights()
+            bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_offload=True)
+            device_map = {
+                "transformer.word_embeddings": "cpu",
+                "transformer.word_embeddings_layernorm": 0,
+                "lm_head": "cpu",
+                "transformer.h.0": "cpu",
+                "transformer.h.1": "cpu",
+                "transformer.h.2": "cpu",
+                "transformer.h.3": "disk",
+                "transformer.h.4": "disk",
+                "transformer.h.5": "disk",
+                "transformer.h.6": 0,
+                "transformer.h.7": 0,
+                "transformer.h.8": 0,
+                "transformer.h.9": 1,
+                "transformer.h.10": 0,
+                "transformer.h.11": 1,
+                "transformer.h.12": 0,
+                "transformer.h.13": 0,
+                "transformer.h.14": 1,
+                "transformer.h.15": 0,
+                "transformer.h.16": 0,
+                "transformer.h.17": 1,
+                "transformer.h.18": 1,
+                "transformer.h.19": 0,
+                "transformer.h.20": 1,
+                "transformer.h.21": 1,
+                "transformer.h.22": 0,
+                "transformer.h.23": 0,
+                "transformer.ln_f": 1,
+            }
+            model_8bit_from_saved = load_and_quantize_model(
+                model_8bit_from_saved,
+                bnb_quantization_config,
+                weights_location=tmpdirname + "/pytorch_model.bin",
+                device_map=device_map,
+                no_split_module_classes=["BloomBlock"],
+                offload_folder=tmpdirname + "/tmp",
+                offload_state_dict=True,
+            )
+
+            self.assertTrue(model_8bit_from_saved.transformer.h[4].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+            self.assertTrue(model_8bit_from_saved.transformer.h[5].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+            self.check_inference_correctness(model_8bit_from_saved)
+
     def test_int8_serialization_shard(self):
         r"""
         Test whether it is possible to serialize a model in 8-bit.
