@@ -194,7 +194,9 @@ class FeatureExamplesTests(TempDirTestCase):
         """.split()
         with mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "0"}):
             output = run_command(self._launch_args + testargs, return_stdout=True)
-            results = ast.literal_eval(re.findall("({.+})", output)[-1])
+            results = re.findall("({.+})", output)
+            results = [r for r in results if "accuracy" in r][-1]
+            results = ast.literal_eval(results)
             self.assertGreaterEqual(results["accuracy"], 0.75)
 
     def test_multi_process_metrics(self):
