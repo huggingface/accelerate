@@ -114,13 +114,14 @@ For 4-bit quantization, the selected modules will be kept in `torch_dtype` that 
  You just need to pass a custom `device_map` in order to offload modules on cpu/disk. The offload modules will be dispatched on the GPU when needed. Here's an example :
 
 ```py
-device_map = {'transformer.wte': 0,
-              'transformer.wpe': 0,
-              'transformer.drop': 0,
-              'transformer.h':'cpu',
-              'transformer.ln_f': 'disk', 
-              'lm_head': 'disk'
-              }
+device_map = {
+    "transformer.wte": 0,
+    "transformer.wpe": 0,
+    "transformer.drop": 0,
+    "transformer.h": "cpu",
+    "transformer.ln_f": "disk",
+    "lm_head": "disk",
+}
 ```
 ### Fine-tune a quantized model
 
