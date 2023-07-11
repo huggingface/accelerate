@@ -24,7 +24,11 @@ from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, 
 from .keymap import KEYMAP
 
 
-in_colab = pkgutil.find_loader("google.colab") is not None
+in_colab = False
+try:
+    in_colab = pkgutil.find_loader("google.colab") is not None
+except ImportError:
+    pass
 
 
 @input.register
