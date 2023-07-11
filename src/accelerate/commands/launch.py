@@ -886,7 +886,7 @@ def _validate_launch_command(args):
                 native_amp = is_torch_version(">=", "1.10")
             else:
                 native_amp = is_bf16_available(True)
-            if args.mixed_precision == "bf16" and not native_amp and not is_tpu_available():
+            if args.mixed_precision == "bf16" and not native_amp and not (args.tpu and is_tpu_available()):
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
         # Silently set the default here
