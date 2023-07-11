@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Installation and Configuration
 
-Before you start, you will need to setup your environment, install the appropriate packages, and configure 🤗 Accelerate. 🤗 Accelerate is tested on **Python 3.7+**.
+Before you start, you will need to setup your environment, install the appropriate packages, and configure 🤗 Accelerate. 🤗 Accelerate is tested on **Python 3.8+**.
 
 ## Installing 🤗 Accelerate
 
