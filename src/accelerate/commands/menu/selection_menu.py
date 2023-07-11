@@ -16,19 +16,15 @@
 Main driver for the selection menu, based on https://github.com/bchao1/bullet
 """
 import builtins
-import pkgutil
 import sys
 
+from ...utils.imports import _is_package_available
 from . import cursor, input
 from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, reset_cursor, writeColor
 from .keymap import KEYMAP
 
 
-in_colab = False
-try:
-    in_colab = pkgutil.find_loader("google.colab") is not None
-except ImportError:
-    pass
+in_colab = _is_package_available("google.colab")
 
 
 @input.register
