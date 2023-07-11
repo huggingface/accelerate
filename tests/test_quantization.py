@@ -228,7 +228,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             "transformer.h.23": 0,
             "transformer.ln_f": 1,
         }
-        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
 
         with init_empty_weights():
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
@@ -284,7 +284,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             "transformer.ln_f": 1,
         }
 
-        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
 
         with init_empty_weights():
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
@@ -341,7 +341,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             "transformer.h.23": 0,
             "transformer.ln_f": 1,
         }
-        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
 
         with init_empty_weights():
             model_8bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
@@ -409,7 +409,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
                 # let's suppose that we can get the right config
                 model_8bit_from_saved = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
             model_8bit_from_saved.tie_weights()
-            bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, enable_offload=True)
+            bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True)
             device_map = {
                 "transformer.word_embeddings": "cpu",
                 "transformer.word_embeddings_layernorm": 0,
@@ -763,7 +763,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             "transformer.ln_f": 1,
         }
 
-        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True)
 
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
@@ -793,7 +793,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             "transformer.ln_f": 1,
         }
 
-        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True)
 
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))
@@ -823,7 +823,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             "transformer.h": 1,
             "transformer.ln_f": "cpu",
         }
-        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, enable_offload=True)
+        bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True)
 
         with init_empty_weights():
             model_4bit = AutoModelForCausalLM.from_config(AutoConfig.from_pretrained(self.model_name))

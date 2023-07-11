@@ -1378,14 +1378,6 @@ class BnbQuantizationConfig:
         metadata={"help": "an explicit list of the modules that we don't quantize. We keep them in `torch.float32`."},
     )
 
-    enable_offload: bool = field(
-        default=False,
-        metadata={
-            "help": "enable offload on cpu/disk. For 8-bit conversion, offloaded modules will be converted in 8-bit. "
-            "For 4-bit conversion, offloaded modules will be kept in `torch_dtype`"
-        },
-    )
-
     def __post_init__(self):
         """
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
@@ -1404,9 +1396,6 @@ class BnbQuantizationConfig:
 
         if not isinstance(self.llm_int8_threshold, (int, float)):
             raise ValueError("llm_int8_threshold must be a float or an int")
-
-        if not isinstance(self.enable_offload, bool):
-            raise ValueError("enable_offload must be a boolean")
 
         if not isinstance(self.bnb_4bit_quant_type, str):
             raise ValueError("bnb_4bit_quant_type must be a string")
