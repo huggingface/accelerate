@@ -1288,41 +1288,6 @@ class Accelerator:
         elif device_placement and not has_hf_device_map:
             model = model.to(self.device)
 
-        if not evaluation_mode:
-            if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
-                if any(p.requires_grad for p in model.parameters()):
-                    kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
-                    model = torch.nn.parallel.DistributedDataParallel(
-                        model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
-                    )
-            elif self.distributed_type == DistributedType.FSDP:
-                from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-
-                # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
-                # don't wrap it again
-                if type(model) != FSDP:
-                    self.state.fsdp_plugin.set_auto_wrap_policy(model)
-                    fsdp_plugin = self.state.fsdp_plugin
-                    kwargs = {
-                        "sharding_strategy": fsdp_plugin.sharding_strategy,
-                        "cpu_offload": fsdp_plugin.cpu_offload,
-                        "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
-                        "mixed_precision": fsdp_plugin.mixed_precision_policy,
-                        "sync_module_states": fsdp_plugin.sync_module_states,
-                        "backward_prefetch": fsdp_plugin.backward_prefetch,
-                        "forward_prefetch": fsdp_plugin.forward_prefetch,
-                        "use_orig_params": fsdp_plugin.use_orig_params,
-                        "param_init_fn": fsdp_plugin.param_init_fn,
-                        "ignored_modules": fsdp_plugin.ignored_modules,
-                        "ignored_parameters": fsdp_plugin.ignored_parameters,
-                        "limit_all_gathers": fsdp_plugin.limit_all_gathers,
-                        "device_id": self.device,
-                    }
-                    model = FSDP(model, **kwargs)
-                self._models[-1] = model
-            elif self.distributed_type == DistributedType.MULTI_CPU:
-                kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
-                model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
@@ -1359,7 +1324,41 @@ class Accelerator:
                 )
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
         if not evaluation_mode:
-            if self.distributed_type == DistributedType.TPU and self.state.fork_launched:
+            if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_XPU):
+                if any(p.requires_grad for p in model.parameters()):
+                    kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                    model = torch.nn.parallel.DistributedDataParallel(
+                        model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
+                    )
+            elif self.distributed_type == DistributedType.FSDP:
+                from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+
+                # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
+                # don't wrap it again
+                if type(model) != FSDP:
+                    self.state.fsdp_plugin.set_auto_wrap_policy(model)
+                    fsdp_plugin = self.state.fsdp_plugin
+                    kwargs = {
+                        "sharding_strategy": fsdp_plugin.sharding_strategy,
+                        "cpu_offload": fsdp_plugin.cpu_offload,
+                        "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
+                        "mixed_precision": fsdp_plugin.mixed_precision_policy,
+                        "sync_module_states": fsdp_plugin.sync_module_states,
+                        "backward_prefetch": fsdp_plugin.backward_prefetch,
+                        "forward_prefetch": fsdp_plugin.forward_prefetch,
+                        "use_orig_params": fsdp_plugin.use_orig_params,
+                        "param_init_fn": fsdp_plugin.param_init_fn,
+                        "ignored_modules": fsdp_plugin.ignored_modules,
+                        "ignored_parameters": fsdp_plugin.ignored_parameters,
+                        "limit_all_gathers": fsdp_plugin.limit_all_gathers,
+                        "device_id": self.device,
+                    }
+                    model = FSDP(model, **kwargs)
+                self._models[-1] = model
+            elif self.distributed_type == DistributedType.MULTI_CPU:
+                kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
+            elif self.distributed_type == DistributedType.TPU and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO:
