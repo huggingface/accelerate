@@ -30,7 +30,7 @@ from accelerate.big_modeling import (
     load_checkpoint_and_dispatch,
 )
 from accelerate.hooks import remove_hook_from_submodules
-from accelerate.test_utils import require_cuda, require_mps, require_multi_gpu, slow
+from accelerate.test_utils import require_bnb, require_cuda, require_mps, require_multi_gpu, slow
 from accelerate.utils import offload_state_dict
 
 
@@ -598,6 +598,7 @@ class BigModelingTester(unittest.TestCase):
         self.assertEqual(model2.weight.device, torch.device("cpu"))
 
     @slow
+    @require_bnb
     @require_multi_gpu
     def test_dispatch_model_bnb(self):
         """Tests that `dispatch_model` quantizes int8 layers"""
@@ -634,6 +635,7 @@ class BigModelingTester(unittest.TestCase):
         self.assertTrue(model.h[-1].self_attention.query_key_value.weight.device.index == 1)
 
     @slow
+    @require_bnb
     def test_dispatch_model_int8_simple(self):
         """Tests that `dispatch_model` quantizes int8 layers"""
         from huggingface_hub import hf_hub_download
@@ -709,6 +711,7 @@ class BigModelingTester(unittest.TestCase):
         self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
 
     @slow
+    @require_bnb
     @unittest.skip("Un-skip in the next transformers release")
     def test_dipatch_model_fp4_simple(self):
         """Tests that `dispatch_model` quantizes fp4 layers"""

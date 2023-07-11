@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
-from accelerate.test_utils import require_multi_gpu, slow
+from accelerate.test_utils import require_bnb, require_multi_gpu, slow
 from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
 from accelerate.utils import patch_environment
 
@@ -229,6 +229,7 @@ class AcceleratorTester(AccelerateTestCase):
         )
 
     @slow
+    @require_bnb
     def test_accelerator_bnb(self):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
@@ -244,6 +245,7 @@ class AcceleratorTester(AccelerateTestCase):
         model = accelerator.prepare(model)
 
     @slow
+    @require_bnb
     def test_accelerator_bnb_cpu_error(self):
         """Tests that the accelerator can be used with the BNB library. This should fail as we are trying to load a model
         that is loaded between cpu and gpu"""
@@ -268,6 +270,7 @@ class AcceleratorTester(AccelerateTestCase):
             model = accelerator.prepare(model)
 
     @slow
+    @require_bnb
     @require_multi_gpu
     def test_accelerator_bnb_multi_gpu(self):
         """Tests that the accelerator can be used with the BNB library."""
@@ -297,6 +300,7 @@ class AcceleratorTester(AccelerateTestCase):
         PartialState._reset_state()
 
     @slow
+    @require_bnb
     @require_multi_gpu
     def test_accelerator_bnb_multi_gpu_no_distributed(self):
         """Tests that the accelerator can be used with the BNB library."""
