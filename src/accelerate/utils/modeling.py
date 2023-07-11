@@ -1198,7 +1198,7 @@ def load_checkpoint_in_model(
         keep_in_fp32_modules(`List[str]`, *optional*):
             A list of the modules that we keep in `torch.float32` dtype.
         offload_8bit_bnb(`bool`, *optional*):
-            Enable offload of 8-bit modules on cpu/disk
+            Whether or not to enable offload of 8-bit modules on cpu/disk.
 
     """
     if offload_8bit_bnb:
