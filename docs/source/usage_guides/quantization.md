@@ -102,6 +102,27 @@ quantized_model_from_saved = load_and_quantize_model(empty_model, weights_locati
 
 Note that 4-bit model serialization is currently not supported.
 
+### Offload modules to cpu and disk 
+
+You can offload some modules to cpu/disk if you don't have enough space on the GPU to store the entire model on your GPUs.
+This uses big model inference under the hood. Check this [documentation](https://huggingface.co/docs/accelerate/usage_guides/big_modeling) for more details. 
+
+For 8-bit quantization, the selected modules will be converted to 8-bit precision. 
+
+For 4-bit quantization, the selected modules will be kept in `torch_dtype` that the user passed in `BnbQuantizationConfig`.  We will add support to convert these offloaded modules in 4-bit when 4-bit serialization will be possible. 
+
+ You just need to pass a custom `device_map` in order to offload modules on cpu/disk. The offload modules will be dispatched on the GPU when needed. Here's an example :
+
+```py
+device_map = {
+    "transformer.wte": 0,
+    "transformer.wpe": 0,
+    "transformer.drop": 0,
+    "transformer.h": "cpu",
+    "transformer.ln_f": "disk",
+    "lm_head": "disk",
+}
+```
 ### Fine-tune a quantized model
 
 With the official support of adapters in the Hugging Face ecosystem, you can fine-tune quantized models. Please have a look at [peft](https://github.com/huggingface/peft) library for more details.

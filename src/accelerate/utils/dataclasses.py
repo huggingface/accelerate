@@ -1378,17 +1378,6 @@ class BnbQuantizationConfig:
         metadata={"help": "an explicit list of the modules that we don't quantize. We keep them in `torch.float32`."},
     )
 
-    # we will see if it will be useful
-    enable_fp32_cpu_offload: bool = field(
-        default=False,
-        metadata={
-            "help": """ this flag is used for advanced use cases and users that are aware of this feature. If you want to split
-            your model in different parts and run some parts in int8 on GPU and some parts in fp32 on CPU, you can use
-            this flag. This is useful for offloading large models such as `google/flan-t5-xxl`. Note that the int8
-            operations will not be run on CPU."""
-        },
-    )
-
     def __post_init__(self):
         """
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
@@ -1407,9 +1396,6 @@ class BnbQuantizationConfig:
 
         if not isinstance(self.llm_int8_threshold, (int, float)):
             raise ValueError("llm_int8_threshold must be a float or an int")
-
-        if not isinstance(self.enable_fp32_cpu_offload, bool):
-            raise ValueError("enable_fp32_cpu_offload must be a boolean")
 
         if not isinstance(self.bnb_4bit_quant_type, str):
             raise ValueError("bnb_4bit_quant_type must be a string")
@@ -1438,9 +1424,6 @@ class BnbQuantizationConfig:
 
         if self.keep_in_fp32_modules is not None and not isinstance(self.keep_in_fp32_modules, list):
             raise ValueError("keep_in_fp_32_modules must be a list of strings")
-
-        if not isinstance(self.enable_fp32_cpu_offload, bool):
-            raise ValueError("enable_fp32_cpu_offload must be a boolean")
 
         if self.load_in_4bit:
             self.target_dtype = CustomDtype.INT4

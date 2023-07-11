@@ -279,7 +279,13 @@ class AlignDevicesHook(ModelHook):
             for name, _ in named_module_tensors(
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
-                set_module_tensor_to_device(module, name, self.execution_device, value=self.weights_map[name])
+                fp16_statistics = None
+                if "weight" in name and name.replace("weight", "SCB") in self.weights_map.keys():
+                    if self.weights_map[name].dtype == torch.int8:
+                        fp16_statistics = self.weights_map[name.replace("weight", "SCB")]
+                set_module_tensor_to_device(
+                    module, name, self.execution_device, value=self.weights_map[name], fp16_statistics=fp16_statistics
+                )
 
         return send_to_device(args, self.execution_device), send_to_device(
             kwargs, self.execution_device, skip_keys=self.skip_keys
@@ -291,6 +297,9 @@ class AlignDevicesHook(ModelHook):
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
                 set_module_tensor_to_device(module, name, "meta")
+                if type(module).__name__ == "Linear8bitLt":
+                    module.state.SCB = None
+                    module.state.CxB = None
 
         if self.io_same_device and self.input_device is not None:
             output = send_to_device(output, self.input_device, skip_keys=self.skip_keys)
