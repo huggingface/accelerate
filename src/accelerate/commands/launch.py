@@ -38,6 +38,7 @@ from accelerate.utils import (
     is_deepspeed_available,
     is_rich_available,
     is_sagemaker_available,
+    is_torch_version,
     is_tpu_available,
     is_xpu_available,
     patch_environment,
