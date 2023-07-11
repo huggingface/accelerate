@@ -1197,7 +1197,7 @@ def load_checkpoint_in_model(
             Whether or not to include the buffers in the weights offloaded to disk.
         keep_in_fp32_modules(`List[str]`, *optional*):
             A list of the modules that we keep in `torch.float32` dtype.
-        offload_8bit_bnb(`bool`, *optional*):
+        offload_8bit_bnb (`bool`, *optional*):
             Whether or not to enable offload of 8-bit modules on cpu/disk.
 
     """
