@@ -125,6 +125,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             elif self.scaler is not None:
                 new_scale = False
                 if self._last_scale is None:
+                    # `get_scale` is an async operation requiring full synchronization
+                    # on CPU and GPUs before finishing. As a result, we store away
+                    # the prior one to reduce the call overhead
                     self._last_scale = self.scaler.get_scale()
                     new_scale = True
                 self.scaler.step(self.optimizer, closure)
