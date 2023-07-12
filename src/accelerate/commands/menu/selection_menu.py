@@ -15,11 +15,20 @@
 """
 Main driver for the selection menu, based on https://github.com/bchao1/bullet
 """
+import builtins
 import sys
 
+from ...utils.imports import _is_package_available
 from . import cursor, input
 from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, reset_cursor, writeColor
 from .keymap import KEYMAP
+
+
+in_colab = False
+try:
+    in_colab = _is_package_available("google.colab")
+except ModuleNotFoundError:
+    pass
 
 
 @input.register
@@ -107,7 +116,10 @@ class BulletMenu:
         if self.prompt:
             linebreak()
             forceWrite(self.prompt, "\n")
-            forceWrite("Please select a choice using the arrow or number keys, and selecting with enter", "\n")
+            if in_colab:
+                forceWrite("Please input a choice index (starting from 0), and press enter", "\n")
+            else:
+                forceWrite("Please select a choice using the arrow or number keys, and selecting with enter", "\n")
         self.position = default_choice
         for i in range(len(self.choices)):
             self.print_choice(i)
@@ -115,7 +127,13 @@ class BulletMenu:
         move_cursor(len(self.choices) - self.position, "UP")
         with cursor.hide():
             while True:
-                choice = self.handle_input()
+                if in_colab:
+                    try:
+                        choice = int(builtins.input())
+                    except ValueError:
+                        choice = default_choice
+                else:
+                    choice = self.handle_input()
                 if choice is not None:
                     reset_cursor()
                     for _ in range(len(self.choices) + 1):
