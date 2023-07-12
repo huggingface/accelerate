@@ -59,6 +59,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.gradient_state = GradientState()
         self.device_placement = device_placement
         self._is_overflow = False
+        self._last_scale = None
 
         # Handle device placement
         if device_placement:
@@ -122,12 +123,21 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 optimizer_args = {"closure": closure} if closure is not None else {}
                 xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)
             elif self.scaler is not None:
-                scale_before = self.scaler.get_scale()
+                new_scale = False
+                if self._last_scale is None:
+                    # `get_scale` is an async operation requiring full synchronization
+                    # on CPU and GPUs before finishing. As a result, we store away
+                    # the prior one to reduce the call overhead
+                    self._last_scale = self.scaler.get_scale()
+                    new_scale = True
                 self.scaler.step(self.optimizer, closure)
                 self.scaler.update()
                 scale_after = self.scaler.get_scale()
-                # If we reduced the loss scale, it means the optimizer step was skipped because of gradient overflow.
-                self._is_overflow = scale_after < scale_before
+                if not new_scale:
+                    # If we reduced the loss scale, it means the optimizer step was skipped because of gradient overflow.
+                    self._is_overflow = scale_after < self._last_scale
+                self._last_scale = scale_after
+
             else:
                 self.optimizer.step(closure)
 
