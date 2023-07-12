@@ -24,7 +24,11 @@ from .helpers import Direction, clear_line, forceWrite, linebreak, move_cursor, 
 from .keymap import KEYMAP
 
 
-in_colab = _is_package_available("google.colab")
+in_colab = False
+try:
+    in_colab = _is_package_available("google.colab")
+except ModuleNotFoundError:
+    pass
 
 
 @input.register
@@ -124,7 +128,10 @@ class BulletMenu:
         with cursor.hide():
             while True:
                 if in_colab:
-                    choice = int(builtins.input())
+                    try:
+                        choice = int(builtins.input())
+                    except ValueError:
+                        choice = default_choice
                 else:
                     choice = self.handle_input()
                 if choice is not None:
