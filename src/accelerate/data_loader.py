@@ -495,10 +495,6 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         self.state = AcceleratorState()
         self._drop_last = _drop_last
         self.skip_batches = skip_batches
-        # We can safely pass because the default is -1
-        with suppress(Exception):
-            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-            self.remainder = length % self.total_batch_size
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
@@ -540,10 +536,14 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     def __iter__(self):
         self.reset()
         self.gradient_state._add_dataloader(self)
-        main_iterator = None
-        if self.state.process_index == 0:
-            # We only iterate through the DataLoader on process 0.
-            main_iterator = super().__iter__()
+        # We can safely pass because the default is -1
+        with suppress(Exception):
+            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+            self.remainder = length % self.total_batch_size
+        # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
+        # shared seed to all dist processes. Thus, we need to create iterator for all dist processes.
+        # But, we only iterate through the DataLoader on process 0.
+        main_iterator = super().__iter__()
         stop_iteration = False
         self._stop_iteration = False
         first_batch = None
