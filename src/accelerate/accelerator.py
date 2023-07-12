@@ -891,8 +891,8 @@ class Accelerator:
 
         Args:
             *model (`torch.nn.Module`):
-                PyTorch Modules that was prepared with `Accelerator.prepare`. Models passed to `accumulate()`
-                will skip gradient syncing during backward pass in distributed training
+                PyTorch Modules that was prepared with `Accelerator.prepare`. Models passed to `accumulate()` will skip
+                gradient syncing during backward pass in distributed training
 
         Example:
 
