@@ -320,6 +320,18 @@ class DataLoaderStateMixin:
         self.end_of_dataloader = False
         self.remainder = -1
 
+    def begin(self):
+        "Prepares the gradient state for the current dataloader"
+        self.reset()
+        with suppress(Exception):
+            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+            self.remainder = length % self.total_batch_size
+        self.gradient_state._add_dataloader(self)
+
+    def end(self):
+        "Cleans up the gradient state after exiting the dataloader"
+        self.gradient_state._remove_dataloader(self)
+
 
 class DataLoaderShard(DataLoader, DataLoaderStateMixin):
     """
@@ -365,12 +377,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
-        self.reset()
-        self.gradient_state._add_dataloader(self)
-        if self.remainder == -1:
-            with suppress(Exception):
-                length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-                self.remainder = length % self.total_batch_size
+        self.begin()
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
@@ -394,7 +401,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
-        self.gradient_state._remove_dataloader(self)
+        self.end()
 
     @property
     def total_batch_size(self):
@@ -534,13 +541,8 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         return batch, batch_info
 
     def __iter__(self):
-        self.reset()
-        self.gradient_state._add_dataloader(self)
+        self.begin()
         main_iterator = None
-        if self.remainder == -1:
-            with suppress(Exception):
-                length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-                self.remainder = length % self.total_batch_size
         if is_torch_version(">=", "2.0.1"):
             # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
             # shared seed to all dist processes. Thus, we need to create iterator for all dist processes.
@@ -595,10 +597,11 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
 
             if stop_iteration:
                 self.end_of_dataloader = True
+                self.remainder = observed_batch_size
             if batch_index >= self.skip_batches:
                 yield batch
             batch_index += 1
-        self.gradient_state._remove_dataloader(self)
+        self.end()
 
     def __len__(self):
         whole_length = super().__len__()
