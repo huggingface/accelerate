@@ -1242,7 +1242,9 @@ def load_checkpoint_in_model(
             # otherwise check for sharded checkpoints
             potential_index = [f for f in os.listdir(checkpoint) if f.endswith(".index.json")]
             if len(potential_index) == 0:
-                raise ValueError(f"{checkpoint} is not a folder containing a `.index.json` file or a {WEIGHTS_NAME} file")
+                raise ValueError(
+                    f"{checkpoint} is not a folder containing a `.index.json` file or a {WEIGHTS_NAME} file"
+                )
             elif len(potential_index) == 1:
                 index_filename = os.path.join(checkpoint, potential_index[0])
             else:
