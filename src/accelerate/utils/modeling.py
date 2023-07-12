@@ -1183,6 +1183,7 @@ def load_checkpoint_in_model(
             - a path to a file containing a whole model state dict
             - a path to a `.json` file containing the index to a sharded checkpoint
             - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint.
+            - a path to a folder containing a unique pytorch_model.bin file.
         device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
             A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
             name, once a given module name is inside, every submodule of it will be sent to the same device.
@@ -1233,17 +1234,25 @@ def load_checkpoint_in_model(
         else:
             checkpoint_files = [checkpoint]
     elif os.path.isdir(checkpoint):
-        potential_index = [f for f in os.listdir(checkpoint) if f.endswith(".index.json")]
-        if len(potential_index) == 0:
-            raise ValueError(f"{checkpoint} is not a folder containing a `.index.json` file.")
-        elif len(potential_index) == 1:
-            index_filename = os.path.join(checkpoint, potential_index[0])
+        # check if the whole state dict is present
+        potential_state = [f for f in os.listdir(checkpoint) if f == WEIGHTS_NAME]
+        if len(potential_state) == 1:
+            checkpoint_files = [os.path.join(checkpoint, potential_state[0])]
         else:
-            raise ValueError(f"{checkpoint} containing more than one `.index.json` file, delete the irrelevant ones.")
+            # otherwise check for sharded checkpoints
+            potential_index = [f for f in os.listdir(checkpoint) if f.endswith(".index.json")]
+            if len(potential_index) == 0:
+                raise ValueError(f"{checkpoint} is not a folder containing a `.index.json` file or a {WEIGHTS_NAME} file")
+            elif len(potential_index) == 1:
+                index_filename = os.path.join(checkpoint, potential_index[0])
+            else:
+                raise ValueError(
+                    f"{checkpoint} containing more than one `.index.json` file, delete the irrelevant ones."
+                )
     else:
         raise ValueError(
             "`checkpoint` should be the path to a file containing a whole state dict, or the index of a sharded "
-            f"checkpoint, or a folder containing a sharded checkpoint, but got {checkpoint}."
+            f"checkpoint, or a folder containing a sharded checkpoint or the whole state dict, but got {checkpoint}."
         )
 
     if index_filename is not None:
