@@ -393,6 +393,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
             self.check_inference_correctness(model_8bit_from_saved)
 
+    @require_multi_gpu
     def test_int8_serialization_offload(self):
         r"""
         Test whether it is possible to serialize a model in 8-bit and offload weights to cpu/disk
