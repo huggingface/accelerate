@@ -47,7 +47,7 @@ from .config_utils import (
 def get_cluster_input():
     distributed_type = _ask_options(
         "Which type of machine are you using?",
-        ["No distributed training", "multi-CPU", "multi-XPU", "multi-GPU", "TPU"],
+        ["No distributed training", "multi-CPU", "multi-XPU", "multi-GPU", "multi-NPU", "TPU"],
         _convert_distributed_mode,
     )
 
@@ -60,7 +60,12 @@ def get_cluster_input():
     rdzv_backend = "static"
     same_network = True
 
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_XPU, DistributedType.MULTI_CPU]:
+    if distributed_type in [
+        DistributedType.MULTI_GPU,
+        DistributedType.MULTI_GPU,
+        DistributedType.MULTI_XPU,
+        DistributedType.MULTI_CPU,
+    ]:
         num_machines = _ask_field(
             "How many different machines will you use (use more than 1 for multi-node training)? [1]: ",
             int,
@@ -110,7 +115,11 @@ def get_cluster_input():
             default=False,
             error_message="Please enter yes or no.",
         )
-    if not use_cpu and is_xpu_available() and distributed_type not in [DistributedType.MULTI_GPU, DistributedType.TPU]:
+    if (
+        not use_cpu
+        and is_xpu_available()
+        and distributed_type not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.TPU]
+    ):
         ipex_config["use_xpu"] = _ask_field(
             "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
             _convert_yes_no_to_bool,
@@ -444,6 +453,7 @@ def get_cluster_input():
         DistributedType.MULTI_CPU,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_GPU,
+        DistributedType.MULTI_NPU,
         DistributedType.TPU,
     ]:
         machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
@@ -468,7 +478,13 @@ def get_cluster_input():
         num_processes = 1
 
     if (
-        distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_XPU, DistributedType.NO]
+        distributed_type
+        in [
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_NPU,
+            DistributedType.MULTI_XPU,
+            DistributedType.NO,
+        ]
         and not use_cpu
         and not use_mps
     ):

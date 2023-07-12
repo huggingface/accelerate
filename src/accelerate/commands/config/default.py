@@ -18,7 +18,7 @@ from pathlib import Path
 
 import torch
 
-from ...utils import is_xpu_available
+from ...utils import is_npu_available, is_xpu_available
 from .config_args import ClusterConfig, default_json_config_file
 from .config_utils import SubcommandHelpFormatter
 
@@ -71,6 +71,14 @@ def write_basic_config(mixed_precision="no", save_location: str = default_json_c
         config["use_cpu"] = False
         if num_xpus > 1:
             config["distributed_type"] = "MULTI_XPU"
+        else:
+            config["distributed_type"] = "NO"
+    elif is_npu_available():
+        num_npus = torch.npu.device_count()
+        config["num_processes"] = num_npus
+        config["use_cpu"] = False
+        if num_npus > 1:
+            config["distributed_type"] = "MULTI_NPU"
         else:
             config["distributed_type"] = "NO"
     else:

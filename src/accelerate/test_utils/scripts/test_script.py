@@ -33,6 +33,7 @@ from accelerate.utils import (
     gather,
     is_bf16_available,
     is_ipex_available,
+    is_npu_available,
     is_xpu_available,
     set_seed,
     synchronize_rng_states,
@@ -358,7 +359,7 @@ def training_check():
 
     accelerator.print("Training yielded the same results on one CPU or distributes setup with batch split.")
 
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() or is_npu_available():
         # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
         print("FP16 training check.")
         AcceleratorState._reset_state()

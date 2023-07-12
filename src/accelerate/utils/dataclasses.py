@@ -182,6 +182,7 @@ class DistributedType(str, enum.Enum):
         - **NO** -- Not a distributed environment, just a single process.
         - **MULTI_CPU** -- Distributed on multiple CPU nodes.
         - **MULTI_GPU** -- Distributed on multiple GPUs.
+        - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **TPU** -- Distributed on TPUs.
@@ -191,6 +192,7 @@ class DistributedType(str, enum.Enum):
     NO = "NO"
     MULTI_CPU = "MULTI_CPU"
     MULTI_GPU = "MULTI_GPU"
+    MULTI_NPU = "MULTI_NPU"
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
@@ -335,6 +337,7 @@ class PrecisionType(BaseEnum):
 class RNGType(BaseEnum):
     TORCH = "torch"
     CUDA = "cuda"
+    NPU = "npu"
     XLA = "xla"
     XPU = "xpu"
     GENERATOR = "generator"

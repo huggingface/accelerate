@@ -103,6 +103,8 @@ def is_bf16_available(ignore_tpu=False):
         return not ignore_tpu
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
+    if is_npu_available():
+        return False
     return True
 
 
@@ -218,6 +220,25 @@ def is_ipex_available():
         )
         return False
     return True
+
+
+@lru_cache
+def is_npu_available(check_device=False):
+    "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
+    if importlib.util.find_spec("torch") is None or importlib.util.find_spec("torch_npu") is None:
+        return False
+
+    import torch
+    import torch_npu  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no NPU is found
+            _ = torch.npu.device_count()
+            return torch.npu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "npu") and torch.npu.is_available()
 
 
 @lru_cache
