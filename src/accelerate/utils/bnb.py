@@ -72,6 +72,7 @@ def load_and_quantize_model(
             - a path to a file containing a whole model state dict
             - a path to a `.json` file containing the index to a sharded checkpoint
             - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint.
+            - a path to a folder containing a unique pytorch_model.bin file.
         device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
             A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
             name, once a given module name is inside, every submodule of it will be sent to the same device.
