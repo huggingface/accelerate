@@ -864,14 +864,14 @@ class Accelerator:
 
     @staticmethod
     @contextmanager
-    def ddp_trigger_sync_in_bwd(model_ddp):
-        """Trigger the sync of the gradients in the next backward pass of DDP model.
+    def trigger_sync_in_backward(model):
+        """Trigger the sync of the gradients in the next backward pass of the model (only applicable in distributed mode).
 
-        If `model` is not in DDP, this context manager does nothing
+        If the script is not launched in distributed mode, this context manager does nothing.
 
         Args:
-            model_ddp (`torch.nn.parallel.DistributedDataParallel`):
-                PyTorch Module wrapped in `DistributedDataParallel`
+            model (`torch.nn.Module`):
+                The model for which to trigger the gradient synchronization.
 
         Example:
 
@@ -885,7 +885,7 @@ class Accelerator:
         ...     loss_a = loss_func(model(input_a))  # first forward pass
         ...     loss_b = loss_func(model(input_b))  # second forward pass
         >>> accelerator.backward(loss_a)  # No synchronization across processes, only accumulate gradients
-        >>> with accelerator.ddp_trigger_sync_in_bwd(model):
+        >>> with accelerator.trigger_sync_in_backward(model):
         ...     accelerator.backward(loss_b)  # Synchronization across all processes
         >>> optimizer.step()
         >>> optimizer.zero_grad()
