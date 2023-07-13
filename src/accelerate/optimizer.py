@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import inspect
+import types
 import warnings
 
 import torch
@@ -59,7 +60,22 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.gradient_state = GradientState()
         self.device_placement = device_placement
         self._is_overflow = False
-        self._last_scale = None
+
+        def patch_optimizer_step(method):
+            method = method.__func__  # Get the unbound function
+
+            def patched_step(self, *args, **kwargs):
+                self._accelerate_num_step_called += 1
+                return method(self, *args, **kwargs)
+
+            return patched_step
+
+        self.optimizer._accelerate_num_step_called = 0
+        self._optimizer_original_step_method = self.optimizer.step
+        # Bind the patched step method to self.optimizer
+        self._optimizer_patched_step_method = types.MethodType(
+            patch_optimizer_step(self._optimizer_original_step_method), self.optimizer
+        )
 
         # Handle device placement
         if device_placement:
@@ -123,21 +139,22 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 optimizer_args = {"closure": closure} if closure is not None else {}
                 xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)
             elif self.scaler is not None:
-                new_scale = False
-                if self._last_scale is None:
-                    # `get_scale` is an async operation requiring full synchronization
-                    # on CPU and GPUs before finishing. As a result, we store away
-                    # the prior one to reduce the call overhead
-                    self._last_scale = self.scaler.get_scale()
-                    new_scale = True
+                self.optimizer.step = self._optimizer_patched_step_method
+
                 self.scaler.step(self.optimizer, closure)
                 self.scaler.update()
-                scale_after = self.scaler.get_scale()
-                if not new_scale:
-                    # If we reduced the loss scale, it means the optimizer step was skipped because of gradient overflow.
-                    self._is_overflow = scale_after < self._last_scale
-                self._last_scale = scale_after
 
+                if self.optimizer._accelerate_num_step_called == 0:
+                    # If the optimizer step was skipped, gradient overflow was detected.
+                    self._is_overflow = True
+                elif self.optimizer._accelerate_num_step_called == 1:
+                    self._is_overflow = False
+                else:
+                    raise RuntimeError("The optimizer step was called more than once. Something is wrong.")
+                # Reset the step method to the original one
+                self.optimizer.step = self._optimizer_original_step_method
+                # Reset the counter
+                self.optimizer._accelerate_num_step_called = 0
             else:
                 self.optimizer.step(closure)
 
