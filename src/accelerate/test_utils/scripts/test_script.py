@@ -480,7 +480,7 @@ def test_split_between_processes_list():
             len(results) == 2
         ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
 
-    data = list(range(0, (2 * state.num_processes) + 3))
+    data = list(range(0, (3 * state.num_processes) - 1))
     with state.split_between_processes(data, apply_padding=True) as results:
         if state.is_last_process:
             # Test that the last process gets the extra item(s)
