@@ -865,7 +865,8 @@ class Accelerator:
     @staticmethod
     @contextmanager
     def trigger_sync_in_backward(model):
-        """Trigger the sync of the gradients in the next backward pass of the model after multiple forward passes under `Accelerator.no_sync` (only applicable in multi-GPU scenarios).
+        """Trigger the sync of the gradients in the next backward pass of the model after multiple forward passes under
+`Accelerator.no_sync` (only applicable in multi-GPU scenarios).
 
         If the script is not launched in distributed mode, this context manager does nothing.
 
