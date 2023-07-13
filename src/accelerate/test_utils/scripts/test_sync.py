@@ -149,6 +149,7 @@ def test_distributed_sync(accelerator):
         torch.manual_seed(1337 + iteration)
         ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
+
 def test_distributed_sync_multiple_fwd(accelerator):
     # Test on distributed setup that context manager behaves properly when used with multiple forwards followed by multiple backwards
     model, ddp_model, dataloader = get_training_setup(accelerator)

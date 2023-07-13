@@ -868,10 +868,10 @@ class Accelerator:
         """Trigger the sync of the gradients in the next backward pass of DDP model.
 
         If `model` is not in DDP, this context manager does nothing
-        
+
         Args:
             model_ddp (`torch.nn.parallel.DistributedDataParallel`):
-                PyTorch Module wrapped in `DistributedDataParallel` 
+                PyTorch Module wrapped in `DistributedDataParallel`
 
         Example:
 
