@@ -125,7 +125,9 @@ device_map = {
 ```
 ### Fine-tune a quantized model
 
-With the official support of adapters in the Hugging Face ecosystem, you can fine-tune quantized models. Please have a look at [peft](https://github.com/huggingface/peft) library for more details.
+It is not possible to perform pure 8bit or 4bit training on these models. However, you can train these models by leveraging parameter efficient fine tuning methods (PEFT) and train for example adapters on top of them. Please have a look at [peft](https://github.com/huggingface/peft) library for more details.
+
+Currently, you can't add adapters on top of any quantized model. However, with the official support of adapters with 🤗 Transformers models, you can fine-tune quantized models. If you want to finetune a 🤗 Transformers model , follow this [documentation](https://huggingface.co/docs/transformers/main_classes/quantization) instead. Check out this [demo](https://colab.research.google.com/drive/1VoYNfYDKcKRQRor98Zbf2-9VQTtGJ24k?usp=sharing) on how to fine-tune a 4-bit 🤗 Transformers model. 
 
 Note that you don’t need to pass `device_map` when loading the model for training. It will automatically load your model on your GPU. Please note that `device_map=auto` should be used for inference only.
 
