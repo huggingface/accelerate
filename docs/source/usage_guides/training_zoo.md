@@ -122,6 +122,11 @@ These are tutorials from libraries that integrate with 🤗 Accelerate:
 
 - [How to implement a sentiment learning task with trlx](https://github.com/CarperAI/trlx#example-how-to-add-a-task)
 
+### Comfy-UI
+
+- [Enabling using large Stable Diffusion Models in low-vram settings using Accelerate](https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/model_management.py#L291-L296)
+
+
 ## In Science
 
 Below contains a non-exhaustive list of papers utilizing 🤗 Accelerate. 
