@@ -191,7 +191,7 @@ def test_distributed_sync_multiple_fwd(accelerator):
 
         else:
             # Sync grads if last backward
-            with accelerator.ddp_trigger_sync_in_bwd(ddp_model):
+            with accelerator.trigger_sync_in_bwd(ddp_model):
                 accelerator.backward(loss)
 
             # DDP model and model should only be in sync after last backward
