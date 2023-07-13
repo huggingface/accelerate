@@ -882,11 +882,11 @@ class Accelerator:
         >>> dataloader, model, optimizer = accelerator.prepare(dataloader, model, optimizer)
 
         >>> with accelerator.no_sync():
-        ...     loss_a = loss_func(model(input_a)) # first forward pass
-        ...     loss_b = loss_func(model(input_b)) # second forward pass
-        >>> accelerator.backward(loss_a) # No synchronization across processes, only accumulate gradients
+        ...     loss_a = loss_func(model(input_a))  # first forward pass
+        ...     loss_b = loss_func(model(input_b))  # second forward pass
+        >>> accelerator.backward(loss_a)  # No synchronization across processes, only accumulate gradients
         >>> with accelerator.ddp_trigger_sync_in_bwd(model):
-        ...     accelerator.backward(loss_b) # Synchronization across all processes
+        ...     accelerator.backward(loss_b)  # Synchronization across all processes
         >>> optimizer.step()
         >>> optimizer.zero_grad()
         ```
