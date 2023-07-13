@@ -891,22 +891,22 @@ class Accelerator:
         >>> optimizer.zero_grad()
         ```
         """
-        if not isinstance(model_ddp, torch.nn.parallel.DistributedDataParallel):
+        if not isinstance(model, torch.nn.parallel.DistributedDataParallel):
             yield
             return
 
-        old_require_backward_grad_sync = model_ddp.require_backward_grad_sync
-        old_require_forward_param_sync = model_ddp.require_forward_param_sync
+        old_require_backward_grad_sync = model.require_backward_grad_sync
+        old_require_forward_param_sync = model.require_forward_param_sync
 
-        model_ddp.require_backward_grad_sync = True
-        model_ddp.require_forward_param_sync = True
+        model.require_backward_grad_sync = True
+        model.require_forward_param_sync = True
         # https://github.com/pytorch/pytorch/blob/master/torch/csrc/distributed/c10d/reducer.cpp#L1325-L1356
-        model_ddp.reducer.prepare_for_backward([])
+        model.reducer.prepare_for_backward([])
         try:
             yield
         finally:
-            model_ddp.require_backward_grad_sync = old_require_backward_grad_sync
-            model_ddp.require_forward_param_sync = old_require_forward_param_sync
+            model.require_backward_grad_sync = old_require_backward_grad_sync
+            model.require_forward_param_sync = old_require_forward_param_sync
 
     def _do_sync(self):
         "Sets the right `sync_gradients` context and either resets or increases `self.step`"
