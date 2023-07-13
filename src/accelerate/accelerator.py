@@ -866,31 +866,31 @@ class Accelerator:
     @contextmanager
     def trigger_sync_in_backward(model):
         """Trigger the sync of the gradients in the next backward pass of the model after multiple forward passes under
-`Accelerator.no_sync` (only applicable in multi-GPU scenarios).
+        `Accelerator.no_sync` (only applicable in multi-GPU scenarios).
 
-        If the script is not launched in distributed mode, this context manager does nothing.
+                If the script is not launched in distributed mode, this context manager does nothing.
 
-        Args:
-            model (`torch.nn.Module`):
-                The model for which to trigger the gradient synchronization.
+                Args:
+                    model (`torch.nn.Module`):
+                        The model for which to trigger the gradient synchronization.
 
-        Example:
+                Example:
 
-        ```python
-        >>> from accelerate import Accelerator
+                ```python
+                >>> from accelerate import Accelerator
 
-        >>> accelerator = Accelerator()
-        >>> dataloader, model, optimizer = accelerator.prepare(dataloader, model, optimizer)
+                >>> accelerator = Accelerator()
+                >>> dataloader, model, optimizer = accelerator.prepare(dataloader, model, optimizer)
 
-        >>> with accelerator.no_sync():
-        ...     loss_a = loss_func(model(input_a))  # first forward pass
-        ...     loss_b = loss_func(model(input_b))  # second forward pass
-        >>> accelerator.backward(loss_a)  # No synchronization across processes, only accumulate gradients
-        >>> with accelerator.trigger_sync_in_backward(model):
-        ...     accelerator.backward(loss_b)  # Synchronization across all processes
-        >>> optimizer.step()
-        >>> optimizer.zero_grad()
-        ```
+                >>> with accelerator.no_sync():
+                ...     loss_a = loss_func(model(input_a))  # first forward pass
+                ...     loss_b = loss_func(model(input_b))  # second forward pass
+                >>> accelerator.backward(loss_a)  # No synchronization across processes, only accumulate gradients
+                >>> with accelerator.trigger_sync_in_backward(model):
+                ...     accelerator.backward(loss_b)  # Synchronization across all processes
+                >>> optimizer.step()
+                >>> optimizer.zero_grad()
+                ```
         """
         if not isinstance(model, torch.nn.parallel.DistributedDataParallel):
             yield
