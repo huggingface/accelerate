@@ -865,7 +865,26 @@ class Accelerator:
     @staticmethod
     @contextmanager
     def ddp_trigger_sync_in_bwd(model_ddp):
-        """Trigger the sync of the gradients in the next backward pass of DDP model."""
+        """Trigger the sync of the gradients in the next backward pass of DDP model.
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> dataloader, model, optimizer = accelerator.prepare(dataloader, model, optimizer)
+
+        >>> with accelerator.no_sync():
+        ...     loss_a = loss_func(model(input_a)) # first forward pass
+        ...     loss_b = loss_func(model(input_b)) # second forward pass
+        >>> accelerator.backward(loss_a) # No synchronization across processes, only accumulate gradients
+        >>> with accelerator.ddp_trigger_sync_in_bwd(model):
+        ...     accelerator.backward(loss_b) # Synchronization across all processes
+        >>> optimizer.step()
+        >>> optimizer.zero_grad()
+        ```
+        """
         assert isinstance(model_ddp, torch.nn.parallel.DistributedDataParallel), (
             f"model_ddp should be of type `torch.nn.parallel.DistributedDataParallel`, "
             f"got {type(model_ddp)} instead."
