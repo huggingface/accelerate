@@ -898,6 +898,8 @@ class Accelerator:
         old_require_backward_grad_sync = model.require_backward_grad_sync
         old_require_forward_param_sync = model.require_forward_param_sync
 
+        # EXPERIMENTAL: While I'm sure this forces grad sync in backward, I don't know if it breaks other DDP features.
+        # https://github.com/pytorch/pytorch/blob/e1502c0cdbfd17548c612f25d5a65b1e4b86224d/torch/nn/parallel/distributed.py#L1453-L1466
         model.require_backward_grad_sync = True
         model.require_forward_param_sync = True
         # https://github.com/pytorch/pytorch/blob/e1502c0cdbfd17548c612f25d5a65b1e4b86224d/torch/csrc/distributed/c10d/reducer.cpp#L1371-L1402
