@@ -165,15 +165,12 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         return self._is_overflow
 
     def __getstate__(self):
-        ret = {}
-        for k, v in self.__dict__.items():
-            if k not in [
-                "_accelerate_num_step_called",
-                "_optimizer_original_step_method",
-                "_optimizer_patched_step_method",
-            ]:
-                ret[k] = v
-        return ret
+        _ignored_keys = [
+            "_accelerate_num_step_called",
+            "_optimizer_original_step_method",
+            "_optimizer_patched_step_method",
+        ]
+        return {k: v for k, v in self.__dict__.items() if k not in _ignored_keys}
 
     def __setstate__(self, state):
         self.__dict__.update(state)
@@ -182,7 +179,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self._optimizer_patched_step_method = patch_optimizer_step(self, self.optimizer.step)
 
 
-def patch_optimizer_step(accelerated_optimizer: "AcceleratedOptimizer", method):
+def patch_optimizer_step(accelerated_optimizer: AcceleratedOptimizer, method):
     def patched_step(*args, **kwargs):
         accelerated_optimizer._accelerate_num_step_called += 1
         return method(*args, **kwargs)
