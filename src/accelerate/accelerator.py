@@ -867,6 +867,12 @@ class Accelerator:
     def ddp_trigger_sync_in_bwd(model_ddp):
         """Trigger the sync of the gradients in the next backward pass of DDP model.
 
+        If `model` is not in DDP, this context manager does nothing
+        
+        Args:
+            model_ddp (`torch.nn.parallel.DistributedDataParallel`):
+                PyTorch Module wrapped in `DistributedDataParallel` 
+
         Example:
 
         ```python
@@ -885,10 +891,10 @@ class Accelerator:
         >>> optimizer.zero_grad()
         ```
         """
-        assert isinstance(model_ddp, torch.nn.parallel.DistributedDataParallel), (
-            f"model_ddp should be of type `torch.nn.parallel.DistributedDataParallel`, "
-            f"got {type(model_ddp)} instead."
-        )
+        if not isinstance(model_ddp, torch.nn.parallel.DistributedDataParallel):
+            yield
+            return
+
         old_require_backward_grad_sync = model_ddp.require_backward_grad_sync
         old_require_forward_param_sync = model_ddp.require_forward_param_sync
 
