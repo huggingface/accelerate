@@ -60,17 +60,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.device_placement = device_placement
         self._is_overflow = False
 
-        def patch_optimizer_step(method):
-            def patched_step(*args, **kwargs):
-                self._accelerate_num_step_called += 1
-                return method(*args, **kwargs)
-
-            return patched_step
-
         self._accelerate_num_step_called = 0
         self._optimizer_original_step_method = self.optimizer.step
-        # Bind the patched step method to self.optimizer
-        self._optimizer_patched_step_method = patch_optimizer_step(self.optimizer.step)
+        self._optimizer_patched_step_method = patch_optimizer_step(self, self.optimizer.step)
 
         # Handle device placement
         if device_placement:
@@ -173,7 +165,26 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         return self._is_overflow
 
     def __getstate__(self):
-        return self.__dict__.copy()
+        ret = {}
+        for k, v in self.__dict__.items():
+            if k not in [
+                "_accelerate_num_step_called",
+                "_optimizer_original_step_method",
+                "_optimizer_patched_step_method",
+            ]:
+                ret[k] = v
+        return ret
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        self._accelerate_num_step_called = 0
+        self._optimizer_original_step_method = self.optimizer.step
+        self._optimizer_patched_step_method = patch_optimizer_step(self, self.optimizer.step)
+
+
+def patch_optimizer_step(accelerated_optimizer: "AcceleratedOptimizer", method):
+    def patched_step(*args, **kwargs):
+        accelerated_optimizer._accelerate_num_step_called += 1
+        return method(*args, **kwargs)
+
+    return patched_step
