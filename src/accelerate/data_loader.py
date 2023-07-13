@@ -549,7 +549,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             # But, we only iterate through the DataLoader on process 0.
             main_iterator = super().__iter__()
         elif self.state.process_index == 0:
-            main_iterator = super().__init__()
+            main_iterator = super().__iter__()
         stop_iteration = False
         self._stop_iteration = False
         first_batch = None
