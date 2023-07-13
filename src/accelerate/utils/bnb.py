@@ -124,7 +124,7 @@ def load_and_quantize_model(
         bnb_quantization_config.keep_in_fp32_modules = []
     keep_in_fp32_modules = bnb_quantization_config.keep_in_fp32_modules
     modules_to_not_convert.extend(keep_in_fp32_modules)
-    
+
     # compatibility with peft
     model.is_loaded_in_4bit = load_in_4bit
     model.is_loaded_in_8bit = load_in_8bit
