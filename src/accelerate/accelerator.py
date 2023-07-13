@@ -862,6 +862,55 @@ class Accelerator:
         with context():
             yield
 
+    @staticmethod
+    @contextmanager
+    def trigger_sync_in_backward(model):
+        """Trigger the sync of the gradients in the next backward pass of the model after multiple forward passes under
+        `Accelerator.no_sync` (only applicable in multi-GPU scenarios).
+
+                If the script is not launched in distributed mode, this context manager does nothing.
+
+                Args:
+                    model (`torch.nn.Module`):
+                        The model for which to trigger the gradient synchronization.
+
+                Example:
+
+                ```python
+                >>> from accelerate import Accelerator
+
+                >>> accelerator = Accelerator()
+                >>> dataloader, model, optimizer = accelerator.prepare(dataloader, model, optimizer)
+
+                >>> with accelerator.no_sync():
+                ...     loss_a = loss_func(model(input_a))  # first forward pass
+                ...     loss_b = loss_func(model(input_b))  # second forward pass
+                >>> accelerator.backward(loss_a)  # No synchronization across processes, only accumulate gradients
+                >>> with accelerator.trigger_sync_in_backward(model):
+                ...     accelerator.backward(loss_b)  # Synchronization across all processes
+                >>> optimizer.step()
+                >>> optimizer.zero_grad()
+                ```
+        """
+        if not isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            yield
+            return
+
+        old_require_backward_grad_sync = model.require_backward_grad_sync
+        old_require_forward_param_sync = model.require_forward_param_sync
+
+        # EXPERIMENTAL: This will force grad sync during `backward()`, but it is unknown if it breaks other DDP features.
+        # https://github.com/pytorch/pytorch/blob/e1502c0cdbfd17548c612f25d5a65b1e4b86224d/torch/nn/parallel/distributed.py#L1453-L1466
+        model.require_backward_grad_sync = True
+        model.require_forward_param_sync = True
+        # https://github.com/pytorch/pytorch/blob/e1502c0cdbfd17548c612f25d5a65b1e4b86224d/torch/csrc/distributed/c10d/reducer.cpp#L1371-L1402
+        model.reducer.prepare_for_backward([])
+        try:
+            yield
+        finally:
+            model.require_backward_grad_sync = old_require_backward_grad_sync
+            model.require_forward_param_sync = old_require_forward_param_sync
+
     def _do_sync(self):
         "Sets the right `sync_gradients` context and either resets or increases `self.step`"
         if self.gradient_state.sync_with_dataloader and self.gradient_state.end_of_dataloader:

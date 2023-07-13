@@ -150,6 +150,60 @@ def test_distributed_sync(accelerator):
         ddp_input = ddp_input[torch.randperm(len(ddp_input))]
 
 
+def test_distributed_sync_multiple_fwd(accelerator):
+    # Test on distributed setup that context manager behaves properly when used with multiple forwards followed by multiple backwards
+    model, ddp_model, dataloader = get_training_setup(accelerator)
+    # Do multiple forwards
+    losses = []
+    num_iterations = 3
+    for iteration in range(num_iterations):
+        ddp_input, ddp_target = next(iter(dataloader)).values()
+
+        # Gather the distributed inputs and targs for the base model
+        input, target = accelerator.gather((ddp_input, ddp_target))
+        input, target = input.to(accelerator.device), target.to(accelerator.device)
+
+        # Perform our initial ground truth step in non "DDP"
+        step_model(model, input, target, accelerator)
+
+        # Accumulate grads locally
+        with accelerator.no_sync(ddp_model):
+            ddp_output = ddp_model(ddp_input)
+            loss = F.mse_loss(ddp_output, ddp_target.to(ddp_output.device))
+            losses.append(loss)
+
+    # Do multiple backwards and sync only at the last backward
+    for iteration in range(num_iterations):
+        loss = losses[iteration]
+
+        if iteration < num_iterations - 1:
+            # Accumulate grads locally
+            accelerator.backward(loss)
+
+            # DDP model and model should only be in sync after last backward
+            for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+                if not param.requires_grad:
+                    continue
+                # Grads should not be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is False
+                ), f"Gradients in sync when they should not be:\nModel grad ({param.grad}) == DDP grad ({ddp_param.grad})"
+
+        else:
+            # Sync grads if last backward
+            with accelerator.trigger_sync_in_backward(ddp_model):
+                accelerator.backward(loss)
+
+            # DDP model and model should only be in sync after last backward
+            for param, ddp_param in zip(model.parameters(), ddp_model.parameters()):
+                if not param.requires_grad:
+                    continue
+                # Grads should be in sync
+                assert (
+                    torch.allclose(param.grad, ddp_param.grad) is True
+                ), f"Gradients not in sync when they should be:\nModel grad ({param.grad}) != DDP grad ({ddp_param.grad})"
+
+
 def test_gradient_accumulation(split_batches=False, dispatch_batches=False):
     accelerator = Accelerator(
         split_batches=split_batches, dispatch_batches=dispatch_batches, gradient_accumulation_steps=2
@@ -270,6 +324,9 @@ def main():
         if state.local_process_index == 0:
             print("**Test Distributed `no_sync` context manager**")
         test_distributed_sync(accelerator)
+        if state.local_process_index == 0:
+            print("**Test Distributed `no_sync` context manager with multiple forwards**")
+        test_distributed_sync_multiple_fwd(accelerator)
     if state.distributed_type == DistributedType.MULTI_GPU:
         for split_batch in [True, False]:
             for dispatch_batches in [True, False]:
