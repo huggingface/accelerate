@@ -900,7 +900,7 @@ class Accelerator:
 
         model.require_backward_grad_sync = True
         model.require_forward_param_sync = True
-        # https://github.com/pytorch/pytorch/blob/master/torch/csrc/distributed/c10d/reducer.cpp#L1325-L1356
+        # https://github.com/pytorch/pytorch/blob/e1502c0cdbfd17548c612f25d5a65b1e4b86224d/torch/csrc/distributed/c10d/reducer.cpp#L1371-L1402
         model.reducer.prepare_for_backward([])
         try:
             yield
