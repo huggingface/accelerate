@@ -19,7 +19,7 @@ import torch
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import require_cpu
+from accelerate.test_utils import require_cpu, require_cuda
 
 
 @require_cpu
@@ -33,4 +33,53 @@ class OptimizerTester(unittest.TestCase):
             pickle.loads(pickle.dumps(optimizer))
         except Exception as e:
             self.fail(f"Accelerated optimizer pickling failed with {e}")
+        AcceleratorState._reset_state()
+
+
+@require_cuda
+class CudaOptimizerTester(unittest.TestCase):
+    def test_accelerated_optimizer_step_was_skipped(self):
+        model = torch.nn.Linear(5, 5)
+        optimizer = torch.optim.SGD(model.parameters(), 0.1)
+        accelerator = Accelerator(mixed_precision="fp16")
+        model, optimizer = accelerator.prepare(model, optimizer)
+
+        loss = model(torch.randn(2, 5, device=accelerator.device)).sum()
+        accelerator.backward(loss)
+        for p in model.parameters():
+            # Fake the gradients, as if there's no overflow
+            p.grad.fill_(0.01)
+
+        optimizer.step()
+        self.assertTrue(optimizer.step_was_skipped is False)
+
+        loss = model(torch.randn(2, 5, device=accelerator.device)).sum()
+        accelerator.backward(loss)
+        for p in model.parameters():
+            p.grad.fill_(0.01)
+        # Manually set the gradients to be NaN, as if there's an overflow
+        p.grad[0] = torch.tensor(float("nan"))
+
+        optimizer.step()
+        self.assertTrue(optimizer.step_was_skipped is True)
+
+        loss = model(torch.randn(2, 5, device=accelerator.device)).sum()
+        accelerator.backward(loss)
+        for p in model.parameters():
+            p.grad.fill_(0.01)
+        # Manually set the gradients to be NaN, as if there's an overflow
+        p.grad[0] = torch.tensor(float("nan"))
+
+        optimizer.step()
+        self.assertTrue(optimizer.step_was_skipped is True)
+
+        loss = model(torch.randn(2, 5, device=accelerator.device)).sum()
+        accelerator.backward(loss)
+        for p in model.parameters():
+            # Fake the gradients, as if there's no overflow
+            p.grad.fill_(0.01)
+
+        optimizer.step()
+        self.assertTrue(optimizer.step_was_skipped is False)
+
         AcceleratorState._reset_state()
