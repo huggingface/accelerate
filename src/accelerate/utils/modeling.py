@@ -267,6 +267,11 @@ def set_module_tensor_to_device(
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
     if value is not None:
+        if old_value.shape != value.shape:
+            raise ValueError(
+                f'Trying to set a tensor of shape {value.shape} in "{tensor_name}" (which has shape {old_value.shape}), this look incorrect.'
+            )
+
         if dtype is None:
             # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
             value = value.to(old_value.dtype)
