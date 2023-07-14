@@ -62,7 +62,7 @@ def get_cluster_input():
 
     if distributed_type in [
         DistributedType.MULTI_GPU,
-        DistributedType.MULTI_GPU,
+        DistributedType.MULTI_NPU,
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_CPU,
     ]:
