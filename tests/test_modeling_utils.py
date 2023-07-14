@@ -143,7 +143,10 @@ class ModelingUtilsTester(unittest.TestCase):
         tensor = torch.zeros((2, 2))
         with self.assertRaises(ValueError) as cm:
             set_module_tensor_to_device(model, "linear1.weight", "cpu", value=tensor)
-        self.assertEqual(str(cm.exception), "Trying to set a tensor of shape torch.Size([2, 2]) in \"weight\" (which has shape torch.Size([4, 3])), this look incorrect.")
+        self.assertEqual(
+            str(cm.exception),
+            'Trying to set a tensor of shape torch.Size([2, 2]) in "weight" (which has shape torch.Size([4, 3])), this look incorrect.',
+        )
 
     def test_named_tensors(self):
         model = nn.BatchNorm1d(4)
