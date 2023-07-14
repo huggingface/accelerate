@@ -60,7 +60,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.device_placement = device_placement
         self._is_overflow = False
 
-        self._accelerate_num_step_called = 0
+        self._accelerate_step_called = False
         self._optimizer_original_step_method = self.optimizer.step
         self._optimizer_patched_step_method = patch_optimizer_step(self, self.optimizer.step)
 
@@ -131,17 +131,15 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 self.scaler.step(self.optimizer, closure)
                 self.scaler.update()
 
-                if self._accelerate_num_step_called == 0:
+                if not self._accelerate_step_called:
                     # If the optimizer step was skipped, gradient overflow was detected.
                     self._is_overflow = True
-                elif self._accelerate_num_step_called == 1:
-                    self._is_overflow = False
                 else:
-                    raise RuntimeError("The optimizer step was called more than once. Something is wrong.")
+                    self._is_overflow = False
                 # Reset the step method to the original one
                 self.optimizer.step = self._optimizer_original_step_method
-                # Reset the counter
-                self._accelerate_num_step_called = 0
+                # Reset the indicator
+                self._accelerate_step_called = False
             else:
                 self.optimizer.step(closure)
 
@@ -166,7 +164,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def __getstate__(self):
         _ignored_keys = [
-            "_accelerate_num_step_called",
+            "_accelerate_step_called",
             "_optimizer_original_step_method",
             "_optimizer_patched_step_method",
         ]
@@ -174,14 +172,14 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self._accelerate_num_step_called = 0
+        self._accelerate_step_called = False
         self._optimizer_original_step_method = self.optimizer.step
         self._optimizer_patched_step_method = patch_optimizer_step(self, self.optimizer.step)
 
 
 def patch_optimizer_step(accelerated_optimizer: AcceleratedOptimizer, method):
     def patched_step(*args, **kwargs):
-        accelerated_optimizer._accelerate_num_step_called += 1
+        accelerated_optimizer._accelerate_step_called = True
         return method(*args, **kwargs)
 
     return patched_step
