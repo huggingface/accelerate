@@ -366,7 +366,7 @@ def broadcast(tensor, from_process: int = 0):
     elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
         return _gpu_broadcast(tensor, src=from_process)
     elif PartialState().distributed_type in DistributedType.MULTI_NPU:
-        return _gpu_gather_object(object)
+        return _gpu_broadcast(tensor, src=from_process)
     elif PartialState().distributed_type in DistributedType.MULTI_XPU:
         return _gpu_broadcast(tensor, src=from_process)
     elif PartialState().distributed_type == DistributedType.MULTI_CPU:
