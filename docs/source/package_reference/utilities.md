@@ -17,6 +17,12 @@ rendered properly in your Markdown viewer.
 
 Below are a variety of utility functions that 🤗 Accelerate provides, broken down by use-case. 
 
+## Constants
+
+Constants used throughout 🤗 Accelerate for reference
+
+[[autodoc]] utils.MODEL_NAME
+
 ## Data Classes
 
 These are basic dataclasses used throughout 🤗 Accelerate and they can be passed in as parameters.
