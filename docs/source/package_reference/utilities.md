@@ -23,11 +23,29 @@ These are basic dataclasses used throughout 🤗 Accelerate and they can be pass
 
 [[autodoc]] utils.DistributedType
 
+[[autodoc]] utils.DynamoBackend
+
 [[autodoc]] utils.LoggerType
 
 [[autodoc]] utils.PrecisionType
 
 [[autodoc]] utils.ProjectConfiguration
+
+## Plugins
+
+These are plugins that can be passed to the [`Accelerator`] object. While they are defined elsewhere in the documentation, 
+for convience all of them are available to see here:
+
+[[autodoc]] utils.DeepSpeedPlugin
+
+[[autodoc]] utils.FullyShardedDataParallelPlugin
+
+[[autodoc]] utils.GradientAccumulationPlugin
+
+[[autodoc]] utils.MegatronLMPlugin
+
+[[autodoc]] utils.TorchDynamoPlugin
+
 
 ## Data Manipulation and Operations
 

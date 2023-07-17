@@ -22,6 +22,8 @@ rendered properly in your Markdown viewer.
 [[autodoc]] big_modeling.disk_offload
 [[autodoc]] big_modeling.dispatch_model
 [[autodoc]] big_modeling.load_checkpoint_and_dispatch
+[[autodoc]] big_modeling.load_checkpoint_in_model
+[[autodoc]] utils.infer_auto_device_map
 
 ## Model Hooks
 
