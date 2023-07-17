@@ -21,7 +21,20 @@ Below are a variety of utility functions that 🤗 Accelerate provides, broken d
 
 Constants used throughout 🤗 Accelerate for reference
 
-[[autodoc]] utils.MODEL_NAME
+The following are constants used when utilizing [`Accelerator.save_state`]
+
+`utils.MODEL_NAME`: `"pytorch_model"`
+`utils.OPTIMIZER_NAME`: `"optimizer"`
+`utils.RNG_STATE_NAME`: `"random_states"`
+`utils.SCALER_NAME`: `"scaler.pt`
+`utils.SCHEDULER_NAME`: `"scheduler`
+
+The following are constants used when utilizing [`Accelerator.save_model`]
+
+`utils.WEIGHTS_NAME`: `"pytorch_model.bin"`
+`utils.SAFE_WEIGHTS_NAME`: `"model.safetensors"`
+`utils.WEIGHTS_INDEX_NAME`: `"pytorch_model.bin.index.json"`
+`utils.SAFE_WEIGHTS_INDEX_NAME`: `"model.safetensors.index.json"`
 
 ## Data Classes
 
@@ -75,15 +88,26 @@ These functionalities check the state of the current working environment includi
 
 [[autodoc]] utils.is_bf16_available
 
+[[autodoc]] is_ipex_available
+
+[[autodoc]] utils.is_mps_available
+
+[[autodoc]] utils.is_npu_available
+
 [[autodoc]] utils.is_torch_version
 
 [[autodoc]] utils.is_tpu_available
 
-## Environment Configuration
+[[autodoc]] utils.is_xpu_available
+
+## Environment Manipulation
+
+[[autodoc]] utils.patch_environment
 
 [[autodoc]] utils.write_basic_config
 
 When setting up 🤗 Accelerate for the first time, rather than running `accelerate config` [~utils.write_basic_config] can be used as an alternative for quick configuration.
+
 
 ## Memory
 
