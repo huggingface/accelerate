@@ -60,9 +60,10 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.device_placement = device_placement
         self._is_overflow = False
 
-        self._accelerate_step_called = False
-        self._optimizer_original_step_method = self.optimizer.step
-        self._optimizer_patched_step_method = patch_optimizer_step(self, self.optimizer.step)
+        if self.scaler is not None:
+            self._accelerate_step_called = False
+            self._optimizer_original_step_method = self.optimizer.step
+            self._optimizer_patched_step_method = patch_optimizer_step(self, self.optimizer.step)
 
         # Handle device placement
         if device_placement:
