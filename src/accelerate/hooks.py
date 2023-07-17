@@ -242,7 +242,7 @@ class AlignDevicesHook(ModelHook):
 
     def __repr__(self):
         return (
-            f"AlignDeviceHook(execution_device={self.execution_device}, offload={self.offload}, "
+            f"AlignDevicesHook(execution_device={self.execution_device}, offload={self.offload}, "
             f"io_same_device={self.io_same_device}, offload_buffers={self.offload_buffers}, "
             f"place_submodules={self.place_submodules}, skip_keys={repr(self.skip_keys)})"
         )
