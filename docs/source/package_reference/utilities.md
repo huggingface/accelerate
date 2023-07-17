@@ -108,7 +108,6 @@ These functionalities check the state of the current working environment includi
 
 When setting up 🤗 Accelerate for the first time, rather than running `accelerate config` [~utils.write_basic_config] can be used as an alternative for quick configuration.
 
-
 ## Memory
 
 [[autodoc]] utils.get_max_memory
