@@ -88,7 +88,7 @@ These functionalities check the state of the current working environment includi
 
 [[autodoc]] utils.is_bf16_available
 
-[[autodoc]] is_ipex_available
+[[autodoc]] utils.is_ipex_available
 
 [[autodoc]] utils.is_mps_available
 
