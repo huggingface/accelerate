@@ -527,6 +527,10 @@ class ModelingUtilsTester(unittest.TestCase):
         max_memory = get_balanced_memory(model, max_memory={0: 200, 1: 200})
         self.assertDictEqual({0: 200, 1: 200}, max_memory)
 
+        # We should be able to set models on a non-contiguous sub-set of
+        max_memory = get_balanced_memory(model, max_memory={0: 200, 2: 200})
+        self.assertDictEqual({0: 200, 2: 200}, max_memory)
+
         max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 300})
         self.assertDictEqual({0: 215, 1: 300}, max_memory)
 
