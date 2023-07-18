@@ -23,6 +23,7 @@ from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwa
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import execute_subprocess_async, require_cuda, require_multi_gpu
 from accelerate.utils import KwargsHandler, TorchDynamoPlugin
+from accelerate.utils.dataclasses import clear_os_environ
 
 
 @dataclass
@@ -64,19 +65,15 @@ class KwargsHandlerTester(unittest.TestCase):
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_torch_dynamo_plugin(self):
-        prefix = "ACCELERATE_DYNAMO_"
-        old_backend = os.environ.get(prefix + "BACKEND", None)
-        old_mode = os.environ.get(prefix + "MODE", None)
-        os.environ[prefix + "BACKEND"] = "nvfuser"
-        os.environ[prefix + "MODE"] = "reduce-overhead"
+        with clear_os_environ():
+            prefix = "ACCELERATE_DYNAMO_"
+            # nvfuser's dynamo backend name is "nvprims_nvfuser"
+            # use "nvfuser" here to cause exception if this test causes os.environ changed permanently
+            os.environ[prefix + "BACKEND"] = "nvfuser"
+            os.environ[prefix + "MODE"] = "reduce-overhead"
 
-        dynamo_plugin_kwargs = TorchDynamoPlugin().to_kwargs()
-        self.assertEqual(dynamo_plugin_kwargs, {"backend": "nvfuser", "mode": "reduce-overhead"})
-
-        if old_backend is not None:
-            os.environ[prefix + "BACKEND"] = old_backend
-        if old_mode is not None:
-            os.environ[prefix + "MODE"] = old_mode
+            dynamo_plugin_kwargs = TorchDynamoPlugin().to_kwargs()
+            self.assertEqual(dynamo_plugin_kwargs, {"backend": "nvfuser", "mode": "reduce-overhead"})
 
 
 if __name__ == "__main__":
