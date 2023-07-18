@@ -18,6 +18,9 @@ rendered properly in your Markdown viewer.
 The following objects can be passed to the main [`Accelerator`] to customize how some PyTorch objects
 related to distributed training or mixed precision are created.
 
+## AutocastKwargs
+
+[[autodoc]] AutocastKwargs
 
 ## DistributedDataParallelKwargs
 
