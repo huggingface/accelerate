@@ -48,6 +48,7 @@ class KwargsHandler:
         """
         # import clear_environment here to avoid circular import problem
         from .other import clear_environment
+
         with clear_environment():
             default_dict = self.__class__().to_dict()
         this_dict = self.to_dict()

@@ -129,7 +129,7 @@ def clear_environment():
 
     >>> os.environ["FOO"] = "bar"
     >>> with clear_environment():
-    ...     print(os.environ) # prints "{}"
+    ...     print(os.environ)  # prints "{}"
     ...     os.environ["FOO"] = "new_bar"
     ...     print(os.environ.get("FOO", None))  # prints "new_bar"
     >>> print(os.environ["FOO"])  # prints "bar"

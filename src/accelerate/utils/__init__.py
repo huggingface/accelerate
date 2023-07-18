@@ -159,11 +159,11 @@ from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
 from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
 from .memory import find_executable_batch_size, release_memory
 from .other import (
+    clear_environment,
     extract_model_from_parallel,
     get_pretty_name,
     is_port_in_use,
     merge_dicts,
-    clear_environment,
     patch_environment,
     save,
     wait_for_everyone,
