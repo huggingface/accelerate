@@ -70,7 +70,7 @@ class AutocastKwargs(KwargsHandler):
     """
 
     enabled: bool = False
-    cache_enabled: bool = False
+    cache_enabled: bool = None
 
 
 @dataclass
