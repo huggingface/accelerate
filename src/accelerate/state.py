@@ -418,23 +418,24 @@ class PartialState:
         if self.num_processes == 1:
             yield inputs
             return
+        length = len(inputs)
         # Nested dictionary of any types
         if isinstance(inputs, dict):
             length = len(inputs[list(inputs.keys())[0]])
             if not all(len(v) == length for v in inputs.values()):
                 raise ValueError("All values in the dictionary must have the same length")
-        num_samples_per_process = math.ceil(len(inputs) / self.num_processes)
+        num_samples_per_process = math.ceil(length / self.num_processes)
         start_index = self.process_index * num_samples_per_process
         end_index = start_index + num_samples_per_process
         if (len(inputs) % self.num_processes != 0) and (self.process_index == self.num_processes - 1):
-            if isinstance(inputs, (list, tuple, torch.Tensor)):
-                end_index = len(inputs)
-            elif isinstance(inputs, dict):
-                end_index = len(inputs[list(inputs.keys())[0]])
+            end_index = length
 
         def _split_values(inputs, start_index, end_index):
             if isinstance(inputs, (list, tuple, torch.Tensor)):
-                result = inputs[start_index:end_index]
+                if start_index >= len(inputs):
+                    result = inputs[-1:]
+                else:
+                    result = inputs[start_index:end_index]
                 if apply_padding:
                     if isinstance(result, torch.Tensor):
                         from accelerate.utils import pad_across_processes, send_to_device
