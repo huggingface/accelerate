@@ -432,7 +432,10 @@ class PartialState:
 
         def _split_values(inputs, start_index, end_index):
             if isinstance(inputs, (list, tuple, torch.Tensor)):
-                result = inputs[start_index:end_index]
+                if start_index >= len(inputs):
+                    result = inputs[-1:]
+                else:
+                    result = inputs[start_index:end_index]
                 if apply_padding:
                     if isinstance(result, torch.Tensor):
                         from accelerate.utils import pad_across_processes, send_to_device
