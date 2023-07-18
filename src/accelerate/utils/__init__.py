@@ -163,6 +163,7 @@ from .other import (
     get_pretty_name,
     is_port_in_use,
     merge_dicts,
+    clear_environment,
     patch_environment,
     save,
     wait_for_everyone,

@@ -22,8 +22,7 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import execute_subprocess_async, require_cuda, require_multi_gpu
-from accelerate.utils import KwargsHandler, TorchDynamoPlugin
-from accelerate.utils.dataclasses import clear_os_environ
+from accelerate.utils import KwargsHandler, TorchDynamoPlugin, clear_environment
 
 
 @dataclass
@@ -65,7 +64,7 @@ class KwargsHandlerTester(unittest.TestCase):
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_torch_dynamo_plugin(self):
-        with clear_os_environ():
+        with clear_environment():
             prefix = "ACCELERATE_DYNAMO_"
             # nvfuser's dynamo backend name is "nvprims_nvfuser"
             # use "nvfuser" here to cause exception if this test causes os.environ changed permanently
