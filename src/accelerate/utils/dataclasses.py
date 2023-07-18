@@ -34,6 +34,14 @@ import torch
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
 
 
+@contextmanager
+def clear_os_environ():
+    _old_os_environ = os.environ
+    os.environ = dict()
+    yield
+    os.environ = _old_os_environ
+
+
 class KwargsHandler:
     """
     Internal mixin that implements a `to_kwargs()` method for a dataclass.
@@ -46,7 +54,8 @@ class KwargsHandler:
         """
         Returns a dictionary containing the attributes with values different from the default of this class.
         """
-        default_dict = self.__class__().to_dict()
+        with clear_os_environ():
+            default_dict = self.__class__().to_dict()
         this_dict = self.to_dict()
         return {k: v for k, v in this_dict.items() if default_dict[k] != v}
 
