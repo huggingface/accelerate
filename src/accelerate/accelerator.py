@@ -2676,7 +2676,7 @@ class Accelerator:
 
         Args:
             input_dir (`str` or `os.PathLike`):
-                The name of the folder all relevant weights and states were saved in. Can be `None` if 
+                The name of the folder all relevant weights and states were saved in. Can be `None` if
                 `automatic_checkpoint_naming` is used, and will pick up from the latest checkpoint.
             load_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for loading model which can be passed to the underlying load function,
