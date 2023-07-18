@@ -2663,7 +2663,7 @@ class Accelerator:
         self._load_model_state_pre_hook[handle.id] = hook
         return handle
 
-    def load_state(self, input_dir: str, **load_model_func_kwargs):
+    def load_state(self, input_dir: str = None, **load_model_func_kwargs):
         """
         Loads the current states of the model, optimizer, scaler, RNG generators, and registered objects.
 
@@ -2693,10 +2693,23 @@ class Accelerator:
         >>> accelerator.load_state("my_checkpoint")
         ```
         """
-        # Check if folder exists
-        input_dir = os.path.expanduser(input_dir)
-        if not os.path.isdir(input_dir):
-            raise ValueError(f"Tried to find {input_dir} but folder does not exist")
+        if input_dir is not None:
+            # Check if folder exists
+            input_dir = os.path.expanduser(input_dir)
+            if not os.path.isdir(input_dir):
+                raise ValueError(f"Tried to find {input_dir} but folder does not exist")
+        elif self.project_configuration.automatic_checkpoint_naming:
+            # Pick up from automatic checkpoint naming
+            input_dir = os.path.join(self.project_dir, "checkpoints")
+            folders = [os.path.join(input_dir, folder) for folder in os.listdir(input_dir)]
+
+            def _inner(folder):
+                return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
+
+            folders.sort(key=_inner)
+            input_dir = os.path.join(input_dir, folders[-1])
+        else:
+            raise ValueError("No input_dir provided and automatic checkpoint naming is disabled.")
         logger.info(f"Loading states from {input_dir}")
 
         # Load the models taking care of FSDP and DeepSpeed nuances
