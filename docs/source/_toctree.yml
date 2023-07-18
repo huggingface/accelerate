@@ -85,4 +85,6 @@
     title: Utility functions and classes
   - local: package_reference/megatron_lm
     title: Megatron-LM Utilities
+  - local: package_reference/fsdp
+    title: Fully Sharded Data Parallelism Utilities
   title: "Reference"

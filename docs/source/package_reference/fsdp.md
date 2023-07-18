@@ -1,4 +1,4 @@
-<!--Copyright 2021 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -13,25 +13,6 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Wrapper classes for torch Dataloaders, Optimizers, and Schedulers
+# Utilities for Fully Sharded Data Parallelism
 
-The internal classes Accelerate uses to prepare objects for distributed training
-when calling [`~Accelerator.prepare`].
-
-## Datasets and DataLoaders
-
-[[autodoc]] data_loader.prepare_data_loader
-[[autodoc]] data_loader.skip_first_batches
-
-[[autodoc]] data_loader.BatchSamplerShard
-[[autodoc]] data_loader.IterableDatasetShard
-[[autodoc]] data_loader.DataLoaderShard
-[[autodoc]] data_loader.DataLoaderDispatcher
-
-## Optimizers 
-
-[[autodoc]] optimizer.AcceleratedOptimizer
-
-## Schedulers 
-
-[[autodoc]] scheduler.AcceleratedScheduler
+[[autodoc]] utils.FullyShardedDataParallelPlugin

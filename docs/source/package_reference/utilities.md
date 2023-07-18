@@ -17,17 +17,54 @@ rendered properly in your Markdown viewer.
 
 Below are a variety of utility functions that 🤗 Accelerate provides, broken down by use-case. 
 
+## Constants
+
+Constants used throughout 🤗 Accelerate for reference
+
+The following are constants used when utilizing [`Accelerator.save_state`]
+
+`utils.MODEL_NAME`: `"pytorch_model"`
+`utils.OPTIMIZER_NAME`: `"optimizer"`
+`utils.RNG_STATE_NAME`: `"random_states"`
+`utils.SCALER_NAME`: `"scaler.pt`
+`utils.SCHEDULER_NAME`: `"scheduler`
+
+The following are constants used when utilizing [`Accelerator.save_model`]
+
+`utils.WEIGHTS_NAME`: `"pytorch_model.bin"`
+`utils.SAFE_WEIGHTS_NAME`: `"model.safetensors"`
+`utils.WEIGHTS_INDEX_NAME`: `"pytorch_model.bin.index.json"`
+`utils.SAFE_WEIGHTS_INDEX_NAME`: `"model.safetensors.index.json"`
+
 ## Data Classes
 
 These are basic dataclasses used throughout 🤗 Accelerate and they can be passed in as parameters.
 
 [[autodoc]] utils.DistributedType
 
+[[autodoc]] utils.DynamoBackend
+
 [[autodoc]] utils.LoggerType
 
 [[autodoc]] utils.PrecisionType
 
 [[autodoc]] utils.ProjectConfiguration
+
+## Plugins
+
+These are plugins that can be passed to the [`Accelerator`] object. While they are defined elsewhere in the documentation, 
+for convience all of them are available to see here:
+
+[[autodoc]] utils.DeepSpeedPlugin
+
+[[autodoc]] utils.FullyShardedDataParallelPlugin
+
+[[autodoc]] utils.GradientAccumulationPlugin
+
+[[autodoc]] utils.MegatronLMPlugin
+
+[[autodoc]] utils.TorchDynamoPlugin
+
 
 ## Data Manipulation and Operations
 
@@ -51,11 +88,21 @@ These functionalities check the state of the current working environment includi
 
 [[autodoc]] utils.is_bf16_available
 
+[[autodoc]] utils.is_ipex_available
+
+[[autodoc]] utils.is_mps_available
+
+[[autodoc]] utils.is_npu_available
+
 [[autodoc]] utils.is_torch_version
 
 [[autodoc]] utils.is_tpu_available
 
-## Environment Configuration
+[[autodoc]] utils.is_xpu_available
+
+## Environment Manipulation
+
+[[autodoc]] utils.patch_environment
 
 [[autodoc]] utils.write_basic_config
 

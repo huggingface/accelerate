@@ -23,6 +23,10 @@ related to distributed training or mixed precision are created.
 
 [[autodoc]] DistributedDataParallelKwargs
 
+## FP8RecipeKwargs
+
+[[autodoc]] utils.FP8RecipeKwargs
+
 ## GradScalerKwargs
 
 [[autodoc]] GradScalerKwargs
