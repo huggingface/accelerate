@@ -69,7 +69,7 @@ class AutocastKwargs(KwargsHandler):
     ```
     """
 
-    enabled: bool = False
+    enabled: bool = True
     cache_enabled: bool = None
 
 
