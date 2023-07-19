@@ -332,6 +332,32 @@ def gather_object(object: Any):
         return object
 
 
+class DistributedOperationException(Exception):
+    """
+    An exception class for distributed operations. Raised if the operation cannot be performed due to the shape of the
+    tensors.
+    """
+
+    pass
+
+
+def verify_broadcastable(tensor: torch.tensor, operation: str = "broadcast"):
+    """
+    Verifies that `tensor` is the same shape across all processes.
+    """
+    output = [None for _ in range(PartialState().num_processes)]
+    torch.distributed.all_gather_object(output, list(tensor.shape))
+    if output[0] is not None:
+        are_same = output.count(output[0]) == len(output)
+        if not are_same:
+            shape_to_idx = {f"Process {i}": shape for i, shape in enumerate(output)}
+            raise DistributedOperationException(
+                f"Cannot apply desired operation `{operation}` due to shape mismatches. All values"
+                f" across devices must be the same, however the shapes are: {shape_to_idx}"
+            )
+    return True
+
+
 def _gpu_broadcast(data, src=0):
     def _gpu_broadcast_one(tensor, src=0):
         torch.distributed.broadcast(tensor, src=src)
