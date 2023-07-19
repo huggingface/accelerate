@@ -78,6 +78,12 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0):
 
 def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0):
     accelerator.wait_for_everyone()
+    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
+        # FSDP raises error when single GPU is used with `offload_to_cpu=True` for FULL_STATE_DICT
+        # so, only enable it when num_processes>1
+        is_multi_process = accelerator.num_processes > 1
+        fsdp_plugin.state_dict_config.offload_to_cpu = is_multi_process
+        fsdp_plugin.state_dict_config.rank0_only = is_multi_process
     with FSDP.state_dict_type(
         model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
     ):
