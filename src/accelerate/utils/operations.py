@@ -421,16 +421,15 @@ def broadcast(tensor, from_process: int = 0):
     Returns:
         The same data structure as `tensor` with all tensors broadcasted to the proper device.
     """
-    distributed_type = PartialState().distributed_type
-    if distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.TPU:
         return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
-    elif distributed_type in CUDA_DISTRIBUTED_TYPES:
+    elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
         return _gpu_broadcast(tensor, src=from_process)
-    elif distributed_type == DistributedType.MULTI_NPU:
+    elif PartialState().distributed_type == DistributedType.MULTI_NPU:
         return _gpu_broadcast(tensor, src=from_process)
-    elif distributed_type == DistributedType.MULTI_XPU:
+    elif PartialState().distributed_type == DistributedType.MULTI_XPU:
         return _gpu_broadcast(tensor, src=from_process)
-    elif distributed_type == DistributedType.MULTI_CPU:
+    elif PartialState().distributed_type == DistributedType.MULTI_CPU:
         return _gpu_broadcast(tensor, src=from_process)
     else:
         return tensor
