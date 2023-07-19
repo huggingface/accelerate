@@ -22,7 +22,7 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import execute_subprocess_async, require_cuda, require_multi_gpu
-from accelerate.utils import KwargsHandler
+from accelerate.utils import KwargsHandler, TorchDynamoPlugin, clear_environment
 
 
 @dataclass
@@ -32,7 +32,7 @@ class MockClass(KwargsHandler):
     c: float = 3.0
 
 
-class DataLoaderTester(unittest.TestCase):
+class KwargsHandlerTester(unittest.TestCase):
     def test_kwargs_handler(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         self.assertDictEqual(MockClass().to_kwargs(), {})
@@ -62,6 +62,17 @@ class DataLoaderTester(unittest.TestCase):
     def test_ddp_kwargs(self):
         cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd, env=os.environ.copy())
+
+    def test_torch_dynamo_plugin(self):
+        with clear_environment():
+            prefix = "ACCELERATE_DYNAMO_"
+            # nvfuser's dynamo backend name is "nvprims_nvfuser"
+            # use "nvfuser" here to cause exception if this test causes os.environ changed permanently
+            os.environ[prefix + "BACKEND"] = "nvfuser"
+            os.environ[prefix + "MODE"] = "reduce-overhead"
+
+            dynamo_plugin_kwargs = TorchDynamoPlugin().to_kwargs()
+            self.assertEqual(dynamo_plugin_kwargs, {"backend": "nvfuser", "mode": "reduce-overhead"})
 
 
 if __name__ == "__main__":
