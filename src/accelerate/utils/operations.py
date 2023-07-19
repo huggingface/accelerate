@@ -188,7 +188,6 @@ def get_data_structure(data):
 
     return recursively_apply(_get_data_structure, data)
 
-
 def initialize_tensors(data_structure):
     """
     Recursively initializes tensors from a nested list/tuple/dictionary of [`~utils.TensorInformation`].
@@ -330,8 +329,7 @@ def gather_object(object: Any):
         return _cpu_gather_object(object)
     else:
         return object
-
-
+    
 class DistributedOperationException(Exception):
     """
     An exception class for distributed operations. Raised if the operation cannot be performed due to the shape of the
@@ -340,22 +338,32 @@ class DistributedOperationException(Exception):
 
     pass
 
+from functools import wraps
 
-def verify_broadcastable(tensor: torch.tensor, operation: str = "broadcast"):
+def verify_operation(function):
     """
     Verifies that `tensor` is the same shape across all processes.
     """
-    output = [None for _ in range(PartialState().num_processes)]
-    torch.distributed.all_gather_object(output, list(tensor.shape))
-    if output[0] is not None:
-        are_same = output.count(output[0]) == len(output)
-        if not are_same:
-            shape_to_idx = {f"Process {i}": shape for i, shape in enumerate(output)}
-            raise DistributedOperationException(
-                f"Cannot apply desired operation `{operation}` due to shape mismatches. All values"
-                f" across devices must be the same, however the shapes are: {shape_to_idx}"
-            )
-    return True
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        operation = function.__name__
+        if "tensor" in kwargs:
+            tensor = kwargs["tensor"]
+        else:
+            tensor = args[0]
+        output = gather_object(list(tensor.shape))
+        if output[0] is not None:
+            are_same = output.count(output[0]) == len(output)
+            if not are_same:
+                shape_to_idx = {f"Process {i}": shape for i, shape in enumerate(output)}
+                raise DistributedOperationException(
+                    f"Cannot apply desired operation `{operation}` due to shape mismatches. All values"
+                    f" across devices must be the same, however the shapes are: {shape_to_idx}"
+                )
+        return function(*args, **kwargs)
+    return wrapper
+
+
 
 
 def _gpu_broadcast(data, src=0):
@@ -387,15 +395,14 @@ def broadcast(tensor, from_process: int = 0):
     Returns:
         The same data structure as `tensor` with all tensors broadcasted to the proper device.
     """
-    if PartialState().distributed_type == DistributedType.TPU:
+    distributed_type = PartialState().distributed_type
+    if distributed_type != DistributedType.NO:
+        verify_operation(tensor, operation="accelerate.utils.broadcast")
+    elif distributed_type == DistributedType.TPU:
         return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
-    elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
+    elif distributed_type in CUDA_DISTRIBUTED_TYPES:
         return _gpu_broadcast(tensor, src=from_process)
-    elif PartialState().distributed_type in DistributedType.MULTI_NPU:
-        return _gpu_broadcast(tensor, src=from_process)
-    elif PartialState().distributed_type in DistributedType.MULTI_XPU:
-        return _gpu_broadcast(tensor, src=from_process)
-    elif PartialState().distributed_type == DistributedType.MULTI_CPU:
+    elif distributed_type in [DistributedType.MULTI_NPU, DistributedType.MULTI_XPU, DistributedType.Multi_CPU]:
         return _gpu_broadcast(tensor, src=from_process)
     else:
         return tensor
