@@ -285,10 +285,10 @@ def gather(tensor):
     """
     if PartialState().distributed_type == DistributedType.TPU:
         return _tpu_gather(tensor)
-    elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
-        return _gpu_gather(tensor)
     elif PartialState().distributed_type == DistributedType.MULTI_CPU:
         return _cpu_gather(tensor)
+    elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
+        return _gpu_gather(tensor)
     else:
         return tensor
 
@@ -316,10 +316,10 @@ def gather_object(object: Any):
     """
     if PartialState().distributed_type == DistributedType.TPU:
         raise NotImplementedError("gather objects in TPU is not supported")
-    elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
-        return _gpu_gather_object(object)
     elif PartialState().distributed_type == DistributedType.MULTI_CPU:
         return _cpu_gather_object(object)
+    elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
+        return _gpu_gather_object(object)
     else:
         return object
 
