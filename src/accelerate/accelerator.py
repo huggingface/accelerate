@@ -1408,7 +1408,6 @@ class Accelerator:
                         "use_orig_params": fsdp_plugin.use_orig_params,
                         "param_init_fn": fsdp_plugin.param_init_fn,
                         "ignored_modules": fsdp_plugin.ignored_modules,
-                        "ignored_parameters": fsdp_plugin.ignored_parameters,
                         "limit_all_gathers": fsdp_plugin.limit_all_gathers,
                         "device_id": self.device,
                     }

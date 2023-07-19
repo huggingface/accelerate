@@ -790,10 +790,6 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={"help": "A list of modules to ignore for FSDP."},
     )
-    ignored_parameters: Optional[Iterable[torch.nn.Parameter]] = field(
-        default=None,
-        metadata={"help": "A list of parameters to ignore for FSDP."},
-    )
     state_dict_type: "typing.Any" = field(
         default=None,
         metadata={
@@ -813,12 +809,12 @@ class FullyShardedDataParallelPlugin:
         },
     )
     limit_all_gathers: bool = field(
-        default=False,
+        default=True,
         metadata={
             "help": "If False, then FSDP allows the CPU thread to schedule all-gathers "
             "without any extra synchronization. If True, then FSDP explicitly synchronizes the CPU thread to prevent "
             "too many in-flight all-gathers. This bool only affects the sharded strategies that schedule all-gathers. "
-            "Enabling this can help lower the number of CUDA malloc retries."
+            "Enabling this can help lower the number of CUDA malloc retries. (Default: ``True``)"
         },
     )
     use_orig_params: bool = field(
