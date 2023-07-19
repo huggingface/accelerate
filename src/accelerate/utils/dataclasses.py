@@ -814,7 +814,7 @@ class FullyShardedDataParallelPlugin:
             "help": "If False, then FSDP allows the CPU thread to schedule all-gathers "
             "without any extra synchronization. If True, then FSDP explicitly synchronizes the CPU thread to prevent "
             "too many in-flight all-gathers. This bool only affects the sharded strategies that schedule all-gathers. "
-            "Enabling this can help lower the number of CUDA malloc retries. (Default: ``True``)"
+            "Enabling this can help lower the number of CUDA malloc retries."
         },
     )
     use_orig_params: bool = field(
