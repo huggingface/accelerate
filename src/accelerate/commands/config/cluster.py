@@ -477,6 +477,11 @@ def get_cluster_input():
     else:
         num_processes = 1
 
+    if (distributed_type == DistributedType.MULTI_GPU) and (num_machines == 1) and (num_processes == 1):
+        raise ValueError(
+            f"Specified distributed type {distributed_type} but only using 1 GPU on a single machine. Please select `No distributed training` for the type of machine you are using."
+        )
+
     if (
         distributed_type
         in [
