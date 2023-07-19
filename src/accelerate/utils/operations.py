@@ -299,11 +299,12 @@ def verify_operation(function):
         if output[0] is not None:
             are_same = output.count(output[0]) == len(output)
             if not are_same:
-                shape_to_idx = {f"Process {i}": shape for i, shape in enumerate(output)}
+                process_shape_str = "\n  - ".join([f"Process {i}: {shape}" for i, shape in enumerate(output)])
                 if PartialState().process_index == 0:
                     raise DistributedOperationException(
-                        f"Cannot apply desired operation `{operation}` due to shape mismatches. All values"
-                        f" across devices must be the same, however the shapes are: {shape_to_idx}"
+                        f"Cannot apply desired operation due to shape mismatches. "
+                        "All shapes across devices must be valid."
+                        f"\n\nOperation: `{operation}`\nInput shapes:\n  - {process_shape_str}"
                     )
         return function(*args, **kwargs)
 
