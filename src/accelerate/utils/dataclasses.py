@@ -809,7 +809,7 @@ class FullyShardedDataParallelPlugin:
         },
     )
     limit_all_gathers: bool = field(
-        default=True,
+        default=False,
         metadata={
             "help": "If False, then FSDP allows the CPU thread to schedule all-gathers "
             "without any extra synchronization. If True, then FSDP explicitly synchronizes the CPU thread to prevent "
