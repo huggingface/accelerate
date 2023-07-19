@@ -288,6 +288,8 @@ def verify_operation(function):
 
     @wraps(function)
     def wrapper(*args, **kwargs):
+        if PartialState().distributed_type == DistributedType.NO:
+            return function(*args, **kwargs)
         operation = f"{function.__module__}.{function.__name__}"
         if "tensor" in kwargs:
             tensor = kwargs["tensor"]
@@ -420,13 +422,15 @@ def broadcast(tensor, from_process: int = 0):
         The same data structure as `tensor` with all tensors broadcasted to the proper device.
     """
     distributed_type = PartialState().distributed_type
-    if distributed_type != DistributedType.NO:
-        verify_operation(tensor, operation="accelerate.utils.broadcast")
-    elif distributed_type == DistributedType.TPU:
+    if distributed_type == DistributedType.TPU:
         return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
     elif distributed_type in CUDA_DISTRIBUTED_TYPES:
         return _gpu_broadcast(tensor, src=from_process)
-    elif distributed_type in [DistributedType.MULTI_NPU, DistributedType.MULTI_XPU, DistributedType.Multi_CPU]:
+    elif distributed_type == DistributedType.MULTI_NPU:
+        return _gpu_broadcast(tensor, src=from_process)
+    elif distributed_type == DistributedType.MULTI_XPU:
+        return _gpu_broadcast(tensor, src=from_process)
+    elif distributed_type == DistributedType.MULTI_CPU:
         return _gpu_broadcast(tensor, src=from_process)
     else:
         return tensor
