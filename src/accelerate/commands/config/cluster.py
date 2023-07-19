@@ -71,7 +71,6 @@ def get_cluster_input():
             int,
             default=1,
         )
-
         if num_machines > 1:
             machine_rank = _ask_options(
                 "What is the rank of this machine?",
