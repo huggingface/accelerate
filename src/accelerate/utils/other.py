@@ -115,6 +115,39 @@ def save(obj, f):
 
 
 @contextmanager
+def clear_environment():
+    """
+    A context manager that will cache origin `os.environ` and replace it with a empty dictionary in this context.
+
+    When this context exits, the cached `os.environ` will be back.
+
+    Example:
+
+    ```python
+    >>> import os
+    >>> from accelerate.utils import clear_environment
+
+    >>> os.environ["FOO"] = "bar"
+    >>> with clear_environment():
+    ...     print(os.environ)
+    ...     os.environ["FOO"] = "new_bar"
+    ...     print(os.environ["FOO"])
+    {}
+    new_bar
+
+    >>> print(os.environ["FOO"])
+    bar
+    ```
+    """
+    _old_os_environ = os.environ
+    os.environ = dict()
+
+    yield
+
+    os.environ = _old_os_environ
+
+
+@contextmanager
 def patch_environment(**kwargs):
     """
     A context manager that will add each keyword argument passed to `os.environ` and remove them when exiting.
