@@ -269,9 +269,6 @@ def _gpu_gather(tensor):
     return recursively_apply(_gpu_gather_one, tensor, error_on_other_type=True)
 
 
-_cpu_gather = _gpu_gather
-
-
 def gather(tensor):
     """
     Recursively gather tensor in a nested list/tuple/dictionary of tensors from all devices.
@@ -285,8 +282,6 @@ def gather(tensor):
     """
     if PartialState().distributed_type == DistributedType.TPU:
         return _tpu_gather(tensor)
-    elif PartialState().distributed_type == DistributedType.MULTI_CPU:
-        return _cpu_gather(tensor)
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_gather(tensor)
     else:
@@ -298,9 +293,6 @@ def _gpu_gather_object(object: Any):
     torch.distributed.all_gather_object(output_objects, object)
     # all_gather_object returns a list of lists, so we need to flatten it
     return [x for y in output_objects for x in y]
-
-
-_cpu_gather_object = _gpu_gather_object
 
 
 def gather_object(object: Any):
@@ -316,8 +308,6 @@ def gather_object(object: Any):
     """
     if PartialState().distributed_type == DistributedType.TPU:
         raise NotImplementedError("gather objects in TPU is not supported")
-    elif PartialState().distributed_type == DistributedType.MULTI_CPU:
-        return _cpu_gather_object(object)
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_gather_object(object)
     else:
