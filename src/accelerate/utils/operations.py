@@ -17,7 +17,7 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
 import pickle
-from functools import update_wrapper
+from functools import update_wrapper, wraps
 from typing import Any, Mapping
 
 import torch
@@ -188,6 +188,7 @@ def get_data_structure(data):
 
     return recursively_apply(_get_data_structure, data)
 
+
 def initialize_tensors(data_structure):
     """
     Recursively initializes tensors from a nested list/tuple/dictionary of [`~utils.TensorInformation`].
@@ -271,6 +272,63 @@ def _gpu_gather(tensor):
 _cpu_gather = _gpu_gather
 
 
+class DistributedOperationException(Exception):
+    """
+    An exception class for distributed operations. Raised if the operation cannot be performed due to the shape of the
+    tensors.
+    """
+
+    pass
+
+
+def verify_operation(function):
+    """
+    Verifies that `tensor` is the same shape across all processes.
+    """
+
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        operation = f"{function.__module__}.{function.__name__}"
+        if "tensor" in kwargs:
+            tensor = kwargs["tensor"]
+        else:
+            tensor = args[0]
+        output = gather_object([list(tensor.shape)])
+        if output[0] is not None:
+            are_same = output.count(output[0]) == len(output)
+            if not are_same:
+                shape_to_idx = {f"Process {i}": shape for i, shape in enumerate(output)}
+                if PartialState().process_index == 0:
+                    raise DistributedOperationException(
+                        f"Cannot apply desired operation `{operation}` due to shape mismatches. All values"
+                        f" across devices must be the same, however the shapes are: {shape_to_idx}"
+                    )
+        return function(*args, **kwargs)
+
+    return wrapper
+
+
+def chained_operation(function):
+    """
+    Checks that `verify_operation` failed and if so reports a more helpful error chaining the existing
+    `DistributedOperationException`.
+    """
+
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except DistributedOperationException as e:
+            operation = f"{function.__module__}.{function.__name__}"
+            if PartialState().process_index == 0:
+                raise DistributedOperationException(
+                    f"Error found while calling `{operation}`. Please see the earlier error for more details."
+                ) from e
+
+    return wrapper
+
+
+@verify_operation
 def gather(tensor):
     """
     Recursively gather tensor in a nested list/tuple/dictionary of tensors from all devices.
@@ -329,41 +387,6 @@ def gather_object(object: Any):
         return _cpu_gather_object(object)
     else:
         return object
-    
-class DistributedOperationException(Exception):
-    """
-    An exception class for distributed operations. Raised if the operation cannot be performed due to the shape of the
-    tensors.
-    """
-
-    pass
-
-from functools import wraps
-
-def verify_operation(function):
-    """
-    Verifies that `tensor` is the same shape across all processes.
-    """
-    @wraps(function)
-    def wrapper(*args, **kwargs):
-        operation = function.__name__
-        if "tensor" in kwargs:
-            tensor = kwargs["tensor"]
-        else:
-            tensor = args[0]
-        output = gather_object(list(tensor.shape))
-        if output[0] is not None:
-            are_same = output.count(output[0]) == len(output)
-            if not are_same:
-                shape_to_idx = {f"Process {i}": shape for i, shape in enumerate(output)}
-                raise DistributedOperationException(
-                    f"Cannot apply desired operation `{operation}` due to shape mismatches. All values"
-                    f" across devices must be the same, however the shapes are: {shape_to_idx}"
-                )
-        return function(*args, **kwargs)
-    return wrapper
-
-
 
 
 def _gpu_broadcast(data, src=0):
@@ -382,6 +405,7 @@ def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
     return xm.mesh_reduce(name, tensor, lambda x: x[src])
 
 
+@verify_operation
 def broadcast(tensor, from_process: int = 0):
     """
     Recursively broadcast tensor in a nested list/tuple/dictionary of tensors to all devices.
@@ -477,6 +501,7 @@ def concatenate(data, dim=0):
     return torch.cat(data, dim=dim)
 
 
+@chained_operation
 def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     """
     Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so they
@@ -523,6 +548,7 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     )
 
 
+@verify_operation
 def reduce(tensor, reduction="mean"):
     """
     Recursively reduce the tensors in a nested list/tuple/dictionary of lists of tensors across all processes by the
