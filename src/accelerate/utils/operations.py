@@ -23,7 +23,7 @@ from typing import Any, Mapping
 import torch
 
 from ..state import PartialState
-from .constants import CUDA_DISTRIBUTED_TYPES
+from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
 from .imports import is_torch_distributed_available, is_tpu_available
 
@@ -269,9 +269,6 @@ def _gpu_gather(tensor):
     return recursively_apply(_gpu_gather_one, tensor, error_on_other_type=True)
 
 
-_cpu_gather = _gpu_gather
-
-
 def gather(tensor):
     """
     Recursively gather tensor in a nested list/tuple/dictionary of tensors from all devices.
@@ -285,14 +282,8 @@ def gather(tensor):
     """
     if PartialState().distributed_type == DistributedType.TPU:
         return _tpu_gather(tensor)
-    elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
+    elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_gather(tensor)
-    elif PartialState().distributed_type in DistributedType.MULTI_NPU:
-        return _gpu_gather(tensor)
-    elif PartialState().distributed_type in DistributedType.MULTI_XPU:
-        return _gpu_gather(tensor)
-    elif PartialState().distributed_type == DistributedType.MULTI_CPU:
-        return _cpu_gather(tensor)
     else:
         return tensor
 
@@ -302,9 +293,6 @@ def _gpu_gather_object(object: Any):
     torch.distributed.all_gather_object(output_objects, object)
     # all_gather_object returns a list of lists, so we need to flatten it
     return [x for y in output_objects for x in y]
-
-
-_cpu_gather_object = _gpu_gather_object
 
 
 def gather_object(object: Any):
@@ -320,14 +308,8 @@ def gather_object(object: Any):
     """
     if PartialState().distributed_type == DistributedType.TPU:
         raise NotImplementedError("gather objects in TPU is not supported")
-    elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
+    elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_gather_object(object)
-    elif PartialState().distributed_type in DistributedType.MULTI_NPU:
-        return _gpu_gather_object(object)
-    elif PartialState().distributed_type in DistributedType.MULTI_XPU:
-        return _gpu_gather_object(object)
-    elif PartialState().distributed_type == DistributedType.MULTI_CPU:
-        return _cpu_gather_object(object)
     else:
         return object
 
@@ -363,13 +345,7 @@ def broadcast(tensor, from_process: int = 0):
     """
     if PartialState().distributed_type == DistributedType.TPU:
         return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
-    elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
-        return _gpu_broadcast(tensor, src=from_process)
-    elif PartialState().distributed_type in DistributedType.MULTI_NPU:
-        return _gpu_broadcast(tensor, src=from_process)
-    elif PartialState().distributed_type in DistributedType.MULTI_XPU:
-        return _gpu_broadcast(tensor, src=from_process)
-    elif PartialState().distributed_type == DistributedType.MULTI_CPU:
+    elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_broadcast(tensor, src=from_process)
     else:
         return tensor
@@ -391,13 +367,7 @@ def broadcast_object_list(object_list, from_process: int = 0):
     if PartialState().distributed_type == DistributedType.TPU:
         for i, obj in enumerate(object_list):
             object_list[i] = xm.mesh_reduce("accelerate.utils.broadcast_object_list", obj, lambda x: x[from_process])
-    elif PartialState().distributed_type in CUDA_DISTRIBUTED_TYPES:
-        torch.distributed.broadcast_object_list(object_list, src=from_process)
-    elif PartialState().distributed_type in DistributedType.MULTI_NPU:
-        torch.distributed.broadcast_object_list(object_list, src=from_process)
-    elif PartialState().distributed_type in DistributedType.MULTI_XPU:
-        torch.distributed.broadcast_object_list(object_list, src=from_process)
-    elif PartialState().distributed_type == DistributedType.MULTI_CPU:
+    elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         torch.distributed.broadcast_object_list(object_list, src=from_process)
     return object_list
 
@@ -512,13 +482,7 @@ def reduce(tensor, reduction="mean"):
             return cloned_tensor
         if state.distributed_type == DistributedType.TPU:
             xm.all_reduce("sum", cloned_tensor)
-        elif state.distributed_type.value in CUDA_DISTRIBUTED_TYPES:
-            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
-        elif state.distributed_type.value in DistributedType.MULTI_NPU:
-            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
-        elif state.distributed_type.value in DistributedType.MULTI_XPU:
-            torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
-        elif state.distributed_type == DistributedType.MULTI_CPU:
+        elif state.distributed_type.value in TORCH_DISTRIBUTED_OPERATION_TYPES:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
         if reduction == "mean":
             cloned_tensor /= state.num_processes
