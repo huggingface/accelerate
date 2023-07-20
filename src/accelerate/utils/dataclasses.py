@@ -56,6 +56,28 @@ class KwargsHandler:
 
 
 @dataclass
+class AutocastKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize how `torch.autocast` behaves. Please refer to the
+    documentation of this [context manager](https://pytorch.org/docs/stable/amp.html#torch.autocast) for more
+    information on each argument.
+
+    Example:
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import AutocastKwargs
+
+    kwargs = AutocastKwargs(cache_enabled=True)
+    accelerator = Accelerator(kwargs_handlers=[kwargs])
+    ```
+    """
+
+    enabled: bool = True
+    cache_enabled: bool = None
+
+
+@dataclass
 class DistributedDataParallelKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize how your model is wrapped in a

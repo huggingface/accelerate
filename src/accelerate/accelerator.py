@@ -45,6 +45,7 @@ from .utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    AutocastKwargs,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -328,6 +329,7 @@ class Accelerator:
         self.scaler_handler = None
         self.init_handler = None
         self.fp8_recipe_handler = None
+        self.autocast_handler = None
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
                 assert isinstance(
@@ -353,6 +355,11 @@ class Accelerator:
                         raise ValueError("You can only pass one `FP8RecipeKwargs` in `kwargs_handler`.")
                     else:
                         self.fp8_recipe_handler = handler
+                elif isinstance(handler, AutocastKwargs):
+                    if self.autocast_handler is not None:
+                        raise ValueError("You can only pass one `AutocastKwargs` in `kwargs_handler`.")
+                    else:
+                        self.autocast_handler = handler
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -1343,14 +1350,8 @@ class Accelerator:
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
-            if self.mixed_precision == "fp16":
-                if is_npu_available():
-                    new_forward = torch.npu.amp.autocast(dtype=torch.float16)(model_forward_func)
-                else:
-                    new_forward = torch.cuda.amp.autocast(dtype=torch.float16)(model_forward_func)
-            elif self.mixed_precision == "bf16" and self.distributed_type != DistributedType.TPU:
-                new_forward = torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)(model_forward_func)
-
+            autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
+            new_forward = autocast_context(model_forward_func)
             if hasattr(model.forward, "__func__"):
                 model.forward = MethodType(new_forward, model)
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
@@ -2952,10 +2953,13 @@ class Accelerator:
         self._custom_objects.extend(objects)
 
     @contextmanager
-    def autocast(self, cache_enabled: bool = False):
+    def autocast(self, cache_enabled: bool = False, autocast_handler: AutocastKwargs = None):
         """
         Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
         different will happen otherwise.
+
+        A different `autocast_handler` can be passed in to override the one set in the `Accelerator` object. This is
+        useful in blocks under `autocast` where you want to revert to fp32.
 
         Example:
 
@@ -2967,7 +2971,19 @@ class Accelerator:
         ...     train()
         ```
         """
-        autocast_context = get_mixed_precision_context_manager(self.native_amp, cache_enabled=cache_enabled)
+        if cache_enabled:
+            warnings.warn(
+                "Passing `cache_enabled=True` to `accelerator.autocast` is deprecated and will be removed in v0.23.0. "
+                "Please use the `AutocastKwargs` class instead and pass it to the `Accelerator` as a `kwarg_handler`.",
+                FutureWarning,
+            )
+            if self.autocast_handler is not None:
+                self.autocast_handler.cache_enabled = True
+            else:
+                self.autocast_handler = AutocastKwargs(cache_enabled=True)
+        if autocast_handler is None:
+            autocast_handler = self.autocast_handler
+        autocast_context = get_mixed_precision_context_manager(self.native_amp, autocast_handler)
         autocast_context.__enter__()
         yield
         autocast_context.__exit__(*sys.exc_info())

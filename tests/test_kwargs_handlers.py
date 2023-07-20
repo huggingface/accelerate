@@ -22,7 +22,7 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import execute_subprocess_async, require_cuda, require_multi_gpu
-from accelerate.utils import KwargsHandler, TorchDynamoPlugin, clear_environment
+from accelerate.utils import AutocastKwargs, KwargsHandler, TorchDynamoPlugin, clear_environment
 
 
 @dataclass
@@ -62,6 +62,30 @@ class KwargsHandlerTester(unittest.TestCase):
     def test_ddp_kwargs(self):
         cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd, env=os.environ.copy())
+
+    @require_cuda
+    def test_autocast_kwargs(self):
+        kwargs = AutocastKwargs(enabled=False)
+        AcceleratorState._reset_state()
+        accelerator = Accelerator(mixed_precision="fp16")
+
+        a_float32 = torch.rand((8, 8), device=accelerator.device)
+        b_float32 = torch.rand((8, 8), device=accelerator.device)
+        c_float32 = torch.rand((8, 8), device=accelerator.device)
+        d_float32 = torch.rand((8, 8), device=accelerator.device)
+
+        with accelerator.autocast():
+            e_float16 = torch.mm(a_float32, b_float32)
+            assert e_float16.dtype == torch.float16
+
+            with accelerator.autocast(autocast_handler=kwargs):
+                # Convert e_float16 to float32
+                f_float32 = torch.mm(c_float32, e_float16.float())
+                assert f_float32.dtype == torch.float32
+
+            g_float16 = torch.mm(d_float32, f_float32)
+            # We should be back in fp16
+            assert g_float16.dtype == torch.float16
 
     def test_torch_dynamo_plugin(self):
         with clear_environment():

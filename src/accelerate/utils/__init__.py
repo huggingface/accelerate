@@ -12,6 +12,7 @@ from .constants import (
     WEIGHTS_NAME,
 )
 from .dataclasses import (
+    AutocastKwargs,
     BnbQuantizationConfig,
     ComputeEnvironment,
     CustomDtype,

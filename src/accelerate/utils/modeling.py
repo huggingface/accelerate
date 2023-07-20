@@ -29,8 +29,8 @@ import torch.nn as nn
 
 from ..state import AcceleratorState
 from .constants import WEIGHTS_NAME
-from .dataclasses import CustomDtype, DistributedType
-from .imports import is_mps_available, is_safetensors_available, is_xpu_available
+from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
+from .imports import is_mps_available, is_npu_available, is_safetensors_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -1365,7 +1365,7 @@ def load_checkpoint_in_model(
     retie_parameters(model, tied_params)
 
 
-def get_mixed_precision_context_manager(native_amp: bool = False, cache_enabled: bool = True):
+def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwargs: AutocastKwargs = None):
     """
     Return a context manager for autocasting mixed precision
 
@@ -1376,17 +1376,24 @@ def get_mixed_precision_context_manager(native_amp: bool = False, cache_enabled:
             Whether the weight cache inside autocast should be enabled.
     """
     state = AcceleratorState()
+    if autocast_kwargs is None:
+        autocast_kwargs = {}
+    else:
+        autocast_kwargs = autocast_kwargs.to_kwargs()
     if native_amp:
         if state.mixed_precision == "fp16":
-            return torch.autocast(device_type=state.device.type, dtype=torch.float16, cache_enabled=cache_enabled)
+            if is_npu_available():
+                return torch.npu.amp.autocast(dtype=torch.float16, **autocast_kwargs)
+            else:
+                return torch.autocast(device_type=state.device.type, dtype=torch.float16, **autocast_kwargs)
         elif state.mixed_precision == "bf16" and state.distributed_type in [
             DistributedType.NO,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
             DistributedType.MULTI_XPU,
         ]:
-            return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, cache_enabled=cache_enabled)
+            return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, **autocast_kwargs)
         else:
-            return torch.autocast(device_type=state.device.type, cache_enabled=cache_enabled)
+            return torch.autocast(device_type=state.device.type, **autocast_kwargs)
     else:
         return contextlib.nullcontext()
