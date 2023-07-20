@@ -14,6 +14,7 @@
 
 import random
 import unittest
+import torch
 
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 
@@ -396,3 +397,28 @@ class DataLoaderTester(unittest.TestCase):
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
             self.assertEqual(dataloader.end_of_dataloader, idx == 3)
+
+    def test_data_loader_dispatcher_gather_for_metrics(self):
+        class DummyIterableDataset(IterableDataset):
+            def __init__(self, data):
+                self.data = data
+
+            def __iter__(self):
+                for element in self.data:
+                    yield element
+
+        iterable_dataset = DummyIterableDataset(torch.as_tensor(range(10)))
+        dataloader = DataLoader(iterable_dataset, batch_size=4)
+
+        accelerator = Accelerator()
+        prepared_dataloader = accelerator.prepare(dataloader)
+
+        assert type(prepared_dataloader) == DataLoaderDispatcher
+
+        batch_shapes = []
+        for _, batch in enumerate(prepared_dataloader):
+            gathered = accelerator.gather_for_metrics(batch)
+            batch_shapes.append(gathered.size(0))
+        
+        assert batch_shapes == []
+

@@ -15,8 +15,10 @@
 # limitations under the License.
 
 import torch
+from torch.utils.data import IterableDataset, DataLoader
 
-from accelerate import PartialState
+from accelerate import PartialState, Accelerator
+from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.utils.operations import broadcast, gather, gather_object, pad_across_processes, reduce
 
 
@@ -76,6 +78,36 @@ def test_reduce_mean(state):
     truth_tensor = torch.tensor([2.0, 3]).to(state.device)
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
+def test_data_loader_dispatcher_gather_for_metrics(state):
+    assert state.num_processes == 2
+
+    class DummyIterableDataset(IterableDataset):
+        def __init__(self, data):
+            self.data = data
+
+        def __iter__(self):
+            for element in self.data:
+                yield element
+
+    iterable_dataset = DummyIterableDataset(torch.as_tensor(range(15)))
+    dataloader = DataLoader(iterable_dataset, batch_size=4)
+
+    accelerator = Accelerator()
+    prepared_dataloader = accelerator.prepare(dataloader)
+
+    assert type(prepared_dataloader) == DataLoaderDispatcher
+
+    batch_shapes = []
+    batches = []
+    for _, batch in enumerate(prepared_dataloader):
+        gathered = accelerator.gather_for_metrics(batch)
+        batches.append(batch)
+        batch_shapes.append(gathered.size(0))
+    
+    print(batches)
+    print(batch_shapes)
+
+
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)
@@ -97,6 +129,8 @@ def main():
     test_reduce_sum(state)
     state.print("testing reduce_mean")
     test_reduce_mean(state)
+    state.print("test_data_loader_dispatcher_gather_for_metrics")
+    test_data_loader_dispatcher_gather_for_metrics(state)
 
 
 if __name__ == "__main__":
