@@ -2939,10 +2939,13 @@ class Accelerator:
         self._custom_objects.extend(objects)
 
     @contextmanager
-    def autocast(self, cache_enabled: bool = False):
+    def autocast(self, cache_enabled: bool = False, autocast_handler: AutocastKwargs = None):
         """
         Will apply automatic mixed-precision inside the block inside this context manager, if it is enabled. Nothing
         different will happen otherwise.
+
+        A different `autocast_handler` can be passed in to override the one set in the `Accelerator` object. This is
+        useful in blocks under `autocast` where you want to revert to fp32.
 
         Example:
 
@@ -2964,7 +2967,9 @@ class Accelerator:
                 self.autocast_handler.cache_enabled = True
             else:
                 self.autocast_handler = AutocastKwargs(cache_enabled=True)
-        autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
+        if autocast_handler is None:
+            autocast_handler = self.autocast_handler
+        autocast_context = get_mixed_precision_context_manager(self.native_amp, autocast_handler)
         autocast_context.__enter__()
         yield
         autocast_context.__exit__(*sys.exc_info())
