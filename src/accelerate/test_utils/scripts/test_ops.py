@@ -88,12 +88,15 @@ def test_reduce_mean(state):
     truth_tensor = torch.tensor([2.0, 3]).to(state.device)
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
-def test_data_loader_dispatcher_gather_for_metrics(state):
+def test_gather_for_metrics_with_iterable_dataset(state):
     assert state.num_processes == 2
 
     class DummyIterableDataset(IterableDataset):
         def __init__(self, data):
             self.data = data
+
+        def __len__(self):
+            return len(self.data)
 
         def __iter__(self):
             for element in self.data:
@@ -112,26 +115,14 @@ def test_data_loader_dispatcher_gather_for_metrics(state):
         list_handler = ListHandler()
         logger.addHandler(list_handler)
 
-    raw_batches_per_process = []
-    gathered_batches = []
-    gathered_for_metrics_batches = []
+    batches_for_metrics = []
+    for _, batch in enumerate(prepared_dataloader):
+        print(accelerator.gradient_state.remainder)
+        batches_for_metrics.append(accelerator.gather_for_metrics(batch))
 
-    for batch_idx, batch in enumerate(prepared_dataloader):
-        print(f"{batch_idx=}")
-        raw_batches_per_process.append(batch)
-
-        gathered_batches.append(accelerator.gather(batch))
-        gathered_for_metrics_batches.append(accelerator.gather_for_metrics(batch))
-    
-    print(f"{accelerator.process_index}: {raw_batches_per_process=}")
-    print(f"{accelerator.process_index}: {gathered_batches=}")
-    print(f"{accelerator.process_index}: {gathered_for_metrics_batches=}")
+    assert torch.cat(batches_for_metrics).size(0) == 15
 
     if state.is_main_process:
-        print(list_handler.logs)
-
-        # assert len(list_handler.logs) == 0
-
         # inverse assertion
         assert len(list_handler.logs) == 1
         assert "The used dataset had no length, returning gathered tensors." in list_handler.logs[0].msg
@@ -159,8 +150,8 @@ def main():
     test_reduce_sum(state)
     state.print("testing reduce_mean")
     test_reduce_mean(state)
-    state.print("test_data_loader_dispatcher_gather_for_metrics")
-    test_data_loader_dispatcher_gather_for_metrics(state)
+    state.print("test_gather_for_metrics_with_iterable_dataset")
+    test_gather_for_metrics_with_iterable_dataset(state)
 
 
 if __name__ == "__main__":
