@@ -411,7 +411,7 @@ and [`~Accelerator.clip_grad_value_`] respectively.
 If you are running your training in Mixed Precision with 🤗 Accelerate, you will get the best result with your loss being
 computed inside your model (like in Transformer models for instance). Every computation outside of the model will be
 executed in full precision (which is generally what you want for loss computation, especially if it involves a
-softmax). However you might want to put your loss computation inside the *accelerator.autocast* context manager:
+softmax). However you might want to put your loss computation inside the [`~Accelerator.autocast`] context manager:
 
 ```
 with accelerator.autocast():

@@ -104,6 +104,8 @@ These functionalities check the state of the current working environment includi
 
 [[autodoc]] utils.patch_environment
 
+[[autodoc]] utils.clear_environment
+
 [[autodoc]] utils.write_basic_config
 
 When setting up 🤗 Accelerate for the first time, rather than running `accelerate config` [~utils.write_basic_config] can be used as an alternative for quick configuration.
