@@ -187,5 +187,5 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
             )
             optim_state = optim_state["optimizer"]
             logger.info(f"Optimizer loaded from {ckpt_dir}")
-        flattened_osd = FSDP.optim_state_dict_to_load(optim_state, model, optimizer)
+        flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
         optimizer.load_state_dict(flattened_osd)
