@@ -283,12 +283,12 @@ class DistributedOperationException(Exception):
 
 def verify_operation(function):
     """
-    Verifies that `tensor` is the same shape across all processes.
+    Verifies that `tensor` is the same shape across all processes. Only ran if `PartialState().debug` is `True`.
     """
 
     @wraps(function)
     def wrapper(*args, **kwargs):
-        if PartialState().distributed_type == DistributedType.NO:
+        if PartialState().distributed_type == DistributedType.NO or not PartialState().debug:
             return function(*args, **kwargs)
         operation = f"{function.__module__}.{function.__name__}"
         if "tensor" in kwargs:
@@ -300,12 +300,11 @@ def verify_operation(function):
             are_same = output.count(output[0]) == len(output)
             if not are_same:
                 process_shape_str = "\n  - ".join([f"Process {i}: {shape}" for i, shape in enumerate(output)])
-                if PartialState().process_index == 0:
-                    raise DistributedOperationException(
-                        f"Cannot apply desired operation due to shape mismatches. "
-                        "All shapes across devices must be valid."
-                        f"\n\nOperation: `{operation}`\nInput shapes:\n  - {process_shape_str}"
-                    )
+                raise DistributedOperationException(
+                    f"Cannot apply desired operation due to shape mismatches. "
+                    "All shapes across devices must be valid."
+                    f"\n\nOperation: `{operation}`\nInput shapes:\n  - {process_shape_str}"
+                )
         return function(*args, **kwargs)
 
     return wrapper
@@ -323,10 +322,9 @@ def chained_operation(function):
             return function(*args, **kwargs)
         except DistributedOperationException as e:
             operation = f"{function.__module__}.{function.__name__}"
-            if PartialState().process_index == 0:
-                raise DistributedOperationException(
-                    f"Error found while calling `{operation}`. Please see the earlier error for more details."
-                ) from e
+            raise DistributedOperationException(
+                f"Error found while calling `{operation}`. Please see the earlier error for more details."
+            ) from e
 
     return wrapper
 

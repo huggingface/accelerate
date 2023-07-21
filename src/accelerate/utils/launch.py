@@ -61,6 +61,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
 
     current_env = os.environ.copy()
     current_env["ACCELERATE_USE_CPU"] = str(args.cpu or args.use_cpu)
+    if args.debug:
+        current_env["ACCELERATE_DEBUG_MODE"] = "true"
     if args.gpu_ids != "all" and args.gpu_ids is not None:
         if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = args.gpu_ids
@@ -140,6 +142,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    if args.debug:
+        current_env["ACCELERATE_DEBUG_MODE"] = "true"
     gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
         if not is_xpu_available():
@@ -276,6 +280,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         setattr(args, "no_python", True)
 
     current_env = os.environ.copy()
+    if args.debug:
+        current_env["ACCELERATE_DEBUG_MODE"] = "true"
     gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
         if not is_xpu_available():
@@ -323,6 +329,8 @@ def prepare_tpu(
             current_env["XLA_DOWNCAST_BF16"] = "1"
         else:
             current_env["XLA_USE_BF16"] = "1"
+    if args.debug:
+        current_env["ACCELERATE_DEBUG_MODE"] = "true"
     if pod:
         # Take explicit args and set them up for XLA
         args.vm = args.tpu_vm

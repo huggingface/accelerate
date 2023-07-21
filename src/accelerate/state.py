@@ -112,6 +112,7 @@ class PartialState:
         - **is_last_process** (`bool`) -- Whether or not the current process is the last one.
         - **is_main_process** (`bool`) -- Whether or not the current process is the main one.
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
+        - **debug** (`bool`) -- Whether or not the current script is being run in debug mode.
     """
 
     _shared_state = SharedDict()
@@ -123,6 +124,7 @@ class PartialState:
             self.backend = None
             env_device = os.environ.get("ACCELERATE_TORCH_DEVICE", None)
             self.device = torch.device(env_device) if env_device is not None else None
+            self.debug = parse_flag_from_env("ACCELERATE_DEBUG_MODE")
             use_sagemaker_dp = kwargs.pop("_use_sagemaker_dp", None)
             if use_sagemaker_dp is None:
                 use_sagemaker_dp = (
@@ -699,6 +701,7 @@ class AcceleratorState:
         - **is_last_process** (`bool`) -- Whether or not the current process is the last one.
         - **is_main_process** (`bool`) -- Whether or not the current process is the main one.
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
+        - **debug** (`bool`) -- Whether or not the current script is being run in debug mode.
     """
 
     _shared_state = SharedDict()
