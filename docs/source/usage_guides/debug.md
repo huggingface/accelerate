@@ -76,6 +76,12 @@ From the CLI:
 accelerate launch --debug {my_script.py} --arg1 --arg2
 ```
 
+As an environmental variable (which avoids the need for `accelerate launch`):
+
+```
+ACCELERATE_DEBUG_MODE="1" accelerate launch {my_script.py} --arg1 --arg2
+```
+
 Manually changing the `config.yaml` file:
 
 ```diff
