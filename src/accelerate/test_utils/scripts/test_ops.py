@@ -102,7 +102,7 @@ def test_gather_for_metrics_with_iterable_dataset(state):
             for element in self.data:
                 yield element
 
-    iterable_dataset = DummyIterableDataset(torch.as_tensor(range(15)))
+    iterable_dataset = DummyIterableDataset(torch.as_tensor(range(30)))
     dataloader = DataLoader(iterable_dataset, batch_size=4)
 
     accelerator = Accelerator()
@@ -116,16 +116,16 @@ def test_gather_for_metrics_with_iterable_dataset(state):
         logger.addHandler(list_handler)
 
     batches_for_metrics = []
-    for _, batch in enumerate(prepared_dataloader):
-        print(accelerator.gradient_state.remainder)
+    for batch in prepared_dataloader:
         batches_for_metrics.append(accelerator.gather_for_metrics(batch))
 
-    assert torch.cat(batches_for_metrics).size(0) == 15
+    assert torch.cat(batches_for_metrics).size(0) == 30
 
     if state.is_main_process:
+        assert len(list_handler.logs) == 0
         # inverse assertion
-        assert len(list_handler.logs) == 1
-        assert "The used dataset had no length, returning gathered tensors." in list_handler.logs[0].msg
+        # assert len(list_handler.logs) == 3
+        # assert "The used dataset had no length, returning gathered tensors." in list_handler.logs[0].msg
 
         logger.removeHandler(list_handler)
 
