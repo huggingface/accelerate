@@ -879,6 +879,7 @@ def _validate_launch_command(args):
                     setattr(args, name, attr)
         if not args.debug:
             args.debug = defaults.debug
+
         if not args.mixed_precision:
             if defaults.mixed_precision is None:
                 args.mixed_precision = "no"
@@ -930,6 +931,8 @@ def _validate_launch_command(args):
         if args.dynamo_backend is None:
             warned.append("\t`--dynamo_backend` was set to a value of `'no'`")
             args.dynamo_backend = "no"
+    if args.debug:
+        logger.debug("Running script in debug mode, expect distributed operations to be slightly slower.")
 
     is_aws_env_disabled = defaults is None or (
         defaults is not None and defaults.compute_environment != ComputeEnvironment.AMAZON_SAGEMAKER
