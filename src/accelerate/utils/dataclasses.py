@@ -936,7 +936,7 @@ class FullyShardedDataParallelPlugin:
         from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
         default_transformer_cls_names_to_wrap = (
-            ",".join(model._no_split_modules) if hasattr(model, "_no_split_modules") else ""
+            ",".join(model._no_split_modules) if getattr(model, "_no_split_modules", None) is not None else ""
         )
         if self.auto_wrap_policy is None:
             auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", "NO_WRAP")
