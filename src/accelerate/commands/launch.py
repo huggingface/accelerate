@@ -877,6 +877,8 @@ def _validate_launch_command(args):
                     and getattr(args, name, None) is None
                 ):
                     setattr(args, name, attr)
+        if not args.debug:
+            args.debug = defaults.debug
         if not args.mixed_precision:
             if defaults.mixed_precision is None:
                 args.mixed_precision = "no"
@@ -905,6 +907,8 @@ def _validate_launch_command(args):
             else:
                 args.num_processes = torch.cuda.device_count()
             warned.append(f"\t`--num_processes` was set to a value of `{args.num_processes}`")
+        if args.debug is None:
+            args.debug = False
         if not args.multi_gpu and (
             (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
             or (is_npu_available() and torch.npu.device_count() > 1)
