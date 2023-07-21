@@ -1196,11 +1196,15 @@ class Accelerator:
             )
 
         if self.distributed_type == DistributedType.FSDP:
+            from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+
             model_count = 0
             optimizer_present = False
+            is_type_fsdp = False
             for obj in args:
                 if isinstance(obj, torch.nn.Module):
                     model_count += 1
+                    is_type_fsdp = type(obj) == FSDP
                 if isinstance(obj, torch.optim.Optimizer):
                     optimizer_present = True
             if model_count > 1 and optimizer_present:
@@ -1209,7 +1213,7 @@ class Accelerator:
                     "prepare must be called for all the models before optimizers are created. "
                     "Then pass the optimizers to the prepare call in the same order as corresponding models."
                 )
-            elif model_count == 1 and optimizer_present:
+            elif model_count == 1 and not is_type_fsdp and optimizer_present:
                 logger.warning(
                     "FSDP Warning: When using FSDP, "
                     "it is efficient and recommended to call prepare for the model before creating the optimizer"
@@ -1270,7 +1274,12 @@ class Accelerator:
                 if isinstance(obj, torch.optim.Optimizer):
                     obj._switch_parameters(mapping)
 
-        if self.distributed_type == DistributedType.FSDP and model_count == 1 and optimizer_present:
+        if (
+            self.distributed_type == DistributedType.FSDP
+            and model_count == 1
+            and not is_type_fsdp
+            and optimizer_present
+        ):
             result = self._prepare_fsdp(*result)
 
         for item in result:
