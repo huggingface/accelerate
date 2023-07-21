@@ -115,7 +115,7 @@ checkpoint = "marcsun13/gpt2-xl-linear-sharded"
 weights_location = snapshot_download(repo_id=checkpoint)
 ```
 
-In order to initialize the model, we will use the library minGTP. 
+In order to initialize the model, we will use the library minGPT. 
 
 ```bash
 git clone https://github.com/karpathy/minGPT.git

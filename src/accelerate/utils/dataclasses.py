@@ -46,9 +46,35 @@ class KwargsHandler:
         """
         Returns a dictionary containing the attributes with values different from the default of this class.
         """
-        default_dict = self.__class__().to_dict()
+        # import clear_environment here to avoid circular import problem
+        from .other import clear_environment
+
+        with clear_environment():
+            default_dict = self.__class__().to_dict()
         this_dict = self.to_dict()
         return {k: v for k, v in this_dict.items() if default_dict[k] != v}
+
+
+@dataclass
+class AutocastKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize how `torch.autocast` behaves. Please refer to the
+    documentation of this [context manager](https://pytorch.org/docs/stable/amp.html#torch.autocast) for more
+    information on each argument.
+
+    Example:
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import AutocastKwargs
+
+    kwargs = AutocastKwargs(cache_enabled=True)
+    accelerator = Accelerator(kwargs_handlers=[kwargs])
+    ```
+    """
+
+    enabled: bool = True
+    cache_enabled: bool = None
 
 
 @dataclass
@@ -790,10 +816,6 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={"help": "A list of modules to ignore for FSDP."},
     )
-    ignored_parameters: Optional[Iterable[torch.nn.Parameter]] = field(
-        default=None,
-        metadata={"help": "A list of parameters to ignore for FSDP."},
-    )
     state_dict_type: "typing.Any" = field(
         default=None,
         metadata={
@@ -913,10 +935,15 @@ class FullyShardedDataParallelPlugin:
     def set_auto_wrap_policy(self, model):
         from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
+        default_transformer_cls_names_to_wrap = (
+            ",".join(model._no_split_modules) if getattr(model, "_no_split_modules", None) is not None else ""
+        )
         if self.auto_wrap_policy is None:
             auto_wrap_policy = os.environ.get("FSDP_AUTO_WRAP_POLICY", "NO_WRAP")
             if auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[0]:
-                transformer_cls_names_to_wrap = os.environ.get("FSDP_TRANSFORMER_CLS_TO_WRAP", "").split(",")
+                transformer_cls_names_to_wrap = os.environ.get(
+                    "FSDP_TRANSFORMER_CLS_TO_WRAP", default_transformer_cls_names_to_wrap
+                ).split(",")
                 transformer_cls_to_wrap = set()
                 for layer_class in transformer_cls_names_to_wrap:
                     transformer_cls = FullyShardedDataParallelPlugin.get_module_class_from_name(model, layer_class)

@@ -20,6 +20,7 @@ import torch
 
 from ..commands.config.default import write_basic_config  # noqa: F401
 from ..state import PartialState
+from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_tpu_available
 from .transformer_engine import convert_model
@@ -64,6 +65,11 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
 
     if is_deepspeed_available():
         options += (DeepSpeedEngine,)
+
+    if is_torch_version(">=", FSDP_PYTORCH_VERSION):
+        from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+
+        options += (FSDP,)
 
     while isinstance(model, options):
         model = model.module
@@ -112,6 +118,39 @@ def save(obj, f):
         xm.save(obj, f)
     elif PartialState().local_process_index == 0:
         torch.save(obj, f)
+
+
+@contextmanager
+def clear_environment():
+    """
+    A context manager that will cache origin `os.environ` and replace it with a empty dictionary in this context.
+
+    When this context exits, the cached `os.environ` will be back.
+
+    Example:
+
+    ```python
+    >>> import os
+    >>> from accelerate.utils import clear_environment
+
+    >>> os.environ["FOO"] = "bar"
+    >>> with clear_environment():
+    ...     print(os.environ)
+    ...     os.environ["FOO"] = "new_bar"
+    ...     print(os.environ["FOO"])
+    {}
+    new_bar
+
+    >>> print(os.environ["FOO"])
+    bar
+    ```
+    """
+    _old_os_environ = os.environ
+    os.environ = dict()
+
+    yield
+
+    os.environ = _old_os_environ
 
 
 @contextmanager
