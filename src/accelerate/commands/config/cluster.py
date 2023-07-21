@@ -59,7 +59,7 @@ def get_cluster_input():
     main_process_port = None
     rdzv_backend = "static"
     same_network = True
-    debug_mode = False
+    debug = False
 
     if distributed_type in [
         DistributedType.MULTI_GPU,
@@ -95,7 +95,7 @@ def get_cluster_input():
                 rdzv_backend = _ask_field(
                     "What rendezvous backend will you use? ('static', 'c10d', ...): ", default="static"
                 )
-        debug_mode = _ask_field(
+        debug = _ask_field(
             "Should distributed operations be checked while running for errors? This can avoid timeout issues but will be slower. [yes/NO]: ",
             _convert_yes_no_to_bool,
             default=False,
@@ -624,5 +624,5 @@ def get_cluster_input():
         tpu_use_sudo=tpu_use_sudo,
         tpu_use_cluster=tpu_use_cluster,
         dynamo_config=dynamo_config,
-        debug_mode=debug_mode,
+        debug=debug,
     )
