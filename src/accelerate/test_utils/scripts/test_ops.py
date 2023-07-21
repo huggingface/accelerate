@@ -14,13 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+import sys
 import torch
 from torch.utils.data import IterableDataset, DataLoader
 
 from accelerate import PartialState, Accelerator
 from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.utils.operations import broadcast, gather, gather_object, pad_across_processes, reduce
+import logging
 
+class ListHandler(logging.Handler):
+    def __init__(self, *args, **kwargs):
+        super(ListHandler, self).__init__(*args, **kwargs)
+        self.logs = []
+
+    def emit(self, record):
+        self.logs.append(record)
 
 def create_tensor(state):
     return (torch.arange(state.num_processes) + 1.0 + (state.num_processes * state.process_index)).to(state.device)
@@ -97,16 +107,36 @@ def test_data_loader_dispatcher_gather_for_metrics(state):
 
     assert type(prepared_dataloader) == DataLoaderDispatcher
 
-    batch_shapes = []
-    batches = []
-    for _, batch in enumerate(prepared_dataloader):
-        gathered = accelerator.gather_for_metrics(batch)
-        batches.append(batch)
-        batch_shapes.append(gathered.size(0))
-    
-    print(batches)
-    print(batch_shapes)
+    if state.is_main_process:
+        logger = logging.root.manager.loggerDict['accelerate.accelerator']
+        list_handler = ListHandler()
+        logger.addHandler(list_handler)
 
+    raw_batches_per_process = []
+    gathered_batches = []
+    gathered_for_metrics_batches = []
+
+    for batch_idx, batch in enumerate(prepared_dataloader):
+        print(f"{batch_idx=}")
+        raw_batches_per_process.append(batch)
+
+        gathered_batches.append(accelerator.gather(batch))
+        gathered_for_metrics_batches.append(accelerator.gather_for_metrics(batch))
+    
+    print(f"{accelerator.process_index}: {raw_batches_per_process=}")
+    print(f"{accelerator.process_index}: {gathered_batches=}")
+    print(f"{accelerator.process_index}: {gathered_for_metrics_batches=}")
+
+    if state.is_main_process:
+        print(list_handler.logs)
+
+        # assert len(list_handler.logs) == 0
+
+        # inverse assertion
+        assert len(list_handler.logs) == 1
+        assert "The used dataset had no length, returning gathered tensors." in list_handler.logs[0].msg
+
+        logger.removeHandler(list_handler)
 
 
 def _mp_fn(index):

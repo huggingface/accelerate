@@ -45,7 +45,7 @@ class MultiGPUTester(unittest.TestCase):
         print(f"Found {torch.cuda.device_count()} devices.")
         cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.operation_file_path]
         print(f"Command: {cmd}")
-        with patch_environment(omp_num_threads=1):
+        with patch_environment(omp_num_threads=1, ACCELERATE_LOG_LEVEL="INFO"):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_gpu
