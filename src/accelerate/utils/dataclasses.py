@@ -816,10 +816,6 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={"help": "A list of modules to ignore for FSDP."},
     )
-    ignored_parameters: Optional[Iterable[torch.nn.Parameter]] = field(
-        default=None,
-        metadata={"help": "A list of parameters to ignore for FSDP."},
-    )
     state_dict_type: "typing.Any" = field(
         default=None,
         metadata={
