@@ -870,9 +870,9 @@ def infer_auto_device_map(
         no_split_module_classes = [no_split_module_classes]
 
     devices = list(max_memory.keys())
-    gpus = [device for device in devices if device != "cpu"]
     if "disk" not in devices:
         devices.append("disk")
+    gpus = [device for device in devices if device not in ["cpu", "disk"]]
 
     # Devices that need to keep space for a potential offloaded layer.
     if "mps" in gpus:
