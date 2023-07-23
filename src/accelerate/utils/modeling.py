@@ -642,6 +642,15 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     for key in max_memory:
         if isinstance(max_memory[key], str):
             max_memory[key] = convert_file_size_to_int(max_memory[key])
+
+    # Need to sort the device by type to make sure that we allocate the gpu first.
+    # As gpu/xpu are represented by int, we need to sort them first.
+    gpu_devices = [k for k in max_memory.keys() if isinstance(k, int)]
+    gpu_devices.sort()
+    # Add the other devices in the preset order if they are available
+    all_devices = gpu_devices + [k for k in ["mps", "cpu", "disk"] if k in max_memory.keys()]
+    max_memory = {k: max_memory[k] for k in all_devices}
+
     return max_memory
 
 
