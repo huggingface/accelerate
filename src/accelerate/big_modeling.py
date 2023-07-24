@@ -333,9 +333,10 @@ def dispatch_model(
             else:
                 main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]
 
-        cpu_modules = [name for name, device in device_map.items() if device == "cpu"]
-        if state_dict is None and len(cpu_modules) > 0:
-            state_dict = extract_submodules_state_dict(model.state_dict(), cpu_modules)
+        if main_device != "cpu":
+            cpu_modules = [name for name, device in device_map.items() if device == "cpu"]
+            if state_dict is None and len(cpu_modules) > 0:
+                state_dict = extract_submodules_state_dict(model.state_dict(), cpu_modules)
 
         disk_modules = [name for name, device in device_map.items() if device == "disk"]
         if offload_dir is None and offload_index is None and len(disk_modules) > 0:
