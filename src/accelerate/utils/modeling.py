@@ -648,7 +648,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     gpu_devices = [k for k in max_memory.keys() if isinstance(k, int)]
     gpu_devices.sort()
     # check if gpu/xgpu device are available and if not, throw a warning
-    num_deivces = torch.xpu.device_count() if is_xpu_available() else torch.cuda.device_count()
+    num_devices = torch.xpu.device_count() if is_xpu_available() else torch.cuda.device_count()
     for device in gpu_devices:
         if device >= num_devices or device < 0:
             logger.warning(
