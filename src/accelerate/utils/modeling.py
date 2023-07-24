@@ -647,20 +647,18 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     # As gpu/xpu are represented by int, we need to sort them first.
     gpu_devices = [k for k in max_memory.keys() if isinstance(k, int)]
     gpu_devices.sort()
-    # check if gpu/xgpu device are available and if not, throw a warning
+    # check if gpu/xgpu devices are available and if not, throw a warning
     num_devices = torch.xpu.device_count() if is_xpu_available() else torch.cuda.device_count()
     for device in gpu_devices:
         if device >= num_devices or device < 0:
-            logger.warning(
-                f"Device {device} is not available, available device are {list(range(num_devices))}"
-            )
+            logger.warning(f"Device {device} is not available, available devices are {list(range(num_devices))}")
     # Add the other devices in the preset order if they are available
     all_devices = gpu_devices + [k for k in ["mps", "cpu", "disk"] if k in max_memory.keys()]
     # Raise an error if a device is not recognized
     for k in max_memory.keys():
         if k not in all_devices:
             raise ValueError(
-                f"Device {k} is not recognized, available device are integers(for GPU/XPU), 'mps', 'cpu' and 'disk'"
+                f"Device {k} is not recognized, available devices are integers(for GPU/XPU), 'mps', 'cpu' and 'disk'"
             )
     max_memory = {k: max_memory[k] for k in all_devices}
 
