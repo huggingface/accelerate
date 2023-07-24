@@ -660,7 +660,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     for k in max_memory.keys():
         if k not in all_devices:
             raise ValueError(
-                f"Device {k} is not recognized, avaiable device are integers(for GPU/XPU), 'mps', 'cpu' and 'disk'"
+                f"Device {k} is not recognized, available device are integers(for GPU/XPU), 'mps', 'cpu' and 'disk'"
             )
     max_memory = {k: max_memory[k] for k in all_devices}
 
