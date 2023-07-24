@@ -652,7 +652,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     for device in gpu_devices:
         if device >= num_deivces or device < 0:
             logger.warning(
-                f"Device {max(gpu_devices)} is not available, available device are {list(range(num_deivces))}"
+                f"Device {device} is not available, available device are {list(range(num_devices))}"
             )
     # Add the other devices in the preset order if they are available
     all_devices = gpu_devices + [k for k in ["mps", "cpu", "disk"] if k in max_memory.keys()]
