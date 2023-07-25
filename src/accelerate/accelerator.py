@@ -944,13 +944,14 @@ class Accelerator:
         self.gradient_state.plugin_kwargs.update({"num_steps": gradient_accumulation_steps})
 
     @contextmanager
-    def accumulate(self, model):
+    def accumulate(self, *models):
         """
         A context manager that will lightly wrap around and perform gradient accumulation automatically
 
         Args:
-            model (`torch.nn.Module`):
-                PyTorch Module that was prepared with `Accelerator.prepare`
+            *models (list of `torch.nn.Module`):
+                PyTorch Modules that was prepared with `Accelerator.prepare`. Models passed to `accumulate()` will skip
+                gradient syncing during backward pass in distributed training
 
         Example:
 
@@ -971,12 +972,9 @@ class Accelerator:
         ```
         """
         self._do_sync()
-        if self.sync_gradients:
-            context = contextlib.nullcontext
-        else:
-            context = self.no_sync
-
-        with context(model):
+        with contextlib.ExitStack() as cm_stack:
+            for m in models:
+                cm_stack.enter_context(contextlib.nullcontext() if self.sync_gradients else self.no_sync(m))
             yield
 
     @contextmanager
