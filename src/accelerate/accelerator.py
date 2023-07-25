@@ -890,7 +890,7 @@ class Accelerator:
         A context manager that will lightly wrap around and perform gradient accumulation automatically
 
         Args:
-            *model (`torch.nn.Module`):
+            *models (list of `torch.nn.Module`):
                 PyTorch Modules that was prepared with `Accelerator.prepare`. Models passed to `accumulate()` will skip
                 gradient syncing during backward pass in distributed training
 
