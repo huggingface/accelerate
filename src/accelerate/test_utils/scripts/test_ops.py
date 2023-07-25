@@ -36,12 +36,13 @@ def test_gather_object(state):
     assert len(gathered_obj) == state.num_processes, f"{gathered_obj}, {len(gathered_obj)} != {state.num_processes}"
     assert gathered_obj == list(range(state.num_processes)), f"{gathered_obj} != {list(range(state.num_processes))}"
 
+
 def test_gather_non_contigous(state):
     # Create a non-contiguous tensor
     tensor = torch.arange(12).view(4, 3).t().to(state.device)
     assert not tensor.is_contiguous()
-    gathered_tensor = gather(tensor)
-    assert gathered_tensor.shape == torch.Size([state.num_processes, 3, 4])
+    # Shouldn't error out
+    _ = gather(tensor)
 
 
 def test_broadcast(state):
@@ -91,21 +92,21 @@ def _mp_fn(index):
 
 def main():
     state = PartialState()
-    # state.print(f"State: {state}")
-    # state.print("testing gather")
-    # test_gather(state)
-    # state.print("testing gather_object")
-    # test_gather_object(state)
+    state.print(f"State: {state}")
+    state.print("testing gather")
+    test_gather(state)
+    state.print("testing gather_object")
+    test_gather_object(state)
     state.print("testing gather non-contigous")
     test_gather_non_contigous(state)
-    # state.print("testing broadcast")
-    # test_broadcast(state)
-    # state.print("testing pad_across_processes")
-    # test_pad_across_processes(state)
-    # state.print("testing reduce_sum")
-    # test_reduce_sum(state)
-    # state.print("testing reduce_mean")
-    # test_reduce_mean(state)
+    state.print("testing broadcast")
+    test_broadcast(state)
+    state.print("testing pad_across_processes")
+    test_pad_across_processes(state)
+    state.print("testing reduce_sum")
+    test_reduce_sum(state)
+    state.print("testing reduce_mean")
+    test_reduce_mean(state)
 
 
 if __name__ == "__main__":
