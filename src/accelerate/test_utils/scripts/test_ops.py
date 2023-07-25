@@ -46,6 +46,14 @@ def test_gather_object(state):
     assert gathered_obj == list(range(state.num_processes)), f"{gathered_obj} != {list(range(state.num_processes))}"
 
 
+def test_gather_non_contigous(state):
+    # Create a non-contiguous tensor
+    tensor = torch.arange(12).view(4, 3).t().to(state.device)
+    assert not tensor.is_contiguous()
+    # Shouldn't error out
+    _ = gather(tensor)
+
+
 def test_broadcast(state):
     tensor = create_tensor(state)
     broadcasted_tensor = broadcast(tensor)
@@ -133,6 +141,8 @@ def main():
     test_gather(state)
     state.print("testing gather_object")
     test_gather_object(state)
+    state.print("testing gather non-contigous")
+    test_gather_non_contigous(state)
     state.print("testing broadcast")
     test_broadcast(state)
     state.print("testing pad_across_processes")

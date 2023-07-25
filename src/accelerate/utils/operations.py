@@ -269,6 +269,9 @@ def _tpu_gather(tensor):
         if tensor.ndim == 0:
             tensor = tensor.clone()[None]
 
+        # Can only gather contiguous tensors
+        if not tensor.is_contiguous():
+            tensor = tensor.contiguous()
         return xm.all_gather(tensor)
 
     res = recursively_apply(_tpu_gather_one, tensor, error_on_other_type=True)
@@ -280,6 +283,10 @@ def _gpu_gather(tensor):
     def _gpu_gather_one(tensor):
         if tensor.ndim == 0:
             tensor = tensor.clone()[None]
+
+        # Can only gather contiguous tensors
+        if not tensor.is_contiguous():
+            tensor = tensor.contiguous()
         output_tensors = [torch.empty_like(tensor) for _ in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather(output_tensors, tensor)
         return torch.cat(output_tensors, dim=0)
