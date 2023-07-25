@@ -885,7 +885,7 @@ class Accelerator:
         self.gradient_state.plugin_kwargs.update({"num_steps": gradient_accumulation_steps})
 
     @contextmanager
-    def accumulate(self, *model):
+    def accumulate(self, *models):
         """
         A context manager that will lightly wrap around and perform gradient accumulation automatically
 
