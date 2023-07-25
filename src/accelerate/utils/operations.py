@@ -189,6 +189,24 @@ def get_data_structure(data):
     return recursively_apply(_get_data_structure, data)
 
 
+def get_shape(data):
+    """
+    Recursively gathers the shape of a nested list/tuple/dictionary of tensors as a list.
+
+    Args:
+        data (nested list/tuple/dictionary of `torch.Tensor`):
+            The data to send to analyze.
+
+    Returns:
+        The same data structure as `data` with lists of tensor shapes instead of tensors.
+    """
+
+    def _get_shape(tensor):
+        return list(tensor.shape)
+
+    return recursively_apply(_get_shape, data)
+
+
 def initialize_tensors(data_structure):
     """
     Recursively initializes tensors from a nested list/tuple/dictionary of [`~utils.TensorInformation`].
@@ -292,7 +310,8 @@ def verify_operation(function):
             tensor = kwargs["tensor"]
         else:
             tensor = args[0]
-        output = gather_object([list(tensor.shape)])
+        shapes = get_shape(tensor)
+        output = gather_object([shapes])
         if output[0] is not None:
             are_same = output.count(output[0]) == len(output)
             if not are_same:

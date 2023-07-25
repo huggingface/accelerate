@@ -93,30 +93,30 @@ def test_op_checker(state):
     state.debug = True
     # `pad_across_processes`
     if state.process_index == 0:
-        tensor = torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)
+        data = {"tensor": torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)}
     else:
-        tensor = torch.tensor([[[0.0, 1, 2, 3, 4, 5]]]).to(state.device)
+        data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4, 5]]]).to(state.device)}
 
     with pytest.raises(DistributedOperationException):
-        pad_across_processes(tensor, dim=0)
+        pad_across_processes(data, dim=0)
 
     # `reduce`
     if state.process_index == 0:
-        tensor = torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)
+        data = {"tensor": torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)}
     else:
-        tensor = torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)
+        data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)}
 
     with pytest.raises(DistributedOperationException):
-        reduce(tensor)
+        reduce(data)
 
     # `broadcast`
     if state.process_index == 0:
-        tensor = torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)
+        data = {"tensor": torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)}
     else:
-        tensor = torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)
+        data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)}
 
     with pytest.raises(DistributedOperationException):
-        broadcast(tensor)
+        broadcast(data)
 
     state.debug = False
 
