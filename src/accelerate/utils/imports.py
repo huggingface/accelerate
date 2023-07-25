@@ -39,13 +39,9 @@ except ImportError:
 _torch_distributed_available = torch.distributed.is_available()
 
 
-def _package_exists(pkg_name):
-    return importlib.util.find_spec(pkg_name) is not None
-
-
 def _is_package_available(pkg_name):
     # Check we're not importing a "pkg_name" directory somewhere but the actual library by trying to grab the version
-    package_exists = _package_exists(pkg_name)
+    package_exists = importlib.util.find_spec(pkg_name) is not None
     if package_exists:
         try:
             _ = importlib.metadata.metadata(pkg_name)
@@ -157,7 +153,11 @@ def is_datasets_available():
 
 
 def is_aim_available():
-    return _is_package_available("aim") and _package_exists("aim.sdk")
+    package_exists = _is_package_available("aim")
+    if package_exists:
+        aim_version = version.parse(importlib.metadata.version("aim"))
+        return compare_versions(aim_version, "<", "4.0.0")
+    return False
 
 
 def is_tensorboard_available():
