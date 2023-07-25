@@ -914,7 +914,7 @@ class Accelerator:
         """
         self._do_sync()
         with contextlib.ExitStack() as cm_stack:
-            for m in model:
+            for m in models:
                 cm_stack.enter_context(contextlib.nullcontext() if self.sync_gradients else self.no_sync(m))
             yield
 
