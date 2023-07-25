@@ -78,6 +78,7 @@ class BaseConfig:
     distributed_type: Union[DistributedType, SageMakerDistributedType]
     mixed_precision: str
     use_cpu: bool
+    debug: bool
 
     def to_dict(self):
         result = self.__dict__
@@ -106,6 +107,8 @@ class BaseConfig:
             config_dict["dynamo_config"] = {} if dynamo_backend == "NO" else {"dynamo_backend": dynamo_backend}
         if "use_cpu" not in config_dict:
             config_dict["use_cpu"] = False
+        if "debug" not in config_dict:
+            config_dict["debug"] = False
         return cls(**config_dict)
 
     def to_json_file(self, json_file):
@@ -132,6 +135,8 @@ class BaseConfig:
             config_dict["dynamo_config"] = {} if dynamo_backend == "NO" else {"dynamo_backend": dynamo_backend}
         if "use_cpu" not in config_dict:
             config_dict["use_cpu"] = False
+        if "debug" not in config_dict:
+            config_dict["debug"] = False
         return cls(**config_dict)
 
     def to_yaml_file(self, yaml_file):

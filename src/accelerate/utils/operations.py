@@ -17,7 +17,7 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
 import pickle
-from functools import update_wrapper
+from functools import update_wrapper, wraps
 from typing import Any, Mapping
 
 import torch
@@ -189,6 +189,24 @@ def get_data_structure(data):
     return recursively_apply(_get_data_structure, data)
 
 
+def get_shape(data):
+    """
+    Recursively gathers the shape of a nested list/tuple/dictionary of tensors as a list.
+
+    Args:
+        data (nested list/tuple/dictionary of `torch.Tensor`):
+            The data to send to analyze.
+
+    Returns:
+        The same data structure as `data` with lists of tensor shapes instead of tensors.
+    """
+
+    def _get_shape(tensor):
+        return list(tensor.shape)
+
+    return recursively_apply(_get_shape, data)
+
+
 def initialize_tensors(data_structure):
     """
     Recursively initializes tensors from a nested list/tuple/dictionary of [`~utils.TensorInformation`].
@@ -269,6 +287,65 @@ def _gpu_gather(tensor):
     return recursively_apply(_gpu_gather_one, tensor, error_on_other_type=True)
 
 
+class DistributedOperationException(Exception):
+    """
+    An exception class for distributed operations. Raised if the operation cannot be performed due to the shape of the
+    tensors.
+    """
+
+    pass
+
+
+def verify_operation(function):
+    """
+    Verifies that `tensor` is the same shape across all processes. Only ran if `PartialState().debug` is `True`.
+    """
+
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        if PartialState().distributed_type == DistributedType.NO or not PartialState().debug:
+            return function(*args, **kwargs)
+        operation = f"{function.__module__}.{function.__name__}"
+        if "tensor" in kwargs:
+            tensor = kwargs["tensor"]
+        else:
+            tensor = args[0]
+        shapes = get_shape(tensor)
+        output = gather_object([shapes])
+        if output[0] is not None:
+            are_same = output.count(output[0]) == len(output)
+            if not are_same:
+                process_shape_str = "\n  - ".join([f"Process {i}: {shape}" for i, shape in enumerate(output)])
+                raise DistributedOperationException(
+                    f"Cannot apply desired operation due to shape mismatches. "
+                    "All shapes across devices must be valid."
+                    f"\n\nOperation: `{operation}`\nInput shapes:\n  - {process_shape_str}"
+                )
+        return function(*args, **kwargs)
+
+    return wrapper
+
+
+def chained_operation(function):
+    """
+    Checks that `verify_operation` failed and if so reports a more helpful error chaining the existing
+    `DistributedOperationException`.
+    """
+
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except DistributedOperationException as e:
+            operation = f"{function.__module__}.{function.__name__}"
+            raise DistributedOperationException(
+                f"Error found while calling `{operation}`. Please see the earlier error for more details."
+            ) from e
+
+    return wrapper
+
+
+@verify_operation
 def gather(tensor):
     """
     Recursively gather tensor in a nested list/tuple/dictionary of tensors from all devices.
@@ -330,6 +407,7 @@ def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
     return xm.mesh_reduce(name, tensor, lambda x: x[src])
 
 
+@verify_operation
 def broadcast(tensor, from_process: int = 0):
     """
     Recursively broadcast tensor in a nested list/tuple/dictionary of tensors to all devices.
@@ -414,6 +492,7 @@ def concatenate(data, dim=0):
     return torch.cat(data, dim=dim)
 
 
+@chained_operation
 def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     """
     Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so they
@@ -460,6 +539,7 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     )
 
 
+@verify_operation
 def reduce(tensor, reduction="mean"):
     """
     Recursively reduce the tensors in a nested list/tuple/dictionary of lists of tensors across all processes by the

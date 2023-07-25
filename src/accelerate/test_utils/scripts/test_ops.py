@@ -14,10 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
 import torch
 
 from accelerate import PartialState
-from accelerate.utils.operations import broadcast, gather, gather_object, pad_across_processes, reduce
+from accelerate.utils.dataclasses import DistributedType
+from accelerate.utils.operations import (
+    DistributedOperationException,
+    broadcast,
+    gather,
+    gather_object,
+    pad_across_processes,
+    reduce,
+)
 
 
 def create_tensor(state):
@@ -77,6 +86,41 @@ def test_reduce_mean(state):
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
 
+def test_op_checker(state):
+    # Must be in a distributed state
+    if state.distributed_type == DistributedType.NO:
+        return
+    state.debug = True
+    # `pad_across_processes`
+    if state.process_index == 0:
+        data = {"tensor": torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)}
+    else:
+        data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4, 5]]]).to(state.device)}
+
+    with pytest.raises(DistributedOperationException):
+        pad_across_processes(data, dim=0)
+
+    # `reduce`
+    if state.process_index == 0:
+        data = {"tensor": torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)}
+    else:
+        data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)}
+
+    with pytest.raises(DistributedOperationException):
+        reduce(data)
+
+    # `broadcast`
+    if state.process_index == 0:
+        data = {"tensor": torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)}
+    else:
+        data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)}
+
+    with pytest.raises(DistributedOperationException):
+        broadcast(data)
+
+    state.debug = False
+
+
 def _mp_fn(index):
     # For xla_spawn (TPUs)
     main()
@@ -97,6 +141,8 @@ def main():
     test_reduce_sum(state)
     state.print("testing reduce_mean")
     test_reduce_mean(state)
+    state.print("testing op_checker")
+    test_op_checker(state)
 
 
 if __name__ == "__main__":
