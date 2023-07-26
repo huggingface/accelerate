@@ -649,7 +649,7 @@ def main():
                 {
                     "perplexity": perplexity,
                     "eval_loss": eval_loss,
-                    "train_loss": total_loss.item() / len(train_dataloader),
+                    "train_loss": total_loss / len(train_dataloader),
                     "epoch": epoch,
                     "step": completed_steps,
                 },
