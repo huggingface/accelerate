@@ -1941,6 +1941,10 @@ class Accelerator:
             for opt in optimizer:
                 while isinstance(opt, AcceleratedOptimizer):
                     opt = opt.optimizer
+                if self.distributed_type == DistributedType.TPU:
+                    # Reduce gradients first for XLA
+                    gradients = xm._fetch_gradients(opt)
+                    xm.all_reduce("sum", gradients, scale=1.0/self.num_processes)
                 self.scaler.unscale_(opt)
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
