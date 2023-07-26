@@ -386,9 +386,9 @@ def get_cluster_input():
                 error_message="Please enter yes or no.",
             )
             fsdp_config["fsdp_sync_module_states"] = _ask_field(
-                "Do you want each individually wrapped FSDP unit to broadcast module parameters from rank 0 at the start? [yes/NO]: ",
+                "Do you want each individually wrapped FSDP unit to broadcast module parameters from rank 0 at the start? [YES/no]: ",
                 _convert_yes_no_to_bool,
-                default=False,
+                default=True,
                 error_message="Please enter yes or no.",
             )
 

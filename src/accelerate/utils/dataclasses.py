@@ -859,7 +859,7 @@ class FullyShardedDataParallelPlugin:
         },
     )
     sync_module_states: bool = field(
-        default=False,
+        default=True,
         metadata={
             "help": "If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0 "
             "to ensure they are the same across all ranks after initialization"
@@ -909,7 +909,7 @@ class FullyShardedDataParallelPlugin:
                     self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
 
         self.use_orig_params = strtobool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
-        self.sync_module_states = strtobool(os.environ.get(prefix + "SYNC_MODULE_STATES", "False")) == 1
+        self.sync_module_states = strtobool(os.environ.get(prefix + "SYNC_MODULE_STATES", "True")) == 1
         self.forward_prefetch = strtobool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
 
         if self.sync_module_states:
