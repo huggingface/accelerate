@@ -608,7 +608,8 @@ def main():
             total_loss = 0
 
         # skip new `skip_first_batches` to skip the batches when resuming from ckpt
-        train_dataloader = accelerator.skip_first_batches(train_dataloader, num_batches=resume_step)
+        if args.resume_from_checkpoint:
+            train_dataloader = accelerator.skip_first_batches(train_dataloader, num_batches=resume_step)
         for step, batch in enumerate(train_dataloader):
             # In particular, DeepSpeed handles `gradient_accumulation` via `DeepSpeedEngine`.
             # Below, we use `accelerator.accumulate` if the user
