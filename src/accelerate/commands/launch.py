@@ -526,7 +526,7 @@ def launch_command_parser(subparsers=None):
     )
     fsdp_args.add_argument(
         "--fsdp_sync_module_states",
-        default="false",
+        default="true",
         type=str,
         help="If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0."
         " (useful only when `use_fsdp` flag is passed).",
