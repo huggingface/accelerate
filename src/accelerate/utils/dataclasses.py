@@ -912,6 +912,9 @@ class FullyShardedDataParallelPlugin:
         self.sync_module_states = strtobool(os.environ.get(prefix + "SYNC_MODULE_STATES", "False")) == 1
         self.forward_prefetch = strtobool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
 
+        if self.sync_module_states:
+            self.param_init_fn = lambda x: x.to_empty(device=torch.cuda.current_device(), recurse=False)
+
     @staticmethod
     def get_module_class_from_name(module, name):
         """
