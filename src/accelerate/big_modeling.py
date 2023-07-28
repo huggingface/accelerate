@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 from contextlib import contextmanager
 from typing import Dict, List, Optional, Union
@@ -38,6 +39,9 @@ from .utils import (
     offload_state_dict,
     retie_parameters,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -379,6 +383,21 @@ def dispatch_model(
         )
         # Attaching the hook may break tied weights, so we retie them
         retie_parameters(model, tied_params)
+
+        # add warning to cuda and to method
+        def add_warning(fn):
+            def wrapper(*args, **kwargs):
+                logger.warning(
+                    "You can't use the model anymore for training or inference as you moved the model."
+                    "You should not move the model when it is dispatched on multiples devices. "
+                )
+                return fn(*args, **kwargs)
+
+            return wrapper
+
+        model.to = add_warning(model.to)
+        model.cuda = add_warning(model.cuda)
+
     else:
         device = list(device_map.values())[0]
         if device != "disk":

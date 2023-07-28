@@ -319,6 +319,20 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
+    @require_multi_gpu
+    def test_dispatch_model_move_model_warning(self):
+        model = ModelForTest()
+        device_map = {"linear1": 0, "batchnorm": 0, "linear2": 1}
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir)
+            with self.assertLogs("accelerate.big_modeling", level="WARNING"):
+                model.to("cpu")
+            with self.assertLogs("accelerate.big_modeling", level="WARNING"):
+                model.cuda(0)
+            with self.assertRaises(RuntimeError):
+                x = torch.randn(2, 3)
+                model(x)
+
     @slow
     @require_multi_gpu
     def test_dispatch_model_gpt2_on_two_gpus(self):
