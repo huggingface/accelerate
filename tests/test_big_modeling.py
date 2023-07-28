@@ -322,7 +322,7 @@ class BigModelingTester(unittest.TestCase):
     @require_cuda
     def test_dispatch_model_move_offloaded_model(self):
         model = ModelForTest()
-        device_map = {"linear1": "disk", "batchnorm": 'cpu', "linear2": 0}
+        device_map = {"linear1": "disk", "batchnorm": "cpu", "linear2": 0}
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             with self.assertRaises(RuntimeError):
