@@ -14,7 +14,6 @@
 
 import random
 import unittest
-import torch
 
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
 

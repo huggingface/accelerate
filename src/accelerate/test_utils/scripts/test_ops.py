@@ -123,9 +123,6 @@ def test_gather_for_metrics_with_iterable_dataset(state):
 
     if state.is_main_process:
         assert len(list_handler.logs) == 0
-        # inverse assertion
-        # assert len(list_handler.logs) == 3
-        # assert "The used dataset had no length, returning gathered tensors." in list_handler.logs[0].msg
 
         logger.removeHandler(list_handler)
 
