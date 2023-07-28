@@ -389,7 +389,7 @@ def dispatch_model(
         def add_warning(fn):
             @wraps(fn)
             def wrapper(*args, **kwargs):
-                logger.warning("You can't move a model when it is dispatched on multiple device.")
+                logger.warning("You can't move a model when it is dispatched on multiple devices.")
                 try:
                     return fn(*args, **kwargs)
                 except NotImplementedError as e:
