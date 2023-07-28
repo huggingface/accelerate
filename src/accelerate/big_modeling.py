@@ -15,6 +15,7 @@
 import logging
 import os
 from contextlib import contextmanager
+from functools import wraps
 from typing import Dict, List, Optional, Union
 
 import torch
@@ -386,12 +387,16 @@ def dispatch_model(
 
         # add warning to cuda and to method
         def add_warning(fn):
+            @wraps(fn)
             def wrapper(*args, **kwargs):
                 logger.warning(
                     "You can't use the model anymore for training or inference as you moved the model."
                     "You should not move the model when it is dispatched on multiples devices. "
                 )
-                return fn(*args, **kwargs)
+                try:
+                    return fn(*args, **kwargs)
+                except NotImplementedError as e:
+                    raise RuntimeError("You can't move a model that has some modules offloaded to cpu or disk.") from e
 
             return wrapper
 
