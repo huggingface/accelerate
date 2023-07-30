@@ -313,7 +313,7 @@ class WandBTracker(GeneralTracker):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
-        wandb.config.update(values)
+        wandb.config.update(values, allow_val_change=True)
         logger.debug("Stored initial configuration hyperparameters to WandB")
 
     @on_main_process
