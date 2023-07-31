@@ -59,24 +59,34 @@ def convert_file_size_to_int(size: Union[int, str]):
     1048576
     ```
     """
-    if isinstance(size, int):
-        return size
-    if size.upper().endswith("GIB"):
-        return int(size[:-3]) * (2**30)
-    if size.upper().endswith("MIB"):
-        return int(size[:-3]) * (2**20)
-    if size.upper().endswith("KIB"):
-        return int(size[:-3]) * (2**10)
-    if size.upper().endswith("GB"):
-        int_size = int(size[:-2]) * (10**9)
-        return int_size // 8 if size.endswith("b") else int_size
-    if size.upper().endswith("MB"):
-        int_size = int(size[:-2]) * (10**6)
-        return int_size // 8 if size.endswith("b") else int_size
-    if size.upper().endswith("KB"):
-        int_size = int(size[:-2]) * (10**3)
-        return int_size // 8 if size.endswith("b") else int_size
-    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
+    mem_size = 0
+    err_msg = (
+        f"`size` {size} is not in a valid format. Use an integer for bytes, or a string with an unit (like '5.0GB')."
+    )
+    try:
+        if isinstance(size, int):
+            mem_size = size
+        elif size.upper().endswith("GIB"):
+            mem_size = int(float(size[:-3]) * (2**30))
+        elif size.upper().endswith("MIB"):
+            mem_size = int(float(size[:-3]) * (2**20))
+        elif size.upper().endswith("KIB"):
+            mem_size = int(float(size[:-3]) * (2**10))
+        elif size.upper().endswith("GB"):
+            int_size = int(float(size[:-2]) * (10**9))
+            mem_size = int_size // 8 if size.endswith("b") else int_size
+        elif size.upper().endswith("MB"):
+            int_size = int(float(size[:-2]) * (10**6))
+            mem_size = int_size // 8 if size.endswith("b") else int_size
+        elif size.upper().endswith("KB"):
+            int_size = int(float(size[:-2]) * (10**3))
+            mem_size = int_size // 8 if size.endswith("b") else int_size
+    except ValueError:
+        raise ValueError(err_msg)
+
+    if mem_size <= 0:
+        raise ValueError(err_msg)
+    return mem_size
 
 
 def dtype_byte_size(dtype: torch.dtype):
