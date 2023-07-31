@@ -244,39 +244,6 @@ def parse_args():
 
 
 # New Code #
-def checkpoint_model(checkpoint_folder, ckpt_id, model, epoch, last_global_step, **kwargs):
-    """Utility function for checkpointing model + optimizer dictionaries
-    The main purpose for this is to be able to resume training from that instant again
-    """
-    checkpoint_state_dict = {
-        "epoch": epoch,
-        "last_global_step": last_global_step,
-    }
-    # Add extra kwargs too
-    checkpoint_state_dict.update(kwargs)
-
-    success = model.save_checkpoint(checkpoint_folder, ckpt_id, checkpoint_state_dict)
-    status_msg = f"checkpointing: checkpoint_folder={checkpoint_folder}, ckpt_id={ckpt_id}"
-    if success:
-        logging.info(f"Success {status_msg}")
-    else:
-        logging.warning(f"Failure {status_msg}")
-    return
-
-
-# New Code #
-def load_training_checkpoint(model, load_dir, tag=None, **kwargs):
-    """Utility function for checkpointing model + optimizer dictionaries
-    The main purpose for this is to be able to resume training from that instant again
-    """
-    _, checkpoint_state_dict = model.load_checkpoint(load_dir, tag=tag, **kwargs)
-    epoch = checkpoint_state_dict["epoch"]
-    last_global_step = checkpoint_state_dict["last_global_step"]
-    del checkpoint_state_dict
-    return (epoch, last_global_step)
-
-
-# New Code #
 def evaluate(args, model, eval_dataloader, accelerator, eval_dataset):
     model.eval()
     losses = []
@@ -302,9 +269,20 @@ def main():
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
+
+    # when using DeepSpeed, the `gradient_accumulation_steps` is properly set from the DeepSpeed plugin/config
+    # or from `accelerate launch` via `--gradient_accumulation_steps`  else
+    # defaulting to the passed `args.gradient_accumulation_steps`
     accelerator = (
-        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
+        Accelerator(
+            log_with=args.report_to,
+            project_dir=args.output_dir,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+        )
+        if args.with_tracking
+        else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
     )
+
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -538,17 +516,11 @@ def main():
         model.tie_weights()
 
     # Scheduler and math around the number of training steps.
-
-    # New Code
-    # Get gradient accumulation steps from deepspeed config if available
-    if accelerator.state.deepspeed_plugin is not None:
-        args.gradient_accumulation_steps = accelerator.state.deepspeed_plugin.deepspeed_config[
-            "gradient_accumulation_steps"
-        ]
-
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / accelerator.gradient_accumulation_steps)
+    overrode_max_train_steps = False
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+        overrode_max_train_steps = True
     else:
         args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
@@ -575,16 +547,16 @@ def main():
     )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
-    args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / accelerator.gradient_accumulation_steps)
+    if overrode_max_train_steps:
+        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+    # Afterwards we recalculate our number of training epochs
+    args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Figure out how many steps we should save the Accelerator states
-    if hasattr(args.checkpointing_steps, "isdigit"):
-        checkpointing_steps = args.checkpointing_steps
-        if args.checkpointing_steps.isdigit():
-            checkpointing_steps = int(args.checkpointing_steps)
-    else:
-        checkpointing_steps = None
+    checkpointing_steps = args.checkpointing_steps
+    if checkpointing_steps is not None and checkpointing_steps.isdigit():
+        checkpointing_steps = int(checkpointing_steps)
 
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
@@ -595,14 +567,16 @@ def main():
         accelerator.init_trackers("clm_no_trainer", experiment_config)
 
     # Train!
-    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+    total_batch_size = (
+        args.per_device_train_batch_size * accelerator.num_processes * accelerator.gradient_accumulation_steps
+    )
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
     logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
     logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
-    logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+    logger.info(f"  Gradient Accumulation steps = {accelerator.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
@@ -613,45 +587,54 @@ def main():
 
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
-        # New Code #
-        # Loads the DeepSpeed checkpoint from the specified path
-        _, last_global_step = load_training_checkpoint(
-            model,
-            args.resume_from_checkpoint,
-            **{"load_optimizer_states": True, "load_lr_scheduler_states": True},
-        )
+        accelerator.load_state(args.resume_from_checkpoint)
         accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
-        resume_step = last_global_step
-        starting_epoch = resume_step // len(train_dataloader)
-        resume_step -= starting_epoch * len(train_dataloader)
+        path = os.path.basename(args.resume_from_checkpoint)
+        training_difference = os.path.splitext(path)[0]
+
+        if "epoch" in training_difference:
+            starting_epoch = int(training_difference.replace("epoch_", "")) + 1
+            resume_step = None
+            completed_steps = starting_epoch * num_update_steps_per_epoch
+        else:
+            resume_step = int(training_difference.replace("step_", ""))
+            starting_epoch = resume_step // num_update_steps_per_epoch
+            resume_step -= starting_epoch * num_update_steps_per_epoch
+            completed_steps = resume_step
 
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         if args.with_tracking:
             total_loss = 0
+
+        # skip new `skip_first_batches` to skip the batches when resuming from ckpt
+        if args.resume_from_checkpoint:
+            train_dataloader = accelerator.skip_first_batches(train_dataloader, num_batches=resume_step)
         for step, batch in enumerate(train_dataloader):
-            # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == starting_epoch:
-                if resume_step is not None and step < resume_step:
-                    completed_steps += 1
-                    continue
-            outputs = model(**batch)
-            loss = outputs.loss
-            # We keep track of the loss at each epoch
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            loss = loss / args.gradient_accumulation_steps
-            accelerator.backward(loss)
-            if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            # In particular, DeepSpeed handles `gradient_accumulation` via `DeepSpeedEngine`.
+            # Below, we use `accelerator.accumulate` if the user
+            # wants to switch to other approaches such as plain DDP, PyTorch FSDP ...
+            # This avoids having to change any code as things are all handled across different distributed setups.
+            with accelerator.accumulate(model):
+                outputs = model(**batch)
+                loss = outputs.loss
+                accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-                progress_bar.update(1)
-                completed_steps += 1
+
+                if accelerator.sync_gradients:
+                    progress_bar.update(1)
+                    completed_steps += 1
+
+            # We keep track of the loss at each epoch
+            if args.with_tracking:
+                step_loss = accelerator.reduce(loss.detach().clone()).item()
+                total_loss += step_loss
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    output_dir = f"step_{completed_steps }"
+                    output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
@@ -666,34 +649,29 @@ def main():
                 {
                     "perplexity": perplexity,
                     "eval_loss": eval_loss,
-                    "train_loss": total_loss.item() / len(train_dataloader),
+                    "train_loss": total_loss / len(train_dataloader),
                     "epoch": epoch,
                     "step": completed_steps,
                 },
                 step=completed_steps,
             )
 
-        # New Code #
-        # Save the DeepSpeed checkpoint to the specified path
-        checkpoint_model(args.output_dir, epoch, model, epoch, completed_steps)
+        if isinstance(checkpointing_steps, str) and checkpointing_steps == "epoch":
+            accelerator.save_state(os.path.join(args.output_dir, f"epoch_{epoch}"))
 
         # New Code #
         # Tracks the best checkpoint and best metric
         if best_metric is None or best_metric > perplexity:
             best_metric = perplexity
-            best_metric_checkpoint = os.path.join(args.output_dir, str(epoch))
+            best_metric_checkpoint = os.path.join(args.output_dir, "best_checkpoint")
+            accelerator.save_state(best_metric_checkpoint)
             accelerator.print(f"New best metric: {best_metric} at epoch {epoch}")
             accelerator.print(f"best_metric_checkpoint: {best_metric_checkpoint}")
 
     # New Code #
     # Loads the best checkpoint after the training is finished
     if args.load_best_model:
-        _, last_global_step = load_training_checkpoint(
-            model,
-            "/".join(best_metric_checkpoint.split("/")[:-1]),
-            tag=best_metric_checkpoint.split("/")[-1],
-            **{"load_optimizer_states": True, "load_lr_scheduler_states": True},
-        )
+        accelerator.load_state(best_metric_checkpoint)
 
     # New Code #
     # Evaluates using the best checkpoint

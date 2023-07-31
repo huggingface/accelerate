@@ -944,13 +944,14 @@ class Accelerator:
         self.gradient_state.plugin_kwargs.update({"num_steps": gradient_accumulation_steps})
 
     @contextmanager
-    def accumulate(self, model):
+    def accumulate(self, *models):
         """
         A context manager that will lightly wrap around and perform gradient accumulation automatically
 
         Args:
-            model (`torch.nn.Module`):
-                PyTorch Module that was prepared with `Accelerator.prepare`
+            *models (list of `torch.nn.Module`):
+                PyTorch Modules that was prepared with `Accelerator.prepare`. Models passed to `accumulate()` will skip
+                gradient syncing during backward pass in distributed training
 
         Example:
 
@@ -971,12 +972,9 @@ class Accelerator:
         ```
         """
         self._do_sync()
-        if self.sync_gradients:
-            context = contextlib.nullcontext
-        else:
-            context = self.no_sync
-
-        with context(model):
+        with contextlib.ExitStack() as cm_stack:
+            for m in models:
+                cm_stack.enter_context(contextlib.nullcontext() if self.sync_gradients else self.no_sync(m))
             yield
 
     @contextmanager
@@ -1196,11 +1194,15 @@ class Accelerator:
             )
 
         if self.distributed_type == DistributedType.FSDP:
+            from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+
             model_count = 0
             optimizer_present = False
+            is_type_fsdp = False
             for obj in args:
                 if isinstance(obj, torch.nn.Module):
                     model_count += 1
+                    is_type_fsdp = type(obj) == FSDP
                 if isinstance(obj, torch.optim.Optimizer):
                     optimizer_present = True
             if model_count > 1 and optimizer_present:
@@ -1209,7 +1211,7 @@ class Accelerator:
                     "prepare must be called for all the models before optimizers are created. "
                     "Then pass the optimizers to the prepare call in the same order as corresponding models."
                 )
-            elif model_count == 1 and optimizer_present:
+            elif model_count == 1 and not is_type_fsdp and optimizer_present:
                 logger.warning(
                     "FSDP Warning: When using FSDP, "
                     "it is efficient and recommended to call prepare for the model before creating the optimizer"
@@ -1270,7 +1272,12 @@ class Accelerator:
                 if isinstance(obj, torch.optim.Optimizer):
                     obj._switch_parameters(mapping)
 
-        if self.distributed_type == DistributedType.FSDP and model_count == 1 and optimizer_present:
+        if (
+            self.distributed_type == DistributedType.FSDP
+            and model_count == 1
+            and not is_type_fsdp
+            and optimizer_present
+        ):
             result = self._prepare_fsdp(*result)
 
         for item in result:
@@ -1409,7 +1416,6 @@ class Accelerator:
                         "use_orig_params": fsdp_plugin.use_orig_params,
                         "param_init_fn": fsdp_plugin.param_init_fn,
                         "ignored_modules": fsdp_plugin.ignored_modules,
-                        "ignored_parameters": fsdp_plugin.ignored_parameters,
                         "limit_all_gathers": fsdp_plugin.limit_all_gathers,
                         "device_id": self.device,
                     }
@@ -2580,6 +2586,7 @@ class Accelerator:
                 raise ValueError(
                     f"Checkpoint directory {output_dir} ({self.save_iteration}) already exists. Please manually override `self.save_iteration` with what iteration to start with."
                 )
+            self.wait_for_everyone()
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
 

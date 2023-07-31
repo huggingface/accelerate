@@ -59,6 +59,7 @@ def get_cluster_input():
     main_process_port = None
     rdzv_backend = "static"
     same_network = True
+    debug = False
 
     if distributed_type in [
         DistributedType.MULTI_GPU,
@@ -94,6 +95,12 @@ def get_cluster_input():
                 rdzv_backend = _ask_field(
                     "What rendezvous backend will you use? ('static', 'c10d', ...): ", default="static"
                 )
+        debug = _ask_field(
+            "Should distributed operations be checked while running for errors? This can avoid timeout issues but will be slower. [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
 
     if distributed_type == DistributedType.NO:
         use_cpu = _ask_field(
@@ -335,11 +342,18 @@ def get_cluster_input():
                 lambda x: FSDP_AUTO_WRAP_POLICY[int(x)],
             )
             if fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[0]:
-                fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
-                    "Specify the comma-separated list of transformer layer class names (case-sensitive) to wrap ,e.g, :"
-                    "`BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput` ...? : ",
-                    str,
+                use_no_split_modules = _ask_field(
+                    "Do you want to use the model's `_no_split_modules` to wrap. Only applicable for 🤗 Transformers [yes/NO]: ",
+                    _convert_yes_no_to_bool,
+                    default=False,
+                    error_message="Please enter yes or no.",
                 )
+                if not use_no_split_modules:
+                    fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = _ask_field(
+                        "Specify the comma-separated list of transformer layer class names (case-sensitive) to wrap ,e.g, :"
+                        "`BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput` ...? : ",
+                        str,
+                    )
             elif fsdp_config["fsdp_auto_wrap_policy"] == FSDP_AUTO_WRAP_POLICY[1]:
                 fsdp_config["fsdp_min_num_params"] = _ask_field(
                     "What should be your FSDP's minimum number of parameters for Default Auto Wrapping Policy? [1e8]: ",
@@ -622,4 +636,5 @@ def get_cluster_input():
         tpu_use_sudo=tpu_use_sudo,
         tpu_use_cluster=tpu_use_cluster,
         dynamo_config=dynamo_config,
+        debug=debug,
     )

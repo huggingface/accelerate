@@ -35,6 +35,8 @@
     title: Saving and loading training states
   - local: usage_guides/tracking
     title: Using experiment trackers
+  - local: usage_guides/debug
+    title: Debugging timeout errors
   - local: usage_guides/memory
     title: How to avoid CUDA Out-of-Memory
   - local: usage_guides/mps

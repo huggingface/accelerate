@@ -146,8 +146,8 @@ class OffloadedWeightsLoader(Mapping):
         index: Mapping = None,
         device=None,
     ):
-        if state_dict is None and save_folder is None:
-            raise ValueError("Need either a `state_dict` or a `save_folder` containing offloaded weights.")
+        if state_dict is None and save_folder is None and index is None:
+            raise ValueError("Need either a `state_dict`, a `save_folder` or an `index` containing offloaded weights.")
 
         self.state_dict = {} if state_dict is None else state_dict
         self.save_folder = save_folder

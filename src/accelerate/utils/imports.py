@@ -153,7 +153,11 @@ def is_datasets_available():
 
 
 def is_aim_available():
-    return _is_package_available("aim")
+    package_exists = _is_package_available("aim")
+    if package_exists:
+        aim_version = version.parse(importlib.metadata.version("aim"))
+        return compare_versions(aim_version, "<", "4.0.0")
+    return False
 
 
 def is_tensorboard_available():

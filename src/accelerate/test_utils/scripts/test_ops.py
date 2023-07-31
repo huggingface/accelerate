@@ -15,14 +15,21 @@
 # limitations under the License.
 
 import logging
-import sys
+import pytest
 import torch
 from torch.utils.data import IterableDataset, DataLoader
 
 from accelerate import PartialState, Accelerator
 from accelerate.data_loader import DataLoaderDispatcher
-from accelerate.utils.operations import broadcast, gather, gather_object, pad_across_processes, reduce
-import logging
+from accelerate.utils.dataclasses import DistributedType
+from accelerate.utils.operations import (
+    DistributedOperationException,
+    broadcast,
+    gather,
+    gather_object,
+    pad_across_processes,
+    reduce,
+)
 
 class ListHandler(logging.Handler):
     def __init__(self, *args, **kwargs):
@@ -47,6 +54,14 @@ def test_gather_object(state):
     gathered_obj = gather_object(obj)
     assert len(gathered_obj) == state.num_processes, f"{gathered_obj}, {len(gathered_obj)} != {state.num_processes}"
     assert gathered_obj == list(range(state.num_processes)), f"{gathered_obj} != {list(range(state.num_processes))}"
+
+
+def test_gather_non_contigous(state):
+    # Create a non-contiguous tensor
+    tensor = torch.arange(12).view(4, 3).t().to(state.device)
+    assert not tensor.is_contiguous()
+    # Shouldn't error out
+    _ = gather(tensor)
 
 
 def test_broadcast(state):
@@ -127,6 +142,41 @@ def test_gather_for_metrics_with_iterable_dataset(state):
         logger.removeHandler(list_handler)
 
 
+def test_op_checker(state):
+    # Must be in a distributed state
+    if state.distributed_type == DistributedType.NO:
+        return
+    state.debug = True
+    # `pad_across_processes`
+    if state.process_index == 0:
+        data = {"tensor": torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)}
+    else:
+        data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4, 5]]]).to(state.device)}
+
+    with pytest.raises(DistributedOperationException):
+        pad_across_processes(data, dim=0)
+
+    # `reduce`
+    if state.process_index == 0:
+        data = {"tensor": torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)}
+    else:
+        data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)}
+
+    with pytest.raises(DistributedOperationException):
+        reduce(data)
+
+    # `broadcast`
+    if state.process_index == 0:
+        data = {"tensor": torch.tensor([[0.0, 1, 2, 3, 4]]).to(state.device)}
+    else:
+        data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)}
+
+    with pytest.raises(DistributedOperationException):
+        broadcast(data)
+
+    state.debug = False
+
+
 def _mp_fn(index):
     # For xla_spawn (TPUs)
     main()
@@ -139,6 +189,8 @@ def main():
     test_gather(state)
     state.print("testing gather_object")
     test_gather_object(state)
+    state.print("testing gather non-contigous")
+    test_gather_non_contigous(state)
     state.print("testing broadcast")
     test_broadcast(state)
     state.print("testing pad_across_processes")
@@ -149,6 +201,8 @@ def main():
     test_reduce_mean(state)
     state.print("test_gather_for_metrics_with_iterable_dataset")
     test_gather_for_metrics_with_iterable_dataset(state)
+    state.print("testing op_checker")
+    test_op_checker(state)
 
 
 if __name__ == "__main__":

@@ -33,6 +33,14 @@ logger = get_logger(__name__)
 
 def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0):
     os.makedirs(output_dir, exist_ok=True)
+
+    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
+        # FSDP raises error when single GPU is used with `offload_to_cpu=True` for FULL_STATE_DICT
+        # so, only enable it when num_processes>1
+        is_multi_process = accelerator.num_processes > 1
+        fsdp_plugin.state_dict_config.offload_to_cpu = is_multi_process
+        fsdp_plugin.state_dict_config.rank0_only = is_multi_process
+
     with FSDP.state_dict_type(
         model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
     ):
@@ -70,6 +78,12 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0):
 
 def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0):
     accelerator.wait_for_everyone()
+    if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
+        # FSDP raises error when single GPU is used with `offload_to_cpu=True` for FULL_STATE_DICT
+        # so, only enable it when num_processes>1
+        is_multi_process = accelerator.num_processes > 1
+        fsdp_plugin.state_dict_config.offload_to_cpu = is_multi_process
+        fsdp_plugin.state_dict_config.rank0_only = is_multi_process
     with FSDP.state_dict_type(
         model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
     ):
@@ -111,7 +125,8 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0):
             )
             state_dict = state_dict["model"]
             logger.info(f"Model loaded from {ckpt_dir}")
-        model.load_state_dict(state_dict)
+        load_result = model.load_state_dict(state_dict)
+    return load_result
 
 
 def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0):
@@ -172,5 +187,5 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
             )
             optim_state = optim_state["optimizer"]
             logger.info(f"Optimizer loaded from {ckpt_dir}")
-        flattened_osd = FSDP.optim_state_dict_to_load(optim_state, model, optimizer)
+        flattened_osd = FSDP.optim_state_dict_to_load(model=model, optim=optimizer, optim_state_dict=optim_state)
         optimizer.load_state_dict(flattened_osd)
