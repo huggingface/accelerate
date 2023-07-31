@@ -65,6 +65,7 @@ class MultiGPUTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
+
 if __name__ == "__main__":
     accelerator = Accelerator()
     shape = (accelerator.state.process_index + 2, 10)

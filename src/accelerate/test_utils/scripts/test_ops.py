@@ -15,11 +15,12 @@
 # limitations under the License.
 
 import logging
+
 import pytest
 import torch
-from torch.utils.data import IterableDataset, DataLoader
+from torch.utils.data import DataLoader, IterableDataset
 
-from accelerate import PartialState, Accelerator
+from accelerate import Accelerator, PartialState
 from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.utils.dataclasses import DistributedType
 from accelerate.utils.operations import (
@@ -31,6 +32,7 @@ from accelerate.utils.operations import (
     reduce,
 )
 
+
 class ListHandler(logging.Handler):
     def __init__(self, *args, **kwargs):
         super(ListHandler, self).__init__(*args, **kwargs)
@@ -38,6 +40,7 @@ class ListHandler(logging.Handler):
 
     def emit(self, record):
         self.logs.append(record)
+
 
 def create_tensor(state):
     return (torch.arange(state.num_processes) + 1.0 + (state.num_processes * state.process_index)).to(state.device)
@@ -103,6 +106,7 @@ def test_reduce_mean(state):
     truth_tensor = torch.tensor([2.0, 3]).to(state.device)
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
+
 def test_gather_for_metrics_with_iterable_dataset(state):
     assert state.num_processes == 2
 
@@ -126,7 +130,7 @@ def test_gather_for_metrics_with_iterable_dataset(state):
     assert type(prepared_dataloader) == DataLoaderDispatcher
 
     if state.is_main_process:
-        logger = logging.root.manager.loggerDict['accelerate.accelerator']
+        logger = logging.root.manager.loggerDict["accelerate.accelerator"]
         list_handler = ListHandler()
         logger.addHandler(list_handler)
 

@@ -2082,7 +2082,7 @@ class Accelerator:
                         return tensor[: self.gradient_state.remainder]
 
                     return recursively_apply(_adjust_samples, tensor)
-                else: # remainder is 0
+                else:  # remainder is 0
                     # no remainder even though at end of dataloader, so nothing to do.
                     return tensor
             else:
