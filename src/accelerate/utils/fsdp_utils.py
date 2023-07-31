@@ -17,10 +17,11 @@ import torch
 
 from ..logging import get_logger
 from .constants import FSDP_PYTORCH_VERSION, MODEL_NAME, OPTIMIZER_NAME
+from .imports import is_torch_distributed_available
 from .versions import is_torch_version
 
 
-if is_torch_version(">=", FSDP_PYTORCH_VERSION):
+if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_available():
     import torch.distributed.checkpoint as dist_cp
     from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner, DefaultSavePlanner
     from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
