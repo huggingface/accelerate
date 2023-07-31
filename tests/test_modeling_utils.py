@@ -27,6 +27,7 @@ from accelerate.utils.modeling import (
     check_device_map,
     clean_device_map,
     compute_module_sizes,
+    convert_file_size_to_int,
     find_tied_parameters,
     get_balanced_memory,
     infer_auto_device_map,
@@ -564,3 +565,31 @@ class ModelingUtilsTester(unittest.TestCase):
             for param, device in device_map.items():
                 device = device if device != "disk" else "cpu"
                 self.assertEqual(loaded_state_dict[param].device, torch.device(device))
+
+    def test_convert_file_size(self):
+        result = convert_file_size_to_int("100MB")
+        self.assertEqual(result, 100 * (10**6))
+
+        result = convert_file_size_to_int("2GiB")
+        self.assertEqual(result, 2 * (2**30))
+
+        result = convert_file_size_to_int("512KiB")
+        self.assertEqual(result, 512 * (2**10))
+
+        result = convert_file_size_to_int("1.5GB")
+        self.assertEqual(result, 1.5 * (10**9))
+
+        result = convert_file_size_to_int("100KB")
+        self.assertEqual(result, 100 * (10**3))
+
+        result = convert_file_size_to_int(500)
+        self.assertEqual(result, 500)
+
+        with self.assertRaises(ValueError):
+            convert_file_size_to_int("5MBB")
+
+        with self.assertRaises(ValueError):
+            convert_file_size_to_int("5k0MB")
+
+        with self.assertRaises(ValueError):
+            convert_file_size_to_int("-1GB")
