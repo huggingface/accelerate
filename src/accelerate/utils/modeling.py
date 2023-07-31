@@ -753,6 +753,7 @@ def get_balanced_memory(
             Transformers generate function).
     """
     # Get default / clean up max_memory
+    user_not_set_max_memory = max_memory is None
     max_memory = get_max_memory(max_memory)
 
     if not (torch.cuda.is_available() or is_xpu_available()) or is_mps_available():
@@ -771,8 +772,18 @@ def get_balanced_memory(
         )
 
     if num_devices == 1:
-        # We cannot do low_zero on just one GPU
+        # We cannot do low_zero on just one GPU, but we will still reserve some memory for the buffer
         low_zero = False
+        # If user just asked us to handle memory usage, we should avoid OOM
+        if user_not_set_max_memory:
+            for key in max_memory.keys():
+                if isinstance(key, int):
+                    max_memory[key] *= 0.9  # 90% is a good compromise
+                    logger.info(
+                        f"We will use 90% of the memory on device {key} for storing the model, and 10% for the buffer to avoid OOM. "
+                        "You can set `max_memory` in to a higher value to use more memory (at your own risk)."
+                    )
+                    break  # only one device
 
     module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes)
     per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
