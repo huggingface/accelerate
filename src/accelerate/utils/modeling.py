@@ -781,7 +781,7 @@ def get_balanced_memory(
                     max_memory[key] *= 0.9  # 90% is a good compromise
                     logger.warning(
                         f"We will use 90% of the memory on device {key} for storing the model, and 10% for the buffer to avoid OOM. "
-                        "You can set `max_memory` in to a higher value to use more memory."
+                        "You can set `max_memory` in to a higher value to use more memory (at your own risk)."
                     )
                     break  # only one device
 
