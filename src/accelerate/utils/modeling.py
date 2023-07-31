@@ -896,8 +896,6 @@ def infer_auto_device_map(
         devices.append("disk")
     gpus = [device for device in devices if device not in ["cpu", "disk"]]
 
-    # find the lowest cardinal of gpus, lower
-
     # Devices that need to keep space for a potential offloaded layer.
     if "mps" in gpus:
         main_devices = ["mps"]
