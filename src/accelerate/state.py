@@ -770,6 +770,13 @@ class AcceleratorState:
                     self.use_ipex = parse_flag_from_env("ACCELERATE_USE_IPEX", default=True)
                 else:
                     self.use_ipex = False
+                if self.distributed_type == DistributedType.MULTI_XPU:
+                    if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
+                        self.distributed_type = DistributedType.FSDP
+                        if self._mixed_precision != "no":
+                            fsdp_plugin.set_mixed_precision(self._mixed_precision)
+                        self.fsdp_plugin = fsdp_plugin
+
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"
