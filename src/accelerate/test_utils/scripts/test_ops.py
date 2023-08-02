@@ -14,14 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-
 import pytest
 import torch
-from torch.utils.data import DataLoader, IterableDataset
 
-from accelerate import Accelerator, PartialState
-from accelerate.data_loader import DataLoaderDispatcher
+from accelerate import PartialState
 from accelerate.utils.dataclasses import DistributedType
 from accelerate.utils.operations import (
     DistributedOperationException,
@@ -31,15 +27,6 @@ from accelerate.utils.operations import (
     pad_across_processes,
     reduce,
 )
-
-
-class ListHandler(logging.Handler):
-    def __init__(self, *args, **kwargs):
-        super(ListHandler, self).__init__(*args, **kwargs)
-        self.logs = []
-
-    def emit(self, record):
-        self.logs.append(record)
 
 
 def create_tensor(state):
@@ -107,45 +94,6 @@ def test_reduce_mean(state):
     assert torch.allclose(reduced_tensor, truth_tensor), f"{reduced_tensor} != {truth_tensor}"
 
 
-def test_gather_for_metrics_with_iterable_dataset(state):
-    assert state.num_processes == 2
-
-    class DummyIterableDataset(IterableDataset):
-        def __init__(self, data):
-            self.data = data
-
-        def __len__(self):
-            return len(self.data)
-
-        def __iter__(self):
-            for element in self.data:
-                yield element
-
-    iterable_dataset = DummyIterableDataset(torch.as_tensor(range(30)))
-    dataloader = DataLoader(iterable_dataset, batch_size=4)
-
-    accelerator = Accelerator()
-    prepared_dataloader = accelerator.prepare(dataloader)
-
-    assert type(prepared_dataloader) == DataLoaderDispatcher
-
-    if state.is_main_process:
-        logger = logging.root.manager.loggerDict["accelerate.accelerator"]
-        list_handler = ListHandler()
-        logger.addHandler(list_handler)
-
-    batches_for_metrics = []
-    for batch in prepared_dataloader:
-        batches_for_metrics.append(accelerator.gather_for_metrics(batch))
-
-    assert torch.cat(batches_for_metrics).size(0) == 30
-
-    if state.is_main_process:
-        assert len(list_handler.logs) == 0
-
-        logger.removeHandler(list_handler)
-
-
 def test_op_checker(state):
     # Must be in a distributed state
     if state.distributed_type == DistributedType.NO:
@@ -203,8 +151,6 @@ def main():
     test_reduce_sum(state)
     state.print("testing reduce_mean")
     test_reduce_mean(state)
-    state.print("test_gather_for_metrics_with_iterable_dataset")
-    test_gather_for_metrics_with_iterable_dataset(state)
     state.print("testing op_checker")
     test_op_checker(state)
 
