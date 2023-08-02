@@ -386,19 +386,19 @@ def dispatch_model(
         retie_parameters(model, tied_params)
 
         # add warning to cuda and to method
-        def add_warning(fn):
+        def add_warning(fn, model):
             @wraps(fn)
             def wrapper(*args, **kwargs):
                 logger.warning("You can't move a model when it is dispatched on multiple devices.")
-                try:
-                    return fn(*args, **kwargs)
-                except NotImplementedError as e:
-                    raise RuntimeError("You can't move a model that has some modules offloaded to cpu or disk.") from e
+                for param in model.parameters():
+                    if param.device == torch.device("meta"):
+                        raise RuntimeError("You can't move a model that has some modules offloaded to cpu or disk.")
+                return fn(*args, **kwargs)
 
             return wrapper
 
-        model.to = add_warning(model.to)
-        model.cuda = add_warning(model.cuda)
+        model.to = add_warning(model.to, model)
+        model.cuda = add_warning(model.cuda, model)
 
     else:
         device = list(device_map.values())[0]
