@@ -389,7 +389,7 @@ def dispatch_model(
         def add_warning(fn, model):
             @wraps(fn)
             def wrapper(*args, **kwargs):
-                logger.warning("You can't move a model when it is dispatched on multiple devices.")
+                logger.warning("You shouldn't move a model when it is dispatched on multiple devices.")
                 for param in model.parameters():
                     if param.device == torch.device("meta"):
                         raise RuntimeError("You can't move a model that has some modules offloaded to cpu or disk.")
