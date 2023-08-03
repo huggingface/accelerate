@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from distutils.util import strtobool
 from functools import partial
 from pathlib import Path
@@ -415,3 +416,18 @@ def run_command(command: List[str], return_stdout=False):
         raise SubprocessCallException(
             f"Command `{' '.join(command)}` failed with the following error:\n\n{e.output.decode()}"
         ) from e
+
+
+@contextmanager
+def assert_exception(exception_class: Exception) -> bool:
+    """
+    Context manager to assert that the right `Exception` class was raised.
+    """
+    was_ran = False
+    try:
+        yield
+        was_ran = True
+    except Exception as e:
+        assert isinstance(e, exception_class), f"Expected exception of type {exception_class} but got {type(e)}"
+    if was_ran:
+        raise AssertionError(f"Expected exception of type {exception_class} but ran without issue.")
