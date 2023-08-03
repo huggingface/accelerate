@@ -17,8 +17,8 @@
 import torch
 
 from accelerate import PartialState
+from accelerate.test_utils.testing import assert_exception
 from accelerate.utils.dataclasses import DistributedType
-from accelerate.utils.imports import is_pytest_available
 from accelerate.utils.operations import (
     DistributedOperationException,
     broadcast,
@@ -27,10 +27,6 @@ from accelerate.utils.operations import (
     pad_across_processes,
     reduce,
 )
-
-
-if is_pytest_available():
-    import pytest
 
 
 def create_tensor(state):
@@ -109,7 +105,7 @@ def test_op_checker(state):
     else:
         data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4, 5]]]).to(state.device)}
 
-    with pytest.raises(DistributedOperationException):
+    with assert_exception(DistributedOperationException):
         pad_across_processes(data, dim=0)
 
     # `reduce`
@@ -118,7 +114,7 @@ def test_op_checker(state):
     else:
         data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)}
 
-    with pytest.raises(DistributedOperationException):
+    with assert_exception(DistributedOperationException):
         reduce(data)
 
     # `broadcast`
@@ -127,7 +123,7 @@ def test_op_checker(state):
     else:
         data = {"tensor": torch.tensor([[[0.0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]]).to(state.device)}
 
-    with pytest.raises(DistributedOperationException):
+    with assert_exception(DistributedOperationException):
         broadcast(data)
 
     state.debug = False
