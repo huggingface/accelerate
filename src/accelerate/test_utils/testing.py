@@ -423,7 +423,11 @@ def assert_exception(exception_class: Exception) -> bool:
     """
     Context manager to assert that the right `Exception` class was raised.
     """
+    was_ran = False
     try:
         yield
+        was_ran = True
     except Exception as e:
         assert isinstance(e, exception_class), f"Expected exception of type {exception_class} but got {type(e)}"
+    if was_ran:
+        raise AssertionError(f"Expected exception of type {exception_class} but ran without issue.")
