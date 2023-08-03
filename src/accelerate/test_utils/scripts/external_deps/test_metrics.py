@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import math
 import os
 from copy import deepcopy
@@ -21,15 +22,25 @@ import evaluate
 import torch
 import transformers
 from datasets import load_dataset
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, IterableDataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from accelerate import Accelerator
+from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import is_tpu_available, set_seed
 
 
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
+
+
+class ListHandler(logging.Handler):
+    def __init__(self, *args, **kwargs):
+        super(ListHandler, self).__init__(*args, **kwargs)
+        self.logs = []
+
+    def emit(self, record):
+        self.logs.append(record)
 
 
 def get_basic_setup(accelerator, num_samples=82, batch_size=16):
@@ -138,6 +149,43 @@ def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
         ), f"Baseline and Distributed are not the same for key {key}:\n\tBaseline: {baseline[key]}\n\tDistributed: {distributed[key]}\n"
 
 
+def test_gather_for_metrics_with_iterable_dataset():
+    class DummyIterableDataset(IterableDataset):
+        def __init__(self, data):
+            self.data = data
+
+        def __len__(self):
+            return len(self.data)
+
+        def __iter__(self):
+            for element in self.data:
+                yield element
+
+    iterable_dataset = DummyIterableDataset(torch.as_tensor(range(30)))
+    dataloader = DataLoader(iterable_dataset, batch_size=4)
+
+    accelerator = Accelerator()
+    prepared_dataloader = accelerator.prepare(dataloader)
+
+    assert isinstance(prepared_dataloader, DataLoaderDispatcher)
+
+    if accelerator.is_main_process:
+        logger = logging.root.manager.loggerDict["accelerate.accelerator"]
+        list_handler = ListHandler()
+        logger.addHandler(list_handler)
+
+    batches_for_metrics = []
+    for batch in prepared_dataloader:
+        batches_for_metrics.append(accelerator.gather_for_metrics(batch))
+
+    assert torch.cat(batches_for_metrics).size(0) == 30
+
+    if accelerator.is_main_process:
+        assert len(list_handler.logs) == 0
+
+        logger.removeHandler(list_handler)
+
+
 def main():
     accelerator = Accelerator(split_batches=False, dispatch_batches=False)
     if accelerator.is_local_main_process:
@@ -156,6 +204,8 @@ def main():
                     print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
                 test_mrpc(dispatch_batches, split_batches)
                 accelerator.state._reset_state()
+        print("test_gather_for_metrics_with_iterable_dataset")
+        test_gather_for_metrics_with_iterable_dataset()
     if accelerator.is_local_main_process:
         print("**Test torch metrics**")
     for split_batches in [True, False]:

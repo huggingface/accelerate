@@ -58,5 +58,5 @@ class MetricTester(unittest.TestCase):
     def test_metric_gpu_multi(self):
         print(f"Found {torch.cuda.device_count()} devices.")
         cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.test_file_path]
-        with patch_environment(omp_num_threads=1):
+        with patch_environment(omp_num_threads=1, ACCELERATE_LOG_LEVEL="INFO"):
             execute_subprocess_async(cmd, env=os.environ.copy())
