@@ -167,7 +167,7 @@ def test_gather_for_metrics_with_iterable_dataset():
     accelerator = Accelerator()
     prepared_dataloader = accelerator.prepare(dataloader)
 
-    assert type(prepared_dataloader) == DataLoaderDispatcher
+    assert isinstance(prepared_dataloader, DataLoaderDispatcher)
 
     if accelerator.is_main_process:
         logger = logging.root.manager.loggerDict["accelerate.accelerator"]
