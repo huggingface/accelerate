@@ -269,3 +269,7 @@ def is_xpu_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "xpu") and torch.xpu.is_available()
+
+
+def is_pytest_available():
+    return _is_package_available("pytest")

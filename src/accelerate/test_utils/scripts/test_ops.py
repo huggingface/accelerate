@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
 import torch
 
 from accelerate import PartialState
 from accelerate.utils.dataclasses import DistributedType
+from accelerate.utils.imports import is_pytest_available
 from accelerate.utils.operations import (
     DistributedOperationException,
     broadcast,
@@ -27,6 +27,10 @@ from accelerate.utils.operations import (
     pad_across_processes,
     reduce,
 )
+
+
+if is_pytest_available():
+    import pytest
 
 
 def create_tensor(state):
