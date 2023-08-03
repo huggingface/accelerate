@@ -421,7 +421,7 @@ def run_command(command: List[str], return_stdout=False):
 @contextmanager
 def assert_exception(exception_class: Exception) -> bool:
     """
-    Context manager to assert that an `exception` class was raised.
+    Context manager to assert that the right `Exception` class was raised.
     """
     try:
         yield
