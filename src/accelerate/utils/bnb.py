@@ -314,6 +314,7 @@ def _replace_with_bnb_layers(
 
     Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
     """
+    # bitsandbytes will initialize CUDA on import, so it needs to be imported lazily
     import bitsandbytes as bnb
 
     has_been_replaced = False
@@ -422,6 +423,7 @@ def get_keys_to_not_convert(model):
 
 def has_4bit_bnb_layers(model):
     """Check if we have `bnb.nn.Linear4bit` or `bnb.nn.Linear8bitLt` layers inside our model"""
+    # bitsandbytes will initialize CUDA on import, so it needs to be imported lazily
     import bitsandbytes as bnb
 
     for m in model.modules():
