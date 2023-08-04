@@ -21,7 +21,10 @@ from typing import Dict, List, Optional, Union
 import torch
 import torch.nn as nn
 
-from accelerate.utils.imports import is_4bit_bnb_available, is_8bit_bnb_available
+from accelerate.utils.imports import (
+    is_4bit_bnb_available,
+    is_8bit_bnb_available,
+)
 
 from ..big_modeling import dispatch_model, init_empty_weights
 from .dataclasses import BnbQuantizationConfig

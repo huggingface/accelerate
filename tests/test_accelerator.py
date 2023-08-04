@@ -329,3 +329,12 @@ class AcceleratorTester(AccelerateTestCase):
         sgd = torch.optim.SGD(model.parameters(), lr=0.01)
         accelerator = Accelerator(cpu=True)
         _ = accelerator.prepare(sgd)
+
+    @require_cuda
+    def test_a_cuda_initialization_on_import(self):
+        # Everything else is already initialized, now we just need to check that the cuda device is *not* initialized
+        initialized = torch.cuda.is_initialized()
+        self.assertFalse(
+            initialized,
+            "CUDA has been initialized somewhere after importing. Please see the imports in `test_accelerator.py` to try and locate the problem.",
+        )
