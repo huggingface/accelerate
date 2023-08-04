@@ -1325,6 +1325,12 @@ class Accelerator:
                 has_hf_device_map = True
                 break
 
+        if has_hf_device_map and self.distributed_type != DistributedType.NO:
+            raise ValueError(
+                "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
+                " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
+            )
+
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
             model, "hf_device_map", False
         ):
