@@ -15,16 +15,13 @@
 
 import logging
 import os
+from copy import deepcopy
 from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
 
-from accelerate.utils.imports import (
-    is_4bit_bnb_available,
-    is_8bit_bnb_available,
-    is_bnb_available,
-)
+from accelerate.utils.imports import is_4bit_bnb_available, is_8bit_bnb_available
 
 from ..big_modeling import dispatch_model, init_empty_weights
 from .dataclasses import BnbQuantizationConfig
@@ -36,12 +33,6 @@ from .modeling import (
     offload_weight,
     set_module_tensor_to_device,
 )
-
-
-if is_bnb_available():
-    import bitsandbytes as bnb
-
-from copy import deepcopy
 
 
 logger = logging.getLogger(__name__)
@@ -320,6 +311,8 @@ def _replace_with_bnb_layers(
 
     Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
     """
+    import bitsandbytes as bnb
+
     has_been_replaced = False
     for name, module in model.named_children():
         if current_key_name is None:
@@ -426,6 +419,8 @@ def get_keys_to_not_convert(model):
 
 def has_4bit_bnb_layers(model):
     """Check if we have `bnb.nn.Linear4bit` or `bnb.nn.Linear8bitLt` layers inside our model"""
+    import bitsandbytes as bnb
+
     for m in model.modules():
         if isinstance(m, bnb.nn.Linear4bit):
             return True
