@@ -120,7 +120,7 @@ needs to be the same length. Basic inference does not require this.
 For instance:
 
 ```python
-from accelerate import PartialState  # Can also be Accelerator or AcceleratorStaet
+from accelerate import PartialState  # Can also be Accelerator or AcceleratorState
 from diffusers import DiffusionPipeline
 
 pipe = DiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
