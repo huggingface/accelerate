@@ -269,7 +269,7 @@ If you use 🤗 Accelerate in your publication, please cite it by using the foll
 ```bibtex
 @Misc{accelerate,
   title =        {Accelerate: Training and inference at scale made simple, efficient and adaptable.},
-  author =       {Sylvain Gugger, Lysandre Debut, Thomas Wolf, Philipp Schmid, Zachary Mueller, Sourab Mangrulkar},
+  author =       {Sylvain Gugger, Lysandre Debut, Thomas Wolf, Philipp Schmid, Zachary Mueller, Sourab Mangrulkar, Marc Sun, Benjamin Bossan},
   howpublished = {\url{https://github.com/huggingface/accelerate}},
   year =         {2022}
 }
