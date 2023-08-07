@@ -163,12 +163,13 @@ Here is a self-contained example that you can run to see gradient accumulation i
 
 ```python
 import torch
-from torch.utils.data import TensorDataset, DataLoader
 import copy
 from accelerate import Accelerator
+from accelerate.utils import set_seed
+from torch.utils.data import TensorDataset, DataLoader
 
 # seed
-torch.manual_seed(0)
+set_seed(0)
 
 # define toy inputs and labels
 x = torch.tensor([1., 2., 3., 4., 5., 6., 7., 8.])
