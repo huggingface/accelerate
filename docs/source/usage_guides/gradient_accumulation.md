@@ -144,7 +144,9 @@ for batch in training_dataloader:
 ```
 
 <Tip warning={true}>
+
 It's important that **only one forward/backward** should be done inside the context manager `with accelerator.accumulate(model)`.
+
 </Tip>
 
 
