@@ -1193,6 +1193,13 @@ class Accelerator:
                 f"`device_placement` should be a list with {len(args)} elements (the number of objects passed)."
             )
 
+        for obj in args:
+            if isinstance(obj, torch.nn.Module) and self.verify_device_map(obj) and self.use_distributed:
+                raise ValueError(
+                    "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
+                    " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
+                )
+
         if self.distributed_type == DistributedType.FSDP:
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
@@ -1317,19 +1324,6 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
-        # We check only for models loaded with `accelerate`
-        # Checks if any of the child module has the attribute `hf_device_map`.
-        has_hf_device_map = False
-        for m in model.modules():
-            if hasattr(m, "hf_device_map"):
-                has_hf_device_map = True
-                break
-
-        if has_hf_device_map and self.distributed_type != DistributedType.NO:
-            raise ValueError(
-                "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
-                " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
-            )
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
             model, "hf_device_map", False
@@ -1357,7 +1351,7 @@ class Accelerator:
                 raise ValueError(
                     "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
                 )
-        elif device_placement and not has_hf_device_map:
+        elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
 
         if self.native_amp:
@@ -3053,3 +3047,16 @@ class Accelerator:
     def __deepcopy__(self, memo):
         logger.info("Deep copying the `Accelerator` object, note that this will point to the same original object.")
         return self
+
+    def verify_device_map(self, model: torch.nn.Module) -> bool:
+        """
+        Verifies that `model` has not been prepared with big model inference with a device-map resembling `auto`.
+        """
+        # Checks if any of the child module has the attribute `hf_device_map`.
+        has_hf_device_map = False
+        for m in model.modules():
+            if hasattr(m, "hf_device_map"):
+                has_hf_device_map = True
+                break
+
+        return has_hf_device_map
