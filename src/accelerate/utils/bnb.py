@@ -65,7 +65,7 @@ def load_and_quantize_model(
     Args:
         model (`torch.nn.Module`):
             Input model. The model can be already loaded or on the meta device
-        bnb_config (`BnbQuantizationConfig`):
+        bnb_quantization_config (`BnbQuantizationConfig`):
             The bitsandbytes quantization parameters
         weights_location (`str` or `os.PathLike`):
             The folder weights_location to load. It can be:
