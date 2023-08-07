@@ -25,10 +25,9 @@ import torch
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
-from accelerate.big_modeling import dispatch_model
 from accelerate.data_loader import prepare_data_loader
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import RegressionDataset, are_the_same_tensors, assert_exception
+from accelerate.test_utils import RegressionDataset, are_the_same_tensors
 from accelerate.utils import (
     DistributedType,
     gather,
@@ -542,24 +541,6 @@ def test_split_between_processes_tensor():
     state.wait_for_everyone()
 
 
-def test_prepare_device_map(accelerator):
-    class ModelForTest(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.linear1 = torch.nn.Linear(3, 4)
-            self.batchnorm = torch.nn.BatchNorm1d(4)
-            self.linear2 = torch.nn.Linear(4, 5)
-
-        def forward(self, x):
-            return self.linear2(self.batchnorm(self.linear1(x)))
-
-    device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
-    model = ModelForTest()
-    dispatch_model(model, device_map=device_map)
-    with assert_exception(ValueError, "You can't train a model that has been loaded with"):
-        model = accelerator.prepare(model)
-
-
 def main():
     accelerator = Accelerator()
     state = accelerator.state
@@ -600,11 +581,6 @@ def main():
     dl_preparation_check()
     if state.distributed_type != DistributedType.TPU:
         central_dl_preparation_check()
-
-    if state.use_distributed:
-        if state.local_process_index == 0:
-            print("\n**Test `device_map` cannot be prepared.**")
-        test_prepare_device_map(accelerator)
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
     if state.distributed_type == DistributedType.DEEPSPEED:

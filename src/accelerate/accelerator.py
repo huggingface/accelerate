@@ -1194,7 +1194,11 @@ class Accelerator:
             )
 
         for obj in args:
-            if isinstance(obj, torch.nn.Module) and self.verify_device_map(obj) and self.use_distributed:
+            if (
+                isinstance(obj, torch.nn.Module)
+                and self.verify_device_map(obj)
+                and self.distributed_type != DistributedType.NO
+            ):
                 raise ValueError(
                     "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
                     " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
@@ -1325,7 +1329,7 @@ class Accelerator:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
 
-        if self.verify_device_map(model) and self.use_distributed:
+        if self.verify_device_map(model) and self.distributed_type != DistributedType.NO:
             raise ValueError(
                 "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
