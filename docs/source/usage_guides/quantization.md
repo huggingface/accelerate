@@ -71,20 +71,20 @@ Finally, you need to set your quantization configuration with [`~utils.BnbQuanti
 Here's an example for 8-bit quantization:
 ```py
 from accelerate.utils import BnbQuantizationConfig
-quantization_config = BnbQuantizationConfig(load_in_8bit=True, llm_int8_threshold = 6)
+bnb_quantization_config = BnbQuantizationConfig(load_in_8bit=True, llm_int8_threshold = 6)
 ```
 
 Here's an example for 4-bit quantization:
 ```py
 from accelerate.utils import BnbQuantizationConfig
-quantization_config = BnbQuantizationConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True, bnb_4bit_quant_type="nf4")
+bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True, bnb_4bit_quant_type="nf4")
 ```
 
 To quantize your empty model with the selected configuration, you need to use [`~utils.load_and_quantize_model`]. 
 
 ```py
 from accelerate.utils import load_and_quantize_model
-quantized_model = load_and_quantize_model(empty_model, weights_location=weights_location, quantization_config=quantization_config, device_map = "auto")
+quantized_model = load_and_quantize_model(empty_model, weights_location=weights_location, bnb_quantization_config=bnb_quantization_config, device_map = "auto")
 ```
 
 ### Saving and loading 8-bit model
@@ -97,7 +97,7 @@ accelerate = Accelerator()
 new_weights_location = "path/to/save_directory"
 accelerate.save_model(quantized_model, new_weights_location)
 
-quantized_model_from_saved = load_and_quantize_model(empty_model, weights_location=new_weights_location, quantization_config=quantization_config, device_map = "auto")
+quantized_model_from_saved = load_and_quantize_model(empty_model, weights_location=new_weights_location, bnb_quantization_config=bnb_quantization_config, device_map = "auto")
 ```
 
 Note that 4-bit model serialization is currently not supported.
