@@ -144,13 +144,7 @@ for batch in training_dataloader:
 ```
 
 <Tip warning={true}>
-  It's important that you enter the `with accelerator.accumulate(model)` context manager before you perform the forward and backward pass of your model. In other words, do **not** do this:
-  
-  ```diff
-  -with accelerator.accumulate(model):
-  -    for batch in training_dataloader:
-          # ...
-  ```
+It's important that **only one forward/backward** should be done inside the context manager `with accelerator.accumulate(model)`.
 </Tip>
 
 
