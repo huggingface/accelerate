@@ -175,7 +175,7 @@ set_seed(0)
 x = torch.tensor([1., 2., 3., 4., 5., 6., 7., 8.])
 y = torch.tensor([2., 4., 6., 8., 10., 12., 14., 16.])
 gradient_accumulation_steps = 4
-batch_size = int(len(x) // gradient_accumulation_steps)
+batch_size = len(x) // gradient_accumulation_steps
 
 # define dataset and dataloader
 dataset = TensorDataset(x, y)
