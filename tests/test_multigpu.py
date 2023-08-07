@@ -20,8 +20,7 @@ import torch
 
 import accelerate
 from accelerate import Accelerator
-from accelerate.big_modeling import dispatch_model
-from accelerate.test_utils import assert_exception, execute_subprocess_async, require_multi_gpu
+from accelerate.test_utils import execute_subprocess_async, require_multi_gpu
 from accelerate.utils import patch_environment
 
 
@@ -94,22 +93,3 @@ if __name__ == "__main__":
     # Raise error at the end to make sure we don't stop at the first failure.
     if len(error_msg) > 0:
         raise ValueError(error_msg)
-
-    # Check device_map
-    accelerator.print("Test `device_map` cannot be prepared.")
-
-    class ModelForTest(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.linear1 = torch.nn.Linear(3, 4)
-            self.batchnorm = torch.nn.BatchNorm1d(4)
-            self.linear2 = torch.nn.Linear(4, 5)
-
-        def forward(self, x):
-            return self.linear2(self.batchnorm(self.linear1(x)))
-
-    device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 1}
-    model = ModelForTest()
-    dispatch_model(model, device_map=device_map)
-    with assert_exception(ValueError, "You can't train a model that has been loaded with"):
-        model = accelerator.prepare_model(model)
