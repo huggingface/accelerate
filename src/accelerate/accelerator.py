@@ -159,9 +159,8 @@ class Accelerator:
         mixed_precision (`str`, *optional*):
             Whether or not to use mixed precision training. Choose from 'no','fp16','bf16 or 'fp8'. Will default to the
             value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
-            accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp16'
-            requires pytorch 1.6 or higher. 'bf16' requires pytorch 1.10 or higher. 'fp8' requires the installation of
-            transformers-engine.
+            accelerate config of the current system or the flag passed with the `accelerate.launch` command. 'fp8'
+            requires the installation of transformers-engine.
         gradient_accumulation_steps (`int`, *optional*, default to 1):
             The number of steps that should pass before gradients are accumulated. A number > 1 should be combined with
             `Accelerator.accumulate`. If not passed, will default to the value in the environment variable
