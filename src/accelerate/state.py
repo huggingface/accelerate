@@ -106,7 +106,7 @@ class PartialState:
           in use.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
         - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision, and if so the type
-          of mixed precision being performed. (One of `"fp16"`, `"bf16"`, or `"fp8"`).
+          of mixed precision being performed. (Choose from 'no','fp16','bf16 or 'fp8').
         - **num_processes** (`int`) -- The number of processes currently launched in parallel.
         - **process_index** (`int`) -- The index of the current process.
         - **is_last_process** (`bool`) -- Whether or not the current process is the last one.
@@ -695,7 +695,7 @@ class AcceleratorState:
         - **initialized** (`bool`) -- Whether or not the `AcceleratorState` has been initialized from `Accelerator`.
         - **local_process_index** (`int`) -- The index of the current process on the current server.
         - **mixed_precision** (`str`) -- Whether or not the current script will use mixed precision, and if so the type
-          of mixed precision being performed. (One of `"no`", `"fp16"`, `"bf16"`, or `"fp8"`).
+          of mixed precision being performed. (Choose from 'no','fp16','bf16 or 'fp8').
         - **num_processes** (`int`) -- The number of processes currently launched in parallel.
         - **process_index** (`int`) -- The index of the current process.
         - **is_last_process** (`bool`) -- Whether or not the current process is the last one.
