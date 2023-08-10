@@ -66,6 +66,22 @@ class MultiGPUTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
+    @require_multi_gpu
+    def test_notebook_launcher(self):
+        """
+        This test checks that the `notebook_launcher` will be able to intialize
+        a `PartialState` without issue
+        """
+        cmd = [
+            "python",
+            "-m",
+            "accelerate.test_utils.scripts.test_notebook",
+            "--num_processes",
+            str(torch.cuda.device_count()),
+        ]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd, env=os.environ.copy())
+
 
 if __name__ == "__main__":
     accelerator = Accelerator()

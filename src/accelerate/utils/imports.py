@@ -24,6 +24,7 @@ from packaging import version
 from packaging.version import parse
 
 from .environment import parse_flag_from_env
+from .other import patch_environment
 from .versions import compare_versions, is_torch_version
 
 
@@ -77,13 +78,19 @@ def is_fp8_available():
     return _is_package_available("transformer_engine")
 
 
+def is_cuda_available():
+    "Checks if `cuda` is available via an `nvml-based` check that won't trigger the drivers"
+    with patch_environment(pytorch_nvml_based_cuda_check=1):
+        return torch.cuda.is_available()
+
+
 @lru_cache
 def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
+    # Due to bugs on the amp series GPUs, we disable torch-xla on them
+    if is_cuda_available():
+        return False
     if check_device:
-        # Due to bugs on the amp series GPUs, we disable torch-xla on them
-        if torch.cuda.is_available():
-            return False
         if _tpu_available:
             try:
                 # Will raise a RuntimeError if no XLA configuration is found

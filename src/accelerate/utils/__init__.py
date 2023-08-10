@@ -46,6 +46,7 @@ from .imports import (
     is_boto3_available,
     is_ccl_available,
     is_comet_ml_available,
+    is_cuda_available,
     is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
