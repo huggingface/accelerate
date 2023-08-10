@@ -24,7 +24,6 @@ from packaging import version
 from packaging.version import parse
 
 from .environment import parse_flag_from_env
-from .other import patch_environment
 from .versions import compare_versions, is_torch_version
 
 
@@ -80,6 +79,8 @@ def is_fp8_available():
 
 def is_cuda_available():
     "Checks if `cuda` is available via an `nvml-based` check that won't trigger the drivers"
+    from accelerate.utils.other import patch_environment
+
     with patch_environment(pytorch_nvml_based_cuda_check=1):
         return torch.cuda.is_available()
 

@@ -1,4 +1,3 @@
-import inspect
 import json
 import os
 import tempfile
@@ -7,12 +6,11 @@ from unittest.mock import patch
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-import accelerate
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_gpu, slow
-from accelerate.test_utils.testing import AccelerateTestCase, execute_subprocess_async, require_cuda
+from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
 from accelerate.utils import patch_environment
 
 
