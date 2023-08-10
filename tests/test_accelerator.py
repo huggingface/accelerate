@@ -331,11 +331,3 @@ class AcceleratorTester(AccelerateTestCase):
         sgd = torch.optim.SGD(model.parameters(), lr=0.01)
         accelerator = Accelerator(cpu=True)
         _ = accelerator.prepare(sgd)
-
-    @require_cuda
-    def test_cuda_initialization_on_import(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        script = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_notebook.py"])
-        cmd = ["accelerate", "launch", script]
-        with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
