@@ -80,16 +80,17 @@ def is_fp8_available():
 @lru_cache
 def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    # Due to bugs on the amp series GPUs, we disable torch-xla on them
-    if torch.cuda.is_available():
-        return False
-    if _tpu_available and check_device:
-        try:
-            # Will raise a RuntimeError if no XLA configuration is found
-            _ = xm.xla_device()
-            return True
-        except RuntimeError:
+    if check_device:
+        # Due to bugs on the amp series GPUs, we disable torch-xla on them
+        if torch.cuda.is_available():
             return False
+        if _tpu_available:
+            try:
+                # Will raise a RuntimeError if no XLA configuration is found
+                _ = xm.xla_device()
+                return True
+            except RuntimeError:
+                return False
     return _tpu_available
 
 
