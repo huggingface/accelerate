@@ -79,10 +79,10 @@ def is_fp8_available():
 
 def is_cuda_available():
     "Checks if `cuda` is available via an `nvml-based` check that won't trigger the drivers"
-    from accelerate.utils.other import patch_environment
-
-    with patch_environment(pytorch_nvml_based_cuda_check=1):
-        return torch.cuda.is_available()
+    os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = str(1)
+    available = torch.cuda.is_available()
+    del os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"]
+    return available
 
 
 @lru_cache
