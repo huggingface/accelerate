@@ -36,6 +36,7 @@ from .utils import (
     find_tied_parameters,
     get_balanced_memory,
     infer_auto_device_map,
+    is_torch_version,
     load_checkpoint_in_model,
     offload_state_dict,
     retie_parameters,
@@ -98,6 +99,12 @@ def init_on_device(device: torch.device, include_buffers: bool = False):
         tst = nn.Liner(100, 100)  # on `cuda` device
     ```
     """
+    # TODO(shingjan): remove the torch version check once older versions are deprecated
+    if is_torch_version(">=", "2.0") and include_buffers:
+        with device:
+            yield
+        return
+
     old_register_parameter = nn.Module.register_parameter
     if include_buffers:
         old_register_buffer = nn.Module.register_buffer
