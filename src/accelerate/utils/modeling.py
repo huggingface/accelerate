@@ -776,7 +776,10 @@ def get_balanced_memory(
             [
                 d
                 for d in max_memory
-                if (torch.device(d).type == "xpu" or torch.xpu.get_device_properties(d).dev_type == "gpu")
+                if (
+                    d != "cpu"
+                    and (torch.device(d).type == "xpu" or torch.xpu.get_device_properties(d).dev_type == "gpu")
+                )
                 and max_memory[d] > 0
             ]
         )
