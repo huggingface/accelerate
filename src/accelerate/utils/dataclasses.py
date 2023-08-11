@@ -874,14 +874,7 @@ class FullyShardedDataParallelPlugin:
     )
 
     def __post_init__(self):
-        from torch.distributed.fsdp.fully_sharded_data_parallel import (
-            BackwardPrefetch,
-            CPUOffload,
-            FullOptimStateDictConfig,
-            FullStateDictConfig,
-            ShardingStrategy,
-            StateDictType,
-        )
+        from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch, CPUOffload, ShardingStrategy
 
         prefix = "FSDP_"
         if self.sharding_strategy is None:
@@ -900,14 +893,7 @@ class FullyShardedDataParallelPlugin:
 
         if self.state_dict_type is None:
             state_dict_type_policy = os.environ.get(prefix + "STATE_DICT_TYPE", "FULL_STATE_DICT")
-            self.state_dict_type = StateDictType(FSDP_STATE_DICT_TYPE.index(state_dict_type_policy) + 1)
-
-            if self.state_dict_type == StateDictType.FULL_STATE_DICT:
-                if self.state_dict_config is None:
-                    self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-                if self.optim_state_dict_config is None:
-                    self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
-
+            self.set_state_dict_type(state_dict_type_policy)
         self.use_orig_params = strtobool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
         self.sync_module_states = strtobool(os.environ.get(prefix + "SYNC_MODULE_STATES", "True")) == 1
         self.forward_prefetch = strtobool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
@@ -978,6 +964,21 @@ class FullyShardedDataParallelPlugin:
 
         if self.mixed_precision_policy is None:
             self.mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
+
+    def set_state_dict_type(self, state_dict_type_policy):
+        from torch.distributed.fsdp.fully_sharded_data_parallel import (
+            FullOptimStateDictConfig,
+            FullStateDictConfig,
+            StateDictType,
+        )
+
+        self.state_dict_type = StateDictType(FSDP_STATE_DICT_TYPE.index(state_dict_type_policy) + 1)
+
+        if self.state_dict_type == StateDictType.FULL_STATE_DICT:
+            if self.state_dict_config is None:
+                self.state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+            if self.optim_state_dict_config is None:
+                self.optim_state_dict_config = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
 
 
 @dataclass
