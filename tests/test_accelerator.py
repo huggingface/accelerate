@@ -1,6 +1,7 @@
 import inspect
 import json
 import os
+import pickle
 import tempfile
 from unittest.mock import patch
 
@@ -339,3 +340,35 @@ class AcceleratorTester(AccelerateTestCase):
         cmd = ["accelerate", "launch", script]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
+
+    @require_cuda
+    def test_can_unwrap_model_fp16(self):
+        # test for a regression introduced in #872
+        # before the fix, after unwrapping with keep_fp32_wrapper=False, there would be the following error:
+        # Linear.forward() missing 1 required positional argument: 'input'
+        model = create_components()[0]
+        accelerator = Accelerator(mixed_precision="fp16")
+        inputs = torch.randn(10, 2).cuda()
+        model = accelerator.prepare(model)
+        model(inputs)  # sanity check that this works
+
+        model = accelerator.unwrap_model(model, keep_fp32_wrapper=False)
+        model(inputs)  # check that this still works
+
+        # check that pickle roundtrip works
+        model_loaded = pickle.loads(pickle.dumps(model))
+        model_loaded(inputs)
+
+    def test_can_unwrap_model(self):
+        model = create_components()[0]
+        accelerator = Accelerator(mixed_precision="no")
+        inputs = torch.randn(10, 2).cuda()
+        model = accelerator.prepare(model)
+        model(inputs)  # sanity check that this works
+
+        model = accelerator.unwrap_model(model, keep_fp32_wrapper=False)
+        model(inputs)  # check that this still works
+
+        # check that pickle roundtrip works
+        model_loaded = pickle.loads(pickle.dumps(model))
+        model_loaded(inputs)
