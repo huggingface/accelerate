@@ -361,7 +361,7 @@ class AcceleratorTester(AccelerateTestCase):
 
     def test_can_unwrap_model(self):
         model = create_components()[0]
-        accelerator = Accelerator(mixed_precision="no")
+        accelerator = Accelerator(mixed_precision="no", cpu=True)
         inputs = torch.randn(10, 2)
         model = accelerator.prepare(model)
         model(inputs)  # sanity check that this works
