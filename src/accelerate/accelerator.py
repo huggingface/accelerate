@@ -3059,10 +3059,10 @@ class Accelerator:
         """
         Verifies that `model` has not been prepared with big model inference with a device-map resembling `auto`.
         """
-        # Checks if any of the child module has the attribute `hf_device_map`.
-
+        # Checks if any of the child modules has the attribute `hf_device_map` and this map has more than one entry.
         for m in model.modules():
             if hasattr(m, "hf_device_map") and len(m.hf_device_map) > 1:
                 return True
-        
+                
         return False
+
