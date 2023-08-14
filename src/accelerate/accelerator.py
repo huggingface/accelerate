@@ -258,6 +258,7 @@ class Accelerator:
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
+        slice_fn: Callable | None = None,
     ):
         if project_config is not None:
             self.project_configuration = project_config
@@ -461,6 +462,8 @@ class Accelerator:
         self.rng_types = rng_types
         if self.rng_types is None:
             self.rng_types = ["generator"]
+
+        self.slice_fn = slice_fn
 
     @property
     def use_distributed(self):
@@ -1807,6 +1810,7 @@ class Accelerator:
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
             even_batches=self.even_batches,
+            slice_fn=self.slice_fn,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
