@@ -3063,6 +3063,5 @@ class Accelerator:
         for m in model.modules():
             if hasattr(m, "hf_device_map") and len(m.hf_device_map) > 1:
                 return True
-                
-        return False
 
+        return False
