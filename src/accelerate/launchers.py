@@ -27,9 +27,7 @@ def test_launch():
     _ = PartialState()
 
 
-def notebook_launcher(
-    function, args=(), num_processes=None, mixed_precision="no", use_port="29500", debug: bool = False
-):
+def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no", use_port="29500"):
     """
     Launches a training function, using several processes if it's possible in the current environment (TPU with
     multiple cores for instance).
@@ -38,6 +36,9 @@ def notebook_launcher(
 
     To use this function absolutely zero calls to a CUDA device must be made in the notebook session before calling. If
     any have been made, you will need to restart the notebook and make sure no cells use any CUDA capability.
+
+    Setting `ACCELERATE_DEBUG_MODE="1"` in your environment will run a test before truly launching to ensure that none
+    of those calls have been made.
 
     </Tip>
 
@@ -54,9 +55,6 @@ def notebook_launcher(
             If `fp16` or `bf16`, will use mixed precision training on multi-GPU.
         use_port (`str`, *optional*, defaults to `"29500"`):
             The port to use to communicate between processes when launching a multi-GPU training.
-        debug (`bool`, *optional`, defaults to `False`):
-            If `True`, will launch a small test function to ensure that the `notebook_launcher` can be initialized.
-            Will also be ran if `ACCELERATE_DEBUG_MODE` is set to `true`.
 
     Example:
 
@@ -134,7 +132,7 @@ def notebook_launcher(
                 world_size=num_processes, master_addr="127.0.01", master_port=use_port, mixed_precision=mixed_precision
             ):
                 # First dummy launch
-                if debug or os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
+                if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
                     launcher = PrepareForLaunch(test_launch, distributed_type="MULTI_GPU")
                     try:
                         start_processes(launcher, args=(), nprocs=num_processes, start_method="fork")
