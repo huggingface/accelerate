@@ -427,7 +427,7 @@ And that's it!
 
 A common issue when running the `notebook_launcher` is receiving a CUDA has already been initialized issue. This usually stems
 from an import or prior code in the notebook that makes a call to the PyTorch `torch.cuda` sublibrary. To help narrow down what went wrong,
-you can launch the `notebook_launcher` with `debug=True` (or set `ACCELERATE_DEBUG_MODE=yes` in your environment) and an additional check
+you can launch the `notebook_launcher` with `ACCELERATE_DEBUG_MODE=yes` in your environment and an additional check
 will be made when spawning that a regular process can be created and utilize CUDA without issue. (Your CUDA code can still be ran afterwards).
 
 ## Conclusion
