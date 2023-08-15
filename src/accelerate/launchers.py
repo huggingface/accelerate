@@ -27,7 +27,9 @@ def test_launch():
     _ = PartialState()
 
 
-def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no", use_port="29500"):
+def notebook_launcher(
+    function, args=(), num_processes=None, mixed_precision="no", use_port="29500", debug: bool = False
+):
     """
     Launches a training function, using several processes if it's possible in the current environment (TPU with
     multiple cores for instance).
@@ -52,6 +54,9 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
             If `fp16` or `bf16`, will use mixed precision training on multi-GPU.
         use_port (`str`, *optional*, defaults to `"29500"`):
             The port to use to communicate between processes when launching a multi-GPU training.
+        debug (`bool`, *optional`, defaults to `False`):
+            If `True`, will launch a small test function to ensure that the `notebook_launcher` can be initialized.
+            Will also be ran if `ACCELERATE_DEBUG_MODE` is set to `true`.
 
     Example:
 
@@ -129,20 +134,21 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                 world_size=num_processes, master_addr="127.0.01", master_port=use_port, mixed_precision=mixed_precision
             ):
                 # First dummy launch
-                launcher = PrepareForLaunch(test_launch, distributed_type="MULTI_GPU")
-                try:
-                    start_processes(launcher, args=(), nprocs=num_processes, start_method="fork")
-                except ProcessRaisedException as e:
-                    err = "An issue was found when verifying a stable environment for the notebook launcher."
-                    if "Cannot re-initialize CUDA in forked subprocess" in e.args[0]:
-                        raise RuntimeError(
-                            f"{err}"
-                            "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
-                            "Please review your imports and test them when running the `notebook_launcher()` to identify "
-                            "which one is problematic and causing CUDA to be initialized."
-                        ) from e
-                    else:
-                        raise RuntimeError(f"{err} The following error was raised: {e}") from e
+                if debug or os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
+                    launcher = PrepareForLaunch(test_launch, distributed_type="MULTI_GPU")
+                    try:
+                        start_processes(launcher, args=(), nprocs=num_processes, start_method="fork")
+                    except ProcessRaisedException as e:
+                        err = "An issue was found when verifying a stable environment for the notebook launcher."
+                        if "Cannot re-initialize CUDA in forked subprocess" in e.args[0]:
+                            raise RuntimeError(
+                                f"{err}"
+                                "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
+                                "Please review your imports and test them when running the `notebook_launcher()` to identify "
+                                "which one is problematic and causing CUDA to be initialized."
+                            ) from e
+                        else:
+                            raise RuntimeError(f"{err} The following error was raised: {e}") from e
                 # Now the actual launch
                 launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
                 try:
