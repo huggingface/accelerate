@@ -78,10 +78,15 @@ def is_fp8_available():
 
 
 def is_cuda_available():
-    "Checks if `cuda` is available via an `nvml-based` check that won't trigger the drivers"
-    os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = str(1)
-    available = torch.cuda.is_available()
-    del os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"]
+    """
+    Checks if `cuda` is available via an `nvml-based` check which won't trigger the drivers and leave cuda
+    uninitialized.
+    """
+    try:
+        os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = str(1)
+        available = torch.cuda.is_available()
+    finally:
+        os.environ.pop("PYTORCH_NVML_BASED_CUDA_CHECK", None)
     return available
 
 
