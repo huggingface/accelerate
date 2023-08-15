@@ -21,6 +21,7 @@ import torch
 from .state import AcceleratorState, PartialState
 from .utils import PrecisionType, PrepareForLaunch, is_mps_available, patch_environment
 
+
 def test_launch():
     "Verify a `PartialState` can be initialized."
     _ = PartialState()
@@ -138,7 +139,7 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                             f"{err}"
                             "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
                             "Please review your imports and test them when running the `notebook_launcher()` to identify "
-                            "which one is problematic."
+                            "which one is problematic and causing CUDA to be initialized."
                         ) from e
                     else:
                         raise RuntimeError(f"{err} The following error was raised: {e}") from e
@@ -152,7 +153,7 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                             "CUDA has been initialized before the `notebook_launcher` could create a forked subprocess. "
                             "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
                             "Please review your imports and test them when running the `notebook_launcher()` to identify "
-                            "which one is problematic."
+                            "which one is problematic and causing CUDA to be initialized."
                         ) from e
                     else:
                         raise RuntimeError(f"An issue was found when launching the training: {e}") from e
