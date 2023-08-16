@@ -149,6 +149,7 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                             raise RuntimeError(f"{err} The following error was raised: {e}") from e
                 # Now the actual launch
                 launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
+                print(f"Launching training on {num_processes} GPUs.")
                 try:
                     start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
                 except ProcessRaisedException as e:
