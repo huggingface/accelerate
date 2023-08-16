@@ -146,7 +146,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         current_env["ACCELERATE_DEBUG_MODE"] = "true"
     gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
-        if not is_xpu_available():
+        if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
