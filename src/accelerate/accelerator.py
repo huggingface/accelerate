@@ -1363,7 +1363,7 @@ class Accelerator:
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
 
-        if self.native_amp:
+        if self.native_amp and self.distributed_type != DistributedType.FSDP:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
             autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
