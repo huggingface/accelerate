@@ -1,10 +1,17 @@
 # Test file to ensure that in general certain situational setups for notebooks work.
+import argparse
 
-import torch
+from accelerate import PartialState, notebook_launcher
 
 
-assert not torch.cuda.is_initialized(), "CUDA was initialized before the test script."
+parser = argparse.ArgumentParser()
+parser.add_argument("--num_processes", type=int, default=1)
+args = parser.parse_args()
 
-from accelerate import Accelerator  # noqa
 
-assert not torch.cuda.is_initialized(), "CUDA was initialized upon importing the `Accelerator` class."
+def function():
+    print(f"PartialState:\n{PartialState()}")
+
+
+if __name__ == "__main__":
+    notebook_launcher(function, num_processes=int(args.num_processes))

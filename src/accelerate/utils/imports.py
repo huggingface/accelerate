@@ -77,19 +77,33 @@ def is_fp8_available():
     return _is_package_available("transformer_engine")
 
 
+def is_cuda_available():
+    """
+    Checks if `cuda` is available via an `nvml-based` check which won't trigger the drivers and leave cuda
+    uninitialized.
+    """
+    try:
+        os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = str(1)
+        available = torch.cuda.is_available()
+    finally:
+        os.environ.pop("PYTORCH_NVML_BASED_CUDA_CHECK", None)
+    return available
+
+
 @lru_cache
 def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     # Due to bugs on the amp series GPUs, we disable torch-xla on them
-    if torch.cuda.is_available():
+    if is_cuda_available():
         return False
-    if _tpu_available and check_device:
-        try:
-            # Will raise a RuntimeError if no XLA configuration is found
-            _ = xm.xla_device()
-            return True
-        except RuntimeError:
-            return False
+    if check_device:
+        if _tpu_available:
+            try:
+                # Will raise a RuntimeError if no XLA configuration is found
+                _ = xm.xla_device()
+                return True
+            except RuntimeError:
+                return False
     return _tpu_available
 
 
