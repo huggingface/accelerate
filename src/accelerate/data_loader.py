@@ -14,7 +14,7 @@
 
 import math
 from contextlib import suppress
-from typing import List, Optional, Union, Callable
+from typing import Callable, List, Optional, Union
 
 import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset
@@ -485,7 +485,9 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
-    def __init__(self, dataset, split_batches: bool = False, skip_batches=0, _drop_last: bool = False, slice_fn=None, **kwargs):
+    def __init__(
+        self, dataset, split_batches: bool = False, skip_batches=0, _drop_last: bool = False, slice_fn=None, **kwargs
+    ):
         shuffle = False
         if is_torch_version(">=", "1.11.0"):
             from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
@@ -569,7 +571,11 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
 
             if not self._drop_last and first_batch is None:
                 # We keep at least num processes elements of the first batch to be able to complete the last batch
-                first_batch = slice_tensors(batch, slice(0, self.state.num_processes)) if self.slice_fn is None else self.slice_fn(batch, self.state.process_index, self.state.num_processes)
+                first_batch = (
+                    slice_tensors(batch, slice(0, self.state.num_processes))
+                    if self.slice_fn is None
+                    else self.slice_fn(batch, self.state.num_processes)
+                )
 
             if batch is None:
                 raise ValueError(
@@ -595,7 +601,11 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
                 batch_size += 1
 
             data_slice = slice(self.state.process_index * batch_size, (self.state.process_index + 1) * batch_size)
-            batch = slice_tensors(batch, data_slice) if self.slice_fn is None else self.slice_fn(batch, self.state.process_index, self.state.num_processes)
+            batch = (
+                slice_tensors(batch, data_slice)
+                if self.slice_fn is None
+                else self.slice_fn(batch, self.state.num_processes)
+            )
 
             if stop_iteration:
                 self.end_of_dataloader = True
@@ -635,7 +645,7 @@ def prepare_data_loader(
     rng_types: Optional[List[Union[str, RNGType]]] = None,
     dispatch_batches: Optional[bool] = None,
     even_batches: bool = True,
-    slice_fn: Optional[Callable] = None,
+    slice_fn_for_dispatch: Optional[Callable] = None,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -685,6 +695,10 @@ def prepare_data_loader(
             If set to `True`, in cases where the total batch size across all processes does not exactly divide the
             dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
             all workers.
+        slice_fn_for_dispatch (`Callable`, *optional*`):
+            If passed, this function will be used to slice tensors across `num_processes`. Will default to
+            [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will be
+            ignored otherwise.
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -789,7 +803,7 @@ def prepare_data_loader(
             split_batches=split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader.drop_last,
-            slice_fn=slice_fn,
+            slice_fn=slice_fn_for_dispatch,
             **kwargs,
         )
     elif sampler_is_batch_sampler:
