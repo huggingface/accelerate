@@ -1363,7 +1363,7 @@ class Accelerator:
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
 
-        if self.native_amp:
+        if self.native_amp and self.distributed_type != DistributedType.FSDP:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
             autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
@@ -1385,9 +1385,7 @@ class Accelerator:
                 kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
             fp8_recipe = te_recipe.DelayedScaling(**kwargs)
             cuda_device_capacity = torch.cuda.get_device_capability()
-            fp8_enabled = cuda_device_capacity[0] >= 9 or (
-                cuda_device_capacity[0] == 8 and cuda_device_capacity[1] >= 9
-            )
+            fp8_enabled = cuda_device_capacity >= (8, 9)
             if not fp8_enabled:
                 logger.warn(
                     f"The current device has compute capability of {cuda_device_capacity} which is "
@@ -3061,7 +3059,9 @@ class Accelerator:
         """
         Verifies that `model` has not been prepared with big model inference with a device-map resembling `auto`.
         """
-        # Checks if any of the child module has the attribute `hf_device_map`.
-        has_hf_device_map = any(hasattr(m, "hf_device_map") for m in model.modules())
+        # Checks if any of the child modules has the attribute `hf_device_map` and this map has more than one entry.
+        for m in model.modules():
+            if hasattr(m, "hf_device_map") and len(m.hf_device_map) > 1:
+                return True
 
-        return has_hf_device_map
+        return False

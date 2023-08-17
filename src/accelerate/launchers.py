@@ -18,8 +18,13 @@ import tempfile
 
 import torch
 
-from .state import AcceleratorState
+from .state import AcceleratorState, PartialState
 from .utils import PrecisionType, PrepareForLaunch, is_mps_available, patch_environment
+
+
+def test_launch():
+    "Verify a `PartialState` can be initialized."
+    _ = PartialState()
 
 
 def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no", use_port="29500"):
@@ -31,6 +36,9 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
 
     To use this function absolutely zero calls to a CUDA device must be made in the notebook session before calling. If
     any have been made, you will need to restart the notebook and make sure no cells use any CUDA capability.
+
+    Setting `ACCELERATE_DEBUG_MODE="1"` in your environment will run a test before truly launching to ensure that none
+    of those calls have been made.
 
     </Tip>
 
@@ -118,19 +126,28 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                     "inside your training function. Restart your notebook and make sure no cells initializes an "
                     "`Accelerator`."
                 )
-
-            if torch.cuda.is_initialized():
-                raise ValueError(
-                    "To launch a multi-GPU training from your notebook, you need to avoid running any instruction "
-                    "using `torch.cuda` in any cell. Restart your notebook and make sure no cells use any CUDA "
-                    "function."
-                )
-
             # torch.distributed will expect a few environment variable to be here. We set the ones common to each
             # process here (the other ones will be set be the launcher).
             with patch_environment(
                 world_size=num_processes, master_addr="127.0.01", master_port=use_port, mixed_precision=mixed_precision
             ):
+                # First dummy launch
+                if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
+                    launcher = PrepareForLaunch(test_launch, distributed_type="MULTI_GPU")
+                    try:
+                        start_processes(launcher, args=(), nprocs=num_processes, start_method="fork")
+                    except ProcessRaisedException as e:
+                        err = "An issue was found when verifying a stable environment for the notebook launcher."
+                        if "Cannot re-initialize CUDA in forked subprocess" in e.args[0]:
+                            raise RuntimeError(
+                                f"{err}"
+                                "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
+                                "Please review your imports and test them when running the `notebook_launcher()` to identify "
+                                "which one is problematic and causing CUDA to be initialized."
+                            ) from e
+                        else:
+                            raise RuntimeError(f"{err} The following error was raised: {e}") from e
+                # Now the actual launch
                 launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
                 print(f"Launching training on {num_processes} GPUs.")
                 try:
@@ -141,8 +158,10 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
                             "CUDA has been initialized before the `notebook_launcher` could create a forked subprocess. "
                             "This likely stems from an outside import causing issues once the `notebook_launcher()` is called. "
                             "Please review your imports and test them when running the `notebook_launcher()` to identify "
-                            "which one is problematic."
+                            "which one is problematic and causing CUDA to be initialized."
                         ) from e
+                    else:
+                        raise RuntimeError(f"An issue was found when launching the training: {e}") from e
 
         else:
             # No need for a distributed launch otherwise as it's either CPU, GPU or MPS.

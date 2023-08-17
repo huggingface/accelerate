@@ -31,7 +31,7 @@ from accelerate.big_modeling import (
 )
 from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import require_bnb, require_cuda, require_mps, require_multi_gpu, slow
-from accelerate.utils import offload_state_dict
+from accelerate.utils import is_torch_version, offload_state_dict
 
 
 class ModelForTest(nn.Module):
@@ -106,8 +106,14 @@ class BigModelingTester(unittest.TestCase):
         self.assertEqual(module.running_mean.device, torch.device("cpu"))
 
         # Use with include_buffers=True
+        register_parameter_func = nn.Module.register_parameter
+        register_buffer_func = nn.Module.register_buffer
         with init_empty_weights(include_buffers=True):
             module = nn.BatchNorm1d(4)
+            # nn.Module.register_parameter/buffer shouldn't be changed with torch >= 2.0
+            if is_torch_version(">=", "2.0"):
+                self.assertEqual(register_parameter_func, nn.Module.register_parameter)
+                self.assertEqual(register_buffer_func, nn.Module.register_buffer)
         self.assertEqual(module.weight.device, torch.device("meta"))
         self.assertEqual(module.running_mean.device, torch.device("meta"))
 

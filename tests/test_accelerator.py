@@ -1,18 +1,17 @@
-import inspect
 import json
 import os
+import pickle
 import tempfile
 from unittest.mock import patch
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-import accelerate
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_gpu, slow
-from accelerate.test_utils.testing import AccelerateTestCase, execute_subprocess_async, require_cuda
+from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
 from accelerate.utils import patch_environment
 
 
@@ -333,9 +332,33 @@ class AcceleratorTester(AccelerateTestCase):
         _ = accelerator.prepare(sgd)
 
     @require_cuda
-    def test_cuda_initialization_on_import(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        script = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_notebook.py"])
-        cmd = ["accelerate", "launch", script]
-        with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+    def test_can_unwrap_model_fp16(self):
+        # test for a regression introduced in #872
+        # before the fix, after unwrapping with keep_fp32_wrapper=False, there would be the following error:
+        # Linear.forward() missing 1 required positional argument: 'input'
+        model = create_components()[0]
+        accelerator = Accelerator(mixed_precision="fp16")
+        inputs = torch.randn(10, 2).cuda()
+        model = accelerator.prepare(model)
+        model(inputs)  # sanity check that this works
+
+        model = accelerator.unwrap_model(model, keep_fp32_wrapper=False)
+        model(inputs)  # check that this still works
+
+        # check that pickle roundtrip works
+        model_loaded = pickle.loads(pickle.dumps(model))
+        model_loaded(inputs)
+
+    def test_can_unwrap_model(self):
+        model = create_components()[0]
+        accelerator = Accelerator(mixed_precision="no", cpu=True)
+        inputs = torch.randn(10, 2)
+        model = accelerator.prepare(model)
+        model(inputs)  # sanity check that this works
+
+        model = accelerator.unwrap_model(model, keep_fp32_wrapper=False)
+        model(inputs)  # check that this still works
+
+        # check that pickle roundtrip works
+        model_loaded = pickle.loads(pickle.dumps(model))
+        model_loaded(inputs)
