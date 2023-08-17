@@ -333,12 +333,14 @@ def dispatch_model(
     check_device_map(model, device_map)
 
     # for backward compatibility
-    is_quantized = getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
+    is_bnb_quantized = (
+        getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
+    ) and getattr(model, "quantization_method", "bitsandbytes") == "bitsandbytes"
 
     # We attach hooks if the device_map have at least 2 different devices. Otherwise, the model in already loaded
     # in the unique device and the user can decide where to dispatch the model.
     # If the model is quantized, we always force-dispatch the model
-    if (len(set(device_map.values())) > 1) or is_quantized:
+    if (len(set(device_map.values())) > 1) or is_bnb_quantized:
         if main_device is None:
             if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
                 main_device = "cpu"
