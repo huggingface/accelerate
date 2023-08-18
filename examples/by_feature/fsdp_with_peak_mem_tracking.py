@@ -316,7 +316,6 @@ def training_function(config, args):
                 batch.to(accelerator.device)
                 outputs = model(**batch)
                 loss = outputs.loss
-                loss = loss / gradient_accumulation_steps
                 # We keep track of the loss at each epoch
                 if args.with_tracking:
                     total_loss += loss.detach().float()
