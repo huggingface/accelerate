@@ -39,6 +39,7 @@ from .utils import (
     is_torch_version,
     load_checkpoint_in_model,
     offload_state_dict,
+    parse_flag_from_env,
     retie_parameters,
 )
 
@@ -47,13 +48,13 @@ logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def init_empty_weights(include_buffers: bool = False):
+def init_empty_weights(include_buffers: bool = None):
     """
     A context manager under which models are initialized with all parameters on the meta device, therefore creating an
     empty model. Useful when just initializing the model would blow the available RAM.
 
     Args:
-        include_buffers (`bool`, *optional*, defaults to `False`):
+        include_buffers (`bool`, *optional*):
             Whether or not to also put all buffers on the meta device while initializing.
 
     Example:
@@ -74,19 +75,21 @@ def init_empty_weights(include_buffers: bool = False):
 
     </Tip>
     """
+    if include_buffers is None:
+        include_buffers = parse_flag_from_env("ACCELERATE_INIT_INCLUDE_BUFFERS", False)
     with init_on_device(torch.device("meta"), include_buffers=include_buffers) as f:
         yield f
 
 
 @contextmanager
-def init_on_device(device: torch.device, include_buffers: bool = False):
+def init_on_device(device: torch.device, include_buffers: bool = None):
     """
     A context manager under which models are initialized with all parameters on the specified device.
 
     Args:
         device (`torch.device`):
             Device to initialize all parameters on.
-        include_buffers (`bool`, *optional*, defaults to `False`):
+        include_buffers (`bool`, *optional*):
             Whether or not to also put all buffers on the meta device while initializing.
 
     Example:
@@ -99,6 +102,9 @@ def init_on_device(device: torch.device, include_buffers: bool = False):
         tst = nn.Liner(100, 100)  # on `cuda` device
     ```
     """
+    if include_buffers is None:
+        include_buffers = parse_flag_from_env("ACCELERATE_INIT_INCLUDE_BUFFERS", False)
+
     # TODO(shingjan): remove the torch version check once older versions are deprecated
     if is_torch_version(">=", "2.0") and include_buffers:
         with device:
