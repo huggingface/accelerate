@@ -1253,7 +1253,7 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
-        if tpu_should_fix_optimizer:
+        if tpu_should_fix_optimizer or self.mixed_precision == "fp8":
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
@@ -1272,11 +1272,11 @@ class Accelerator:
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-        if tpu_should_fix_optimizer:
+        if tpu_should_fix_optimizer or self.mixed_precision == "fp8":
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
-            mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
+            mapping = {p: new_named_params[n] for n, p in old_named_params.items() if n in new_named_params}
             # 4. using that map to update the parameters of the optimizer
             for obj in result:
                 if isinstance(obj, torch.optim.Optimizer):
