@@ -1253,7 +1253,7 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
-        if tpu_should_fix_optimizer or self.mixed_precision == "fp8":
+        if tpu_should_fix_optimizer:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
