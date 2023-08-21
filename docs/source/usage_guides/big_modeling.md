@@ -147,4 +147,4 @@ To learn more about this, check out the 🤗 Transformers documentation availabl
 
 ## Where to go from here
 
-For a much more detailed look at big model inference, be sure to check out the [Conceptual Guide on it](../concept_guides/big_model_inference.md)
+For a much more detailed look at big model inference, be sure to check out the [Conceptual Guide on it](../concept_guides/big_model_inference)
