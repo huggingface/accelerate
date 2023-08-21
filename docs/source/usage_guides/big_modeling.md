@@ -33,7 +33,7 @@ my_model.load_state_dict(state_dict)
 
 Note that here we assume that `ModelClass` is a model that takes up more video-card memory than what can fit on your device (be it `mps` or `cuda`).
 
-The first step is to init an empty skeleton of the model which won't take up any RAM using the [`~utils.init_empty_weights`] context manager:
+The first step is to init an empty skeleton of the model which won't take up any RAM using the [`init_empty_weights`] context manager:
 
 ```py
 from accelerate import init_empty_weights
@@ -45,7 +45,7 @@ With this `my_model` currently is "parameterless", hence leaving the smaller foo
 
 Next we need to load in the weights to our model so we can perform inference.
 
-For this we will use [`~utils.load_checkpoint_and_dispatch`], which as the name implies will load a checkpoint inside your empty model and dispatch the weights for each layer across all the devices you have available (GPU/MPS and CPU RAM). 
+For this we will use [`load_checkpoint_and_dispatch`], which as the name implies will load a checkpoint inside your empty model and dispatch the weights for each layer across all the devices you have available (GPU/MPS and CPU RAM). 
 
 To determine how this `dispatch` can be performed, generally specifying `device_map="auto"` will be good enough as 🤗 Accelerate
 will attempt to fill all the space in your GPU(s), then loading them to the CPU, and finally if there is not enough RAM it will be loaded to the disk (the absolute slowest option). 
