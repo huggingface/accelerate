@@ -2929,11 +2929,6 @@ class Accelerator:
                 model = self.unwrap_model(model)
             state_dict = model.state_dict()
 
-        if state_dict is not None:
-            for k in state_dict:
-                if getattr(state_dict[k], "dtype", None) == torch.float16:
-                    state_dict[k] = state_dict[k].float()
-
         return state_dict
 
     def register_for_checkpointing(self, *objects):
