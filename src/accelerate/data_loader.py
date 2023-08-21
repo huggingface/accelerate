@@ -505,7 +505,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         self._drop_last = _drop_last
         self.skip_batches = skip_batches
 
-        self.slice_fn = slice_tensors if self.slice_fn is None else slice_fn
+        self.slice_fn = slice_tensors if slice_fn is None else slice_fn
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
