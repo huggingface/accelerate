@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Handling big models for inference
 
-One of the biggest advancements 🤗 Accelerate provides is the concept of [large model inference](../concept_guides/big_model_inference) wherein you can perform *inference* on models that cannot fully fit in your GPU space. 
+One of the biggest advancements 🤗 Accelerate provides is the concept of [large model inference](../concept_guides/big_model_inference) wherein you can perform *inference* on models that cannot fully fit on your graphics card. 
 
 This tutorial will be broken down into two parts showcasing how to use both 🤗 Accelerate and 🤗 Transformers (a higher API-level) to make use of this idea.
 
@@ -46,8 +46,15 @@ With this `my_model` currently is "parameterless", hence leaving the smaller foo
 Next we need to load in the weights to our model so we can perform inference.
 
 For this we will use [`~utils.load_checkpoint_and_dispatch`], which as the name implies will load a checkpoint inside your empty model and dispatch the weights for each layer across all the devices you have available (GPU/MPS and CPU RAM). 
+
 To determine how this `dispatch` can be performed, generally specifying `device_map="auto"` will be good enough as 🤗 Accelerate
 will attempt to fill all the space in your GPU(s), then loading them to the CPU, and finally if there is not enough RAM it will be loaded to the disk (the absolute slowest option). 
+
+<Tip>
+
+For more details on desigining your own device map, see this section of the [concept guide](../concept_guide/big_model_inference#desigining-a-device-map)
+
+</Tip>
 
 See an example below:
 
@@ -61,17 +68,17 @@ model = load_checkpoint_and_dispatch(
 
 <Tip>
 
-    If there are certain "chunks" of layers that shouldn't be split, you can pass them in as `no_split_module_classes`. Read more about it [here](../concept_guides/big_model_inference.md)
+    If there are certain "chunks" of layers that shouldn't be split, you can pass them in as `no_split_module_classes`. Read more about it [here](../concept_guides/big_model_inference#loading-weights)
+
+</Tip>
 
 <Tip>
 
-<Tip>
+    Also to save on memory (such as if the `state_dict` will not fit in RAM), a model's weights can be divided and split into multiple checkpoint files. Read more about it [here](../concept_guides/big_model_inference#sharded-checkpoints)
 
-    To save on memory, a model can be divided and split into multiple checkpoint files as well. Check out the concept guide linked prior to read more about this as well!
+</Tip>
 
-<Tip>
-
-Now that the model is dispatched fully, you can just perform inference as normal with the model:
+Now that the model is dispatched fully, you can perform inference as normal with the model:
 
 ```{python}
 input = torch.randn(2,3)
@@ -83,7 +90,8 @@ What will happen now is each time the input gets passed through a layer, it will
 
 <Tip>
 
-    Multiple GPUs can be utilized, however this is considered "model parallism" and as a result only one GPU will be active at a given moment, waiting for the prior one to send it the output.
+    Multiple GPUs can be utilized, however this is considered "model parallism" and as a result only one GPU will be active at a given moment, waiting for the prior one to send it the output. As a result, you can launch your script normally with `python`
+    and not need `torchrun`, `accelerate launch`, etc.
 
 </Tip>
 
@@ -136,3 +144,7 @@ model = AutoModelForSeq2SeqLM("bigscience/T0pp", device_map="auto", torch_dtype=
 ```
 
 To learn more about this, check out the 🤗 Transformers documentation available [here](https://huggingface.co/docs/transformers/main/en/main_classes/model#large-model-loading).
+
+## Where to go from here
+
+For a much more detailed look at big model inference, be sure to check out the [Conceptual Guide on it](../concept_guides/big_model_inference.md)

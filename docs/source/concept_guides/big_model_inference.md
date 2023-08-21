@@ -150,7 +150,14 @@ By passing `device_map="auto"`, we tell 🤗 Accelerate to determine automatical
 - if we still need space, we store the remaining weights on the CPU
 - if there is not enough RAM, we store the remaining weights on the hard drive as memory-mapped tensors
 
-`no_split_module_classes=["Block"]` indicates that the modules that are `Block` should not be split on different devices. You should set here all blocks that include a residual connection of some kind.
+
+#### `no_split_module_classes`
+
+This parameter will indicate that some of the modules with the name `"Block"` should not be split across different devices. You should set here all blocks that 
+include a residutal connection of some kind.
+
+
+#### The `device_map`
 
 You can see the `device_map` that 🤗 Accelerate picked by accessing the `hf_device_map` attribute of your model:
 
@@ -163,61 +170,31 @@ model.hf_device_map
  'transformer.wpe': 0,
  'transformer.drop': 0,
  'transformer.h.0': 0,
- 'transformer.h.1': 0,
- 'transformer.h.2': 0,
- 'transformer.h.3': 0,
- 'transformer.h.4': 0,
- 'transformer.h.5': 0,
- 'transformer.h.6': 0,
- 'transformer.h.7': 0,
- 'transformer.h.8': 0,
- 'transformer.h.9': 0,
- 'transformer.h.10': 0,
- 'transformer.h.11': 0,
- 'transformer.h.12': 0,
- 'transformer.h.13': 0,
- 'transformer.h.14': 0,
- 'transformer.h.15': 0,
- 'transformer.h.16': 0, 
- 'transformer.h.17': 0, 
- 'transformer.h.18': 0, 
- 'transformer.h.19': 0, 
- 'transformer.h.20': 0, 
+ ...
  'transformer.h.21': 0, 
  'transformer.h.22': 1, 
  'transformer.h.23': 1, 
- 'transformer.h.24': 1, 
- 'transformer.h.25': 1, 
- 'transformer.h.26': 1, 
- 'transformer.h.27': 1, 
- 'transformer.h.28': 1, 
- 'transformer.h.29': 1, 
- 'transformer.h.30': 1, 
- 'transformer.h.31': 1, 
- 'transformer.h.32': 1, 
- 'transformer.h.33': 1, 
- 'transformer.h.34': 1, 
- 'transformer.h.35': 1, 
- 'transformer.h.36': 1, 
- 'transformer.h.37': 1, 
- 'transformer.h.38': 1, 
- 'transformer.h.39': 1, 
- 'transformer.h.40': 1, 
- 'transformer.h.41': 1, 
- 'transformer.h.42': 1, 
- 'transformer.h.43': 1, 
- 'transformer.h.44': 1, 
- 'transformer.h.45': 1, 
- 'transformer.h.46': 1, 
+ 'transformer.h.24': 1,
+ ...
  'transformer.h.47': 1, 
  'transformer.ln_f': 1, 
  'lm_head': 1}
  ```
 
-You can also design your `device_map` yourself if you prefer to explicitly decide where each layer should be. In this case, the command above becomes:
+It's fully possible to create your own device map for the layers to use as well, specifying the GPU device to use (a number), `"cpu"`, or `"disk"` and pass this in:
 
-```py
-model = load_checkpoint_and_dispatch(model, checkpoint=weights_location, device_map=my_device_map)
+```python
+device_map = {
+    "transformer.wte": "cpu",
+    "transformer.wpe": 0,
+    "transformer.drop": "cpu",
+    "transformer.h.0": "disk"
+}
+
+model = load_checkpoint_and_dispatch(
+    model, checkpoint=weights_location, device_map=device_map
+)
+
 ```
 
 ### Run the model
