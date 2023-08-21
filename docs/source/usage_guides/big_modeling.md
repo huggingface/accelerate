@@ -23,7 +23,7 @@ This tutorial will be broken down into two parts showcasing how to use both 🤗
 
 For these tutorials, we'll assume a typical workflow for loading your model in such that:
 
-```{python}
+```py
 import torch
 
 my_model = ModelClass(...)
@@ -35,7 +35,7 @@ Note that here we assume that `ModelClass` is a model that takes up more video-c
 
 The first step is to init an empty skeleton of the model which won't take up any RAM using the [`~utils.init_empty_weights`] context manager:
 
-```{python}
+```py
 from accelerate import init_empty_weights
 with init_empty_weights():
     my_model = ModelClass(...)
@@ -58,7 +58,7 @@ For more details on desigining your own device map, see this section of the [con
 
 See an example below:
 
-```{python}
+```py
 from accelerate import load_checkpoint_and_dispatch
 
 model = load_checkpoint_and_dispatch(
@@ -80,7 +80,7 @@ model = load_checkpoint_and_dispatch(
 
 Now that the model is dispatched fully, you can perform inference as normal with the model:
 
-```{python}
+```py
 input = torch.randn(2,3)
 input = input.to("cuda")
 output = model(input)
@@ -103,7 +103,7 @@ For a visual representation of this, check out the animation below:
 
 Below is the full example showcasing what we performed above:
 
-```{python}
+```py
 import torch
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 
@@ -127,7 +127,7 @@ These operate by specifying a string representing the model to download from the
 
 As a brief example, we will look at using `transformers` and loading in Big Science's T0pp model. 
 
-```{python}
+```py
 from transformers import AutoModelForSeq2SeqLM
 
 model = AutoModelForSeq2SeqLM("bigscience/T0pp", device_map="auto")
@@ -137,7 +137,7 @@ After loading the model in, the initial steps from before to prepare a model hav
 ready to make use of all the resources in your machine. Through these constructors, you can also save *more* memory by
 specifying the precision the model is loaded into as well, through the `torch_dtype` parameter, such as:
 
-```{python}
+```py
 from transformers import AutoModelForSeq2SeqLM
 
 model = AutoModelForSeq2SeqLM("bigscience/T0pp", device_map="auto", torch_dtype=torch.float16)
