@@ -90,7 +90,7 @@ What will happen now is each time the input gets passed through a layer, it will
 
 <Tip>
 
-    Multiple GPUs can be utilized, however this is considered "model parallism" and as a result only one GPU will be active at a given moment, waiting for the prior one to send it the output. As a result, you can launch your script normally with `python`
+    Multiple GPUs can be utilized, however this is considered "model parallism" and as a result only one GPU will be active at a given moment, waiting for the prior one to send it the output. You should launch your script normally with `python`
     and not need `torchrun`, `accelerate launch`, etc.
 
 </Tip>
