@@ -505,7 +505,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         self._drop_last = _drop_last
         self.skip_batches = skip_batches
 
-        self.slice_fn = slice_fn
+        self.slice_fn = slice_tensors if self.slice_fn is None else slice_fn
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
@@ -571,10 +571,11 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
 
             if not self._drop_last and first_batch is None:
                 # We keep at least num processes elements of the first batch to be able to complete the last batch
-                first_batch = (
-                    slice_tensors(batch, slice(0, self.state.num_processes))
-                    if self.slice_fn is None
-                    else self.slice_fn(batch, self.state.num_processes)
+                first_batch = self.slice_fn(
+                    batch,
+                    slice(0, self.state.num_processes),
+                    process_index=self.state.process_index,
+                    num_processes=self.state.num_processes,
                 )
 
             if batch is None:
@@ -601,10 +602,11 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
                 batch_size += 1
 
             data_slice = slice(self.state.process_index * batch_size, (self.state.process_index + 1) * batch_size)
-            batch = (
-                slice_tensors(batch, data_slice)
-                if self.slice_fn is None
-                else self.slice_fn(batch, self.state.num_processes)
+            batch = self.slice_fn(
+                batch,
+                data_slice,
+                process_index=self.state.process_index,
+                num_processes=self.state.num_processes,
             )
 
             if stop_iteration:
