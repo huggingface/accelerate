@@ -1767,7 +1767,9 @@ class Accelerator:
                 result[i] = optimizer
         return tuple(result)
 
-    def prepare_data_loader(self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn=None):
+    def prepare_data_loader(
+        self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
+    ):
         """
         Prepares a PyTorch DataLoader for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -1778,6 +1780,10 @@ class Accelerator:
             device_placement (`bool`, *optional*):
                 Whether or not to place the batches on the proper device in the prepared dataloader. Will default to
                 `self.device_placement`.
+            slice_fn_for_dispatch (`Callable`, *optional*`):
+                If passed, this function will be used to slice tensors across `num_processes`. Will default to
+                [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will
+                be ignored otherwise.
 
         Example:
 
@@ -1807,7 +1813,7 @@ class Accelerator:
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
             even_batches=self.even_batches,
-            slice_fn=slice_fn,
+            slice_fn_for_dispatch=slice_fn_for_dispatch,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
