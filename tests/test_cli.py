@@ -237,9 +237,9 @@ class ModelEstimatorTester(unittest.TestCase):
 
     def test_no_metadata(self):
         with self.assertRaises(
-            SubprocessCallException, msg="Model `bert-base-cased` does not have any library metadata on the Hub"
+            SubprocessCallException, msg="Model `meta-llama/Llama-2-7b` does not have any library metadata on the Hub"
         ):
-            run_command(self.base_cmd + ["--model_name", "bert-base-cased", "--dtypes", "float32"])
+            run_command(self.base_cmd + ["--model_name", "meta-llama/Llama-2-7b", "--dtypes", "float32"])
 
     @require_transformers
     def test_transformers_model(self):
