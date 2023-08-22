@@ -38,6 +38,7 @@ from ..utils import (
     is_mps_available,
     is_safetensors_available,
     is_tensorboard_available,
+    is_timm_available,
     is_torch_version,
     is_tpu_available,
     is_transformers_available,
@@ -114,6 +115,20 @@ def require_huggingface_suite(test_case):
     return unittest.skipUnless(
         is_transformers_available() and is_datasets_available(), "test requires the Hugging Face suite"
     )(test_case)
+
+
+def require_transformers(test_case):
+    """
+    Decorator marking a test that requires transformers. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(is_transformers_available(), "test requires the transformers library")(test_case)
+
+
+def require_timm(test_case):
+    """
+    Decorator marking a test that requires transformers. These tests are skipped when they are not.
+    """
+    return unittest.skipUnless(is_timm_available(), "test requires the timm library")(test_case)
 
 
 def require_bnb(test_case):

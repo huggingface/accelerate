@@ -228,6 +228,26 @@ The following arguments are only useful when training in SageMaker
 * `--aws_access_key_id AWS_ACCESS_KEY_ID` (`str`) -- The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job
 * `--aws_secret_access_key AWS_SECRET_ACCESS_KEY` (`str`) -- The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job
 
+## accelerate estimate-memory
+
+**Command**:
+
+`accelerate estimate-memory` or `accelerate-estimate-memory` or `python -m accelerate.commands.estimate`
+
+Estimates the total vRAM a particular model hosted on the Hub needs to perform Big Model Inference and training.
+
+**Usage**: 
+
+```bash
+accelerate estimate-memory [arguments]
+```
+
+**Optional Arguments**:
+
+* `--model_name MODEL_NAME` (`str`)-- The model name on the Hugging Face Hub
+* `--library_name LIBRARY_NAME` (`str`)-- The library the model has an integration with, such as `transformers`, needed only if this information is not stored on the Hub
+* `--dtypes {float32,float16,int8,int4}` (`[{float32,float16,int8,int4} ...]`) --The dtypes to use for the model, must be one (or many) of `float32`, `float16`, `int8`, and `int4`
+
 ## accelerate tpu-config
 
 `accelerate tpu-config`

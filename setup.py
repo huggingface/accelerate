@@ -47,6 +47,7 @@ setup(
         "console_scripts": [
             "accelerate=accelerate.commands.accelerate_cli:main",
             "accelerate-config=accelerate.commands.config:main",
+            "accelerate-estimate-memory=accelerate.commands.estimate:main",
             "accelerate-launch=accelerate.commands.launch:main",
         ]
     },
