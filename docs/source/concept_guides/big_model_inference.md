@@ -34,7 +34,7 @@ While this works very well for regularly sized models, this workflow has some cl
 
 <Tip warning={true}>
 
-    This API is quite new and still in its experimental stage. While we strive to provide a stable API, it's possible some small parts of the public API will change in the future.
+This API is quite new and still in its experimental stage. While we strive to provide a stable API, it's possible some small parts of the public API will change in the future.
 
 </Tip>
 
