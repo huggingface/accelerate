@@ -36,6 +36,7 @@ from ..utils import (
     is_datasets_available,
     is_deepspeed_available,
     is_mps_available,
+    is_npu_available,
     is_safetensors_available,
     is_tensorboard_available,
     is_torch_version,
@@ -107,6 +108,13 @@ def require_mps(test_case):
     return unittest.skipUnless(is_mps_available(), "test requires a `mps` backend support in `torch`")(test_case)
 
 
+def require_npu(test_case):
+    """
+    Decorator marking a test that requires NPU. These tests are skipped when there are no NPU available.
+    """
+    return unittest.skipUnless(is_npu_available(), "test requires a NPU")(test_case)
+
+
 def require_huggingface_suite(test_case):
     """
     Decorator marking a test that requires transformers and datasets. These tests are skipped when they are not.
@@ -146,6 +154,16 @@ def require_single_xpu(test_case):
     return unittest.skipUnless(torch.xpu.device_count() == 1, "test requires a XPU")(test_case)
 
 
+def require_single_npu(test_case):
+    """
+    Decorator marking a test that requires a single NPU. These tests are skipped when there are no NPU
+    available or number of NPUs is more than one.
+    """
+    return unittest.skipUnless(
+        is_npu_available() and torch.npu.device_count() == 1, "test requires a NPU"
+    )(test_case)
+
+
 def require_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
@@ -160,6 +178,14 @@ def require_multi_xpu(test_case):
     XPUs.
     """
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
+
+
+def require_multi_npu(test_case):
+    """
+    Decorator marking a test that requires a multi-NPU setup. These tests are skipped on a machine without multiple
+    NPUs.
+    """
+    return unittest.skipUnless(is_npu_available() and torch.npu.device_count() > 1, "test requires multiple NPUs")(test_case)
 
 
 def require_safetensors(test_case):
