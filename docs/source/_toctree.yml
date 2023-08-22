@@ -53,6 +53,8 @@
     title: How to use 🤗 Accelerate with Intel® Extension for PyTorch for cpu
   title: How-To Guides
 - sections:
+  - local: concept_guides/big_model_inference
+    title: Loading big models into memory
   - local: concept_guides/performance
     title: Comparing performance across distributed setups
   - local: concept_guides/deferring_execution
