@@ -53,17 +53,19 @@ def create_empty_model(model_name, library_name: str):
     Args:
         model_name (`str`):
             The model name on the Hub
-        library_name (`str`, *optional*, defaults to "auto"):
+        library_name (`str`):
             The library the model has an integration with, such as `transformers`. Will be used if `model_name` has no
             metadata on the Hub to determine the library.
     """
     model_info = verify_on_hub(model_name)
     if not model_info:
         raise ValueError(f"Model `{model_name}` is not an available model on the Hub.")
-    if library_name is None and getattr(model_info, "library_name", False):
-        raise ValueError(
-            f"Model `{model_name}` does not have any library metadata on the Hub, please manually pass in a `--library_name` to use (such as `transformers`)"
-        )
+    if library_name is None:
+        library_name = getattr(model_info, "library_name", False)
+        if not library_name:
+            raise ValueError(
+                f"Model `{model_name}` does not have any library metadata on the Hub, please manually pass in a `--library_name` to use (such as `transformers`)"
+            )
     if library_name == "transformers":
         if not is_transformers_available():
             raise ImportError(
