@@ -72,9 +72,10 @@ def create_empty_model(model_name, library_name: str):
                 f"To check `{model_name}`, `transformers` must be installed. Please install it via `pip install transformers`"
             )
         print(f"Loading pretrained config for `{model_name}` from `transformers`...")
-        config = AutoConfig.from_pretrained(model_name)
+        # As we just load in the `config` file and not the weights, we use `True`
+        config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
         with init_empty_weights():
-            model = AutoModel.from_config(config)
+            model = AutoModel.from_config(config, trust_remote_code=True)
     elif library_name == "timm":
         if not is_timm_available():
             raise ImportError(
