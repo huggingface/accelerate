@@ -46,7 +46,7 @@ def verify_on_hub(repo: str):
         return False
 
 
-def create_empty_model(model_name, library_name: str):
+def create_empty_model(model_name, library_name: str, trust_remote_code: bool = False):
     """
     Creates an empty model from its parent library on the `Hub` to calculate the overall memory consumption.
 
@@ -56,6 +56,11 @@ def create_empty_model(model_name, library_name: str):
         library_name (`str`):
             The library the model has an integration with, such as `transformers`. Will be used if `model_name` has no
             metadata on the Hub to determine the library.
+        trust_remote_code (`bool`, `optional`, defaults to `False`):
+            Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+            should only be set to `True` for repositories you trust and in which you have read the code, as it will
+            execute code present on the Hub on your local machine.
+
     """
     model_info = verify_on_hub(model_name)
     if not model_info:
@@ -73,9 +78,16 @@ def create_empty_model(model_name, library_name: str):
             )
         print(f"Loading pretrained config for `{model_name}` from `transformers`...")
         # As we just load in the `config` file and not the weights, we use `True`
-        config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
+        has_remote_code = hasattr(model_info.config, "auto_map")
+        if has_remote_code and not trust_remote_code:
+            raise ValueError(
+                f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
+                f"the repository at https://hf.co/{model_name}. You can bypass this by passing "
+                "`--trust_remote_code`"
+            )
+        config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code)
         with init_empty_weights():
-            model = AutoModel.from_config(config, trust_remote_code=True)
+            model = AutoModel.from_config(config, trust_remote_code=trust_remote_code)
     elif library_name == "timm":
         if not is_timm_available():
             raise ImportError(
@@ -140,6 +152,13 @@ def estimate_command_parser(subparsers=None):
         help="The dtypes to use for the model, must be one (or many) of `float32`, `float16`, `int8`, and `int4`",
         choices=["float32", "float16", "int8", "int4"],
     )
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help="""Whether or not to allow for custom models defined on the Hub in their own modeling files. This flag
+                should only be used for repositories you trust and in which you have read the code, as it will execute
+                code present on the Hub on your local machine.""",
+    )
 
     if subparsers is not None:
         parser.set_defaults(func=estimate_command)
@@ -147,7 +166,9 @@ def estimate_command_parser(subparsers=None):
 
 
 def estimate_command(args):
-    model = create_empty_model(args.model_name, library_name=args.library_name)
+    model = create_empty_model(
+        args.model_name, library_name=args.library_name, trust_remote_code=args.trust_remote_code
+    )
     total_size, largest_layer = calculate_maximum_sizes(model)
 
     data = []
