@@ -210,7 +210,19 @@ def is_tqdm_available():
 
 
 def is_mlflow_available():
-    return _is_package_available("mlflow")
+    package_exists = importlib.util.find_spec("mlflow") is not None
+    if package_exists:
+        try:
+            _ = importlib.metadata.metadata("mlflow")
+            return True
+        except importlib.metadata.PackageNotFoundError:
+            # support a case of mlflow installed via mlflow-skinny
+            try:
+                _ = importlib.metadata.metadata("mlflow-skinny")
+                return True
+            except importlib.metadata.PackageNotFoundError:
+                return False
+    return False
 
 
 def is_mps_available():
