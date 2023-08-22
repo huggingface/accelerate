@@ -249,6 +249,7 @@ class ModelEstimatorTester(unittest.TestCase):
             + ["--dtypes", "float32", "float16", "int8", "int4"],
             return_stdout=True,
         )
+        print(f'Output:\n{output}')
         # The largest layer and total size of the model
         largest_layer, total_size = 84.95, 413.18
         # Check that full precision -> int4 is calculating correctly
