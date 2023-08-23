@@ -860,7 +860,10 @@ def calculate_maximum_sizes(model: torch.nn.Module):
     "Computes the total size of the model and its largest layer"
     sizes = compute_module_sizes(model)
     # `transformers` models store this information for us
-    no_split_modules = getattr(model, "_no_split_modules", [])
+    no_split_modules = getattr(model, "_no_split_modules", None)
+    if no_split_modules is None:
+        no_split_modules = []
+
     modules_to_treat = (
         list(model.named_parameters(recurse=False))
         + list(model.named_children())
