@@ -35,7 +35,6 @@ from ..utils import (
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
-    is_einops_available,
     is_huggingface_hub_available,
     is_mps_available,
     is_safetensors_available,
@@ -131,13 +130,6 @@ def require_transformers(test_case):
     Decorator marking a test that requires transformers. These tests are skipped when they are not.
     """
     return unittest.skipUnless(is_transformers_available(), "test requires the transformers library")(test_case)
-
-
-def require_einops(test_case):
-    """
-    Decorator marking a test that requires transformers. These tests are skipped when they are not.
-    """
-    return unittest.skipUnless(is_einops_available(), "test requires the einops library")(test_case)
 
 
 def require_timm(test_case):
