@@ -110,7 +110,16 @@ def create_empty_model(model_name, library_name: str, trust_remote_code: bool = 
                 f"the repository at https://hf.co/{model_name}. You can bypass this by passing "
                 "`--trust_remote_code`"
             )
-        config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code)
+        try:
+            config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code)
+        except ValueError as e:
+            if "trust_remote_code" in e.args[0]:
+                e.args = (
+                    f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
+                    f"the repository at https://hf.co/{model_name}. You can bypass this by passing "
+                    "`--trust_remote_code`",
+                )
+            raise e
         with init_empty_weights():
             model = AutoModel.from_config(config, trust_remote_code=trust_remote_code)
     elif library_name == "timm":

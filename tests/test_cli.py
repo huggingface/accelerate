@@ -262,6 +262,16 @@ class ModelEstimatorTester(unittest.TestCase):
                 estimate_command(args)
 
     @require_transformers
+    def test_remote_code(self):
+        args = self.parser.parse_args(["tiiuae/falcon-7b"])
+        with self.assertRaises(ValueError, msg="--trust_remote_code"):
+            gather_data(args)
+
+        # Verify it works with the flag
+        args = self.parser.parse_args(["tiiuae/falcon-7b", "--trust_remote_code"])
+        gather_data(args)
+
+    @require_transformers
     def test_explicit_dtypes(self):
         args = self.parser.parse_args(["bert-base-cased", "--dtypes", "float32", "float16"])
         output = gather_data(args)
