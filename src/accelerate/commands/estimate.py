@@ -67,7 +67,7 @@ def check_has_model(error):
         return "unknown"
 
 
-def create_empty_model(model_name, library_name: str, trust_remote_code: bool = False):
+def create_empty_model(model_name: str, library_name: str, trust_remote_code: bool = False):
     """
     Creates an empty model from its parent library on the `Hub` to calculate the overall memory consumption.
 
@@ -81,6 +81,9 @@ def create_empty_model(model_name, library_name: str, trust_remote_code: bool = 
             Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
             should only be set to `True` for repositories you trust and in which you have read the code, as it will
             execute code present on the Hub on your local machine.
+
+    Returns:
+        `torch.nn.Module`: The torch model that has been initialized on the `meta` device.
 
     """
     model_info = verify_on_hub(model_name)
