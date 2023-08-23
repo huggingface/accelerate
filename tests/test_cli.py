@@ -252,18 +252,52 @@ class ModelEstimatorTester(unittest.TestCase):
         with self.assertRaises(
             ValueError, msg="Model `muellerzr/dummy` does not have any library metadata on the Hub"
         ):
-            args = self.parser.parse_args(["muellerzr/dummy", "--dtypes", "float32"])
+            args = self.parser.parse_args(["muellerzr/dummy"])
             estimate_command(args)
 
     def test_gated(self):
         with self.assertRaises(GatedRepoError, msg="Repo for model `meta-llama/Llama-2-7b` is gated"):
-            args = self.parser.parse_args(["meta-llama/Llama-2-7b", "--dtypes", "float32"])
+            args = self.parser.parse_args(["meta-llama/Llama-2-7b"])
             with patch_environment(hf_hub_disable_implicit_token="1"):
                 estimate_command(args)
 
     @require_transformers
+    def test_explicit_dtypes(self):
+        args = self.parser.parse_args(["bert-base-cased", "--dtypes", "float32", "float16"])
+        output = gather_data(args)
+        # The largest layer and total size of the model in bytes
+        largest_layer, total_size = 89075712, 433249280
+        # Check that full precision -> int4 is calculating correctly
+        self.assertEqual(len(output), 2, f"Output was missing a precision, expected 2 but received {len(output)}")
+
+        for i, factor in enumerate([1, 2]):
+            precision = 32 // factor
+            precision_str = f"float{precision}"
+            largest_layer_estimate = largest_layer / factor
+            total_size_estimate = total_size / factor
+            total_training_size_estimate = total_size_estimate * 4
+
+            self.assertEqual(precision_str, output[i][0], f"Output is missing precision `{precision_str}`")
+            self.assertEqual(
+                largest_layer_estimate,
+                output[i][1],
+                f"Calculation for largest layer size in `{precision_str}` is incorrect.",
+            )
+
+            self.assertEqual(
+                total_size_estimate,
+                output[i][2],
+                msg=f"Calculation for total size in `{precision_str}` is incorrect.",
+            )
+            self.assertEqual(
+                total_training_size_estimate,
+                output[i][3],
+                msg=f"Calculation for total training size in `{precision_str}` is incorrect.",
+            )
+
+    @require_transformers
     def test_transformers_model(self):
-        args = self.parser.parse_args(["bert-base-cased", "--library_name", "transformers"])
+        args = self.parser.parse_args(["bert-base-cased"])
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 89075712, 433249280
