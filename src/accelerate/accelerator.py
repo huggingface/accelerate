@@ -1198,7 +1198,7 @@ class Accelerator:
                 isinstance(obj, torch.nn.Module)
                 and self.verify_device_map(obj)
                 and self.distributed_type != DistributedType.NO
-                and os.environ.get("ACCELERATE_BYPASS_AUTO", "false") == "false"
+                and os.environ.get("ACCELERATE_BYPASS_AUTO", "false") != "true"
             ):
                 raise ValueError(
                     "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
@@ -1334,7 +1334,7 @@ class Accelerator:
         if (
             self.verify_device_map(model)
             and self.distributed_type != DistributedType.NO
-            and os.environ.get("ACCELERATE_BYPASS_AUTO", "false") == "false"
+            and os.environ.get("ACCELERATE_BYPASS_AUTO", "false") != "true"
         ):
             raise ValueError(
                 "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
