@@ -231,4 +231,4 @@ def convert_bytes(size):
             return f"{round(size, 2)} {x}"
         size /= 1024.0
 
-    return size
+    return f"{round(size, 2)} PB"
