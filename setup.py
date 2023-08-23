@@ -83,6 +83,8 @@ setup(
 # 6. Upload the package to the pypi test server first:
 #      twine upload dist/* -r testpypi
 # 7. Check that you can install it in a virtualenv by running:
+#      pip install accelerate
+#      pip uninstall accelerate
 #      pip install -i https://testpypi.python.org/pypi accelerate
 #      accelerate env
 #      accelerate test
