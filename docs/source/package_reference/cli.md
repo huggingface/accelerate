@@ -234,7 +234,7 @@ The following arguments are only useful when training in SageMaker
 
 `accelerate estimate-memory` or `accelerate-estimate-memory` or `python -m accelerate.commands.estimate`
 
-Estimates the total vRAM a particular model hosted on the Hub needs to perform Big Model Inference and training. Requires that `huggingface_hub` be installed.
+Estimates the total vRAM a particular model hosted on the Hub needs to perform inference and training. Requires that `huggingface_hub` be installed.
 
 **Usage**: 
 
