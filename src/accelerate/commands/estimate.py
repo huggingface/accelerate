@@ -15,8 +15,6 @@
 # limitations under the License.
 import argparse
 
-from requests.exceptions import HTTPError
-
 from accelerate import init_empty_weights
 from accelerate.utils import (
     calculate_maximum_sizes,
@@ -29,6 +27,7 @@ from accelerate.utils import (
 
 if is_huggingface_hub_available():
     from huggingface_hub import model_info
+    from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 if is_transformers_available():
     from transformers import AutoConfig, AutoModel
@@ -45,8 +44,26 @@ def verify_on_hub(repo: str):
         )
     try:
         return model_info(repo)
-    except HTTPError:
-        return False
+    except GatedRepoError:
+        return "gated"
+    except RepositoryNotFoundError:
+        return "repo"
+
+
+def check_has_model(error):
+    """
+    Checks what library spawned `error` when a model is not found
+    """
+    if is_timm_available() and isinstance(error, RuntimeError) and "Unknown model" in error.args[0]:
+        return "timm"
+    elif (
+        is_transformers_available()
+        and isinstance(error, OSError)
+        and "does not appear to have a file named" in error.args[0]
+    ):
+        return "transformers"
+    else:
+        return "unknown"
 
 
 def create_empty_model(model_name, library_name: str, trust_remote_code: bool = False):
@@ -66,8 +83,13 @@ def create_empty_model(model_name, library_name: str, trust_remote_code: bool = 
 
     """
     model_info = verify_on_hub(model_name)
-    if not model_info:
-        raise ValueError(f"Model `{model_name}` is not an available model on the Hub.")
+    # Simplified errors
+    if model_info == "gated":
+        raise GatedRepoError(f"Repo for model `{model_name}` is gated. You must be authenticated to access it.")
+    elif model_info == "repo":
+        raise RepositoryNotFoundError(
+            f"Repo for model `{model_name}` does not exist on the Hub. If you are trying to access a private repo, make sure you are authenticated."
+        )
     if library_name is None:
         library_name = getattr(model_info, "library_name", False)
         if not library_name:
@@ -171,9 +193,18 @@ def estimate_command_parser(subparsers=None):
 
 def gather_data(args):
     "Creates an empty model and gathers the data for the sizes"
-    model = create_empty_model(
-        args.model_name, library_name=args.library_name, trust_remote_code=args.trust_remote_code
-    )
+    try:
+        model = create_empty_model(
+            args.model_name, library_name=args.library_name, trust_remote_code=args.trust_remote_code
+        )
+    except (RuntimeError, OSError) as e:
+        library = check_has_model(e)
+        if library != "unknown":
+            raise RuntimeError(
+                f"Tried to load `{args.model_name}` with `{library}` but a possible model to load was not found inside the repo."
+            )
+        raise e
+
     total_size, largest_layer = calculate_maximum_sizes(model)
 
     data = []

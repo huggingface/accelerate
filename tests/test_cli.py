@@ -23,6 +23,11 @@ import accelerate
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import require_timm, require_transformers, run_command
+from accelerate.utils import is_huggingface_hub_available, patch_environment
+
+
+if is_huggingface_hub_available():
+    from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -225,16 +230,36 @@ class ModelEstimatorTester(unittest.TestCase):
     parser = estimate_command_parser()
 
     def test_invalid_model_name(self):
-        with self.assertRaises(ValueError, msg="Model `somebrokenname` is not an available model on the Hub"):
-            args = self.parser.parse_args(["somebrokenname", "--dtypes", "float32"])
+        with self.assertRaises(
+            RepositoryNotFoundError, msg="Repo for model `somebrokenname` does not exist on the Hub"
+        ):
+            args = self.parser.parse_args(["somebrokenname"])
+            estimate_command(args)
+
+    @require_timm
+    def test_invalid_model_name_timm(self):
+        with self.assertRaises(RuntimeError, msg="Tried to load `muellerzr/dummy` with `timm` but"):
+            args = self.parser.parse_args(["muellerzr/dummy", "--library_name", "timm"])
+            estimate_command(args)
+
+    @require_transformers
+    def test_invalid_model_name_transformers(self):
+        with self.assertRaises(RuntimeError, msg="Tried to load `muellerzr/dummy` with `transformers` but"):
+            args = self.parser.parse_args(["muellerzr/dummy", "--library_name", "transformers"])
             estimate_command(args)
 
     def test_no_metadata(self):
         with self.assertRaises(
-            ValueError, msg="Model `meta-llama/Llama-2-7b` does not have any library metadata on the Hub"
+            ValueError, msg="Model `muellerzr/dummy` does not have any library metadata on the Hub"
         ):
-            args = self.parser.parse_args(["meta-llama/Llama-2-7b", "--dtypes", "float32"])
+            args = self.parser.parse_args(["muellerzr/dummy", "--dtypes", "float32"])
             estimate_command(args)
+
+    def test_gated(self):
+        with self.assertRaises(GatedRepoError, msg="Repo for model `meta-llama/Llama-2-7b` is gated"):
+            args = self.parser.parse_args(["meta-llama/Llama-2-7b", "--dtypes", "float32"])
+            with patch_environment(hf_hub_disable_implicit_token="1"):
+                estimate_command(args)
 
     @require_transformers
     def test_transformers_model(self):
