@@ -169,7 +169,8 @@ def estimate_command_parser(subparsers=None):
     return parser
 
 
-def estimate_command(args, debug=False):
+def gather_data(args):
+    "Creates an empty model and gathers the data for the sizes"
     model = create_empty_model(
         args.model_name, library_name=args.library_name, trust_remote_code=args.trust_remote_code
     )
@@ -177,7 +178,6 @@ def estimate_command(args, debug=False):
 
     data = []
 
-    headers = ["dtype", "Largest Layer", "Total Size", "Training using Adam"]
     for dtype in args.dtypes:
         dtype_total_size = total_size
         dtype_largest_layer = largest_layer[0]
@@ -191,14 +191,18 @@ def estimate_command(args, debug=False):
             dtype_total_size /= 8
             dtype_largest_layer /= 8
         dtype_training_size = dtype_total_size * 4
-        if not debug:
-            dtype_training_size = convert_bytes(dtype_training_size)
-            dtype_total_size = convert_bytes(dtype_total_size)
-            dtype_largest_layer = convert_bytes(dtype_largest_layer)
         data.append([dtype, dtype_largest_layer, dtype_total_size, dtype_training_size])
+    return data
 
-    if debug:
-        return data
+
+def estimate_command(args):
+    data = gather_data(args)
+    for row in data:
+        for i, item in enumerate(row):
+            if isinstance(item, (int, float)):
+                row[i] = convert_bytes(item)
+
+    headers = ["dtype", "Largest Layer", "Total Size", "Training using Adam"]
 
     title = f"Memory Usage for `{args.model_name}`"
     table = create_ascii_table(headers, data, title)

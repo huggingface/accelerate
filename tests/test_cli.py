@@ -20,7 +20,7 @@ from pathlib import Path
 import torch
 
 import accelerate
-from accelerate.commands.estimate import estimate_command, estimate_command_parser
+from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import require_timm, require_transformers, run_command
 
@@ -243,7 +243,7 @@ class ModelEstimatorTester(unittest.TestCase):
     @require_transformers
     def test_transformers_model(self):
         args = self.parser.parse_args(["bert-base-cased", "--library_name", "transformers"])
-        output = estimate_command(args, debug=True)
+        output = gather_data(args)
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 89075712, 433249280
         # Check that full precision -> int4 is calculating correctly
@@ -277,7 +277,7 @@ class ModelEstimatorTester(unittest.TestCase):
     @require_timm
     def test_timm_model(self):
         args = self.parser.parse_args(["timm/resnet50.a1_in1k", "--library_name", "timm"])
-        output = estimate_command(args, debug=True)
+        output = gather_data(args)
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 9437184, 102441032
         # Check that full precision -> int4 is calculating correctly
