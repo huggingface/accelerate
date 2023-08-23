@@ -104,8 +104,8 @@ def create_empty_model(model_name, library_name: str, trust_remote_code: bool = 
             )
         print(f"Loading pretrained config for `{model_name}` from `transformers`...")
         # As we just load in the `config` file and not the weights, we use `True`
-        remote_code = model_info.config.get("auto_map", False)
-        if remote_code and not trust_remote_code:
+        auto_map = model_info.config.get("auto_map", False)
+        if auto_map and not trust_remote_code:
             raise ValueError(
                 f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
                 f"the repository at https://hf.co/{model_name}. You can bypass this by passing "
@@ -124,8 +124,8 @@ def create_empty_model(model_name, library_name: str, trust_remote_code: bool = 
             raise e
         with init_empty_weights():
             # remote code could specify a specific `AutoModel` class in the `auto_map`
-            if remote_code:
-                for key in remote_code.keys():
+            if isinstance(auto_map, dict):
+                for key in auto_map.keys():
                     if key.startswith("AutoModelFor"):
                         value = key
                         break
