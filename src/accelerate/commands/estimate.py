@@ -175,7 +175,9 @@ def estimate_command_parser(subparsers=None):
     else:
         parser = argparse.ArgumentParser(description="Model size estimator")
 
-    parser.add_argument("model_name", type=str, help="The model name on the Hugging Face Hub.")
+    parser.add_argument(
+        "model_name", type=str, help="The model name on the Hugging Face Hub or local path to the model folder."
+    )
     parser.add_argument(
         "--library_name",
         type=str,
