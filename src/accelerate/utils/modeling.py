@@ -859,6 +859,7 @@ def get_balanced_memory(
 def calculate_maximum_sizes(model: torch.nn.Module):
     "Computes the total size of the model and its largest layer"
     sizes = compute_module_sizes(model)
+    # `transformers` models store this information for us
     no_split_modules = getattr(model, "_no_split_modules", [])
     modules_to_treat = (
         list(model.named_parameters(recurse=False))
