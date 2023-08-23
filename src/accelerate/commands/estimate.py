@@ -127,14 +127,15 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
             raise e
         with init_empty_weights():
             # remote code could specify a specific `AutoModel` class in the `auto_map`
+            constructor = AutoModel
             if isinstance(auto_map, dict):
+                value = None
                 for key in auto_map.keys():
                     if key.startswith("AutoModelFor"):
                         value = key
                         break
-                constructor = getattr(transformers, value)
-            else:
-                constructor = AutoModel
+                if value is not None:
+                    constructor = getattr(transformers, value)
             model = constructor.from_config(config, trust_remote_code=trust_remote_code)
     elif library_name == "timm":
         if not is_timm_available():
