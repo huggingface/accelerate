@@ -234,19 +234,23 @@ The following arguments are only useful when training in SageMaker
 
 `accelerate estimate-memory` or `accelerate-estimate-memory` or `python -m accelerate.commands.estimate`
 
-Estimates the total vRAM a particular model hosted on the Hub needs to perform Big Model Inference and training.
+Estimates the total vRAM a particular model hosted on the Hub needs to perform Big Model Inference and training. Requires that `huggingface_hub` be installed.
 
 **Usage**: 
 
 ```bash
-accelerate estimate-memory [arguments]
+accelerate estimate-memory --model_name {MODEL_NAME} --library_name {LIBRARY_NAME} --dtypes {dtype_1} {dtype_2} ...
 ```
+
+**Required Arguments**:
+
+* `MODEL_NAME` (`str`)-- The model name on the Hugging Face Hub
 
 **Optional Arguments**:
 
-* `--model_name MODEL_NAME` (`str`)-- The model name on the Hugging Face Hub
-* `--library_name LIBRARY_NAME` (`str`)-- The library the model has an integration with, such as `transformers`, needed only if this information is not stored on the Hub
+* `--library_name {timm,transformers}` (`str`)-- The library the model has an integration with, such as `transformers`, needed only if this information is not stored on the Hub
 * `--dtypes {float32,float16,int8,int4}` (`[{float32,float16,int8,int4} ...]`) --The dtypes to use for the model, must be one (or many) of `float32`, `float16`, `int8`, and `int4`
+* `--trust_remote_code` (`bool`) -- Whether or not to allow for custom models defined on the Hub in their own modeling files. This option should only be passed for repositories you trust and in which you have read the code, as it will execute code present on the Hub on your local machine.
 
 ## accelerate tpu-config
 
