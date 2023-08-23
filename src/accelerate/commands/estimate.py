@@ -30,6 +30,7 @@ if is_huggingface_hub_available():
     from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 if is_transformers_available():
+    import transformers
     from transformers import AutoConfig, AutoModel
 
 if is_timm_available():
@@ -103,13 +104,14 @@ def create_empty_model(model_name, library_name: str, trust_remote_code: bool = 
             )
         print(f"Loading pretrained config for `{model_name}` from `transformers`...")
         # As we just load in the `config` file and not the weights, we use `True`
-        has_remote_code = hasattr(model_info.config, "auto_map")
-        if has_remote_code and not trust_remote_code:
+        remote_code = model_info.config.get("auto_map", False)
+        if remote_code and not trust_remote_code:
             raise ValueError(
                 f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
                 f"the repository at https://hf.co/{model_name}. You can bypass this by passing "
                 "`--trust_remote_code`"
             )
+
         try:
             config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code)
         except ValueError as e:
@@ -121,7 +123,16 @@ def create_empty_model(model_name, library_name: str, trust_remote_code: bool = 
                 )
             raise e
         with init_empty_weights():
-            model = AutoModel.from_config(config, trust_remote_code=trust_remote_code)
+            # remote code could specify a specific `AutoModel` class in the `auto_map`
+            if remote_code:
+                for key in remote_code.keys():
+                    if key.startswith("AutoModelFor"):
+                        value = key
+                        break
+                constructor = getattr(transformers, value)
+            else:
+                constructor = AutoModel
+            model = constructor.from_config(config, trust_remote_code=trust_remote_code)
     elif library_name == "timm":
         if not is_timm_available():
             raise ImportError(

@@ -22,7 +22,13 @@ import torch
 import accelerate
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
-from accelerate.test_utils.testing import require_huggingface_hub, require_timm, require_transformers, run_command
+from accelerate.test_utils.testing import (
+    require_einops,
+    require_huggingface_hub,
+    require_timm,
+    require_transformers,
+    run_command,
+)
 from accelerate.utils import is_huggingface_hub_available, patch_environment
 
 
@@ -262,6 +268,7 @@ class ModelEstimatorTester(unittest.TestCase):
             with patch_environment(hf_hub_disable_implicit_token="1"):
                 estimate_command(args)
 
+    @require_einops
     @require_transformers
     def test_remote_code(self):
         args = self.parser.parse_args(["tiiuae/falcon-7b"])
@@ -270,6 +277,12 @@ class ModelEstimatorTester(unittest.TestCase):
 
         # Verify it works with the flag
         args = self.parser.parse_args(["tiiuae/falcon-7b", "--trust_remote_code"])
+        gather_data(args)
+
+    @require_einops
+    @require_transformers
+    def test_custom_auto_class(self):
+        args = self.parser.parse_args(["tiiuae/falcon-7b-instruct", "--trust_remote_code"])
         gather_data(args)
 
     @require_transformers
