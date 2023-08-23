@@ -14,16 +14,15 @@
 
 import inspect
 import os
-import re
 import unittest
 from pathlib import Path
 
 import torch
 
 import accelerate
+from accelerate.commands.estimate import estimate_command, estimate_command_parser
 from accelerate.test_utils import execute_subprocess_async
-from accelerate.test_utils.testing import SubprocessCallException, require_timm, require_transformers, run_command
-from accelerate.utils.other import convert_bytes
+from accelerate.test_utils.testing import require_timm, require_transformers, run_command
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -220,7 +219,7 @@ class ModelEstimatorTester(unittest.TestCase):
     Test case for checking the output of `accelerate estimate-memory` is correct.
     """
 
-    base_cmd = ["accelerate", "estimate-memory"]
+    parser = estimate_command_parser()
     units = [" bytes", " KB", " MB", " GB", " TB"]
 
     def remove_units(self, number):
@@ -230,108 +229,81 @@ class ModelEstimatorTester(unittest.TestCase):
         return number
 
     def test_invalid_model_name(self):
-        with self.assertRaises(
-            SubprocessCallException, msg="Model `somebrokenname` is not an available model on the Hub"
-        ):
-            run_command(self.base_cmd + ["somebrokenname", "--dtypes", "float32"])
+        with self.assertRaises(ValueError, msg="Model `somebrokenname` is not an available model on the Hub"):
+            args = self.parser.parse_args(["somebrokenname", "--dtypes", "float32"])
+            estimate_command(args)
 
     def test_no_metadata(self):
         with self.assertRaises(
-            SubprocessCallException, msg="Model `meta-llama/Llama-2-7b` does not have any library metadata on the Hub"
+            ValueError, msg="Model `meta-llama/Llama-2-7b` does not have any library metadata on the Hub"
         ):
-            run_command(self.base_cmd + ["meta-llama/Llama-2-7b", "--dtypes", "float32"])
+            args = self.parser.parse_args(["meta-llama/Llama-2-7b", "--dtypes", "float32"])
+            estimate_command(args)
 
     @require_transformers
     def test_transformers_model(self):
-        output = run_command(
-            self.base_cmd
-            + ["bert-base-cased", "--library_name", "transformers"]
-            + ["--dtypes", "float32", "float16", "int8", "int4"],
-            return_stdout=True,
-        )
-        print(f"Output:\n{output}")
-        # The largest layer and total size of the model
-        largest_layer, total_size = 84.95, 413.18
+        args = self.parser.parse_args(["bert-base-cased", "--library_name", "transformers"])
+        output = estimate_command(args, debug=True)
+        # The largest layer and total size of the model in bytes
+        largest_layer, total_size = 89075712, 433249280
         # Check that full precision -> int4 is calculating correctly
-        pat = re.compile(r"\d+\.\d+")
-        floats = [float(num) for num in pat.findall(output)]
-        groups = []
-        for i in range(0, len(floats), 3):
-            groups.append(floats[i : i + 3])
+        self.assertEqual(len(output), 4, "Output was missing a precision")
 
         for i, factor in enumerate([1, 2, 4, 8]):
             precision = 32 // factor
             precision_str = f"int{precision}" if precision < 16 else f"float{precision}"
-            self.assertIn(precision_str, output, "Output is missing precision `{precision_str}`")
-            largest_layer_estimate = convert_bytes(round(largest_layer / factor, 2))
-            largest_layer_estimate = float(self.remove_units(largest_layer_estimate))
-            total_size_estimate = convert_bytes(round(total_size / factor, 2))
-            total_size_estimate = float(self.remove_units(total_size_estimate))
-            total_training_size_estimate = convert_bytes(round((total_size / factor) * 4, 2))
-            total_training_size_estimate = float(self.remove_units(total_training_size_estimate))
+            largest_layer_estimate = largest_layer / factor
+            total_size_estimate = total_size / factor
+            total_training_size_estimate = total_size_estimate * 4
 
-            self.assertAlmostEqual(
+            self.assertEqual(precision_str, output[i][0], f"Output is missing precision `{precision_str}`")
+            self.assertEqual(
                 largest_layer_estimate,
-                groups[i][0],
-                delta=0.05,
-                msg=f"Calculation for largest layer size in `{precision_str}` is incorrect.",
+                output[i][1],
+                f"Calculation for largest layer size in `{precision_str}` is incorrect.",
             )
-            self.assertAlmostEqual(
+
+            self.assertEqual(
                 total_size_estimate,
-                groups[i][1],
-                delta=0.05,
+                output[i][2],
                 msg=f"Calculation for total size in `{precision_str}` is incorrect.",
             )
-            self.assertAlmostEqual(
+            self.assertEqual(
                 total_training_size_estimate,
-                groups[i][2],
-                delta=0.05,
+                output[i][3],
                 msg=f"Calculation for total training size in `{precision_str}` is incorrect.",
             )
 
     @require_timm
     def test_timm_model(self):
-        output = run_command(
-            self.base_cmd
-            + ["timm/resnet50.a1_in1k", "--library_name", "timm"]
-            + ["--dtypes", "float32", "float16", "int8", "int4"],
-            return_stdout=True,
-        )
-        # The largest layer and total size of the model
-        largest_layer, total_size = 9, 97.7
+        args = self.parser.parse_args(["timm/resnet50.a1_in1k", "--library_name", "timm"])
+        output = estimate_command(args, debug=True)
+        # The largest layer and total size of the model in bytes
+        largest_layer, total_size = 9437184, 102441032
         # Check that full precision -> int4 is calculating correctly
-        pat = re.compile(r"\d+\.\d+")
-        floats = [float(num) for num in pat.findall(output)]
-        groups = []
-        for i in range(0, len(floats), 3):
-            groups.append(floats[i : i + 3])
+        self.assertEqual(len(output), 4, "Output was missing a precision")
 
         for i, factor in enumerate([1, 2, 4, 8]):
             precision = 32 // factor
             precision_str = f"int{precision}" if precision < 16 else f"float{precision}"
-            self.assertIn(precision_str, output, "Output is missing precision `{precision_str}`")
-            largest_layer_estimate = convert_bytes(round(largest_layer / factor, 2))
-            largest_layer_estimate = float(self.remove_units(largest_layer_estimate))
-            total_size_estimate = convert_bytes(round(total_size / factor, 2))
-            total_size_estimate = float(self.remove_units(total_size_estimate))
-            total_training_size_estimate = convert_bytes(round((total_size / factor) * 4, 2))
-            total_training_size_estimate = float(self.remove_units(total_training_size_estimate))
+            largest_layer_estimate = largest_layer / factor
+            total_size_estimate = total_size / factor
+            total_training_size_estimate = total_size_estimate * 4
 
-            self.assertAlmostEqual(
+            self.assertEqual(precision_str, output[i][0], f"Output is missing precision `{precision_str}`")
+            self.assertEqual(
                 largest_layer_estimate,
-                groups[i][0],
-                delta=0.05,
-                msg=f"Calculation for largest layer size in `{precision_str}` is incorrect.",
+                output[i][1],
+                f"Calculation for largest layer size in `{precision_str}` is incorrect.",
             )
-            self.assertAlmostEqual(
+
+            self.assertEqual(
                 total_size_estimate,
-                groups[i][1],
-                delta=0.05,
+                output[i][2],
                 msg=f"Calculation for total size in `{precision_str}` is incorrect.",
             )
-            self.assertAlmostEqual(
+            self.assertEqual(
                 total_training_size_estimate,
-                groups[i][2],
-                delta=0.05,
+                output[i][3],
                 msg=f"Calculation for total training size in `{precision_str}` is incorrect.",
             )

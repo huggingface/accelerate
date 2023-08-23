@@ -169,7 +169,7 @@ def estimate_command_parser(subparsers=None):
     return parser
 
 
-def estimate_command(args):
+def estimate_command(args, debug=False):
     model = create_empty_model(
         args.model_name, library_name=args.library_name, trust_remote_code=args.trust_remote_code
     )
@@ -190,10 +190,15 @@ def estimate_command(args):
         elif dtype == "int4":
             dtype_total_size /= 8
             dtype_largest_layer /= 8
-        dtype_training_size = convert_bytes(dtype_total_size * 4)
-        dtype_total_size = convert_bytes(dtype_total_size)
-        dtype_largest_layer = convert_bytes(dtype_largest_layer)
+        dtype_training_size = dtype_total_size * 4
+        if not debug:
+            dtype_training_size = convert_bytes(dtype_training_size)
+            dtype_total_size = convert_bytes(dtype_total_size)
+            dtype_largest_layer = convert_bytes(dtype_largest_layer)
         data.append([dtype, dtype_largest_layer, dtype_total_size, dtype_training_size])
+
+    if debug:
+        return data
 
     title = f"Memory Usage for `{args.model_name}`"
     table = create_ascii_table(headers, data, title)
