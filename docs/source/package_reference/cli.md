@@ -239,7 +239,7 @@ Estimates the total vRAM a particular model hosted on the Hub needs to perform B
 **Usage**: 
 
 ```bash
-accelerate estimate-memory --model_name {MODEL_NAME} --library_name {LIBRARY_NAME} --dtypes {dtype_1} {dtype_2} ...
+accelerate estimate-memory {MODEL_NAME} --library_name {LIBRARY_NAME} --dtypes {dtype_1} {dtype_2} ...
 ```
 
 **Required Arguments**:
