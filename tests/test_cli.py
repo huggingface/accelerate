@@ -217,16 +217,12 @@ class TpuConfigTester(unittest.TestCase):
 class ModelEstimatorTester(unittest.TestCase):
     """
     Test case for checking the output of `accelerate estimate-memory` is correct.
+
+    - Uses `estimate_command` when trying to catch raised errors
+    - Uses `gather_data` when just verifying the calculations are correct
     """
 
     parser = estimate_command_parser()
-    units = [" bytes", " KB", " MB", " GB", " TB"]
-
-    def remove_units(self, number):
-        "Removes the units from a number, such as `1.23 MB` to `1.23`"
-        for unit in self.units:
-            number = number.replace(unit, "")
-        return number
 
     def test_invalid_model_name(self):
         with self.assertRaises(ValueError, msg="Model `somebrokenname` is not an available model on the Hub"):
