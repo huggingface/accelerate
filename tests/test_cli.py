@@ -353,6 +353,18 @@ class ModelEstimatorTester(unittest.TestCase):
                 msg=f"Calculation for total training size in `{precision_str}` is incorrect.",
             )
 
+    @require_transformers
+    def test_no_split_modules(self):
+        # idefics-80b-instruct has ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
+        args = self.parser.parse_args(["HuggingFaceM4/idefics-80b-instruct", "--dtypes", "float32"])
+        output = gather_data(args)
+        # without factoring in `no_split` modules, the largest layer is 721420288 bytes
+        self.assertNotEqual(
+            output[0][1], 721420288, "Largest layer calculation incorrect, did not factor in `no_split` modules."
+        )
+        # the real answer is 3240165632 bytes
+        self.assertEqual(output[0][1], 3240165632)
+
     @require_timm
     def test_timm_model(self):
         args = self.parser.parse_args(["timm/resnet50.a1_in1k", "--library_name", "timm"])

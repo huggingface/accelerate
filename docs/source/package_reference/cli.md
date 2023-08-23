@@ -248,8 +248,8 @@ accelerate estimate-memory {MODEL_NAME} --library_name {LIBRARY_NAME} --dtypes {
 
 **Optional Arguments**:
 
-* `--library_name {timm,transformers}` (`str`)-- The library the model has an integration with, such as `transformers`, needed only if this information is not stored on the Hub
-* `--dtypes {float32,float16,int8,int4}` (`[{float32,float16,int8,int4} ...]`) --The dtypes to use for the model, must be one (or many) of `float32`, `float16`, `int8`, and `int4`
+* `--library_name {timm,transformers}` (`str`) -- The library the model has an integration with, such as `transformers`, needed only if this information is not stored on the Hub
+* `--dtypes {float32,float16,int8,int4}` (`[{float32,float16,int8,int4} ...]`) -- The dtypes to use for the model, must be one (or many) of `float32`, `float16`, `int8`, and `int4`
 * `--trust_remote_code` (`bool`) -- Whether or not to allow for custom models defined on the Hub in their own modeling files. This option should only be passed for repositories you trust and in which you have read the code, as it will execute code present on the Hub on your local machine.
 
 ## accelerate tpu-config
