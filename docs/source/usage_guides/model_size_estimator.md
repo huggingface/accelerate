@@ -25,9 +25,10 @@ Currently we support searching for models that can be used in `timm` and `transf
 
 <Tip>
 
-    This API will download the `config.json` for a model and load it into memory on the `meta` device, so we are not 
-    actually loading the full weights of the model nor do we need to. As a result it's perfectly fine to measure 8B+
-    parameter models, without having to worry about if your CPU can handle it!
+    This API will load the model into memory on the `meta` device, so we are not actually downloading 
+    and loading the full weights of the model into memory, nor do we need to. As a result it's 
+    perfectly fine to measure 8 billion parameter models (or more), without having to worry about 
+    if your CPU can handle it!
 
 </Tip>
 
