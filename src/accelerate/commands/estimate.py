@@ -82,7 +82,7 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
             should only be set to `True` for repositories you trust and in which you have read the code, as it will
             execute code present on the Hub on your local machine.
         access_token (`str`, `optional`, defaults to `None`):
-            The access token to use to access private or gated models on the Hub.
+            The access token to use to access private or gated models on the Hub. (for use on the Gradio app)
 
     Returns:
         `torch.nn.Module`: The torch model that has been initialized on the `meta` device.
