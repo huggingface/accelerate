@@ -23,6 +23,14 @@ even let you post those results directly on the model repo!
 
 Currently we support searching for models that can be used in `timm` and `transformers`.
 
+<Tip>
+
+    This API will download the `config.json` for a model and load it into memory on the `meta` device, so we are not 
+    actually loading the full weights of the model nor do we need to. As a result it's perfectly fine to measure 8B+
+    parameter models, without having to worry about if your CPU can handle it!
+
+</Tip>
+
 ## The Command
 
 When using `accelerate estimate-memory`, you need to pass in the name of the model you want to use, potentially the framework
