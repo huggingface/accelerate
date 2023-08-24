@@ -185,11 +185,9 @@ def estimate_command_parser(subparsers=None):
     if subparsers is not None:
         parser = subparsers.add_parser("estimate-memory")
     else:
-        parser = argparse.ArgumentParser(description="Model size estimator")
+        parser = argparse.ArgumentParser(description="Model size estimator for fitting a model onto CUDA memory.")
 
-    parser.add_argument(
-        "model_name", type=str, help="The model name on the Hugging Face Hub or local path to the model folder."
-    )
+    parser.add_argument("model_name", type=str, help="The model name on the Hugging Face Hub.")
     parser.add_argument(
         "--library_name",
         type=str,
@@ -261,7 +259,7 @@ def estimate_command(args):
 
     headers = ["dtype", "Largest Layer", "Total Size", "Training using Adam"]
 
-    title = f"Memory Usage for `{args.model_name}`"
+    title = f"Memory Usage for loading `{args.model_name}`\n"
     table = create_ascii_table(headers, data, title)
     print(table)
 
