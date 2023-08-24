@@ -37,14 +37,14 @@ if is_timm_available():
     import timm
 
 
-def verify_on_hub(repo: str):
+def verify_on_hub(repo: str, token: str = None):
     "Verifies that the model is on the hub and returns the model info."
     if not is_huggingface_hub_available():
         raise ImportError(
             "To use `accelerate estimate-memory`, the `huggingface_hub` library must be installed. Please run `pip install huggingface_hub` and try again."
         )
     try:
-        return model_info(repo)
+        return model_info(repo, token=token)
     except GatedRepoError:
         return "gated"
     except RepositoryNotFoundError:
@@ -67,7 +67,7 @@ def check_has_model(error):
         return "unknown"
 
 
-def create_empty_model(model_name: str, library_name: str, trust_remote_code: bool = False):
+def create_empty_model(model_name: str, library_name: str, trust_remote_code: bool = False, access_token: str = None):
     """
     Creates an empty model from its parent library on the `Hub` to calculate the overall memory consumption.
 
@@ -81,12 +81,14 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
             Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
             should only be set to `True` for repositories you trust and in which you have read the code, as it will
             execute code present on the Hub on your local machine.
+        access_token (`str`, `optional`, defaults to `None`):
+            The access token to use to access private or gated models on the Hub. (for use on the Gradio app)
 
     Returns:
         `torch.nn.Module`: The torch model that has been initialized on the `meta` device.
 
     """
-    model_info = verify_on_hub(model_name)
+    model_info = verify_on_hub(model_name, access_token)
     # Simplified errors
     if model_info == "gated":
         raise GatedRepoError(
