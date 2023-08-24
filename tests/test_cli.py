@@ -23,7 +23,6 @@ import accelerate
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
-    require_huggingface_hub,
     require_timm,
     require_transformers,
     run_command,
@@ -224,7 +223,6 @@ class TpuConfigTester(unittest.TestCase):
         )
 
 
-@require_huggingface_hub
 class ModelEstimatorTester(unittest.TestCase):
     """
     Test case for checking the output of `accelerate estimate-memory` is correct.

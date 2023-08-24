@@ -50,7 +50,6 @@ from .imports import (
     is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
-    is_huggingface_hub_available,
     is_ipex_available,
     is_megatron_lm_available,
     is_mlflow_available,

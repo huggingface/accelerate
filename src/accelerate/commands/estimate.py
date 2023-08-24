@@ -15,19 +15,17 @@
 # limitations under the License.
 import argparse
 
+from huggingface_hub import model_info
+from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
+
 from accelerate import init_empty_weights
 from accelerate.utils import (
     calculate_maximum_sizes,
     convert_bytes,
-    is_huggingface_hub_available,
     is_timm_available,
     is_transformers_available,
 )
 
-
-if is_huggingface_hub_available():
-    from huggingface_hub import model_info
-    from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 if is_transformers_available():
     import transformers
@@ -39,10 +37,6 @@ if is_timm_available():
 
 def verify_on_hub(repo: str):
     "Verifies that the model is on the hub and returns the model info."
-    if not is_huggingface_hub_available():
-        raise ImportError(
-            "To use `accelerate estimate-memory`, the `huggingface_hub` library must be installed. Please run `pip install huggingface_hub` and try again."
-        )
     try:
         return model_info(repo)
     except GatedRepoError:
