@@ -18,6 +18,7 @@ import unittest
 from pathlib import Path
 
 import torch
+from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 import accelerate
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
@@ -27,11 +28,7 @@ from accelerate.test_utils.testing import (
     require_transformers,
     run_command,
 )
-from accelerate.utils import is_huggingface_hub_available, patch_environment
-
-
-if is_huggingface_hub_available():
-    from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
+from accelerate.utils import patch_environment
 
 
 class AccelerateLauncherTester(unittest.TestCase):
