@@ -23,6 +23,8 @@
     title: Example Zoo
   - local: usage_guides/big_modeling
     title: How to perform inference on large models with small resources
+  - local: usage_guides/model_size_estimator
+    title: Knowing how big of a model you can fit into memory
   - local: usage_guides/quantization
     title: How to quantize model 
   - local: usage_guides/distributed_inference
