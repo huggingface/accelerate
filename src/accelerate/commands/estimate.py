@@ -152,13 +152,25 @@ def create_ascii_table(headers: list, rows: list, title: str):
     formats = [f"%{column_widths[i]}s" for i in range(len(rows[0]))]
 
     pattern = f"{sep_char}{sep_char.join(formats)}{sep_char}"
-    separator = f'├{"┼".join([in_between * n for n in column_widths])}┤'
+    diff = 0
+
+    def make_row(left_char, middle_char, right_char):
+        return f"{left_char}{middle_char.join([in_between * n for n in column_widths])}{in_between * diff}{right_char}"
+
+    separator = make_row("├", "┼", "┤")
+    if len(title) > sum(column_widths):
+        diff = abs(len(title) - len(separator))
+        column_widths[-1] += diff
+
+    # Update with diff
+    separator = make_row("├", "┼", "┤")
     initial_rows = [
-        f"┌{in_between * (len(separator)-2)}┐",
-        f"{sep_char}{title.center(sum(column_widths) + len(column_widths)-1)}{sep_char}",
-        f'├{"┬".join([in_between * n for n in column_widths])}┤',
+        make_row("┌", in_between, "┐"),
+        f"{sep_char}{title.center(len(separator) - 2)}{sep_char}",
+        make_row("├", "┬", "┤"),
     ]
     table = "\n".join(initial_rows) + "\n"
+    column_widths[-1] += diff
     centered_line = [text.center(column_widths[i]) for i, text in enumerate(headers)]
     table += f"{pattern % tuple(centered_line)}\n{separator}\n"
     for i, line in enumerate(rows):
