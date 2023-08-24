@@ -37,14 +37,14 @@ for batch in dataloader:
 
 <div class="block dark:hidden">
 	<iframe 
-        src="https://muellerzr-accelerate-examples.hf.space?__theme=light"
+        src="https://hf-accelerate-accelerate-examples.hf.space?__theme=light"
         width="850"
         height="1600"
     ></iframe>
 </div>
 <div class="hidden dark:block">
     <iframe 
-        src="https://muellerzr-accelerate-examples.hf.space?__theme=dark"
+        src="https://hf-accelerate-accelerate-examples.hf.space?__theme=dark"
         width="850"
         height="1600"
     ></iframe>
