@@ -1447,10 +1447,15 @@ class Accelerator:
                             CheckpointImpl,
                             apply_activation_checkpointing,
                         )
+
                         apply_activation_checkpointing(
                             model,
-                            checkpoint_wrapper_fn=functools.partial(checkpoint_wrapper, checkpoint_impl=CheckpointImpl.NO_REENTRANT,),
-                            auto_wrap_policy=fsdp_plugin.auto_wrap_policy,)
+                            checkpoint_wrapper_fn=functools.partial(
+                                checkpoint_wrapper,
+                                checkpoint_impl=CheckpointImpl.NO_REENTRANT,
+                            ),
+                            auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
+                        )
 
                 self._models[-1] = model
             elif self.distributed_type == DistributedType.MULTI_CPU:
