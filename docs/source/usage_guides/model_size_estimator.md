@@ -123,9 +123,9 @@ accelerate estimate-memory bert-base-cased --dtypes float32 float16
 
 ## Caveats with this calculator
 
-This calculator will tell you how much memory is needed to purely load the model in, *not* to perform inference.
+This calculator will tell you exactly how much memory is needed to purely load the model in, *not* to perform inference.
 
-In general, you can expect to add up to an additional 20% to this number as found by [EleutherAI](https://blog.eleuther.ai/transformer-math/). We'll be conducting research into finding a more accurate estimate to these values, and will update 
+When performing inference however, you can expect to add up to an additional 20% as found by [EleutherAI](https://blog.eleuther.ai/transformer-math/). We'll be conducting research into finding a more accurate estimate to these values, and will update 
 this calculator once done.
 
 ## Live Gradio Demo
