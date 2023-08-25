@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 One very difficult aspect when exploring potential models to use on your machine is knowing just how big of a model will *fit* with your current graphics card.
 
-To help alleviate this, 🤗 Accelerate has a CLI interface through `accelerate calculate-memory`. This tutorial will 
+To help alleviate this, 🤗 Accelerate has a CLI interface through `accelerate estimate-memory`. This tutorial will 
 help walk you through using it, what to expect, and at the end link to the interactive demo hosted on the 🤗 Hub which will 
 even let you post those results directly on the model repo!
 
@@ -121,7 +121,7 @@ accelerate estimate-memory bert-base-cased --dtypes float32 float16
 └───────┴─────────────┴──────────┴───────────────────┘
 ```
 
-## Caviats with this calculator
+## Caveats with this calculator
 
 This calculator will tell you how much memory is needed to purely load the model in, *not* to perform inference.
 
