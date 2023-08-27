@@ -27,7 +27,3 @@ from .utils import (
     load_checkpoint_in_model,
     synchronize_rng_states,
 )
-
-
-if is_rich_available():
-    from .utils import rich
