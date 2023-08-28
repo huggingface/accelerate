@@ -48,7 +48,7 @@ it will use:
 
 ```
 ┌────────────────────────────────────────────────────┐
-│    Memory Usage for loading `bert-base-cased`      │
+│     Memory Usage for loading `bert-base-cased`     │
 ├───────┬─────────────┬──────────┬───────────────────┤
 │ dtype │Largest Layer│Total Size│Training using Adam│
 ├───────┼─────────────┼──────────┼───────────────────┤
@@ -71,16 +71,16 @@ accelerate estimate-memory HuggingFaceM4/idefics-80b-instruct --library_name tra
 ```
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│   Memory Usage for loading `HuggingFaceM4/idefics-80b-instruct`    |
-├───────┬─────────────┬──────────┬───────────────────────────────────┤
-│ dtype │Largest Layer│Total Size│        Training using Adam        │
-├───────┼─────────────┼──────────┼───────────────────────────────────┤
-│float32│   3.02 GB   │297.12 GB │              1.16 TB              │
-│float16│   1.51 GB   │148.56 GB │             594.24 GB             │
-│  int8 │  772.52 MB  │ 74.28 GB │             297.12 GB             │
-│  int4 │  386.26 MB  │ 37.14 GB │             148.56 GB             │
-└───────┴─────────────┴──────────┴───────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  Memory Usage for loading `HuggingFaceM4/idefics-80b-instruct`   │
+├───────┬─────────────┬──────────┬─────────────────────────────────┤
+│ dtype │Largest Layer│Total Size│       Training using Adam       │
+├───────┼─────────────┼──────────┼─────────────────────────────────┤
+│float32│   3.02 GB   │297.12 GB │             1.16 TB             │
+│float16│   1.51 GB   │148.56 GB │            594.24 GB            │
+│  int8 │  772.52 MB  │ 74.28 GB │            297.12 GB            │
+│  int4 │  386.26 MB  │ 37.14 GB │            148.56 GB            │
+└───────┴─────────────┴──────────┴─────────────────────────────────┘
 ```
 
 ```bash
@@ -89,7 +89,7 @@ accelerate estimate-memory timm/resnet50.a1_in1k --library_name timm
 
 ```
 ┌────────────────────────────────────────────────────┐
-│ Memory Usage for loading `timm/resnet50.a1_in1k`   │
+│  Memory Usage for loading `timm/resnet50.a1_in1k`  │
 ├───────┬─────────────┬──────────┬───────────────────┤
 │ dtype │Largest Layer│Total Size│Training using Adam│
 ├───────┼─────────────┼──────────┼───────────────────┤
@@ -112,7 +112,7 @@ accelerate estimate-memory bert-base-cased --dtypes float32 float16
 
 ```
 ┌────────────────────────────────────────────────────┐
-│    Memory Usage for loading `bert-base-cased`      │
+│     Memory Usage for loading `bert-base-cased`     │
 ├───────┬─────────────┬──────────┬───────────────────┤
 │ dtype │Largest Layer│Total Size│Training using Adam│
 ├───────┼─────────────┼──────────┼───────────────────┤
@@ -123,9 +123,11 @@ accelerate estimate-memory bert-base-cased --dtypes float32 float16
 
 ## Caveats with this calculator
 
-This calculator will tell you exactly how much memory is needed to purely load the model in, *not* to perform inference.
+This calculator will tell you how much memory is needed to purely load the model in, *not* to perform inference.
 
-When performing inference however, you can expect to add up to an additional 20% as found by [EleutherAI](https://blog.eleuther.ai/transformer-math/). We'll be conducting research into finding a more accurate estimate to these values, and will update 
+This calculation is accurate within a few % of the actual value, so it is a very good view of just how much memory it will take. For instance loading `bert-base-cased` actually takes `413.68 MB` when loaded on CUDA in full precision, and the calculator estimates `413.18 MB`.
+
+When performing inference you can expect to add up to an additional 20% as found by [EleutherAI](https://blog.eleuther.ai/transformer-math/). We'll be conducting research into finding a more accurate estimate to these values, and will update 
 this calculator once done.
 
 ## Live Gradio Demo
