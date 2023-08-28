@@ -255,7 +255,7 @@ def estimate_command(args):
 
     headers = ["dtype", "Largest Layer", "Total Size", "Training using Adam"]
 
-    title = f"Memory Usage for loading `{args.model_name}`\n"
+    title = f"Memory Usage for loading `{args.model_name}`"
     table = create_ascii_table(headers, data, title)
     print(table)
 
