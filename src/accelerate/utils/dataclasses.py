@@ -725,7 +725,7 @@ class DeepSpeedPlugin:
             if ds_config["train_batch_size"] == "auto":
                 del ds_config["train_batch_size"]
 
-            from transformers.deepspeed import HfDeepSpeedConfig
+            from transformers.integrations import HfDeepSpeedConfig
 
             self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
