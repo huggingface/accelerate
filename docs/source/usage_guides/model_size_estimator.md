@@ -48,7 +48,7 @@ it will use:
 
 ```
 ┌────────────────────────────────────────────────────┐
-│    Memory Usage for loading `bert-base-cased`      │
+│    Memory Usage for loading bert-base-cased      │
 ├───────┬─────────────┬──────────┬───────────────────┤
 │ dtype │Largest Layer│Total Size│Training using Adam│
 ├───────┼─────────────┼──────────┼───────────────────┤
@@ -72,7 +72,7 @@ accelerate estimate-memory HuggingFaceM4/idefics-80b-instruct --library_name tra
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  Memory Usage for loading `HuggingFaceM4/idefics-80b-instruct`   │
+│  Memory Usage for loading HuggingFaceM4/idefics-80b-instruct   │
 ├───────┬─────────────┬──────────┬─────────────────────────────────┤
 │ dtype │Largest Layer│Total Size│       Training using Adam       │
 ├───────┼─────────────┼──────────┼─────────────────────────────────┤
@@ -89,7 +89,7 @@ accelerate estimate-memory timm/resnet50.a1_in1k --library_name timm
 
 ```
 ┌────────────────────────────────────────────────────┐
-│  Memory Usage for loading `timm/resnet50.a1_in1k`  │
+│  Memory Usage for loading timm/resnet50.a1_in1k  │
 ├───────┬─────────────┬──────────┬───────────────────┤
 │ dtype │Largest Layer│Total Size│Training using Adam│
 ├───────┼─────────────┼──────────┼───────────────────┤
@@ -112,7 +112,7 @@ accelerate estimate-memory bert-base-cased --dtypes float32 float16
 
 ```
 ┌────────────────────────────────────────────────────┐
-│     Memory Usage for loading `bert-base-cased`    │
+│     Memory Usage for loading bert-base-cased    │
 ├───────┬─────────────┬──────────┬───────────────────┤
 │ dtype │Largest Layer│Total Size│Training using Adam│
 ├───────┼─────────────┼──────────┼───────────────────┤
