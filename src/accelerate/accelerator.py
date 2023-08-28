@@ -1443,9 +1443,9 @@ class Accelerator:
                     model = FSDP(model, **kwargs)
                     if fsdp_plugin.activation_checkpointing:
                         from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-                            checkpoint_wrapper,
                             CheckpointImpl,
                             apply_activation_checkpointing,
+                            checkpoint_wrapper,
                         )
 
                         apply_activation_checkpointing(
