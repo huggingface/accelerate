@@ -21,6 +21,7 @@ from ...utils import (
     DistributedType,
     is_deepspeed_available,
     is_mps_available,
+    is_npu_available,
     is_transformers_available,
     is_xpu_available,
 )
@@ -104,7 +105,7 @@ def get_cluster_input():
 
     if distributed_type == DistributedType.NO:
         use_cpu = _ask_field(
-            "Do you want to run your training on CPU only (even if a GPU / Apple Silicon device is available)? [yes/NO]:",
+            "Do you want to run your training on CPU only (even if a GPU / Apple Silicon / Ascend NPU device is available)? [yes/NO]:",
             _convert_yes_no_to_bool,
             default=False,
             error_message="Please enter yes or no.",
@@ -507,8 +508,12 @@ def get_cluster_input():
         and not use_cpu
         and not use_mps
     ):
+        if is_npu_available():
+            machine_type = "NPU(s)"
+        else:
+            machine_type = "GPU(s)"
         gpu_ids = _ask_field(
-            "What GPU(s) (by id) should be used for training on this machine as a comma-seperated list? [all]:",
+            f"What {machine_type} (by id) should be used for training on this machine as a comma-seperated list? [all]:",
             default="all",
         )
 
