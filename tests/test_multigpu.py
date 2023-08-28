@@ -14,6 +14,7 @@
 
 import inspect
 import os
+import subprocess
 import unittest
 
 import torch
@@ -72,6 +73,7 @@ class MultiGPUTester(unittest.TestCase):
         This test checks that the `notebook_launcher` will be able to intialize
         a `PartialState` without issue
         """
+
         cmd = [
             "python",
             "-m",
@@ -79,8 +81,7 @@ class MultiGPUTester(unittest.TestCase):
             "--num_processes",
             str(torch.cuda.device_count()),
         ]
-        with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+        subprocess.run(cmd, env=os.environ.copy(), check=True)
 
 
 if __name__ == "__main__":
