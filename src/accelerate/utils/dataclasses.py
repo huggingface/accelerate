@@ -32,6 +32,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
+from .versions import compare_versions
 
 
 class KwargsHandler:
@@ -725,7 +726,10 @@ class DeepSpeedPlugin:
             if ds_config["train_batch_size"] == "auto":
                 del ds_config["train_batch_size"]
 
-            from transformers.integrations import HfDeepSpeedConfig
+            if compare_versions("transformers", "<", "4.33"):
+                from transformers.deepspeed import HfDeepSpeedConfig
+            else:
+                from transformers.integrations import HfDeepSpeedConfig
 
             self.dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive # noqa
 
