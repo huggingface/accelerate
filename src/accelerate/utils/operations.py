@@ -457,7 +457,7 @@ def broadcast_object_list(object_list, from_process: int = 0):
     return object_list
 
 
-def slice_tensors(data, tensor_slice):
+def slice_tensors(data, tensor_slice, process_index=None, num_processes=None):
     """
     Recursively takes a slice in a nested list/tuple/dictionary of tensors.
 

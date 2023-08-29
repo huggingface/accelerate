@@ -59,12 +59,14 @@ from .imports import (
     is_safetensors_available,
     is_sagemaker_available,
     is_tensorboard_available,
+    is_timm_available,
     is_tpu_available,
     is_transformers_available,
     is_wandb_available,
     is_xpu_available,
 )
 from .modeling import (
+    calculate_maximum_sizes,
     check_device_map,
     check_tied_parameters_in_config,
     check_tied_parameters_on_same_device,
@@ -163,6 +165,7 @@ from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
 from .memory import find_executable_batch_size, release_memory
 from .other import (
     clear_environment,
+    convert_bytes,
     extract_model_from_parallel,
     get_pretty_name,
     is_port_in_use,

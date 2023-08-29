@@ -166,6 +166,10 @@ def is_datasets_available():
     return _is_package_available("datasets")
 
 
+def is_timm_available():
+    return _is_package_available("timm")
+
+
 def is_aim_available():
     package_exists = _is_package_available("aim")
     if package_exists:

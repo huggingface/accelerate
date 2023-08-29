@@ -125,7 +125,7 @@ model = MyModel()
 model = accelerator.prepare(model)
 ```
 
-Use [`~Accelerator.save_model`] instead of `torch.save` to save a model. It will remove all model wrappers added during the distributed process, get the state_dict of the model and save it.
+Use [`~Accelerator.save_model`] instead of `torch.save` to save a model. It will remove all model wrappers added during the distributed process, get the state_dict of the model and save it. The state_dict will be in the same precision as the model being trained.
 
 ```diff
 - torch.save(state_dict, "my_state.pkl")

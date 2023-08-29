@@ -19,7 +19,7 @@ extras = {}
 extras["quality"] = ["black ~= 23.1", "ruff >= 0.0.241", "hf-doc-builder >= 0.3.0", "urllib3 < 2.0.0"]
 extras["docs"] = []
 extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
-extras["test_dev"] = ["datasets", "evaluate", "transformers", "scipy", "scikit-learn", "deepspeed", "tqdm", "bitsandbytes"]
+extras["test_dev"] = ["datasets", "evaluate", "transformers", "scipy", "scikit-learn", "deepspeed", "tqdm", "bitsandbytes", "timm"]
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
 extras["rich"] = ["rich"]
 
@@ -32,7 +32,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.22.0.dev0",
+    version="0.23.0.dev0",
     description="Accelerate",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -47,11 +47,12 @@ setup(
         "console_scripts": [
             "accelerate=accelerate.commands.accelerate_cli:main",
             "accelerate-config=accelerate.commands.config:main",
+            "accelerate-estimate-memory=accelerate.commands.estimate:main",
             "accelerate-launch=accelerate.commands.launch:main",
         ]
     },
     python_requires=">=3.8.0",
-    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.10.0"],
+    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.10.0", "huggingface_hub"],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -67,21 +68,29 @@ setup(
 )
 
 # Release checklist
-# 1. Change the version in __init__.py and setup.py.
-# 2. Commit these changes with the message: "Release: VERSION"
-# 3. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
-#    Push the tag to git: git push --tags origin main
-# 4. Run the following commands in the top-level directory:
+# 1. Checkout the release branch (for a patch the current release branch, for a new minor version, create one):
+#      git checkout -b vXX.xx-release
+#    The -b is only necessary for creation (so remove it when doing a patch)
+# 2. Change the version in __init__.py and setup.py to the proper value.
+# 3. Commit these changes with the message: "Release: v<VERSION>"
+# 4. Add a tag in git to mark the release:
+#      git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi'
+#    Push the tag and release commit to git: git push --tags origin vXX.xx-release
+# 5. Run the following commands in the top-level directory:
+#      rm -rf dist
+#      rm -rf build
 #      python setup.py bdist_wheel
 #      python setup.py sdist
-# 5. Upload the package to the pypi test server first:
-#      twine upload dist/* -r pypitest
-#      twine upload dist/* -r pypitest --repository-url=https://test.pypi.org/legacy/
-# 6. Check that you can install it in a virtualenv by running:
+# 6. Upload the package to the pypi test server first:
+#      twine upload dist/* -r testpypi
+# 7. Check that you can install it in a virtualenv by running:
+#      pip install accelerate
+#      pip uninstall accelerate
 #      pip install -i https://testpypi.python.org/pypi accelerate
 #      accelerate env
 #      accelerate test
-# 7. Upload the final version to actual pypi:
+# 8. Upload the final version to actual pypi:
 #      twine upload dist/* -r pypi
-# 8. Add release notes to the tag in github once everything is looking hunky-dory.
-# 9. Update the version in __init__.py, setup.py to the new version "-dev" and push to master
+# 9. Add release notes to the tag in github once everything is looking hunky-dory.
+# 10. Go back to the main branch and update the version in __init__.py, setup.py to the new version ".dev" and push to
+#     main.

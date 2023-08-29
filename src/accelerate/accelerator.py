@@ -1193,10 +1193,12 @@ class Accelerator:
             )
 
         for obj in args:
+            # TODO: Look at enabling native TP training directly with a proper config
             if (
                 isinstance(obj, torch.nn.Module)
                 and self.verify_device_map(obj)
                 and self.distributed_type != DistributedType.NO
+                and os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true"
             ):
                 raise ValueError(
                     "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
@@ -1328,7 +1330,12 @@ class Accelerator:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         self._models.append(model)
 
-        if self.verify_device_map(model) and self.distributed_type != DistributedType.NO:
+        # TODO: Look at enabling native TP training directly with a proper config
+        if (
+            self.verify_device_map(model)
+            and self.distributed_type != DistributedType.NO
+            and os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true"
+        ):
             raise ValueError(
                 "You can't train a model that has been loaded with `device_map='auto'` in any distributed mode."
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
@@ -1401,8 +1408,14 @@ class Accelerator:
             ):
                 if any(p.requires_grad for p in model.parameters()):
                     kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
+                    # TODO: Look at enabling native TP training directly with a proper config
+                    if os.environ.get("ACCELERATE_BYPASS_DEVICE_MAP", "false") != "true":
+                        device_ids, output_device = [self.local_process_index], self.local_process_index
+                    else:
+                        device_ids, output_device = None, None
+
                     model = torch.nn.parallel.DistributedDataParallel(
-                        model, device_ids=[self.local_process_index], output_device=self.local_process_index, **kwargs
+                        model, device_ids=device_ids, output_device=output_device, **kwargs
                     )
             elif self.distributed_type == DistributedType.FSDP:
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -1767,7 +1780,9 @@ class Accelerator:
                 result[i] = optimizer
         return tuple(result)
 
-    def prepare_data_loader(self, data_loader: torch.utils.data.DataLoader, device_placement=None):
+    def prepare_data_loader(
+        self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
+    ):
         """
         Prepares a PyTorch DataLoader for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -1778,6 +1793,10 @@ class Accelerator:
             device_placement (`bool`, *optional*):
                 Whether or not to place the batches on the proper device in the prepared dataloader. Will default to
                 `self.device_placement`.
+            slice_fn_for_dispatch (`Callable`, *optional*`):
+                If passed, this function will be used to slice tensors across `num_processes`. Will default to
+                [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will
+                be ignored otherwise.
 
         Example:
 
@@ -1807,6 +1826,7 @@ class Accelerator:
             rng_types=self.rng_types.copy(),
             dispatch_batches=self.dispatch_batches,
             even_batches=self.even_batches,
+            slice_fn_for_dispatch=slice_fn_for_dispatch,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
@@ -2928,11 +2948,6 @@ class Accelerator:
             if unwrap:
                 model = self.unwrap_model(model)
             state_dict = model.state_dict()
-
-        if state_dict is not None:
-            for k in state_dict:
-                if getattr(state_dict[k], "dtype", None) == torch.float16:
-                    state_dict[k] = state_dict[k].float()
 
         return state_dict
 

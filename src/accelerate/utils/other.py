@@ -222,3 +222,13 @@ def is_port_in_use(port: int = None) -> bool:
         port = 29500
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("localhost", port)) == 0
+
+
+def convert_bytes(size):
+    "Converts `size` from bytes to the largest possible unit"
+    for x in ["bytes", "KB", "MB", "GB", "TB"]:
+        if size < 1024.0:
+            return f"{round(size, 2)} {x}"
+        size /= 1024.0
+
+    return f"{round(size, 2)} PB"

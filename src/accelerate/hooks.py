@@ -311,6 +311,7 @@ class AlignDevicesHook(ModelHook):
             for name, device in self.original_devices.items():
                 if device != torch.device("meta"):
                     set_module_tensor_to_device(module, name, device, value=self.weights_map.get(name, None))
+        return module
 
 
 def attach_execution_device_hook(

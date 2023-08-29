@@ -18,10 +18,17 @@ import unittest
 from pathlib import Path
 
 import torch
+from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 import accelerate
+from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
-from accelerate.test_utils.testing import run_command
+from accelerate.test_utils.testing import (
+    require_timm,
+    require_transformers,
+    run_command,
+)
+from accelerate.utils import patch_environment
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -210,4 +217,138 @@ class TpuConfigTester(unittest.TestCase):
         self.assertIn(
             f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate==12.0.0; echo "hello world"; echo "this is a second command" --worker all',
             output,
+        )
+
+
+class ModelEstimatorTester(unittest.TestCase):
+    """
+    Test case for checking the output of `accelerate estimate-memory` is correct.
+
+    - Uses `estimate_command` when trying to catch raised errors
+    - Uses `gather_data` when just verifying the calculations are correct
+    """
+
+    parser = estimate_command_parser()
+
+    def test_invalid_model_name(self):
+        with self.assertRaises(
+            RepositoryNotFoundError, msg="Repo for model `somebrokenname` does not exist on the Hub"
+        ):
+            args = self.parser.parse_args(["somebrokenname"])
+            estimate_command(args)
+
+    @require_timm
+    def test_invalid_model_name_timm(self):
+        with self.assertRaises(RuntimeError, msg="Tried to load `muellerzr/dummy` with `timm` but"):
+            args = self.parser.parse_args(["muellerzr/dummy", "--library_name", "timm"])
+            estimate_command(args)
+
+    @require_transformers
+    def test_invalid_model_name_transformers(self):
+        with self.assertRaises(RuntimeError, msg="Tried to load `muellerzr/dummy` with `transformers` but"):
+            args = self.parser.parse_args(["muellerzr/dummy", "--library_name", "transformers"])
+            estimate_command(args)
+
+    def test_no_metadata(self):
+        with self.assertRaises(
+            ValueError, msg="Model `muellerzr/dummy` does not have any library metadata on the Hub"
+        ):
+            args = self.parser.parse_args(["muellerzr/dummy"])
+            estimate_command(args)
+
+    def test_gated(self):
+        with self.assertRaises(GatedRepoError, msg="Repo for model `meta-llama/Llama-2-7b` is gated"):
+            args = self.parser.parse_args(["meta-llama/Llama-2-7b"])
+            with patch_environment(hf_hub_disable_implicit_token="1"):
+                estimate_command(args)
+
+    @require_transformers
+    def test_remote_code(self):
+        # Also tests that custom `Auto` classes work
+        args = self.parser.parse_args(["hf-internal-testing/test_dynamic_model"])
+        with self.assertRaises(ValueError, msg="--trust_remote_code"):
+            gather_data(args)
+
+        # Verify it works with the flag
+        args = self.parser.parse_args(["hf-internal-testing/test_dynamic_model", "--trust_remote_code"])
+        gather_data(args)
+
+    @require_transformers
+    def test_explicit_dtypes(self):
+        args = self.parser.parse_args(["bert-base-cased", "--dtypes", "float32", "float16"])
+        output = gather_data(args)
+        # The largest layer and total size of the model in bytes
+        largest_layer, total_size = 89075712, 433249280
+        # Check that full precision -> int4 is calculating correctly
+        self.assertEqual(len(output), 2, f"Output was missing a precision, expected 2 but received {len(output)}")
+
+        for i, factor in enumerate([1, 2]):
+            precision = 32 // factor
+            precision_str = f"float{precision}"
+            largest_layer_estimate = largest_layer / factor
+            total_size_estimate = total_size / factor
+            total_training_size_estimate = total_size_estimate * 4
+
+            self.assertEqual(precision_str, output[i][0], f"Output is missing precision `{precision_str}`")
+            self.assertEqual(
+                largest_layer_estimate,
+                output[i][1],
+                f"Calculation for largest layer size in `{precision_str}` is incorrect.",
+            )
+
+            self.assertEqual(
+                total_size_estimate,
+                output[i][2],
+                msg=f"Calculation for total size in `{precision_str}` is incorrect.",
+            )
+            self.assertEqual(
+                total_training_size_estimate,
+                output[i][3],
+                msg=f"Calculation for total training size in `{precision_str}` is incorrect.",
+            )
+
+    @require_transformers
+    def test_transformers_model(self):
+        args = self.parser.parse_args(["bert-base-cased", "--dtypes", "float32"])
+        output = gather_data(args)
+        # The largest layer and total size of the model in bytes
+        largest_layer, total_size = 89075712, 433249280
+        self.assertEqual(
+            largest_layer,
+            output[0][1],
+            f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}",
+        )
+        self.assertEqual(
+            total_size,
+            output[0][2],
+            f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}",
+        )
+
+    @require_transformers
+    def test_no_split_modules(self):
+        # idefics-80b-instruct has ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
+        args = self.parser.parse_args(["HuggingFaceM4/idefics-80b-instruct", "--dtypes", "float32"])
+        output = gather_data(args)
+        # without factoring in `no_split` modules, the largest layer is 721420288 bytes
+        self.assertNotEqual(
+            output[0][1], 721420288, "Largest layer calculation incorrect, did not factor in `no_split` modules."
+        )
+        # the real answer is 3240165632 bytes
+        self.assertEqual(output[0][1], 3240165632)
+
+    @require_timm
+    def test_timm_model(self):
+        args = self.parser.parse_args(["timm/resnet50.a1_in1k", "--library_name", "timm"])
+        output = gather_data(args)
+        # The largest layer and total size of the model in bytes
+        largest_layer, total_size = 9437184, 102441032
+        self.assertEqual(
+            largest_layer,
+            output[0][1],
+            f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}",
+        )
+        self.assertEqual(
+            total_size,
+            output[0][2],
+            f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}",
         )

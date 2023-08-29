@@ -23,6 +23,8 @@
     title: Example Zoo
   - local: usage_guides/big_modeling
     title: How to perform inference on large models with small resources
+  - local: usage_guides/model_size_estimator
+    title: Knowing how big of a model you can fit into memory
   - local: usage_guides/quantization
     title: How to quantize model 
   - local: usage_guides/distributed_inference
@@ -53,6 +55,8 @@
     title: How to use 🤗 Accelerate with Intel® Extension for PyTorch for cpu
   title: How-To Guides
 - sections:
+  - local: concept_guides/big_model_inference
+    title: Loading big models into memory
   - local: concept_guides/performance
     title: Comparing performance across distributed setups
   - local: concept_guides/deferring_execution

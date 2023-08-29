@@ -28,7 +28,7 @@ import torch
 import torch.nn as nn
 
 from ..state import AcceleratorState
-from .constants import WEIGHTS_NAME
+from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import is_mps_available, is_npu_available, is_safetensors_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
@@ -856,6 +856,24 @@ def get_balanced_memory(
     return max_memory
 
 
+def calculate_maximum_sizes(model: torch.nn.Module):
+    "Computes the total size of the model and its largest layer"
+    sizes = compute_module_sizes(model)
+    # `transformers` models store this information for us
+    no_split_modules = getattr(model, "_no_split_modules", None)
+    if no_split_modules is None:
+        no_split_modules = []
+
+    modules_to_treat = (
+        list(model.named_parameters(recurse=False))
+        + list(model.named_children())
+        + list(model.named_buffers(recurse=False))
+    )
+    largest_layer = get_max_layer_size(modules_to_treat, sizes, no_split_modules)
+    total_size = sizes[""]
+    return total_size, largest_layer
+
+
 def infer_auto_device_map(
     model: nn.Module,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
@@ -1236,7 +1254,7 @@ def load_checkpoint_in_model(
             - a path to a file containing a whole model state dict
             - a path to a `.json` file containing the index to a sharded checkpoint
             - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint.
-            - a path to a folder containing a unique pytorch_model.bin file.
+            - a path to a folder containing a unique pytorch_model.bin or a model.safetensors file.
         device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
             A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
             name, once a given module name is inside, every submodule of it will be sent to the same device.
@@ -1288,15 +1306,18 @@ def load_checkpoint_in_model(
             checkpoint_files = [checkpoint]
     elif os.path.isdir(checkpoint):
         # check if the whole state dict is present
-        potential_state = [f for f in os.listdir(checkpoint) if f == WEIGHTS_NAME]
-        if len(potential_state) == 1:
-            checkpoint_files = [os.path.join(checkpoint, potential_state[0])]
+        potential_state_bin = [f for f in os.listdir(checkpoint) if f == WEIGHTS_NAME]
+        potential_state_safetensor = [f for f in os.listdir(checkpoint) if f == SAFE_WEIGHTS_NAME]
+        if len(potential_state_bin) == 1:
+            checkpoint_files = [os.path.join(checkpoint, potential_state_bin[0])]
+        elif len(potential_state_safetensor) == 1:
+            checkpoint_files = [os.path.join(checkpoint, potential_state_safetensor[0])]
         else:
             # otherwise check for sharded checkpoints
             potential_index = [f for f in os.listdir(checkpoint) if f.endswith(".index.json")]
             if len(potential_index) == 0:
                 raise ValueError(
-                    f"{checkpoint} is not a folder containing a `.index.json` file or a {WEIGHTS_NAME} file"
+                    f"{checkpoint} is not a folder containing a `.index.json` file or a {WEIGHTS_NAME} or a {SAFE_WEIGHTS_NAME} file"
                 )
             elif len(potential_index) == 1:
                 index_filename = os.path.join(checkpoint, potential_index[0])
