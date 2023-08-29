@@ -1110,9 +1110,44 @@ class Accelerator:
                         "FSDP Warning: When using FSDP, several parameter groups will be conflated into "
                         "a single one due to nested module wrapping and parameter flattening."
                     )
+
+                # we attempt to reproduce the optimizer's construction arguments, to construct it again but with flattened parameters
+                optimizer_kwargs: Dict[str, Any] = {**obj.optimizer.defaults}
+                # TODO: work out whether we can make this more general (e.g. to support other 8-bit optimizers)
+                if obj.optimizer.__class__.__module__ == 'bitsandbytes.optim.adamw' and obj.optimizer.__class__.__name__ == 'AdamW':
+                    # when we reconstruct the optimizer with flattened params: try to reproduce construction args such as 8-bitness and pagedness.
+                    optimizer_kwargs['is_paged'] = obj.optimizer.is_paged
+                    optimizer_kwargs['optim_bits'] = obj.optimizer.args.optim_bits
+
+                    # Adam-series optimizers do **not** have a construction arg for differentiable (even though it's a property listed among their defaults).
+                    # https://github.com/huggingface/accelerate/issues/801
+                    # TODO: do this for **all** Adam-series optimizers (and move it outside of bnb-AdamW condition)
+                    if 'differentiable' in optimizer_kwargs:
+                        del optimizer_kwargs['differentiable']
+
+                    # TODO: this isn't specific to AdamW; consider moving outside of bnb-AdamW condition
+                    # if all param_groups share the same weight_decay: we should use that instead of falling back to a default
+                    assert len(obj.optimizer.param_groups), 'tried to check whether all param_groups have a common weight_decay, but there are no param_groups at all'
+                    preferred_decay: Optional[float] = None
+                    all_decay_equal = True
+                    for g in obj.optimizer.param_groups:
+                        if preferred_decay is None:
+                            preferred_decay = g['weight_decay']
+                        elif g['weight_decay'] != preferred_decay:
+                            all_decay_equal = False
+                            break
+                    if all_decay_equal:
+                        assert preferred_decay is not None, 'invariant violated (i.e. algorithm has a mistake): preferred_decay is supposed to be initialized, since we initialize it upon visiting first param_group, and we verified there is at least one param_group'
+                        optimizer_kwargs['weight_decay'] = preferred_decay
+                    else:
+                        logger.warning(
+                            f"FSDP Warning: optimizer param_groups have a variety of weight_decays. we are not able to maintain param_groups after sharding, so we cannot maintain their variety of weight_decays either. a weight_decay of {optimizer_kwargs['weight_decay']} will be used across *all* params, which differs from your original config."
+                        )
+
                 try:
                     optimizer = obj.optimizer.__class__(model.parameters(), **obj.optimizer.defaults)
                 except TypeError:
+                    # TODO: remove 'differentiable' from optimizer_kwargs for all AdamW-series optimizers, then we can remove this defensive programming
                     if "differentiable" in obj.optimizer.defaults:
                         # https://github.com/huggingface/accelerate/issues/801
                         defaults = {k: v for k, v in obj.optimizer.defaults.items() if k != "differentiable"}
