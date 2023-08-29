@@ -1507,12 +1507,13 @@ class Accelerator:
             batch_size_per_device = deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"]
             result = [obj for obj in args]
 
-        if self.gradient_accumulation_steps != deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]:
-            logger.info(
-                f"Updating DeepSpeed's gradient accumulation steps to {self.gradient_accumulation_steps} from "
-                f"{deepspeed_plugin.deepspeed_config['gradient_accumulation_steps']}."
-            )
-            deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"] = self.gradient_accumulation_steps
+        # handle `gradient_accumulation_steps` when the value is `auto`
+        deepspeed_plugin.fill_match(
+            "gradient_accumulation_steps",
+            must_match=False,
+            gradient_accumulation_steps=self.gradient_accumulation_steps,
+        )
+
         config_kwargs = {
             "train_micro_batch_size_per_gpu": batch_size_per_device,
             "train_batch_size": batch_size_per_device

@@ -599,7 +599,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         deepspeed_plugin = DeepSpeedPlugin(
             hf_ds_config=ds_config,
             zero3_init_flag=True,
-            gradient_accumulation_steps=1,
+            gradient_accumulation_steps=2,
             gradient_clipping=1.0,
             zero_stage=2,
             offload_optimizer_device="cpu",
@@ -611,7 +611,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=dtype)
             deepspeed_plugin = accelerator.state.deepspeed_plugin
             self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_clipping"], 1.0)
-            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 1)
+            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 2)
             self.assertEqual(deepspeed_plugin.deepspeed_config["zero_optimization"]["stage"], 2)
             self.assertEqual(
                 deepspeed_plugin.deepspeed_config["zero_optimization"]["offload_optimizer"]["device"], "cpu"
@@ -631,6 +631,32 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 f"`--mixed_precision` arg cannot be set to `{diff_dtype}` when `{dtype}` is set in the DeepSpeed config file."
                 in str(cm.exception)
             )
+
+        # filling the `auto` gradient_accumulation_steps via Accelerator's value
+        AcceleratorState._reset_state(True)
+        deepspeed_plugin = DeepSpeedPlugin(
+            hf_ds_config=ds_config,
+            zero3_init_flag=True,
+            gradient_clipping=1.0,
+            zero_stage=2,
+            offload_optimizer_device="cpu",
+            offload_param_device="cpu",
+            zero3_save_16bit_model=True,
+        )
+        with mockenv_context(**self.dist_env):
+            accelerator = Accelerator(
+                deepspeed_plugin=deepspeed_plugin, mixed_precision=dtype, gradient_accumulation_steps=8
+            )
+            deepspeed_plugin = accelerator.state.deepspeed_plugin
+            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 8)
+
+        # base case of passing in `gradient_accumulation_steps` to `DeepSpeedPlugin`
+        AcceleratorState._reset_state(True)
+        deepspeed_plugin = DeepSpeedPlugin(zero_stage=2, gradient_accumulation_steps=4)
+        with mockenv_context(**self.dist_env):
+            accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=dtype)
+            deepspeed_plugin = accelerator.state.deepspeed_plugin
+            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 4)
 
     def test_ds_config_assertions(self):
         ambiguous_env = self.dist_env.copy()
