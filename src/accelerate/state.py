@@ -168,7 +168,11 @@ class PartialState:
 
                     # DeepSpeed always uses nccl
                     kwargs.pop("backend", None)
-                    self.backend = "nccl"
+                    if is_xpu_available and is_ccl_available():
+                        # Set DeepSpeed backend to ccl for xpu
+                        self.backend = "ccl"
+                    else:
+                        self.backend = "nccl"
                     dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
 
                 self.num_processes = torch.distributed.get_world_size()
