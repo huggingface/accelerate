@@ -27,6 +27,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e .[testing,test_trackers] -U
+          pip install transformers -U
           pip install pytest-reportlog tabulate
 
       - name: Run CLI tests
@@ -66,6 +67,7 @@ jobs:
           git config --global --add safe.directory '*'
           git fetch && git checkout ${{ github.sha }}
           pip install -e .[testing,test_trackers] -U
+          pip install transformers -U
           pip install pytest-reportlog tabulate
 
       - name: Run test on GPUs
