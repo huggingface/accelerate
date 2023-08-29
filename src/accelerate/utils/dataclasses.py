@@ -872,6 +872,14 @@ class FullyShardedDataParallelPlugin:
             "all-gather while executing in the forward pass. only use with Static graphs."
         },
     )
+    activation_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, activation checkpointing is a technique to reduce memory usage by clearing activations of "
+            "certain layers and recomputing them during a backward pass. Effectively, this trades extra computation time "
+            "for reduced memory usage."
+        },
+    )
 
     def __post_init__(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch, CPUOffload, ShardingStrategy
@@ -897,6 +905,7 @@ class FullyShardedDataParallelPlugin:
         self.use_orig_params = strtobool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
         self.sync_module_states = strtobool(os.environ.get(prefix + "SYNC_MODULE_STATES", "True")) == 1
         self.forward_prefetch = strtobool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
+        self.activation_checkpointing = strtobool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
 
         if self.sync_module_states:
             self.param_init_fn = lambda x: x.to_empty(device=torch.cuda.current_device(), recurse=False)

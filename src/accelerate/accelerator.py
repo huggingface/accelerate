@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import collections
 import contextlib
+import functools
 import json
 import math
 import os
@@ -1440,6 +1441,22 @@ class Accelerator:
                         "device_id": self.device,
                     }
                     model = FSDP(model, **kwargs)
+                    if fsdp_plugin.activation_checkpointing:
+                        from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+                            CheckpointImpl,
+                            apply_activation_checkpointing,
+                            checkpoint_wrapper,
+                        )
+
+                        apply_activation_checkpointing(
+                            model,
+                            checkpoint_wrapper_fn=functools.partial(
+                                checkpoint_wrapper,
+                                checkpoint_impl=CheckpointImpl.NO_REENTRANT,
+                            ),
+                            auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
+                        )
+
                 self._models[-1] = model
             elif self.distributed_type == DistributedType.MULTI_CPU:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
