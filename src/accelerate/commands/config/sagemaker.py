@@ -254,5 +254,5 @@ def get_sagemaker_input():
         num_machines=num_machines,
         sagemaker_inputs_file=sagemaker_inputs_file,
         sagemaker_metrics_file=sagemaker_metrics_file,
-        debug=False
+        debug=False,
     )
