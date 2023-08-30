@@ -12,7 +12,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists*
 
 # Create our conda env
-RUN conda create --name accelerate python=${PYTHON_VERSION} ipython jupyter pip
+RUN conda create --name accelerate python=${PYTHON_VERSION} pip
 # We don't install pytorch here yet since CUDA isn't available
 # instead we use the direct torch wheel
 ENV PATH /opt/conda/envs/accelerate/bin:$PATH
