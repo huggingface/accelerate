@@ -258,12 +258,15 @@ class DummyScheduler:
             Total number of steps.
         warmup_num_steps (int):
             Number of steps for warmup.
+        lr_scheduler_callable (callable):
+            A callable function that creates an LR Scheduler. It accepts only one argument `optimizer`.
         **kwargs:
             Other arguments.
     """
 
-    def __init__(self, optimizer, total_num_steps=None, warmup_num_steps=0, **kwargs):
+    def __init__(self, optimizer, total_num_steps=None, warmup_num_steps=0, lr_scheduler_callable=None, **kwargs):
         self.optimizer = optimizer
         self.total_num_steps = total_num_steps
         self.warmup_num_steps = warmup_num_steps
+        self.lr_scheduler_callable = lr_scheduler_callable
         self.kwargs = kwargs

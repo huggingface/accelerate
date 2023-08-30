@@ -1589,7 +1589,7 @@ class Accelerator:
                 config_kwargs.update(
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
                 )
-            if isinstance(scheduler, (DummyScheduler)):
+            if isinstance(scheduler, (DummyScheduler)) and scheduler.lr_scheduler_callable is None:
                 max_lr = (
                     getattr(scheduler.optimizer, "lr", None)
                     if getattr(scheduler.optimizer, "defaults", None) is None
@@ -1614,6 +1614,8 @@ class Accelerator:
             if optimizer is not None:
                 if isinstance(optimizer, (DummyOptim)):
                     kwargs["model_parameters"] = optimizer.params
+                    if isinstance(scheduler, (DummyScheduler)) and scheduler.lr_scheduler_callable is not None:
+                        kwargs["lr_scheduler"] = scheduler.lr_scheduler_callable
                 else:
                     if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
                         "device", "none"
@@ -1624,7 +1626,10 @@ class Accelerator:
                         optimizer = DeepSpeedCPUAdam(optimizer.param_groups, **defaults)
                     kwargs["optimizer"] = optimizer
                     if scheduler is not None:
-                        if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
+                        if (
+                            isinstance(scheduler, LRScheduler)
+                            or type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
+                        ):
                             kwargs["lr_scheduler"] = scheduler
 
             engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
