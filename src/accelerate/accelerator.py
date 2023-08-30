@@ -1557,10 +1557,6 @@ class Accelerator:
                     "Please remove the scheduler from the config file or "
                     "create `accelerate.utils.DummyScheduler` in the code."
                 )
-            elif "scheduler" not in deepspeed_plugin.deepspeed_config and isinstance(scheduler, (DummyScheduler)):
-                raise ValueError(
-                    "You cannot create a `DummyScheduler` without specifying a scheduler in the config file."
-                )
 
         if optimizer is not None and scheduler is not None:
             if isinstance(optimizer, (DummyOptim)) and not isinstance(scheduler, (DummyScheduler)):
