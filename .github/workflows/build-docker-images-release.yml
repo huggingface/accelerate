@@ -37,7 +37,7 @@ jobs:
       - name: Build and Push CPU
         run: |
           docker build -t huggingface/accelerate-cpu -f ./docker/accelerate-cpu/Dockerfile .
-          docker push huggingface/accelerate-cpu::${{needs.get-version.outputs.version}}
+          docker push huggingface/accelerate-cpu:${{needs.get-version.outputs.version}}
 
   version-cuda:
     name: "Latest Accelerate GPU [version]"
@@ -57,4 +57,4 @@ jobs:
       - name: Build and Push GPU
         run: |
           docker build -t huggingface/accelerate-gpu -f ./docker/accelerate-gpu/Dockerfile .
-          docker push huggingface/accelerate-gpu::${{needs.get-version.outputs.version}}
+          docker push huggingface/accelerate-gpu:${{needs.get-version.outputs.version}}
