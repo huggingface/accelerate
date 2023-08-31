@@ -24,6 +24,10 @@ jobs:
     name: "Latest Accelerate CPU [dev]"
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     needs: clean-storage
+    defaults:
+      run:
+        working-directory: accelerate/
+        shell: bash
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -44,6 +48,10 @@ jobs:
     name: "Latest Accelerate GPU [dev]"
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     needs: clean-storage
+    defaults:
+      run:
+        working-directory: accelerate/
+        shell: bash
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
