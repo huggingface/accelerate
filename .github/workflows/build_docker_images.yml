@@ -36,9 +36,9 @@ jobs:
       - name: Build and Push CPU
         uses: docker/build-push-action@v4
         with:
-          file: docker/accelerate-gpu/Dockerfile          
+          file: docker/accelerate-cpu/Dockerfile          
           push: true
-          tags: ./accelerate-cpu
+          tags: huggingface/accelerate-cpu
 
   # latest-cuda:
   #   name: "Latest Accelerate GPU [dev]"
