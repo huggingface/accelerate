@@ -538,7 +538,8 @@ class DeepSpeedPlugin:
         from .deepspeed import HfDeepSpeedConfig
 
         if self.gradient_accumulation_steps is None:
-            self.gradient_accumulation_steps = int(os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", 1))
+            gas = os.environ.get("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", "auto")
+            self.gradient_accumulation_steps = int(gas) if gas.isdigit() else gas
 
         if self.gradient_clipping is None:
             gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", "none")
