@@ -17,9 +17,9 @@ jobs:
     steps:
       - name: Clean storage
         run: |
-          docker image prune -a -f --filter "until=48h"
-          docker system prune -a -f --filter "until=48h"
-          docker volume prune -a -f --filter "until=48h"
+          docker image prune --all -f --filter "until=48h"
+          docker system prune --all -f --filter "until=48h"
+          docker volume prune --all -f --filter "until=48h"
 
   latest-cpu:
     name: "Latest Accelerate CPU [dev]"
