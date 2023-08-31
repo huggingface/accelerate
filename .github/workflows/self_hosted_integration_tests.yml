@@ -29,8 +29,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # TODO (@muellerzr, transformers v4.33) Add pypi back after the next release
         transformers-version: [
-          pypi,
           github
         ]
         cuda_visible_devices: [
@@ -106,7 +106,7 @@ jobs:
         run: |
           source activate accelerate
           git config --global --add safe.directory '*'
-          git checkout main && git pull
+          git checkout master && git pull
           if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
             git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
           fi
