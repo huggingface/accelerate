@@ -55,7 +55,6 @@ jobs:
 
       - name: Build and Push GPU
         uses: docker/build-push-action@v4
-        working-directory: accelerate/
         with:
           context: "{{defaultContext}}:accelerate/docker/accelerate-gpu"
           push: true
