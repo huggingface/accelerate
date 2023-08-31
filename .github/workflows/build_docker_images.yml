@@ -19,7 +19,6 @@ jobs:
         run: |
           docker image prune --all -f --filter "until=48h"
           docker system prune --all -f --filter "until=48h"
-          docker volume prune -f --filter "until=48h"
 
   latest-cpu:
     name: "Latest Accelerate CPU [dev]"
