@@ -76,6 +76,7 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
           WANDB_DISABLED: true
+        if: always()
         run: |
           source activate accelerate;
           pytest -sv tests/deepspeed
