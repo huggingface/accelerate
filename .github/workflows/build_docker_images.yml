@@ -24,13 +24,10 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
       - name: Build and Push CPU
-        uses: docker/build-push-action@v2
-        with:
-          context: ./docker/accelerate-cpu
-          push: true
-          tags: huggingface/accelerate-cpu
+        run: |
+          docker build -t huggingface/accelerate-cpu -f ./docker/accelerate-cpu/Dockerfile .
+          docker push huggingface/accelerate-cpu:latest
 
   latest-cuda:
     name: "Latest Accelerate GPU [dev]"
@@ -47,8 +44,6 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Build and Push GPU
-        uses: docker/build-push-action@v2
-        with:
-          context: ./docker/accelerate-gpu
-          push: true
-          tags: huggingface/accelerate-gpu
+        run: |
+          docker build -t huggingface/accelerate-gpu -f ./docker/accelerate-gpu/Dockerfile .
+          docker push huggingface/accelerate-gpu:latest
