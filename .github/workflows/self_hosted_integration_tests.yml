@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Add pypi back in after the next release!
+        # TODO (@muellerzr, transformers v4.33) Add pypi back after the next release
         transformers-version: [
           github
         ]
