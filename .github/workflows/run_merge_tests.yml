@@ -35,10 +35,12 @@ jobs:
           make test_cli
           
       - name: Run test on GPUs
+        if: always()
         run: |
           source activate accelerate
           make test
       - name: Run examples on GPUs
+        if: always()
         run: |
           source activate accelerate
           pip uninstall comet_ml -y
@@ -74,6 +76,7 @@ jobs:
           make test
 
       - name: Run examples on GPUs
+        if: always()
         run: |
           source activate accelerate
           pip uninstall comet_ml -y
