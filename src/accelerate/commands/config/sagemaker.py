@@ -221,6 +221,15 @@ def get_sagemaker_input():
         ec2_instance_query += "? [ml.p3.2xlarge]:"
         ec2_instance_type = _ask_field(ec2_instance_query, lambda x: str(x).lower(), default="ml.p3.2xlarge")
 
+    debug = False
+    if distributed_type != SageMakerDistributedType.NO:
+        debug = _ask_field(
+            "Should distributed operations be checked while running for errors? This can avoid timeout issues but will be slower. [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+
     num_machines = 1
     if distributed_type in (SageMakerDistributedType.DATA_PARALLEL, SageMakerDistributedType.MODEL_PARALLEL):
         num_machines = _ask_field(
@@ -254,4 +263,5 @@ def get_sagemaker_input():
         num_machines=num_machines,
         sagemaker_inputs_file=sagemaker_inputs_file,
         sagemaker_metrics_file=sagemaker_metrics_file,
+        debug=debug,
     )
