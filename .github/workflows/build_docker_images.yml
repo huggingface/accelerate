@@ -11,22 +11,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  clean-storage:
+    name: "Clean docker image storage"
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    steps:
+      - name: Clean storage
+        run: |
+          docker image prune -a -f --filter "until=48h"
+          docker system prune -a -f --filter "until=48h"
+          docker volume prune -a -f --filter "until=48h"
+
   latest-cpu:
     name: "Latest Accelerate CPU [dev]"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    requires: clean-storage
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Build and Push CPU
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v4
         with:
           context: ./docker/accelerate-cpu
           push: true
@@ -34,20 +45,21 @@ jobs:
 
   latest-cuda:
     name: "Latest Accelerate GPU [dev]"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    requires: clean-storage
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Build and Push GPU
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v4
         with:
           context: ./docker/accelerate-gpu
           push: true
