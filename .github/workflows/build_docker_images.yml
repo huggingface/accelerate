@@ -35,9 +35,8 @@ jobs:
 
       - name: Build and Push CPU
         uses: docker/build-push-action@v4
-        working-directory: accelerate/
         with:
-          context: accelerate/docker/accelerate-cpu
+          context: "{{defaultContext}}:accelerate/docker/accelerate-gpu"
           push: true
           tags: ./accelerate-cpu
 
@@ -58,6 +57,6 @@ jobs:
         uses: docker/build-push-action@v4
         working-directory: accelerate/
         with:
-          context: ./docker/accelerate-gpu
+          context: "{{defaultContext}}:accelerate/docker/accelerate-gpu"
           push: true
           tags: huggingface/accelerate-gpu
