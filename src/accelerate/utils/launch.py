@@ -537,7 +537,9 @@ class PrepareForLaunch:
         ):
             # Prepare the environment for torch.distributed
             os.environ["LOCAL_RANK"] = str(index)
-            os.environ["RANK"] = str(index)
+            nproc = int(os.environ.get("NPROC", 1))
+            node_rank = int(os.environ.get("NODE_RANK", 0))
+            os.environ["RANK"] = str(nproc * node_rank + index)
 
         os.environ["FORK_LAUNCHED"] = str(1)
         self.launcher(*args)
