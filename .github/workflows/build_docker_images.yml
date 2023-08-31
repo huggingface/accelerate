@@ -40,7 +40,7 @@ jobs:
       - name: Build and Push CPU
         uses: docker/build-push-action@v4
         with:
-          context: ./docker/accelerate-cpu
+          context: docker/accelerate-cpu
           push: true
           tags: huggingface/accelerate-cpu
 
@@ -64,6 +64,6 @@ jobs:
       - name: Build and Push GPU
         uses: docker/build-push-action@v4
         with:
-          context: ./docker/accelerate-gpu
+          context: docker/accelerate-gpu
           push: true
           tags: huggingface/accelerate-gpu
