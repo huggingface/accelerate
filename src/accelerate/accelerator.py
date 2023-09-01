@@ -1215,7 +1215,7 @@ class Accelerator:
             for obj in args:
                 if isinstance(obj, torch.nn.Module):
                     model_count += 1
-                    is_type_fsdp = type(obj) == FSDP
+                    is_type_fsdp = (type(obj) == FSDP) or isinstance(getattr(obj, "_orig_mod", None), FSDP)
                 if isinstance(obj, torch.optim.Optimizer):
                     optimizer_present = True
             if model_count > 1 and optimizer_present:
