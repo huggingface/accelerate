@@ -31,7 +31,6 @@ from transformers.utils import is_torch_bf16_available
 
 import accelerate
 from accelerate.accelerator import Accelerator
-from accelerate.scheduler import AcceleratedScheduler
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
@@ -332,7 +331,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                         model, optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                     )
                 self.assertTrue(
-                    "You cannot create a `DummyScheduler` without specifying a scheduler in the config file."
+                    "Either specify a scheduler in the config file or "
+                    "pass in the `lr_scheduler_callable` parameter when using `accelerate.utils.DummyScheduler`."
                     in str(cm.exception)
                 )
 
@@ -352,7 +352,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 self.assertTrue(accelerator.deepspeed_config["train_batch_size"], 16)
                 self.assertEqual(type(model), DeepSpeedEngine)
                 self.assertEqual(type(optimizer), DeepSpeedOptimizerWrapper)
-                self.assertEqual(type(lr_scheduler), AcceleratedScheduler)
+                self.assertEqual(type(lr_scheduler), DeepSpeedSchedulerWrapper)
                 self.assertEqual(type(accelerator.deepspeed_engine_wrapped), DeepSpeedEngineWrapper)
 
         elif optim_type == DS_OPTIMIZER and scheduler_type == DS_SCHEDULER:
@@ -481,6 +481,31 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 self.assertTrue(
                     "You can only specify `accelerate.utils.DummyScheduler` in the code when using `accelerate.utils.DummyOptim`."
                     in str(cm.exception)
+                )
+
+                # passing `DummyScheduler` without `lr_scheduler_callable` should fail
+                with self.assertRaises(ValueError) as cm:
+                    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+                        model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
+                    )
+                self.assertTrue(
+                    "Either specify a scheduler in the config file or "
+                    "pass in the `lr_scheduler_callable` parameter when using `accelerate.utils.DummyScheduler`."
+                    in str(cm.exception)
+                )
+
+                # passing `lr_scheduler_callable` to DummyScheduler should enable DS Optim + Custom Scheduler
+                def _lr_scheduler_callable(optimizer):
+                    return get_scheduler(
+                        name="linear",
+                        optimizer=optimizer,
+                        num_warmup_steps=0,
+                        num_training_steps=1000,
+                    )
+
+                dummy_lr_scheduler = DummyScheduler(dummy_optimizer, lr_scheduler_callable=_lr_scheduler_callable)
+                model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+                    model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                 )
 
     def test_save_checkpoints(self):
