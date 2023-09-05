@@ -254,11 +254,11 @@ class DummyScheduler:
     Args:
         optimizer (`torch.optim.optimizer.Optimizer`):
             The optimizer to wrap.
-        total_num_steps (int):
+        total_num_steps (int, *optional*):
             Total number of steps.
-        warmup_num_steps (int):
+        warmup_num_steps (int, *optional*):
             Number of steps for warmup.
-        lr_scheduler_callable (callable):
+        lr_scheduler_callable (callable, *optional*):
             A callable function that creates an LR Scheduler. It accepts only one argument `optimizer`.
         **kwargs:
             Other arguments.
