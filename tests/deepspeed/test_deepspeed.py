@@ -31,7 +31,6 @@ from transformers.utils import is_torch_bf16_available
 
 import accelerate
 from accelerate.accelerator import Accelerator
-from accelerate.scheduler import AcceleratedScheduler
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
