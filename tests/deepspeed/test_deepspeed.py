@@ -494,7 +494,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                     in str(cm.exception)
                 )
 
-                # passing `lr_scheduler_callable` to DUmmyScheduler should enable DS Optim + Custom Scheduler
+                # passing `lr_scheduler_callable` to DummyScheduler should enable DS Optim + Custom Scheduler
                 def _lr_scheduler_callable(optimizer):
                     return get_scheduler(
                         name="linear",
