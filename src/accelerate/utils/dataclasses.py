@@ -495,7 +495,10 @@ class DeepSpeedPlugin:
         },
     )
     gradient_accumulation_steps: int = field(
-        default=None, metadata={"help": "Number of steps to accumulate gradients before updating optimizer states"}
+        default=None,
+        metadata={
+            "help": "Number of steps to accumulate gradients before updating optimizer states. If not set, will use the value from the `Accelerator` directly."
+        },
     )
     gradient_clipping: float = field(default=None, metadata={"help": "Enable gradient clipping with value"})
     zero_stage: int = field(
