@@ -80,8 +80,8 @@ from .utils import (
     is_megatron_lm_available,
     is_npu_available,
     is_safetensors_available,
-    is_torch_version,
     is_torch_tensor,
+    is_torch_version,
     is_tpu_available,
     is_xpu_available,
     load_fsdp_model,
@@ -2099,8 +2099,8 @@ class Accelerator:
 
     def gather_for_metrics(self, input_data):
         """
-        Gathers `tensor` or object and potentially drops duplicates in the last batch if on a distributed system. For objects, duplicates are removed. Should be used
-        for gathering the inputs and targets for metric calculation.
+        Gathers `tensor` or object and potentially drops duplicates in the last batch if on a distributed system. For
+        objects, duplicates are removed. Should be used for gathering the inputs and targets for metric calculation.
 
         Args:
             input (`torch.Tensor`, a nested tuple/list/dictionary of `torch.Tensor`, `object` or a nested tuple/list/dictionary of `object`):
@@ -2122,11 +2122,11 @@ class Accelerator:
         9
         ```
         """
+
         def check_input(input_data):
             if isinstance(input_data, (list, tuple)):
                 return all(is_torch_tensor(item) for item in input_data)
             return is_torch_tensor(input_data)
-
 
         if not check_input(input_data):
             try:
