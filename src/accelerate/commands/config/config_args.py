@@ -60,7 +60,7 @@ def load_config_from_file(config_file):
                 config_class = ClusterConfig
             else:
                 config_class = SageMakerConfig
-            return config_class.from_json_file(json_file=config_file)
+                return config_class.from_json_file(json_file=config_file)
         else:
             if (
                 yaml.safe_load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
@@ -69,6 +69,7 @@ def load_config_from_file(config_file):
                 config_class = ClusterConfig
             else:
                 config_class = SageMakerConfig
+
             return config_class.from_yaml_file(yaml_file=config_file)
 
 
@@ -109,6 +110,12 @@ class BaseConfig:
             config_dict["use_cpu"] = False
         if "debug" not in config_dict:
             config_dict["debug"] = False
+        extra_keys = set(config_dict.keys()) - set(cls.__dataclass_fields__.keys())
+        if len(extra_keys) > 0:
+            raise ValueError(
+                f"Unknown keys in the config file: {list(extra_keys)}, please try upgrading your `accelerate` version or remove them."
+            )
+
         return cls(**config_dict)
 
     def to_json_file(self, json_file):
@@ -123,7 +130,6 @@ class BaseConfig:
             config_dict = yaml.safe_load(f)
         if "compute_environment" not in config_dict:
             config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE
-
         if "mixed_precision" not in config_dict:
             config_dict["mixed_precision"] = "fp16" if ("fp16" in config_dict and config_dict["fp16"]) else None
         if isinstance(config_dict["mixed_precision"], bool) and not config_dict["mixed_precision"]:
@@ -137,6 +143,11 @@ class BaseConfig:
             config_dict["use_cpu"] = False
         if "debug" not in config_dict:
             config_dict["debug"] = False
+        extra_keys = set(config_dict.keys()) - set(cls.__dataclass_fields__.keys())
+        if len(extra_keys) > 0:
+            raise ValueError(
+                f"Unknown keys in the config file: {list(extra_keys)}, please try upgrading your `accelerate` version or remove them."
+            )
         return cls(**config_dict)
 
     def to_yaml_file(self, yaml_file):

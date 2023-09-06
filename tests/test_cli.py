@@ -67,10 +67,21 @@ class AccelerateLauncherTester(unittest.TestCase):
 
     def test_config_compatibility(self):
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
-            with self.subTest(config_file=config):
-                execute_subprocess_async(
-                    self.base_cmd + ["--config_file", str(config), self.test_file_path], env=os.environ.copy()
-                )
+            if "invalid" not in str(config):
+                with self.subTest(config_file=config):
+                    execute_subprocess_async(
+                        self.base_cmd + ["--config_file", str(config), self.test_file_path], env=os.environ.copy()
+                    )
+
+    def test_invalid_keys(self):
+        with self.assertRaises(
+            RuntimeError, msg="Unknown keys in the config file: ['another_invalid_key', 'invalid_key']"
+        ):
+            execute_subprocess_async(
+                self.base_cmd
+                + ["--config_file", str(self.test_config_path / "invalid_keys.yaml"), self.test_file_path],
+                env=os.environ.copy(),
+            )
 
     def test_accelerate_test(self):
         execute_subprocess_async(["accelerate", "test"], env=os.environ.copy())
