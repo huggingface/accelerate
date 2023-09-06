@@ -75,7 +75,8 @@ class AccelerateLauncherTester(unittest.TestCase):
 
     def test_invalid_keys(self):
         with self.assertRaises(
-            RuntimeError, msg="Unknown keys in the config file: ['another_invalid_key', 'invalid_key']"
+            RuntimeError,
+            msg="The config file at 'invalid_keys.yaml' had unknown keys ('another_invalid_key', 'invalid_key')",
         ):
             execute_subprocess_async(
                 self.base_cmd

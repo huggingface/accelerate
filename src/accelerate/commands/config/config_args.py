@@ -110,10 +110,11 @@ class BaseConfig:
             config_dict["use_cpu"] = False
         if "debug" not in config_dict:
             config_dict["debug"] = False
-        extra_keys = set(config_dict.keys()) - set(cls.__dataclass_fields__.keys())
+        extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
         if len(extra_keys) > 0:
             raise ValueError(
-                f"Unknown keys in the config file: {list(extra_keys)}, please try upgrading your `accelerate` version or remove them."
+                f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `accelerate`"
+                " version or fix (and potentially remove) these keys from your config file."
             )
 
         return cls(**config_dict)
@@ -143,10 +144,11 @@ class BaseConfig:
             config_dict["use_cpu"] = False
         if "debug" not in config_dict:
             config_dict["debug"] = False
-        extra_keys = set(config_dict.keys()) - set(cls.__dataclass_fields__.keys())
+        extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
         if len(extra_keys) > 0:
             raise ValueError(
-                f"Unknown keys in the config file: {list(extra_keys)}, please try upgrading your `accelerate` version or remove them."
+                f"The config file at {yaml_file} had unknown keys ({extra_keys}), please try upgrading your `accelerate`"
+                " version or fix (and potentially remove) these keys from your config file."
             )
         return cls(**config_dict)
 
