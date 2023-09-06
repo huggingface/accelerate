@@ -1987,9 +1987,9 @@ class Accelerator:
                 while isinstance(opt, AcceleratedOptimizer):
                     opt = opt.optimizer
                 # Reduce gradients first for XLA
-                if is_tpu_available():
+                if self.distributed_type == DistributedType.TPU:
                     gradients = xm._fetch_gradients(opt)
-                    xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
+                    self.reduce(gradients, scale=1.0 / self.num_processes)
                 self.scaler.unscale_(opt)
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
