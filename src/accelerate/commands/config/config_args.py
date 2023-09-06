@@ -60,7 +60,7 @@ def load_config_from_file(config_file):
                 config_class = ClusterConfig
             else:
                 config_class = SageMakerConfig
-                return config_class.from_json_file(json_file=config_file)
+            return config_class.from_json_file(json_file=config_file)
         else:
             if (
                 yaml.safe_load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
