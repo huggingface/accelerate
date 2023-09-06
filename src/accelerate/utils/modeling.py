@@ -1455,6 +1455,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.NO,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
         ]:
             return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, **autocast_kwargs)
