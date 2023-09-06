@@ -1996,6 +1996,10 @@ class Accelerator:
             for opt in optimizer:
                 while isinstance(opt, AcceleratedOptimizer):
                     opt = opt.optimizer
+                # Reduce gradients first for XLA
+                if self.distributed_type == DistributedType.TPU:
+                    gradients = xm._fetch_gradients(opt)
+                    self.reduce(gradients, scale=1.0 / self.num_processes)
                 self.scaler.unscale_(opt)
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
@@ -2147,7 +2151,7 @@ class Accelerator:
             # Dataset had no length or raised an error
             return tensor
 
-    def reduce(self, tensor, reduction="sum"):
+    def reduce(self, tensor, reduction="sum", scale=1.0):
         """
         Reduce the values in *tensor* across all processes based on *reduction*.
 
@@ -2159,6 +2163,8 @@ class Accelerator:
                 The tensors to reduce across all processes.
             reduction (`str`, *optional*, defaults to "sum"):
                 A reduction type, can be one of 'sum', 'mean', or 'none'. If 'none', will not perform any operation.
+            scale (`float`, *optional*, defaults to 1.0):
+                A default scaling value to be applied after the reduce, only valied on XLA.
 
         Returns:
             `torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`:
@@ -2179,7 +2185,7 @@ class Accelerator:
         tensor([4, 6])
         ```
         """
-        return reduce(tensor, reduction)
+        return reduce(tensor, reduction, scale)
 
     def pad_across_processes(self, tensor, dim=0, pad_index=0, pad_first=False):
         """

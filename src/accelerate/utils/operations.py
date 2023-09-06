@@ -547,7 +547,7 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
 
 
 @verify_operation
-def reduce(tensor, reduction="mean"):
+def reduce(tensor, reduction="mean", scale=1.0):
     """
     Recursively reduce the tensors in a nested list/tuple/dictionary of lists of tensors across all processes by the
     mean of a given operation.
@@ -557,25 +557,29 @@ def reduce(tensor, reduction="mean"):
             The data to reduce.
         reduction (`str`, *optional*, defaults to `"mean"`):
             A reduction method. Can be of "mean", "sum", or "none"
+        scale (`float`, *optional*):
+            A default scaling value to be applied after the reduce, only valied on XLA.
 
     Returns:
         The same data structure as `data` with all the tensors reduced.
     """
 
-    def _reduce_across_processes(tensor, reduction="mean"):
+    def _reduce_across_processes(tensor, reduction="mean", scale=1.0):
         state = PartialState()
         cloned_tensor = tensor.clone()
         if state.distributed_type == DistributedType.NO:
             return cloned_tensor
         if state.distributed_type == DistributedType.TPU:
-            xm.all_reduce("sum", cloned_tensor)
+            xm.all_reduce("sum", cloned_tensor, scale)
         elif state.distributed_type.value in TORCH_DISTRIBUTED_OPERATION_TYPES:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
         if reduction == "mean":
             cloned_tensor /= state.num_processes
         return cloned_tensor
 
-    return recursively_apply(_reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction)
+    return recursively_apply(
+        _reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction, scale=scale
+    )
 
 
 def convert_to_fp32(tensor):
