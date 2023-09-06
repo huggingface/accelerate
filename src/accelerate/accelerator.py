@@ -96,6 +96,7 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import FSDP_PYTORCH_VERSION
+from .utils.other import is_compiled_module
 
 
 if is_deepspeed_available():
@@ -1215,7 +1216,9 @@ class Accelerator:
             for obj in args:
                 if isinstance(obj, torch.nn.Module):
                     model_count += 1
-                    is_type_fsdp = (type(obj) == FSDP) or isinstance(getattr(obj, "_orig_mod", None), FSDP)
+                    if is_compiled_module(obj):
+                        unwrapped_model = obj._orig_mod
+                    is_type_fsdp = (type(obj) == FSDP) or isinstance(unwrapped_model, FSDP)
                 if isinstance(obj, torch.optim.Optimizer):
                     optimizer_present = True
             if model_count > 1 and optimizer_present:
@@ -1423,8 +1426,9 @@ class Accelerator:
 
                 # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
                 # don't wrap it again
-                is_torch_compiled = getattr(model, "_orig_mod", None)
-                is_type_fsdp = (type(model) == FSDP) or isinstance(is_torch_compiled, FSDP)
+                if is_compiled_module(model):
+                    unwrapped_model = model._orig_mod
+                is_type_fsdp = (type(model) == FSDP) or isinstance(unwrapped_model, FSDP)
 
                 if not is_type_fsdp:
                     self.state.fsdp_plugin.set_auto_wrap_policy(model)
@@ -1469,7 +1473,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.TPU and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last and only if the model isn't already compiled.
-        if self.state.dynamo_plugin.backend != DynamoBackend.NO and getattr(model, "_orig_mod", None) is None:
+        if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if not is_torch_version(">=", "2.0"):
                 raise ValueError("Using `torch.compile` requires PyTorch 2.0 or higher.")
             model = torch.compile(model, **self.state.dynamo_plugin.to_kwargs())
