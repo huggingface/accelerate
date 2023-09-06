@@ -68,6 +68,7 @@ from .utils import (
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
+    gather_object,
     get_mixed_precision_context_manager,
     get_pretty_name,
     has_transformer_engine_layers,
@@ -80,6 +81,7 @@ from .utils import (
     is_npu_available,
     is_safetensors_available,
     is_torch_version,
+    is_torch_tensor,
     is_tpu_available,
     is_xpu_available,
     load_fsdp_model,
@@ -2095,14 +2097,14 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_for_metrics(self, tensor):
+    def gather_for_metrics(self, input_data):
         """
-        Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
+        Gathers `tensor` or object and potentially drops duplicates in the last batch if on a distributed system. For objects, duplicates are removed. Should be used
         for gathering the inputs and targets for metric calculation.
 
         Args:
-            tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
-                The tensors for calculating metrics across all processes.
+            input (`torch.Tensor`, a nested tuple/list/dictionary of `torch.Tensor`, `object` or a nested tuple/list/dictionary of `object`):
+                The tensors / objects for calculating metrics across all processes
 
         Example:
 
@@ -2120,8 +2122,29 @@ class Accelerator:
         9
         ```
         """
-        tensor = self.gather(tensor)
+        def check_input(input_data):
+            if isinstance(input_data, (list, tuple)):
+                return all(is_torch_tensor(item) for item in input_data)
+            return is_torch_tensor(input_data)
 
+
+        if not check_input(input_data):
+            try:
+                obj = gather_object(input_data)
+                # deduplicate objects within the last batch
+                if self.gradient_state.end_of_dataloader and self.gradient_state.remainder > 0:
+                    deduplicated_objects = []
+                    seen_objects = set()
+                    for item in obj:
+                        if item not in seen_objects:
+                            deduplicated_objects.append(item)
+                            seen_objects.add(item)
+                return deduplicated_objects
+
+            except Exception:
+                return obj
+
+        tensor = self.gather(input_data)
         try:
             if self.gradient_state.end_of_dataloader:
                 # at the end of a dataloader, `gather_for_metrics` regresses to
