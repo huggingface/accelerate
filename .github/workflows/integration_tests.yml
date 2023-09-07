@@ -27,8 +27,8 @@ jobs:
       fail-fast: false
       matrix:
         transformers-version: [
-          github,
-          pypi
+          pypi,
+          github
         ]
     steps:
     - uses: actions/checkout@v3.1.0

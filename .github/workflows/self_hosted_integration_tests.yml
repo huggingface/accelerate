@@ -30,8 +30,8 @@ jobs:
       fail-fast: false
       matrix:
         transformers-version: [
-          github,
-          pypi
+          pypi,
+          github
         ]
         cuda_visible_devices: [
           "0", 
