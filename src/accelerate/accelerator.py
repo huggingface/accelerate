@@ -1216,8 +1216,7 @@ class Accelerator:
             for obj in args:
                 if isinstance(obj, torch.nn.Module):
                     model_count += 1
-                    if is_compiled_module(obj):
-                        unwrapped_model = obj._orig_mod
+                    unwrapped_model = obj._orig_mod if is_compiled_module(obj) else obj
                     is_type_fsdp = (type(obj) == FSDP) or isinstance(unwrapped_model, FSDP)
                 if isinstance(obj, torch.optim.Optimizer):
                     optimizer_present = True
@@ -1426,8 +1425,7 @@ class Accelerator:
 
                 # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
                 # don't wrap it again
-                if is_compiled_module(model):
-                    unwrapped_model = model._orig_mod
+                unwrapped_model = model._orig_mod if is_compiled_module(model) else model
                 is_type_fsdp = (type(model) == FSDP) or isinstance(unwrapped_model, FSDP)
 
                 if not is_type_fsdp:
