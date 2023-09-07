@@ -463,6 +463,9 @@ class Accelerator:
         if self.rng_types is None:
             self.rng_types = ["generator"]
 
+        # Tracking tensor for monitoring breakpoints
+        self.flag_tensor = torch.zeros(1, device=self.device)
+
     @property
     def use_distributed(self):
         """
@@ -1962,6 +1965,62 @@ class Accelerator:
             self.scaler.scale(loss).backward(**kwargs)
         else:
             loss.backward(**kwargs)
+
+    def set_breakpoint(self):
+        """
+        Sets the internal flag tensor to 1 on the current process. A latter check of `Accelerator().check_breakpoint()`
+        should follow using this which will check across all processes.
+
+        Note:
+            Does not require `wait_for_everyone()`
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume later in the training script
+        >>> # `should_do_breakpoint` is a custom function to monitor when to break,
+        >>> # e.g. when the loss is NaN
+        >>> if should_do_breakpoint(loss):
+        ...     accelerator.set_breakpoint()
+        >>> # Assume later in the training script
+        >>> if accelerator.check_breakpoint():
+        ...     break
+        ```
+        """
+        self.flag_tensor += 1
+
+    def check_breakpoint(self):
+        """
+        Checks if `self.flag_tensor` has been set to 1 in any of the processes. If so, will return `True` and reset the
+        flag tensor to 0.
+
+        Note:
+            Does not require `wait_for_everyone()`
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume later in the training script
+        >>> # `should_do_breakpoint` is a custom function to monitor when to break,
+        >>> # e.g. when the loss is NaN
+        >>> if should_do_breakpoint(loss):
+        ...     accelerator.set_breakpoint()
+        >>> # Assume later in the training script
+        >>> if accelerator.check_breakpoint():
+        ...     break
+        ```
+        """
+        flag_tensor = self.reduce(self.flag_tensor)
+        if flag_tensor.item() == 1:
+            self.flag_tensor = torch.zeros(1, device=self.device)
+            return True
+        return False
 
     def unscale_gradients(self, optimizer=None):
         """
