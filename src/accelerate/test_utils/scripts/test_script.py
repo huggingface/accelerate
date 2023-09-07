@@ -558,51 +558,51 @@ def test_breakpoint():
 def main():
     accelerator = Accelerator()
     state = accelerator.state
-    # if state.local_process_index == 0:
-    #     print("**Initialization**")
-    # init_state_check()
-    # state.wait_for_everyone()
+    if state.local_process_index == 0:
+        print("**Initialization**")
+    init_state_check()
+    state.wait_for_everyone()
 
-    # if state.distributed_type == DistributedType.MULTI_GPU:
-    #     num_processes_per_node = torch.cuda.device_count()
-    # else:
-    #     num_processes_per_node = state.num_processes
+    if state.distributed_type == DistributedType.MULTI_GPU:
+        num_processes_per_node = torch.cuda.device_count()
+    else:
+        num_processes_per_node = state.num_processes
 
-    # # We only run this test on non-multinode
-    # if num_processes_per_node == state.num_processes:
-    #     if state.process_index == 0:
-    #         print("\n**Test process execution**")
-    #     process_execution_check()
+    # We only run this test on non-multinode
+    if num_processes_per_node == state.num_processes:
+        if state.process_index == 0:
+            print("\n**Test process execution**")
+        process_execution_check()
 
-    #     if state.process_index == 0:
-    #         print("\n**Test split between processes as a list**")
-    #     test_split_between_processes_list()
+        if state.process_index == 0:
+            print("\n**Test split between processes as a list**")
+        test_split_between_processes_list()
 
-    #     if state.process_index == 0:
-    #         print("\n**Test split between processes as a dict**")
-    #     test_split_between_processes_nested_dict()
+        if state.process_index == 0:
+            print("\n**Test split between processes as a dict**")
+        test_split_between_processes_nested_dict()
 
-    #     if state.process_index == 0:
-    #         print("\n**Test split between processes as a tensor**")
-    #     test_split_between_processes_tensor()
+        if state.process_index == 0:
+            print("\n**Test split between processes as a tensor**")
+        test_split_between_processes_tensor()
 
-    # if state.local_process_index == 0:
-    #     print("\n**Test random number generator synchronization**")
-    # rng_sync_check()
+    if state.local_process_index == 0:
+        print("\n**Test random number generator synchronization**")
+    rng_sync_check()
 
-    # if state.local_process_index == 0:
-    #     print("\n**DataLoader integration test**")
-    # dl_preparation_check()
-    # if state.distributed_type != DistributedType.TPU:
-    #     central_dl_preparation_check()
+    if state.local_process_index == 0:
+        print("\n**DataLoader integration test**")
+    dl_preparation_check()
+    if state.distributed_type != DistributedType.TPU:
+        central_dl_preparation_check()
 
-    # # Trainings are not exactly the same in DeepSpeed and CPU mode
-    # if state.distributed_type == DistributedType.DEEPSPEED:
-    #     return
+    # Trainings are not exactly the same in DeepSpeed and CPU mode
+    if state.distributed_type == DistributedType.DEEPSPEED:
+        return
 
-    # if state.local_process_index == 0:
-    #     print("\n**Training integration test**")
-    # training_check()
+    if state.local_process_index == 0:
+        print("\n**Training integration test**")
+    training_check()
 
     if state.local_process_index == 0:
         print("\n**Breakpoint test**")
