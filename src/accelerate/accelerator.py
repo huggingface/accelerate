@@ -2122,28 +2122,16 @@ class Accelerator:
         ```
         """
 
-        def check_input(input_data):
-            if isinstance(input_data, (list, tuple)):
-                return all(is_torch_tensor(item) for item in input_data)
-            return is_torch_tensor(input_data)
+        try:
+            recursively_apply(lambda x: x, input_data, error_on_other_type=True)
+            all_tensors = True
+        except TypeError:
+            all_tensors = False
 
-        if not check_input(input_data):
-            try:
-                obj = gather_object(input_data)
-                # deduplicate objects within the last batch
-                if self.gradient_state.end_of_dataloader and self.gradient_state.remainder > 0:
-                    deduplicated_objects = []
-                    seen_objects = set()
-                    for item in obj:
-                        if item not in seen_objects:
-                            deduplicated_objects.append(item)
-                            seen_objects.add(item)
-                return deduplicated_objects
+        if not all_tensors:
+            data= gather_object(input_data)
 
-            except Exception:
-                return obj
-
-        tensor = self.gather(input_data)
+        data= self.gather(input_data)
         try:
             if self.gradient_state.end_of_dataloader:
                 # at the end of a dataloader, `gather_for_metrics` regresses to
