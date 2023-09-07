@@ -2103,7 +2103,7 @@ class Accelerator:
 
         Args:
             input (`torch.Tensor`, a nested tuple/list/dictionary of `torch.Tensor`, `object` or a nested tuple/list/dictionary of `object`):
-                The tensors / objects for calculating metrics across all processes
+                The tensors or objects for calculating metrics across all processes
 
         Example:
 
