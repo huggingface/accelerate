@@ -463,8 +463,8 @@ class Accelerator:
         if self.rng_types is None:
             self.rng_types = ["generator"]
 
-        # Tracking tensor for monitoring breakpoints
-        self.flag_tensor = torch.zeros(1, device=self.device)
+        # Set a flag tensor for early stopping and other breakpoints
+        self.flag_tensor = None
 
     @property
     def use_distributed(self):
@@ -1990,7 +1990,7 @@ class Accelerator:
         ...     break
         ```
         """
-        self.flag_tensor += 1
+        self.flag_tensor = torch.tensor(1, device=self.device)
 
     def check_breakpoint(self):
         """
@@ -2016,9 +2016,12 @@ class Accelerator:
         ...     break
         ```
         """
+        # Now that we are outside `__init__`, we can initialize it if it is `None` on device
+        if self.flag_tensor is None:
+            self.flag_tensor = torch.tensor(0, device=self.device)
         flag_tensor = self.reduce(self.flag_tensor)
         if flag_tensor.item() == 1:
-            self.flag_tensor = torch.zeros(1, device=self.device)
+            self.flag_tensor = None
             return True
         return False
 
