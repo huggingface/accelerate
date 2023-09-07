@@ -608,8 +608,6 @@ def main():
         print("\n**Breakpoint test**")
     test_breakpoint()
 
-    AcceleratorState()._reset_state()
-
 
 if __name__ == "__main__":
     main()
