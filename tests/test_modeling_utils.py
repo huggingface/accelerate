@@ -547,6 +547,10 @@ class ModelingUtilsTester(unittest.TestCase):
         max_memory = get_balanced_memory(model, max_memory={0: 0, 1: 300, 2: 300})
         self.assertDictEqual({0: 0, 1: 215, 2: 300}, max_memory)
 
+        # If we set a device to 0, it's not counted.
+        max_memory = get_balanced_memory(model, max_memory={0: 0, "cpu": 100})
+        self.assertDictEqual({0: 0, "cpu": 100}, max_memory)
+
     @require_cuda
     @require_safetensors
     def test_load_state_dict(self):

@@ -766,9 +766,6 @@ def get_balanced_memory(
     user_not_set_max_memory = max_memory is None
     max_memory = get_max_memory(max_memory)
 
-    if not (torch.cuda.is_available() or is_xpu_available()) or is_mps_available():
-        return max_memory
-
     if not is_xpu_available():
         num_devices = len([d for d in max_memory if torch.device(d).type == "cuda" and max_memory[d] > 0])
     else:
@@ -783,6 +780,9 @@ def get_balanced_memory(
                 and max_memory[d] > 0
             ]
         )
+
+    if num_devices == 0:
+        return max_memory
 
     if num_devices == 1:
         # We cannot do low_zero on just one GPU, but we will still reserve some memory for the buffer
