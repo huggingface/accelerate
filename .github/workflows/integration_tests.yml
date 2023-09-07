@@ -26,9 +26,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # TODO (@muellerzr, transformers v4.33) Add pypi back after the next release
         transformers-version: [
-          github
+          github,
+          pypi
         ]
     steps:
     - uses: actions/checkout@v3.1.0
