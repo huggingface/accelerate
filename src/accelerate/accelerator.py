@@ -2129,9 +2129,9 @@ class Accelerator:
             all_tensors = False
 
         if not all_tensors:
-            data= gather_object(input_data)
+            data = gather_object(input_data)
 
-        data= self.gather(input_data)
+        data = self.gather(input_data)
         try:
             if self.gradient_state.end_of_dataloader:
                 # at the end of a dataloader, `gather_for_metrics` regresses to
@@ -2140,22 +2140,22 @@ class Accelerator:
                     logger.info(
                         "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
                     )
-                    return tensor
+                    return data
                 elif self.gradient_state.remainder > 0:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
 
-                    return recursively_apply(_adjust_samples, tensor)
+                    return recursively_apply(_adjust_samples, data)
                 else:  # remainder is 0
                     # no remainder even though at end of dataloader, so nothing to do.
-                    return tensor
+                    return data
             else:
                 # Not at the end of the dataloader, no need to adjust the tensors
-                return tensor
+                return data
         except Exception:
             # Dataset had no length or raised an error
-            return tensor
+            return data
 
     def reduce(self, tensor, reduction="sum"):
         """
