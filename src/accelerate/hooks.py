@@ -26,6 +26,7 @@ from .utils import (
     send_to_device,
     set_module_tensor_to_device,
 )
+from .utils.modeling import get_non_persistant_buffers
 
 
 class ModelHook:
@@ -213,6 +214,9 @@ class AlignDevicesHook(ModelHook):
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to include the associated module's buffers when offloading.
+        remove_non_persistant (`bool`, *optional*, defaults to `False`):
+            Whether or not to remove the non persistant buffer from the buffers that we want to offload. Useful only
+            when offload_buffers = True
         place_submodules (`bool`, *optional*, defaults to `False`):
             Whether to place the submodules on `execution_device` during the `init_hook` event.
     """
@@ -224,6 +228,7 @@ class AlignDevicesHook(ModelHook):
         io_same_device: bool = False,
         weights_map: Optional[Mapping] = None,
         offload_buffers: bool = False,
+        remove_non_persistant: bool = False,
         place_submodules: bool = False,
         skip_keys: Optional[Union[str, List[str]]] = None,
     ):
@@ -232,6 +237,7 @@ class AlignDevicesHook(ModelHook):
         self.io_same_device = io_same_device
         self.weights_map = weights_map
         self.offload_buffers = offload_buffers
+        self.remove_non_persistant = remove_non_persistant
         self.place_submodules = place_submodules
         self.skip_keys = skip_keys
 
@@ -264,12 +270,19 @@ class AlignDevicesHook(ModelHook):
                 }
 
             for name, _ in named_module_tensors(
-                module, include_buffers=self.offload_buffers, recurse=self.place_submodules
+                module,
+                include_buffers=self.offload_buffers,
+                recurse=self.place_submodules,
+                remove_non_persistant=self.remove_non_persistant,
             ):
                 set_module_tensor_to_device(module, name, "meta")
             if not self.offload_buffers and self.execution_device is not None:
                 for name, _ in module.named_buffers(recurse=self.place_submodules):
                     set_module_tensor_to_device(module, name, self.execution_device)
+            elif self.remove_non_persistant and self.offload_buffers and self.execution_device is not None:
+                for name in get_non_persistant_buffers(module, recurse=self.place_submodules):
+                    set_module_tensor_to_device(module, name, self.execution_device)
+
         return module
 
     def pre_forward(self, module, *args, **kwargs):
@@ -277,7 +290,10 @@ class AlignDevicesHook(ModelHook):
             self.input_device = find_device([args, kwargs])
         if self.offload:
             for name, _ in named_module_tensors(
-                module, include_buffers=self.offload_buffers, recurse=self.place_submodules
+                module,
+                include_buffers=self.offload_buffers,
+                recurse=self.place_submodules,
+                remove_non_persistant=self.remove_non_persistant,
             ):
                 fp16_statistics = None
                 if "weight" in name and name.replace("weight", "SCB") in self.weights_map.keys():
@@ -294,7 +310,10 @@ class AlignDevicesHook(ModelHook):
     def post_forward(self, module, output):
         if self.offload:
             for name, _ in named_module_tensors(
-                module, include_buffers=self.offload_buffers, recurse=self.place_submodules
+                module,
+                include_buffers=self.offload_buffers,
+                recurse=self.place_submodules,
+                remove_non_persistant=self.remove_non_persistant,
             ):
                 set_module_tensor_to_device(module, name, "meta")
                 if type(module).__name__ == "Linear8bitLt":
@@ -354,6 +373,7 @@ def attach_align_device_hook(
     offload: bool = False,
     weights_map: Optional[Mapping] = None,
     offload_buffers: bool = False,
+    remove_non_persistant: bool = False,
     module_name: str = "",
     skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
@@ -373,6 +393,9 @@ def attach_align_device_hook(
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to include the associated module's buffers when offloading.
+        remove_non_persistant (`bool`, *optional*, defaults to `False`):
+            Whether or not to remove the non persistant buffer from the buffers that we want to offload. Useful only
+            when offload_buffers = True
         module_name (`str`, *optional*, defaults to `""`):
             The name of the module.
         skip_keys (`str` or `List[str]`, *optional*):
@@ -400,6 +423,7 @@ def attach_align_device_hook(
             offload=offload,
             weights_map=prefixed_weights_map,
             offload_buffers=offload_buffers,
+            remove_non_persistant=remove_non_persistant,
             place_submodules=full_offload,
             skip_keys=skip_keys,
         )
@@ -418,6 +442,7 @@ def attach_align_device_hook(
             offload=offload,
             weights_map=weights_map,
             offload_buffers=offload_buffers,
+            remove_non_persistant=remove_non_persistant,
             module_name=child_name,
             preload_module_classes=preload_module_classes,
             skip_keys=skip_keys,
@@ -442,6 +467,7 @@ def attach_align_device_hook_on_blocks(
     offload: Union[bool, Dict[str, bool]] = False,
     weights_map: Mapping = None,
     offload_buffers: bool = False,
+    remove_non_persistant: bool = False,
     module_name: str = "",
     skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
@@ -462,6 +488,9 @@ def attach_align_device_hook_on_blocks(
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to include the associated module's buffers when offloading.
+        remove_non_persistant (`bool`, *optional*, defaults to `False`):
+            Whether or not to remove the non persistant buffer from the buffers that we want to offload. Useful only
+            when offload_buffers = True
         module_name (`str`, *optional*, defaults to `""`):
             The name of the module.
         skip_keys (`str` or `List[str]`, *optional*):
@@ -486,6 +515,7 @@ def attach_align_device_hook_on_blocks(
                 offload=True,
                 weights_map=weights_map,
                 offload_buffers=offload_buffers,
+                remove_non_persistant=remove_non_persistant,
                 module_name=module_name,
                 skip_keys=skip_keys,
             )
@@ -500,6 +530,7 @@ def attach_align_device_hook_on_blocks(
         hook = AlignDevicesHook(
             execution_device=execution_device[module_name],
             offload_buffers=offload_buffers,
+            remove_non_persistant=remove_non_persistant,
             io_same_device=(module_name == ""),
             place_submodules=True,
             skip_keys=skip_keys,
@@ -513,6 +544,7 @@ def attach_align_device_hook_on_blocks(
             offload=True,
             weights_map=weights_map,
             offload_buffers=offload_buffers,
+            remove_non_persistant=remove_non_persistant,
             module_name=module_name,
             skip_keys=skip_keys,
             preload_module_classes=preload_module_classes,
@@ -540,6 +572,7 @@ def attach_align_device_hook_on_blocks(
             offload=offload,
             weights_map=weights_map,
             offload_buffers=offload_buffers,
+            remove_non_persistant=remove_non_persistant,
             module_name=child_name,
             preload_module_classes=preload_module_classes,
             skip_keys=skip_keys,

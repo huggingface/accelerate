@@ -361,7 +361,9 @@ def set_module_tensor_to_device(
     torch.cuda.empty_cache()
 
 
-def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurse: bool = False):
+def named_module_tensors(
+    module: nn.Module, include_buffers: bool = True, recurse: bool = False, remove_non_persistant: bool = False
+):
     """
     A helper function that gathers all the tensors (parameters + buffers) of a given module. If `include_buffers=True`
     it's the same as doing `module.named_parameters(recurse=recurse) + module.named_buffers(recurse=recurse)`.
@@ -373,13 +375,40 @@ def named_module_tensors(module: nn.Module, include_buffers: bool = True, recurs
             Whether or not to include the buffers in the result.
         recurse (`bool`, *optional`, defaults to `False`):
             Whether or not to go look in every submodule or just return the direct parameters and buffers.
+        remove_non_persistant (`bool`, *optional*, defaults to `False`):
+            Whether or not to remove the non persistant buffer from the buffers. Useful only when include_buffers =
+            True
     """
     for named_parameter in module.named_parameters(recurse=recurse):
         yield named_parameter
 
     if include_buffers:
+        non_persistant_buffers = set()
+        if remove_non_persistant:
+            non_persistant_buffers = get_non_persistant_buffers(module, recurse=recurse)
         for named_buffer in module.named_buffers(recurse=recurse):
-            yield named_buffer
+            name, _ = named_buffer
+            if name not in non_persistant_buffers:
+                yield named_buffer
+
+
+def get_non_persistant_buffers(module: nn.Module, recurse: bool = False):
+    """
+    Gather all non persistant buffers of a given modules into a set
+
+    Args:
+        module (`nn.Module`):
+            The module we want the non persistant buffers on.
+        recurse (`bool`, *optional*, defaults to `False`):
+            Whether or not to go look in every submodule or just return the direct non persistant buffers.
+    """
+
+    non_persistent_buffers_set = module._non_persistent_buffers_set
+    if recurse:
+        for _, m in module.named_modules():
+            non_persistent_buffers_set |= m._non_persistent_buffers_set
+
+    return non_persistent_buffers_set
 
 
 class FindTiedParametersResult(list):
