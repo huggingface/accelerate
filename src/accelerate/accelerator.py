@@ -1216,6 +1216,9 @@ class Accelerator:
             for obj in args:
                 if isinstance(obj, torch.nn.Module):
                     model_count += 1
+                    # if the model is compiled using PyTorch 2.0,
+                    # check that the wrapped model is FSDP or not;
+                    # else check if it is FSDP or not;
                     unwrapped_model = obj._orig_mod if is_compiled_module(obj) else obj
                     is_type_fsdp = (type(obj) == FSDP) or isinstance(unwrapped_model, FSDP)
                 if isinstance(obj, torch.optim.Optimizer):
@@ -1425,6 +1428,8 @@ class Accelerator:
 
                 # Check if the model is already a FSDP model due to `Manual Wrapping` and if so,
                 # don't wrap it again
+                # In case the model is already compiled using PyTorch 2.0 and the wrapped model in it
+                # is a FSDP model, don't wrap it again
                 unwrapped_model = model._orig_mod if is_compiled_module(model) else model
                 is_type_fsdp = (type(model) == FSDP) or isinstance(unwrapped_model, FSDP)
 
