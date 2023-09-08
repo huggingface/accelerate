@@ -29,8 +29,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # TODO (@muellerzr, transformers v4.33) Add pypi back after the next release
         transformers-version: [
+          pypi,
           github
         ]
         cuda_visible_devices: [
