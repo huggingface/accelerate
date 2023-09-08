@@ -2130,8 +2130,9 @@ class Accelerator:
 
         if not all_tensors:
             data = gather_object(input_data)
+        else:
+            data = self.gather(input_data)
 
-        data = self.gather(input_data)
         try:
             if self.gradient_state.end_of_dataloader:
                 # at the end of a dataloader, `gather_for_metrics` regresses to
