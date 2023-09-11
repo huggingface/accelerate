@@ -141,7 +141,7 @@ try:
 except ImportError:
     from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 
-if is_safetensors_available:
+if is_safetensors_available():
     from safetensors.torch import save_file as safe_save_file
 
 logger = get_logger(__name__)
