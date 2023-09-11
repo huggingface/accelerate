@@ -141,6 +141,9 @@ try:
 except ImportError:
     from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 
+if is_safetensors_available:
+    from safetensors.torch import save_file as safe_save_file
+
 logger = get_logger(__name__)
 
 
@@ -2507,7 +2510,7 @@ class Accelerator:
                             del state_dict[name]
                             warn_names.add(name)
             if len(warn_names) > 0:
-                logger.warning_once(
+                logger.warning(
                     f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
                 )
 
@@ -2538,7 +2541,10 @@ class Accelerator:
 
         # Save the model
         for shard_file, shard in shards.items():
-            self.save(shard, os.path.join(save_directory, shard_file))
+            if safe_serialization:
+                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
+            else:
+                self.save(shard, os.path.join(save_directory, shard_file))
 
         if index is None:
             path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
