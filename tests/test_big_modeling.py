@@ -45,6 +45,33 @@ class ModelForTest(nn.Module):
         return self.linear2(self.batchnorm(self.linear1(x)))
 
 
+class LinearWithNonPersistentBuffers(nn.Module):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True, device=None, dtype=None) -> None:
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.register_buffer("weight", torch.ones((out_features, in_features), **factory_kwargs))
+        if bias:
+            self.register_buffer("bias", torch.ones(out_features, **factory_kwargs), persistent=False)
+        else:
+            self.register_buffer("bias", None)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return torch.nn.functional.linear(input, self.weight, self.bias)
+
+
+class ModelForTestNonPersistentBuffers(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = LinearWithNonPersistentBuffers(3, 4)
+        self.batchnorm = nn.BatchNorm1d(4)
+        self.linear2 = LinearWithNonPersistentBuffers(4, 5)
+
+    def forward(self, x):
+        return self.linear2(self.batchnorm(self.linear1(x)))
+
+
 class ModelForTestTiedWeights(nn.Module):
     def __init__(self):
         super().__init__()
@@ -289,6 +316,29 @@ class BigModelingTester(unittest.TestCase):
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
+    def test_dispatch_model_with_non_persistent_buffers(self):
+        model = ModelForTestNonPersistentBuffers()
+        device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "disk"}
+        x = torch.randn(2, 3)
+        expected = model(x)
+        print(expected)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir, offload_buffers=True, remove_non_persistent=True)
+            output = model(x)
+            print(output)
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+        with TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(NotImplementedError) as context:
+                dispatch_model(
+                    model, device_map, offload_dir=tmp_dir, offload_buffers=True, remove_non_persistent=False
+                )
+                output = model(x)
+            # we are not able to retreive the non_persistent buffers
+            self.assertTrue("Cannot copy out of meta tensor; no data!" in str(context.exception))
 
     @require_mps
     def test_dispatch_model_mps(self):

@@ -362,7 +362,7 @@ def set_module_tensor_to_device(
 
 
 def named_module_tensors(
-    module: nn.Module, include_buffers: bool = True, recurse: bool = False, remove_non_persistant: bool = False
+    module: nn.Module, include_buffers: bool = True, recurse: bool = False, remove_non_persistent: bool = False
 ):
     """
     A helper function that gathers all the tensors (parameters + buffers) of a given module. If `include_buffers=True`
@@ -375,32 +375,32 @@ def named_module_tensors(
             Whether or not to include the buffers in the result.
         recurse (`bool`, *optional`, defaults to `False`):
             Whether or not to go look in every submodule or just return the direct parameters and buffers.
-        remove_non_persistant (`bool`, *optional*, defaults to `False`):
-            Whether or not to remove the non persistant buffer from the buffers. Useful only when include_buffers =
+        remove_non_persistent (`bool`, *optional*, defaults to `False`):
+            Whether or not to remove the non persistent buffer from the buffers. Useful only when include_buffers =
             True
     """
     for named_parameter in module.named_parameters(recurse=recurse):
         yield named_parameter
 
     if include_buffers:
-        non_persistant_buffers = set()
-        if remove_non_persistant:
-            non_persistant_buffers = get_non_persistant_buffers(module, recurse=recurse)
+        non_persistent_buffers = set()
+        if remove_non_persistent:
+            non_persistent_buffers = get_non_persistent_buffers(module, recurse=recurse)
         for named_buffer in module.named_buffers(recurse=recurse):
             name, _ = named_buffer
-            if name not in non_persistant_buffers:
+            if name not in non_persistent_buffers:
                 yield named_buffer
 
 
-def get_non_persistant_buffers(module: nn.Module, recurse: bool = False):
+def get_non_persistent_buffers(module: nn.Module, recurse: bool = False):
     """
-    Gather all non persistant buffers of a given modules into a set
+    Gather all non persistent buffers of a given modules into a set
 
     Args:
         module (`nn.Module`):
-            The module we want the non persistant buffers on.
+            The module we want the non persistent buffers on.
         recurse (`bool`, *optional*, defaults to `False`):
-            Whether or not to go look in every submodule or just return the direct non persistant buffers.
+            Whether or not to go look in every submodule or just return the direct non persistent buffers.
     """
 
     non_persistent_buffers_set = module._non_persistent_buffers_set
