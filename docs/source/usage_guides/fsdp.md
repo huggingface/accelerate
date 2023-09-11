@@ -49,7 +49,7 @@ fsdp_config:
   fsdp_offload_params: false
   fsdp_sharding_strategy: 1
   fsdp_state_dict_type: FULL_STATE_DICT
-  fsdp_transformer_layer_cls_to_wrap: GPT2Block
+  fsdp_transformer_layer_cls_to_wrap: BertLayer
 machine_rank: 0
 main_process_ip: null
 main_process_port: null
