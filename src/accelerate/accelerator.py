@@ -2704,7 +2704,13 @@ class Accelerator:
             hook(self._models, weights, output_dir)
 
         save_location = save_accelerator_state(
-            output_dir, weights, optimizers, schedulers, self.state.process_index, self.scaler
+            output_dir,
+            weights,
+            optimizers,
+            schedulers,
+            self.state.process_index,
+            self.scaler,
+            self.project_configuration.use_node_local_storage,
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)

@@ -51,6 +51,7 @@ def save_accelerator_state(
     schedulers: list,
     process_index: int,
     scaler: GradScaler = None,
+    global_only: bool = False,
 ):
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
@@ -68,32 +69,34 @@ def save_accelerator_state(
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
             An optional gradient scaler instance to save
+        global_only (`bool`, *optional*):
+            Whether to only save on the global main process.
     """
     # Model states
     for i, state in enumerate(model_states):
         weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
         output_model_file = os.path.join(output_dir, weights_name)
-        save(state, output_model_file)
+        save(state, output_model_file, global_only)
         logger.info(f"Model weights saved in {output_model_file}")
     # Optimizer states
     for i, opt in enumerate(optimizers):
         state = opt.state_dict()
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
         output_optimizer_file = os.path.join(output_dir, optimizer_name)
-        save(state, output_optimizer_file)
+        save(state, output_optimizer_file, global_only)
         logger.info(f"Optimizer state saved in {output_optimizer_file}")
     # Scheduler states
     for i, scheduler in enumerate(schedulers):
         state = scheduler.state_dict()
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
         output_scheduler_file = os.path.join(output_dir, scheduler_name)
-        save(state, output_scheduler_file)
+        save(state, output_scheduler_file, global_only)
         logger.info(f"Scheduler state saved in {output_scheduler_file}")
     # GradScaler state
     if scaler is not None:
         state = scaler.state_dict()
         output_scaler_file = os.path.join(output_dir, SCALER_NAME)
-        torch.save(state, output_scaler_file)
+        torch.save(state, output_scaler_file, global_only)
         logger.info(f"Gradient scaler state saved in {output_scaler_file}")
     # Random number generator states
     states = {}
