@@ -2417,6 +2417,10 @@ class Accelerator:
             obj (`object`): The object to save.
             f (`str` or `os.PathLike`): Where to save the content of `obj`.
 
+        Note:
+            If `use_node_local_storage` was passed in as a `ProjectConfiguration`, will only save on the main process
+            and assume a shared file system.
+
         Example:
 
         ```python
@@ -2427,7 +2431,7 @@ class Accelerator:
         >>> accelerator.save(arr, "array.pkl")
         ```
         """
-        save(obj, f)
+        save(obj, f, self.project_configuration.use_node_local_storage)
 
     def save_model(
         self,

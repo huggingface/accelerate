@@ -415,6 +415,13 @@ class ProjectConfiguration:
         metadata={"help": "The current save iteration."},
     )
 
+    use_node_local_storage: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to store model and checkpoint states based on the local rank, allowing for them to be loaded and saved on a shared filesystem."
+        },
+    )
+
     def set_directories(self, project_dir: str = None):
         "Sets `self.project_dir` and `self.logging_dir` to the appropriate values."
         self.project_dir = project_dir
