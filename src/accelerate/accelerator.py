@@ -2418,8 +2418,8 @@ class Accelerator:
             f (`str` or `os.PathLike`): Where to save the content of `obj`.
 
         Note:
-            If `use_node_local_storage` was passed in as a `ProjectConfiguration`, will only save on the main process
-            and assume a shared file system.
+            If `use_node_global_storage` was passed in as a `ProjectConfiguration`, will only save on the global main
+            process and assume a shared file system.
 
         Example:
 
@@ -2431,7 +2431,7 @@ class Accelerator:
         >>> accelerator.save(arr, "array.pkl")
         ```
         """
-        save(obj, f, self.project_configuration.use_node_local_storage)
+        save(obj, f, self.project_configuration.use_node_global_storage)
 
     def save_model(
         self,
@@ -2710,7 +2710,7 @@ class Accelerator:
             schedulers,
             self.state.process_index,
             self.scaler,
-            self.project_configuration.use_node_local_storage,
+            self.project_configuration.use_node_global_storage,
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i)

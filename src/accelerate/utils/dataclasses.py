@@ -415,10 +415,10 @@ class ProjectConfiguration:
         metadata={"help": "The current save iteration."},
     )
 
-    use_node_local_storage: bool = field(
+    use_node_global_storage: bool = field(
         default=False,
         metadata={
-            "help": "Whether to store model and checkpoint states based on the local rank, allowing for them to be loaded and saved on a shared filesystem."
+            "help": "Whether to store model and checkpoint states based on the global rank, allowing for them to be loaded and saved on a shared filesystem."
         },
     )
 
