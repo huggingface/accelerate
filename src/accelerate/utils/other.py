@@ -120,7 +120,7 @@ def save(obj, f, global_only: bool = False):
         xm.save(obj, f)
     elif PartialState().is_main_process and global_only:
         torch.save(obj, f)
-    elif PartialState().is_local_main_process:
+    elif PartialState().is_local_main_process and not global_only:
         torch.save(obj, f)
 
 
