@@ -544,15 +544,15 @@ def test_split_between_processes_tensor():
 def test_breakpoint():
     accelerator = Accelerator()
     # should start with being false
-    assert accelerator.check_breakpoint() is False
+    assert accelerator.set_trigger() is False
 
     # set a breakpoint on the main process
     if accelerator.is_main_process:
-        accelerator.set_breakpoint()
+        accelerator.set_trigger()
 
     # check it's been activated across all processes
     # calls `all_reduce` and triggers a sync
-    assert accelerator.check_breakpoint() is True
+    assert accelerator.check_trigger() is True
 
 
 def main():

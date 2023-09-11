@@ -111,16 +111,17 @@ with accelerator.main_process_first():
 
 ## Applying checks such as Early Stopping
 
-To have a check that works with a flag set by a particular process, the `check` and `set` breakpoint API should be used.
+To have a check that works with a flag set by a particular process, the `check` and `set` breakpoint API should be used. Useful examples
+for doing so can include situations such as using early stopping and monitoring the loss (as each loss slightly differs on each process).
 
-Call [`Accelerator.set_breakpoint`] when your condition has been met, and [`Accelerator.check_breakpoint`] when checking if that condition has been met in any process:
+Call [`Accelerator.set_trigger`] when your condition has been met, and [`Accelerator.check_trigger`] when checking if that condition has been met in any process:
 
 ```python
-# Assume `should_do_breakpoint` is a custom defined function that returns a conditional
-if should_do_breakpoint(loss):
-    accelerator.set_breakpoint()
+# Assume `should_do_early_stopping` is a custom defined function that returns a conditional
+if should_do_early_stopping(loss):
+    accelerator.set_trigger()
 
 # Later in the training script when we need to check for the breakpoint
-if accelerator.check_breakpoint():
+if accelerator.check_trigger():
     break
 ```

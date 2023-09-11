@@ -197,6 +197,15 @@ def training_function(config, args):
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
+            # New code
+            # Check if we should stop the training on any processes
+            if callback.check_early_stopping(loss.item()):
+                accelerator.set_trigger()
+
+            # If so, we break the loop
+            if accelerator.check_trigger():
+                break
+
         model.eval()
         for step, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
@@ -211,15 +220,6 @@ def training_function(config, args):
             )
 
         eval_metric = metric.compute()
-
-        # New code
-        # Check if we should stop the training on any processes
-        if callback.check_early_stopping(outputs.loss.item()):
-            accelerator.set_breakpoint()
-
-        # If so, we break the loop
-        if accelerator.check_breakpoint():
-            break
 
         # Use accelerator.print to print only on the main process.
         accelerator.print(f"epoch {epoch}:", eval_metric)

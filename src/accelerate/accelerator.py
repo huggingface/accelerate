@@ -1966,10 +1966,10 @@ class Accelerator:
         else:
             loss.backward(**kwargs)
 
-    def set_breakpoint(self):
+    def set_trigger(self):
         """
-        Sets the internal flag tensor to 1 on the current process. A latter check of `Accelerator().check_breakpoint()`
-        should follow using this which will check across all processes.
+        Sets the internal trigger tensor to 1 on the current process. A latter check should follow using this which
+        will check across all processes.
 
         Note:
             Does not require `wait_for_everyone()`
@@ -1984,7 +1984,7 @@ class Accelerator:
         >>> # `should_do_breakpoint` is a custom function to monitor when to break,
         >>> # e.g. when the loss is NaN
         >>> if should_do_breakpoint(loss):
-        ...     accelerator.set_breakpoint()
+        ...     accelerator.set_trigger()
         >>> # Assume later in the training script
         >>> if accelerator.check_breakpoint():
         ...     break
@@ -1992,10 +1992,10 @@ class Accelerator:
         """
         self.flag_tensor = torch.tensor(1, device=self.device)
 
-    def check_breakpoint(self):
+    def check_trigger(self):
         """
-        Checks if `self.flag_tensor` has been set to 1 in any of the processes. If so, will return `True` and reset the
-        flag tensor to 0.
+        Checks if the internal trigger tensor has been set to 1 in any of the processes. If so, will return `True` and
+        reset the trigger tensor to 0.
 
         Note:
             Does not require `wait_for_everyone()`
@@ -2010,9 +2010,9 @@ class Accelerator:
         >>> # `should_do_breakpoint` is a custom function to monitor when to break,
         >>> # e.g. when the loss is NaN
         >>> if should_do_breakpoint(loss):
-        ...     accelerator.set_breakpoint()
+        ...     accelerator.set_trigger()
         >>> # Assume later in the training script
-        >>> if accelerator.check_breakpoint():
+        >>> if accelerator.check_trigger():
         ...     break
         ```
         """
