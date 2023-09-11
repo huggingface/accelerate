@@ -544,7 +544,7 @@ def test_split_between_processes_tensor():
 def test_breakpoint():
     accelerator = Accelerator()
     # should start with being false
-    assert accelerator.set_trigger() is False
+    assert accelerator.check_trigger() is False
 
     # set a breakpoint on the main process
     if accelerator.is_main_process:
