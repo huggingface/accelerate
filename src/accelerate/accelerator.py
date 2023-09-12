@@ -141,9 +141,6 @@ try:
 except ImportError:
     from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 
-if is_safetensors_available():
-    from safetensors.torch import save_file as safe_save_file
-
 logger = get_logger(__name__)
 
 
@@ -2412,13 +2409,14 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.finish()
 
-    def save(self, obj, f):
+    def save(self, obj, f, safe_serialization=False):
         """
         Save the object passed to disk once per machine. Use in place of `torch.save`.
 
         Args:
             obj (`object`): The object to save.
             f (`str` or `os.PathLike`): Where to save the content of `obj`.
+            safe_serialization (`bool`, *optional*, defaults to `False`): Whether to save `obj` using `safetensors`
 
         Example:
 
@@ -2430,7 +2428,7 @@ class Accelerator:
         >>> accelerator.save(arr, "array.pkl")
         ```
         """
-        save(obj, f)
+        save(obj, f, safe_serialization)
 
     def save_model(
         self,
@@ -2541,10 +2539,7 @@ class Accelerator:
 
         # Save the model
         for shard_file, shard in shards.items():
-            if safe_serialization:
-                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
-            else:
-                self.save(shard, os.path.join(save_directory, shard_file))
+            self.save(shard, os.path.join(save_directory, shard_file), safe_serialization)
 
         if index is None:
             path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
