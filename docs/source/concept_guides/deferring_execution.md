@@ -117,11 +117,14 @@ for doing so can include situations such as using early stopping and monitoring 
 Call [`Accelerator.set_trigger`] when your condition has been met, and [`Accelerator.check_trigger`] when checking if that condition has been met in any process:
 
 ```python
-# Assume `should_do_early_stopping` is a custom defined function that returns a conditional
-if should_do_early_stopping(loss):
-    accelerator.set_trigger()
+for (x,y) in data_loader:
+    logits = model(x)
+    loss = loss_func(logits, y)
+    # Assume `should_do_early_stopping` is a custom defined function that returns a conditional
+    if should_do_early_stopping(loss):
+        accelerator.set_trigger()
 
-# Later in the training script when we need to check for the breakpoint
-if accelerator.check_trigger():
-    break
+    # Later in the training script when we need to check for the breakpoint
+    if accelerator.check_trigger():
+        break
 ```
