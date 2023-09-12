@@ -332,14 +332,14 @@ def require_import(import_str: str, secondary_import_str: str = None):
                 import_str = f"import {import_str}"
             if len(secondary_import_str.split(" ")) == 1:
                 secondary_import_str = f"import {secondary_import_str}"
-            # try:
-            parsed_import = ast.parse(import_str).body[0]
-            _import_module(parsed_import)
+            try:
+                parsed_import = ast.parse(import_str).body[0]
+                _import_module(parsed_import)
+            except ModuleNotFoundError:
+                parsed_import = ast.parse(secondary_import_str).body[0]
+                _import_module(parsed_import)
 
             function(*args, **kwargs)
-            # except ModuleNotFoundError:
-            #     parsed_import = ast.parse(secondary_import_str).body[0]
-            #     _import_module(parsed_import)
 
         return inner
 
