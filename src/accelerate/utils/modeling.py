@@ -35,6 +35,10 @@ from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
 
+if is_npu_available(check_device=False):
+    import torch_npu  # noqa: F401
+
+
 if is_safetensors_available():
     from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
@@ -1447,10 +1451,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
         autocast_kwargs = autocast_kwargs.to_kwargs()
     if native_amp:
         if state.mixed_precision == "fp16":
-            if is_npu_available():
-                return torch.npu.amp.autocast(dtype=torch.float16, **autocast_kwargs)
-            else:
-                return torch.autocast(device_type=state.device.type, dtype=torch.float16, **autocast_kwargs)
+            return torch.autocast(device_type=state.device.type, dtype=torch.float16, **autocast_kwargs)
         elif state.mixed_precision == "bf16" and state.distributed_type in [
             DistributedType.NO,
             DistributedType.MULTI_CPU,
