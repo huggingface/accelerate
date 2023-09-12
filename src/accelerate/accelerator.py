@@ -2409,13 +2409,14 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.finish()
 
-    def save(self, obj, f):
+    def save(self, obj, f, safe_serialization=False):
         """
         Save the object passed to disk once per machine. Use in place of `torch.save`.
 
         Args:
             obj (`object`): The object to save.
             f (`str` or `os.PathLike`): Where to save the content of `obj`.
+            safe_serialization (`bool`, *optional*, defaults to `False`): Whether to save `obj` using `safetensors`
 
         Example:
 
@@ -2427,7 +2428,7 @@ class Accelerator:
         >>> accelerator.save(arr, "array.pkl")
         ```
         """
-        save(obj, f)
+        save(obj, f, safe_serialization=safe_serialization)
 
     def save_model(
         self,
@@ -2507,7 +2508,7 @@ class Accelerator:
                             del state_dict[name]
                             warn_names.add(name)
             if len(warn_names) > 0:
-                logger.warning_once(
+                logger.warning(
                     f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
                 )
 
@@ -2538,7 +2539,7 @@ class Accelerator:
 
         # Save the model
         for shard_file, shard in shards.items():
-            self.save(shard, os.path.join(save_directory, shard_file))
+            self.save(shard, os.path.join(save_directory, shard_file), safe_serialization=safe_serialization)
 
         if index is None:
             path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)

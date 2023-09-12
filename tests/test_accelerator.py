@@ -10,9 +10,10 @@ from torch.utils.data import DataLoader, TensorDataset
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
-from accelerate.test_utils import require_bnb, require_multi_gpu, slow
+from accelerate.test_utils import require_bnb, require_multi_gpu, require_safetensors, slow
 from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
 from accelerate.utils import patch_environment
+from accelerate.utils.modeling import load_checkpoint_in_model
 
 
 def create_components():
@@ -112,6 +113,30 @@ class AcceleratorTester(AccelerateTestCase):
 
             # make sure loaded weights match
             accelerator.load_state(tmpdirname)
+            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+
+    def test_save_model_pytorch(self):
+        accelerator = Accelerator()
+        model = torch.nn.Linear(10, 10)
+
+        model_signature = get_signature(model)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            accelerator.save_model(model, tmpdirname, safe_serialization=False)
+            # make sure loaded weights match
+            load_checkpoint_in_model(model, tmpdirname)
+            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+
+    @require_safetensors
+    def test_save_model_safetensors(self):
+        accelerator = Accelerator()
+        model = torch.nn.Linear(10, 10)
+
+        model_signature = get_signature(model)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            accelerator.save_model(model, tmpdirname, safe_serialization=True)
+
+            # make sure loaded weights match
+            load_checkpoint_in_model(model, tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
 
     def test_save_load_model_with_hooks(self):
