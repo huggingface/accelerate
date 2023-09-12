@@ -177,10 +177,11 @@ class TensorBoardTracker(GeneralTracker):
     @require_import("import torch.utils.tensorboard as tensorboard", "import tensorboardX as tensorboard")
     def __init__(self, run_name: str, logging_dir: Union[str, os.PathLike], **kwargs):
         super().__init__()
-        self.run_name = run_name
-        self.logging_dir = os.path.join(logging_dir, run_name)
         global tensorboard
         tensorboard = imports.tensorboard
+
+        self.run_name = run_name
+        self.logging_dir = os.path.join(logging_dir, run_name)
         self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
         logger.debug(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
         logger.debug(
@@ -286,9 +287,10 @@ class WandBTracker(GeneralTracker):
     @require_import("wandb")
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
-        self.run_name = run_name
         global wandb
         wandb = imports.wandb
+
+        self.run_name = run_name
         self.run = wandb.init(project=self.run_name, **kwargs)
         logger.debug(f"Initialized WandB project {self.run_name}")
         logger.debug(
@@ -309,6 +311,7 @@ class WandBTracker(GeneralTracker):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
+        wandb.config.update(values, allow_val_change=True)
         logger.debug("Stored initial configuration hyperparameters to WandB")
 
     @on_main_process
@@ -403,11 +406,10 @@ class CometMLTracker(GeneralTracker):
     @require_import("from comet_ml import Experiment")
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
-        self.run_name = run_name
-
         global Experiment
         Experiment = imports.Experiment
 
+        self.run_name = run_name
         self.writer = Experiment(project_name=run_name, **kwargs)
         logger.debug(f"Initialized CometML project {self.run_name}")
         logger.debug(
@@ -483,9 +485,11 @@ class AimTracker(GeneralTracker):
     @on_main_process
     @require_import("from aim import Run")
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
-        self.run_name = run_name
+        super().__init__()
         global Run
         Run = imports.Run
+
+        self.run_name = run_name
         self.writer = Run(repo=logging_dir, **kwargs)
         self.writer.name = self.run_name
         logger.debug(f"Initialized Aim project {self.run_name}")
@@ -576,8 +580,10 @@ class MLflowTracker(GeneralTracker):
         run_name: Optional[str] = None,
         description: Optional[str] = None,
     ):
+        super().__init__()
         global mlflow
         mlflow = imports.mlflow
+
         experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", experiment_name)
         run_id = os.getenv("MLFLOW_RUN_ID", run_id)
         tags = os.getenv("MLFLOW_TAGS", tags)
