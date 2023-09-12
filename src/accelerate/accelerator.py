@@ -1470,6 +1470,7 @@ class Accelerator:
 
     def _prepare_deepspeed(self, *args):
         import deepspeed
+
         deepspeed_plugin = self.state.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
