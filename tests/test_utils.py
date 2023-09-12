@@ -116,9 +116,11 @@ class UtilsTester(unittest.TestCase):
 
             self.assertEqual(os.environ.get("AA"), "1")
             self.assertEqual(os.environ.get("BB"), "2")
+            self.assertNotIn("CC", os.environ)
 
         self.assertNotIn("AA", os.environ)
         self.assertNotIn("BB", os.environ)
+        self.assertNotIn("CC", os.environ)
 
     def test_can_undo_convert_outputs(self):
         model = RegressionModel()
