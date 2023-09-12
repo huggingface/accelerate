@@ -15,7 +15,7 @@
 import os
 
 
-def str_to_bool(value) -> bool:
+def str_to_bool(value) -> int:
     """
     Converts a string representation of truth to `True` (1) or `False` (0).
 
