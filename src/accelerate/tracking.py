@@ -23,6 +23,8 @@ from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
+import accelerate.utils.imports as imports
+
 from .logging import get_logger
 from .state import PartialState
 from .utils import (
@@ -35,8 +37,6 @@ from .utils import (
     listify,
     require_import,
 )
-
-import accelerate.utils.imports as imports
 
 
 _available_trackers = []
@@ -265,6 +265,7 @@ class TensorBoardTracker(GeneralTracker):
         """
         self.writer.close()
         logger.debug("TensorBoard writer closed")
+
 
 class WandBTracker(GeneralTracker):
     """
@@ -531,6 +532,7 @@ class AimTracker(GeneralTracker):
         """
         self.writer.close()
 
+
 class MLflowTracker(GeneralTracker):
     """
     A `Tracker` class that supports `mlflow`. Should be initialized at the start of your script.
@@ -561,7 +563,6 @@ class MLflowTracker(GeneralTracker):
 
     name = "mlflow"
     requires_logging_directory = False
-
 
     @on_main_process
     @require_import("mlflow")
