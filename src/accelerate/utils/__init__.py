@@ -172,6 +172,7 @@ from .other import (
     merge_dicts,
     patch_environment,
     save,
+    str_to_bool,
     wait_for_everyone,
     write_basic_config,
 )

@@ -20,7 +20,6 @@ import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
-from distutils.util import strtobool
 from functools import partial
 from pathlib import Path
 from typing import List, Union
@@ -44,6 +43,7 @@ from ..utils import (
     is_transformers_available,
     is_wandb_available,
     is_xpu_available,
+    str_to_bool,
 )
 
 
@@ -56,7 +56,7 @@ def parse_flag_from_env(key, default=False):
     else:
         # KEY is set, convert it to True or False.
         try:
-            _value = strtobool(value)
+            _value = str_to_bool(value)
         except ValueError:
             # More values are supported, but let's keep the message simple.
             raise ValueError(f"If set, {key} must be yes or no.")

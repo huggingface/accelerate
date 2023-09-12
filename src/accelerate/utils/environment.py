@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import os
-from distutils.util import strtobool
+
+from .other import str_to_bool
 
 
 def get_int_from_env(env_keys, default):
@@ -28,7 +29,7 @@ def get_int_from_env(env_keys, default):
 def parse_flag_from_env(key, default=False):
     """Returns truthy value for `key` from the env if available else the default."""
     value = os.environ.get(key, str(default))
-    return strtobool(value) == 1  # As its name indicates `strtobool` actually returns an int...
+    return str_to_bool(value) == 1  # As its name indicates `str_to_bool` actually returns an int...
 
 
 def parse_choice_from_env(key, default="no"):

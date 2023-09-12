@@ -239,3 +239,18 @@ def convert_bytes(size):
         size /= 1024.0
 
     return f"{round(size, 2)} PB"
+
+
+def str_to_bool(value) -> bool:
+    """
+    Converts a string representation of truth to `True` (1) or `False` (0).
+
+    True values are `y`, `yes`, `t`, `true`, `on`, and `1`; False value are `n`, `no`, `f`, `false`, `off`, and `0`;
+    """
+    truth = ["y", "yes", "t", "true", "on", "1"]
+    false = ["n", "no", "f", "false", "off", "0"]
+
+    if value.lower() not in truth + false:
+        raise ValueError(f"{value} is not a valid boolean value")
+
+    return value.lower() in truth
