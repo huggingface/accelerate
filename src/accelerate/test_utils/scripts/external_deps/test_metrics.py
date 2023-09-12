@@ -239,6 +239,8 @@ def main():
                 accelerator.state._reset_state()
         print("test_gather_for_metrics_with_iterable_dataset")
         test_gather_for_metrics_with_iterable_dataset()
+        print("test gather_for_metrics_with_non_tensor_objects_iterable_dataset")
+        test_gather_for_metrics_with_non_tensor_objects_iterable_dataset()
     if accelerator.is_local_main_process:
         print("**Test torch metrics**")
     for split_batches in [True, False]:
