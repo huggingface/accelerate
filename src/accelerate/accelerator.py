@@ -2428,7 +2428,7 @@ class Accelerator:
         >>> accelerator.save(arr, "array.pkl")
         ```
         """
-        save(obj, f, safe_serialization)
+        save(obj, f, safe_serialization=safe_serialization)
 
     def save_model(
         self,
@@ -2539,7 +2539,7 @@ class Accelerator:
 
         # Save the model
         for shard_file, shard in shards.items():
-            self.save(shard, os.path.join(save_directory, shard_file), safe_serialization)
+            self.save(shard, os.path.join(save_directory, shard_file), safe_serialization=safe_serialization)
 
         if index is None:
             path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
