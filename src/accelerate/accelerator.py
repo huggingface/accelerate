@@ -2098,8 +2098,8 @@ class Accelerator:
 
     def gather_for_metrics(self, input_data):
         """
-        Gathers `input_data` and potentially drops duplicates in the last batch if on a distributed system.
-        Should be used for gathering the inputs and targets for metric calculation.
+        Gathers `input_data` and potentially drops duplicates in the last batch if on a distributed system. Should be
+        used for gathering the inputs and targets for metric calculation.
 
         Args:
             input (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
