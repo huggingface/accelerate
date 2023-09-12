@@ -28,9 +28,6 @@ from .transformer_engine import convert_model
 from .versions import is_torch_version
 
 
-if is_deepspeed_available():
-    from deepspeed import DeepSpeedEngine
-
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
@@ -68,6 +65,8 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
         model = model._orig_mod
 
     if is_deepspeed_available():
+        from deepspeed import DeepSpeedEngine
+
         options += (DeepSpeedEngine,)
 
     if is_torch_version(">=", FSDP_PYTORCH_VERSION):

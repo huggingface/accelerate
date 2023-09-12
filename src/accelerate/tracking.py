@@ -42,23 +42,15 @@ if is_tensorboard_available():
     _available_trackers.append(LoggerType.TENSORBOARD)
 
 if is_wandb_available():
-    import wandb
-
     _available_trackers.append(LoggerType.WANDB)
 
 if is_comet_ml_available():
-    from comet_ml import Experiment
-
     _available_trackers.append(LoggerType.COMETML)
 
 if is_aim_available():
-    from aim import Run
-
     _available_trackers.append(LoggerType.AIM)
 
 if is_mlflow_available():
-    import mlflow
-
     _available_trackers.append(LoggerType.MLFLOW)
 
 logger = get_logger(__name__)
@@ -180,11 +172,10 @@ class TensorBoardTracker(GeneralTracker):
 
     @on_main_process
     def __init__(self, run_name: str, logging_dir: Union[str, os.PathLike], **kwargs):
-        if is_tensorboard_available():
-            try:
-                from torch.utils import tensorboard
-            except ModuleNotFoundError:
-                import tensorboardX as tensorboard
+        try:
+            from torch.utils import tensorboard
+        except ModuleNotFoundError:
+            import tensorboardX as tensorboard
         super().__init__()
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
@@ -293,6 +284,9 @@ class WandBTracker(GeneralTracker):
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
         self.run_name = run_name
+
+        import wandb
+
         self.run = wandb.init(project=self.run_name, **kwargs)
         logger.debug(f"Initialized WandB project {self.run_name}")
         logger.debug(
@@ -313,6 +307,8 @@ class WandBTracker(GeneralTracker):
                 Values to be stored as initial hyperparameters as key-value pairs. The values need to have type `bool`,
                 `str`, `float`, `int`, or `None`.
         """
+        import wandb
+
         wandb.config.update(values, allow_val_change=True)
         logger.debug("Stored initial configuration hyperparameters to WandB")
 
@@ -346,6 +342,8 @@ class WandBTracker(GeneralTracker):
             kwargs:
                 Additional key word arguments passed along to the `wandb.log` method.
         """
+        import wandb
+
         for k, v in values.items():
             self.log({k: [wandb.Image(image) for image in v]}, step=step, **kwargs)
         logger.debug("Successfully logged images to WandB")
@@ -376,6 +374,7 @@ class WandBTracker(GeneralTracker):
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
         """
+        import wandb
 
         values = {table_name: wandb.Table(columns=columns, data=data, dataframe=dataframe)}
         self.log(values, step=step, **kwargs)
@@ -409,6 +408,9 @@ class CometMLTracker(GeneralTracker):
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
         self.run_name = run_name
+
+        from comet_ml import Experiment
+
         self.writer = Experiment(project_name=run_name, **kwargs)
         logger.debug(f"Initialized CometML project {self.run_name}")
         logger.debug(
@@ -484,6 +486,9 @@ class AimTracker(GeneralTracker):
     @on_main_process
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
         self.run_name = run_name
+
+        from aim import Run
+
         self.writer = Run(repo=logging_dir, **kwargs)
         self.writer.name = self.run_name
         logger.debug(f"Initialized Aim project {self.run_name}")
@@ -581,6 +586,8 @@ class MLflowTracker(GeneralTracker):
 
         nested_run = os.getenv("MLFLOW_NESTED_RUN", nested_run)
 
+        import mlflow
+
         exps = mlflow.search_experiments(filter_string=f"name = '{experiment_name}'")
         if len(exps) > 0:
             if len(exps) > 1:
@@ -620,6 +627,7 @@ class MLflowTracker(GeneralTracker):
             values (`dict`):
                 Values to be stored as initial hyperparameters as key-value pairs.
         """
+        import mlflow
 
         for name, value in list(values.items()):
             # internally, all values are converted to str in MLflow
@@ -658,6 +666,7 @@ class MLflowTracker(GeneralTracker):
                     f'MLflowTracker is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
                     "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                 )
+        import mlflow
 
         mlflow.log_metrics(metrics, step=step)
         logger.debug("Successfully logged to mlflow")
@@ -667,6 +676,8 @@ class MLflowTracker(GeneralTracker):
         """
         End the active MLflow run.
         """
+        import mlflow
+
         mlflow.end_run()
 
 
