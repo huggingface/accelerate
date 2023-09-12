@@ -172,14 +172,22 @@ def patch_environment(**kwargs):
     >>> print(os.environ["FOO"])  # raises KeyError
     ```
     """
+    existing_vars = {}
     for key, value in kwargs.items():
-        os.environ[key.upper()] = str(value)
+        key = key.upper()
+        if key in os.environ:
+            existing_vars[key] = os.environ[key]
+        os.environ[key] = str(value)
 
     yield
 
     for key in kwargs:
-        if key.upper() in os.environ:
-            del os.environ[key.upper()]
+        key = key.upper()
+        if key in existing_vars:
+            # restore previous value
+            os.environ[key] = existing_vars[key]
+        else:
+            os.environ.pop(key, None)
 
 
 def get_pretty_name(obj):
