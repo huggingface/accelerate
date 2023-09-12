@@ -39,11 +39,6 @@ from .utils import (
 _available_trackers = []
 
 if is_tensorboard_available():
-    try:
-        from torch.utils import tensorboard
-    except ModuleNotFoundError:
-        import tensorboardX as tensorboard
-
     _available_trackers.append(LoggerType.TENSORBOARD)
 
 if is_wandb_available():
@@ -185,6 +180,11 @@ class TensorBoardTracker(GeneralTracker):
 
     @on_main_process
     def __init__(self, run_name: str, logging_dir: Union[str, os.PathLike], **kwargs):
+        if is_tensorboard_available():
+            try:
+                from torch.utils import tensorboard
+            except ModuleNotFoundError:
+                import tensorboardX as tensorboard
         super().__init__()
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
