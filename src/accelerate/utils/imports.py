@@ -330,14 +330,17 @@ def require_import(import_str: str, secondary_import_str: str = None):
             nonlocal import_str, secondary_import_str
             if len(import_str.split(" ")) == 1:
                 import_str = f"import {import_str}"
-            if len(secondary_import_str.split(" ")) == 1:
+            if secondary_import_str is not None and len(secondary_import_str.split(" ")) == 1:
                 secondary_import_str = f"import {secondary_import_str}"
             try:
                 parsed_import = ast.parse(import_str).body[0]
                 _import_module(parsed_import)
             except ModuleNotFoundError:
-                parsed_import = ast.parse(secondary_import_str).body[0]
-                _import_module(parsed_import)
+                if secondary_import_str is not None:
+                    parsed_import = ast.parse(secondary_import_str).body[0]
+                    _import_module(parsed_import)
+                else:
+                    raise
 
             function(*args, **kwargs)
 
