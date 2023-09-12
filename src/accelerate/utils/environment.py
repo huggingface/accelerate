@@ -21,13 +21,13 @@ def str_to_bool(value) -> bool:
 
     True values are `y`, `yes`, `t`, `true`, `on`, and `1`; False value are `n`, `no`, `f`, `false`, `off`, and `0`;
     """
-    truth = ["y", "yes", "t", "true", "on", "1"]
-    false = ["n", "no", "f", "false", "off", "0"]
-
-    if value.lower() not in truth + false:
-        raise ValueError(f"{value} is not a valid boolean value")
-
-    return value.lower() in truth
+    value = value.lower()
+    if value in ("y", "yes", "t", "true", "on", "1"):
+        return 1
+    elif value in ("n", "no", "f", "false", "off", "0"):
+        return 0
+    else:
+        raise ValueError(f"invalid truth value {value}")
 
 
 def get_int_from_env(env_keys, default):
