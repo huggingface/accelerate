@@ -541,7 +541,7 @@ def test_split_between_processes_tensor():
     state.wait_for_everyone()
 
 
-def test_breakpoint():
+def test_trigger():
     accelerator = Accelerator()
     # should start with being false
     assert accelerator.check_trigger() is False
@@ -605,8 +605,8 @@ def main():
     training_check()
 
     if state.local_process_index == 0:
-        print("\n**Breakpoint test**")
-    test_breakpoint()
+        print("\n**Breakpoint trigger test**")
+    test_trigger()
 
 
 if __name__ == "__main__":
