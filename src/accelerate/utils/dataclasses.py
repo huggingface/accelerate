@@ -31,7 +31,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
-from .other import str_to_bool
+from .environment import str_to_bool
 from .versions import compare_versions
 
 
