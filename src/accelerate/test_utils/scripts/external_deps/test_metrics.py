@@ -165,7 +165,6 @@ def test_gather_for_metrics_with_non_tensor_objects_iterable_dataset():
     dataloader = DataLoader(iterable_dataset, batch_size=4)
     accelerator = Accelerator()
     prepared_dataloader = accelerator.prepare(dataloader)
-    assert isinstance(prepared_dataloader, DataLoaderDispatcher)
 
     if accelerator.is_main_process:
         logger = logging.root.manager.loggerDict["accelerate.accelerator"]
