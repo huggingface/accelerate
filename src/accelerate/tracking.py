@@ -36,6 +36,8 @@ from .utils import (
     require_import,
 )
 
+import accelerate.utils.imports as imports
+
 
 _available_trackers = []
 
@@ -177,6 +179,8 @@ class TensorBoardTracker(GeneralTracker):
         super().__init__()
         self.run_name = run_name
         self.logging_dir = os.path.join(logging_dir, run_name)
+        global tensorboard
+        tensorboard = imports.tensorboard
         self.writer = tensorboard.SummaryWriter(self.logging_dir, **kwargs)
         logger.debug(f"Initialized TensorBoard project {self.run_name} logging to {self.logging_dir}")
         logger.debug(
@@ -262,7 +266,6 @@ class TensorBoardTracker(GeneralTracker):
         self.writer.close()
         logger.debug("TensorBoard writer closed")
 
-@require_import("wandb")
 class WandBTracker(GeneralTracker):
     """
     A `Tracker` class that supports `wandb`. Should be initialized at the start of your script.
@@ -279,9 +282,12 @@ class WandBTracker(GeneralTracker):
     main_process_only = False
 
     @on_main_process
+    @require_import("wandb")
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
         self.run_name = run_name
+        global wandb
+        wandb = imports.wandb
         self.run = wandb.init(project=self.run_name, **kwargs)
         logger.debug(f"Initialized WandB project {self.run_name}")
         logger.debug(
@@ -397,6 +403,10 @@ class CometMLTracker(GeneralTracker):
     def __init__(self, run_name: str, **kwargs):
         super().__init__()
         self.run_name = run_name
+
+        global Experiment
+        Experiment = imports.Experiment
+
         self.writer = Experiment(project_name=run_name, **kwargs)
         logger.debug(f"Initialized CometML project {self.run_name}")
         logger.debug(
@@ -473,6 +483,8 @@ class AimTracker(GeneralTracker):
     @require_import("from aim import Run")
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
         self.run_name = run_name
+        global Run
+        Run = imports.Run
         self.writer = Run(repo=logging_dir, **kwargs)
         self.writer.name = self.run_name
         logger.debug(f"Initialized Aim project {self.run_name}")
@@ -519,7 +531,6 @@ class AimTracker(GeneralTracker):
         """
         self.writer.close()
 
-
 class MLflowTracker(GeneralTracker):
     """
     A `Tracker` class that supports `mlflow`. Should be initialized at the start of your script.
@@ -551,6 +562,7 @@ class MLflowTracker(GeneralTracker):
     name = "mlflow"
     requires_logging_directory = False
 
+
     @on_main_process
     @require_import("mlflow")
     def __init__(
@@ -563,6 +575,8 @@ class MLflowTracker(GeneralTracker):
         run_name: Optional[str] = None,
         description: Optional[str] = None,
     ):
+        global mlflow
+        mlflow = imports.mlflow
         experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", experiment_name)
         run_id = os.getenv("MLFLOW_RUN_ID", run_id)
         tags = os.getenv("MLFLOW_TAGS", tags)
@@ -602,7 +616,6 @@ class MLflowTracker(GeneralTracker):
         return self.active_run
 
     @on_main_process
-    @require_import("mlflow")
     def store_init_configuration(self, values: dict):
         """
         Logs `values` as hyperparameters for the run. Should be run at the beginning of your experiment.
