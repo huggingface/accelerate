@@ -2102,7 +2102,7 @@ class Accelerator:
         Should be used for gathering the inputs and targets for metric calculation.
 
         Args:
-            input (`torch.Tensor`, a nested tuple/list/dictionary of `torch.Tensor`, `object` or a nested tuple/list/dictionary of `object`):
+            input (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
                 The tensors or objects for calculating metrics across all processes
 
         Example:
