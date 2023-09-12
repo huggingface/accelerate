@@ -103,6 +103,25 @@ class UtilsTester(unittest.TestCase):
         self.assertNotIn("AA", os.environ)
         self.assertNotIn("BB", os.environ)
 
+    def test_patch_environment_key_exists(self):
+        # check that patch_environment correctly restores pre-existing env vars
+        with patch_environment(aa=1, BB=2):
+            self.assertEqual(os.environ.get("AA"), "1")
+            self.assertEqual(os.environ.get("BB"), "2")
+
+            with patch_environment(Aa=10, bb="20", cC=30):
+                self.assertEqual(os.environ.get("AA"), "10")
+                self.assertEqual(os.environ.get("BB"), "20")
+                self.assertEqual(os.environ.get("CC"), "30")
+
+            self.assertEqual(os.environ.get("AA"), "1")
+            self.assertEqual(os.environ.get("BB"), "2")
+            self.assertNotIn("CC", os.environ)
+
+        self.assertNotIn("AA", os.environ)
+        self.assertNotIn("BB", os.environ)
+        self.assertNotIn("CC", os.environ)
+
     def test_can_undo_convert_outputs(self):
         model = RegressionModel()
         model._original_forward = model.forward
