@@ -485,7 +485,6 @@ class AimTracker(GeneralTracker):
     @on_main_process
     @require_import("from aim import Run")
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
-        super().__init__()
         global Run
         Run = imports.Run
 
@@ -580,7 +579,6 @@ class MLflowTracker(GeneralTracker):
         run_name: Optional[str] = None,
         description: Optional[str] = None,
     ):
-        super().__init__()
         global mlflow
         mlflow = imports.mlflow
 
