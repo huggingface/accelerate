@@ -99,8 +99,6 @@ from .utils.constants import FSDP_PYTORCH_VERSION
 
 
 if is_deepspeed_available():
-    import deepspeed
-
     from .utils import (
         DeepSpeedEngineWrapper,
         DeepSpeedOptimizerWrapper,
@@ -1471,6 +1469,7 @@ class Accelerator:
         return model
 
     def _prepare_deepspeed(self, *args):
+        import deepspeed
         deepspeed_plugin = self.state.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
