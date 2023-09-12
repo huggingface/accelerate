@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ast
 import importlib
 import importlib.metadata
 import os
 import warnings
 from distutils.util import strtobool
-from functools import lru_cache
+from functools import lru_cache, wraps
 
 import torch
 from packaging import version
@@ -296,3 +297,49 @@ def is_xpu_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "xpu") and torch.xpu.is_available()
+
+def require_import(import_str:str, secondary_import_str:str=None):
+    """
+    Decorator which checks that the module in `import_str`
+    is available, and then imports it, making it 
+    available on the global scope.
+
+    Args:
+        import_str (`str`): 
+            The import statement to check and execute.
+        secondary_import_str (`str`, *optional*): 
+            A secondary import statement to check and execute if `import_str` fails
+            via `ModuleNotFoundError`.
+    """
+    def _import_module(parsed_import):
+        name = parsed_import.names[0]
+        # First check `import x` syntax
+        if isinstance(parsed_import, ast.Import):
+            if name.asname is None:
+                globals()[name.name] = importlib.import_module(name.name)
+            else:
+                globals()[name.asname] = importlib.import_module(name.name)
+        
+        # Then check for `from x import y` syntax
+        elif isinstance(parsed_import, ast.ImportFrom):
+            globals()[name.name] = importlib.import_module(parsed_import.module)
+            
+    
+    def decorator(function):
+        @wraps(function)
+        def inner(*args, **kwargs):
+            nonlocal import_str, secondary_import_str
+            if len(import_str.split(" ")) == 1:
+                import_str = f'import {import_str}'
+            if len(secondary_import_str.split(" ")) == 1:
+                secondary_import_str = f'import {secondary_import_str}'
+            # try:
+            parsed_import = ast.parse(import_str).body[0]
+            _import_module(parsed_import)
+
+            function(*args, **kwargs)
+            # except ModuleNotFoundError:
+            #     parsed_import = ast.parse(secondary_import_str).body[0]
+            #     _import_module(parsed_import)
+        return inner
+    return decorator

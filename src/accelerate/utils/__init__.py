@@ -64,6 +64,7 @@ from .imports import (
     is_transformers_available,
     is_wandb_available,
     is_xpu_available,
+    require_import,
 )
 from .modeling import (
     calculate_maximum_sizes,
