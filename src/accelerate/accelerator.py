@@ -68,6 +68,7 @@ from .utils import (
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
+    gather_object,
     get_mixed_precision_context_manager,
     get_pretty_name,
     has_transformer_engine_layers,
@@ -2099,14 +2100,14 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_for_metrics(self, tensor):
+    def gather_for_metrics(self, input_data):
         """
-        Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
-        for gathering the inputs and targets for metric calculation.
+        Gathers `input_data` and potentially drops duplicates in the last batch if on a distributed system. Should be
+        used for gathering the inputs and targets for metric calculation.
 
         Args:
-            tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
-                The tensors for calculating metrics across all processes.
+            input (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
+                The tensors or objects for calculating metrics across all processes
 
         Example:
 
@@ -2124,7 +2125,17 @@ class Accelerator:
         9
         ```
         """
-        tensor = self.gather(tensor)
+
+        try:
+            recursively_apply(lambda x: x, input_data, error_on_other_type=True)
+            all_tensors = True
+        except TypeError:
+            all_tensors = False
+
+        if not all_tensors:
+            data = gather_object(input_data)
+        else:
+            data = self.gather(input_data)
 
         try:
             if self.gradient_state.end_of_dataloader:
@@ -2134,22 +2145,22 @@ class Accelerator:
                     logger.info(
                         "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
                     )
-                    return tensor
+                    return data
                 elif self.gradient_state.remainder > 0:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
 
-                    return recursively_apply(_adjust_samples, tensor)
+                    return recursively_apply(_adjust_samples, data)
                 else:  # remainder is 0
                     # no remainder even though at end of dataloader, so nothing to do.
-                    return tensor
+                    return data
             else:
                 # Not at the end of the dataloader, no need to adjust the tensors
-                return tensor
+                return data
         except Exception:
             # Dataset had no length or raised an error
-            return tensor
+            return data
 
     def reduce(self, tensor, reduction="sum", scale=1.0):
         """
