@@ -2021,7 +2021,7 @@ class Accelerator:
             self.flag_tensor = torch.tensor(0, device=self.device)
         flag_tensor = self.reduce(self.flag_tensor)
         if flag_tensor.item() >= 1:
-            self.flag_tensor = None
+            self.flag_tensor = torch.tensor(0, device=self.device)
             return True
         return False
 
