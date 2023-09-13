@@ -35,7 +35,7 @@ from .dataclasses import (
     TensorInformation,
     TorchDynamoPlugin,
 )
-from .environment import get_int_from_env, parse_choice_from_env, parse_flag_from_env
+from .environment import get_int_from_env, parse_choice_from_env, parse_flag_from_env, str_to_bool
 from .imports import (
     get_ccl_version,
     is_4bit_bnb_available,

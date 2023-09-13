@@ -15,6 +15,7 @@
 import os
 import socket
 from contextlib import contextmanager
+from functools import partial
 from types import MethodType
 
 import torch
@@ -23,16 +24,16 @@ from ..commands.config.default import write_basic_config  # noqa: F401
 from ..state import PartialState
 from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
-from .imports import is_deepspeed_available, is_tpu_available
+from .imports import is_deepspeed_available, is_safetensors_available, is_tpu_available
 from .transformer_engine import convert_model
 from .versions import is_torch_version
 
 
-if is_deepspeed_available():
-    from deepspeed import DeepSpeedEngine
-
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+
+if is_safetensors_available():
+    from safetensors.torch import save_file as safe_save_file
 
 
 def is_compiled_module(module):
@@ -65,6 +66,8 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
         model = model._orig_mod
 
     if is_deepspeed_available():
+        from deepspeed import DeepSpeedEngine
+
         options += (DeepSpeedEngine,)
 
     if is_torch_version(">=", FSDP_PYTORCH_VERSION):
@@ -106,23 +109,27 @@ def wait_for_everyone():
     """
     PartialState().wait_for_everyone()
 
-
-def save(obj, f, save_on_each_node: bool = False):
+def save(obj, f, save_on_each_node: bool = False, safe_serialization:bool = False):
     """
     Save the data to disk. Use in place of `torch.save()`.
 
     Args:
-        obj: The data to save
-        f: The file (or file-like object) to use to save the data
-        save_on_each_node: Whether to only save on the global main process
+        obj: 
+            The data to save
+        f: 
+            The file (or file-like object) to use to save the data
+        save_on_each_node (`bool`, *optional*, defaults to `False`): 
+            Whether to only save on the global main process
+        safe_serialization (`bool`, *optional*, defaults to `False`): 
+            Whether to save `obj` using `safetensors`
     """
+    save_func = torch.save if not safe_serialization else partial(safe_save_file, metadata={"format": "pt"})
     if PartialState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
     elif PartialState().is_main_process and save_on_each_node:
-        torch.save(obj, f)
+        save_func(obj, f)
     elif PartialState().is_local_main_process and not save_on_each_node:
-        torch.save(obj, f)
-
+        save_func(obj, f)
 
 @contextmanager
 def clear_environment():
@@ -175,14 +182,22 @@ def patch_environment(**kwargs):
     >>> print(os.environ["FOO"])  # raises KeyError
     ```
     """
+    existing_vars = {}
     for key, value in kwargs.items():
-        os.environ[key.upper()] = str(value)
+        key = key.upper()
+        if key in os.environ:
+            existing_vars[key] = os.environ[key]
+        os.environ[key] = str(value)
 
     yield
 
     for key in kwargs:
-        if key.upper() in os.environ:
-            del os.environ[key.upper()]
+        key = key.upper()
+        if key in existing_vars:
+            # restore previous value
+            os.environ[key] = existing_vars[key]
+        else:
+            os.environ.pop(key, None)
 
 
 def get_pretty_name(obj):

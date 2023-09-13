@@ -26,12 +26,12 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from distutils.util import strtobool
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
+from .environment import str_to_bool
 from .versions import compare_versions
 
 
@@ -482,9 +482,9 @@ class TorchDynamoPlugin(KwargsHandler):
         if self.mode is None:
             self.mode = os.environ.get(prefix + "MODE", "default")
         if self.fullgraph is None:
-            self.fullgraph = strtobool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
+            self.fullgraph = str_to_bool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
         if self.dynamic is None:
-            self.dynamic = strtobool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
+            self.dynamic = str_to_bool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
 
     def to_dict(self):
         dynamo_config = copy.deepcopy(self.__dict__)
@@ -645,7 +645,7 @@ class DeepSpeedPlugin:
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
             self.zero3_init_flag = (
-                strtobool(os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
+                str_to_bool(os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
             )
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
@@ -907,7 +907,7 @@ class FullyShardedDataParallelPlugin:
             self.sharding_strategy = ShardingStrategy(int(os.environ.get(prefix + "SHARDING_STRATEGY", 1)))
 
         if self.cpu_offload is None:
-            if strtobool(os.environ.get(prefix + "OFFLOAD_PARAMS", "False")) == 1:
+            if str_to_bool(os.environ.get(prefix + "OFFLOAD_PARAMS", "False")) == 1:
                 self.cpu_offload = CPUOffload(offload_params=True)
             else:
                 self.cpu_offload = CPUOffload(offload_params=False)
@@ -920,10 +920,10 @@ class FullyShardedDataParallelPlugin:
         if self.state_dict_type is None:
             state_dict_type_policy = os.environ.get(prefix + "STATE_DICT_TYPE", "FULL_STATE_DICT")
             self.set_state_dict_type(state_dict_type_policy)
-        self.use_orig_params = strtobool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
-        self.sync_module_states = strtobool(os.environ.get(prefix + "SYNC_MODULE_STATES", "True")) == 1
-        self.forward_prefetch = strtobool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
-        self.activation_checkpointing = strtobool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
+        self.use_orig_params = str_to_bool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
+        self.sync_module_states = str_to_bool(os.environ.get(prefix + "SYNC_MODULE_STATES", "True")) == 1
+        self.forward_prefetch = str_to_bool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
+        self.activation_checkpointing = str_to_bool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
 
         if self.sync_module_states:
             self.param_init_fn = lambda x: x.to_empty(device=torch.cuda.current_device(), recurse=False)
@@ -1179,13 +1179,13 @@ class MegatronLMPlugin:
         if self.gradient_clipping is None:
             self.gradient_clipping = float(os.environ.get(prefix + "GRADIENT_CLIPPING", 1.0))
         if self.recompute_activation is None:
-            self.recompute_activation = strtobool(os.environ.get(prefix + "RECOMPUTE_ACTIVATION", "False")) == 1
+            self.recompute_activation = str_to_bool(os.environ.get(prefix + "RECOMPUTE_ACTIVATION", "False")) == 1
         if self.use_distributed_optimizer is None:
             self.use_distributed_optimizer = (
-                strtobool(os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")) == 1
+                str_to_bool(os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")) == 1
             )
         if self.sequence_parallelism is None:
-            self.sequence_parallelism = strtobool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False")) == 1
+            self.sequence_parallelism = str_to_bool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False")) == 1
 
         if self.pp_degree > 1 or self.use_distributed_optimizer:
             self.DDP_impl = "local"

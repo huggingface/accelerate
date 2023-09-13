@@ -68,6 +68,7 @@ from .utils import (
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     gather,
+    gather_object,
     get_mixed_precision_context_manager,
     get_pretty_name,
     has_transformer_engine_layers,
@@ -99,8 +100,6 @@ from .utils.constants import FSDP_PYTORCH_VERSION
 
 
 if is_deepspeed_available():
-    import deepspeed
-
     from .utils import (
         DeepSpeedEngineWrapper,
         DeepSpeedOptimizerWrapper,
@@ -134,6 +133,10 @@ from torch.distributed.algorithms.join import Join
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
     import torch_xla.distributed.xla_multiprocessing as xmp
+
+
+if is_npu_available(check_device=False):
+    import torch_npu  # noqa: F401
 
 
 try:
@@ -1471,6 +1474,8 @@ class Accelerator:
         return model
 
     def _prepare_deepspeed(self, *args):
+        import deepspeed
+
         deepspeed_plugin = self.state.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
@@ -2099,14 +2104,14 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_for_metrics(self, tensor):
+    def gather_for_metrics(self, input_data):
         """
-        Gathers `tensor` and potentially drops duplicates in the last batch if on a distributed system. Should be used
-        for gathering the inputs and targets for metric calculation.
+        Gathers `input_data` and potentially drops duplicates in the last batch if on a distributed system. Should be
+        used for gathering the inputs and targets for metric calculation.
 
         Args:
-            tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
-                The tensors for calculating metrics across all processes.
+            input (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
+                The tensors or objects for calculating metrics across all processes
 
         Example:
 
@@ -2124,7 +2129,17 @@ class Accelerator:
         9
         ```
         """
-        tensor = self.gather(tensor)
+
+        try:
+            recursively_apply(lambda x: x, input_data, error_on_other_type=True)
+            all_tensors = True
+        except TypeError:
+            all_tensors = False
+
+        if not all_tensors:
+            data = gather_object(input_data)
+        else:
+            data = self.gather(input_data)
 
         try:
             if self.gradient_state.end_of_dataloader:
@@ -2134,22 +2149,22 @@ class Accelerator:
                     logger.info(
                         "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
                     )
-                    return tensor
+                    return data
                 elif self.gradient_state.remainder > 0:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
 
-                    return recursively_apply(_adjust_samples, tensor)
+                    return recursively_apply(_adjust_samples, data)
                 else:  # remainder is 0
                     # no remainder even though at end of dataloader, so nothing to do.
-                    return tensor
+                    return data
             else:
                 # Not at the end of the dataloader, no need to adjust the tensors
-                return tensor
+                return data
         except Exception:
             # Dataset had no length or raised an error
-            return tensor
+            return data
 
     def reduce(self, tensor, reduction="sum", scale=1.0):
         """
@@ -2409,13 +2424,14 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.finish()
 
-    def save(self, obj, f):
+    def save(self, obj, f, safe_serialization=False):
         """
         Save the object passed to disk once per machine. Use in place of `torch.save`.
 
         Args:
             obj (`object`): The object to save.
             f (`str` or `os.PathLike`): Where to save the content of `obj`.
+            safe_serialization (`bool`, *optional*, defaults to `False`): Whether to save `obj` using `safetensors`
 
         Note:
             If `save_on_each_node` was passed in as a `ProjectConfiguration`, will save the object once per node,
@@ -2431,7 +2447,7 @@ class Accelerator:
         >>> accelerator.save(arr, "array.pkl")
         ```
         """
-        save(obj, f, self.project_configuration.save_on_each_node)
+        save(obj, f, save_on_each_node=self.project_configuration.save_on_each_node, safe_serialization=safe_serialization)
 
     def save_model(
         self,
@@ -2511,7 +2527,7 @@ class Accelerator:
                             del state_dict[name]
                             warn_names.add(name)
             if len(warn_names) > 0:
-                logger.warning_once(
+                logger.warning(
                     f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
                 )
 
@@ -2542,7 +2558,7 @@ class Accelerator:
 
         # Save the model
         for shard_file, shard in shards.items():
-            self.save(shard, os.path.join(save_directory, shard_file))
+            self.save(shard, os.path.join(save_directory, shard_file), safe_serialization=safe_serialization)
 
         if index is None:
             path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
