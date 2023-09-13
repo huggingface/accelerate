@@ -108,3 +108,23 @@ with accelerator.main_process_first():
         remove_columns=["idx", "sentence1", "sentence2"],
     )
 ```
+
+## Applying checks such as Early Stopping
+
+To have a check that works with a flag set by a particular process, the `set_trigger` and `check_trigger` API should be used. Useful examples
+for doing so can include situations such as using early stopping and monitoring the loss (as each loss slightly differs on each process).
+
+Call [`Accelerator.set_trigger`] when your condition has been met, and [`Accelerator.check_trigger`] when checking if that condition has been met in any process:
+
+```python
+for (x,y) in data_loader:
+    logits = model(x)
+    loss = loss_func(logits, y)
+    # Assume `should_do_early_stopping` is a custom defined function that returns a conditional
+    if should_do_early_stopping(loss):
+        accelerator.set_trigger()
+
+    # Later in the training script when we need to check for the breakpoint
+    if accelerator.check_trigger():
+        break
+```

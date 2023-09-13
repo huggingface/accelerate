@@ -466,6 +466,9 @@ class Accelerator:
         if self.rng_types is None:
             self.rng_types = ["generator"]
 
+        # Set a flag tensor for early stopping and other breakpoints
+        self.flag_tensor = None
+
     @property
     def use_distributed(self):
         """
@@ -1967,6 +1970,65 @@ class Accelerator:
             self.scaler.scale(loss).backward(**kwargs)
         else:
             loss.backward(**kwargs)
+
+    def set_trigger(self):
+        """
+        Sets the internal trigger tensor to 1 on the current process. A latter check should follow using this which
+        will check across all processes.
+
+        Note:
+            Does not require `wait_for_everyone()`
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume later in the training script
+        >>> # `should_do_breakpoint` is a custom function to monitor when to break,
+        >>> # e.g. when the loss is NaN
+        >>> if should_do_breakpoint(loss):
+        ...     accelerator.set_trigger()
+        >>> # Assume later in the training script
+        >>> if accelerator.check_breakpoint():
+        ...     break
+        ```
+        """
+        self.flag_tensor = torch.tensor(1, device=self.device)
+
+    def check_trigger(self):
+        """
+        Checks if the internal trigger tensor has been set to 1 in any of the processes. If so, will return `True` and
+        reset the trigger tensor to 0.
+
+        Note:
+            Does not require `wait_for_everyone()`
+
+        Example:
+
+        ```python
+        >>> from accelerate import Accelerator
+
+        >>> accelerator = Accelerator()
+        >>> # Assume later in the training script
+        >>> # `should_do_breakpoint` is a custom function to monitor when to break,
+        >>> # e.g. when the loss is NaN
+        >>> if should_do_breakpoint(loss):
+        ...     accelerator.set_trigger()
+        >>> # Assume later in the training script
+        >>> if accelerator.check_trigger():
+        ...     break
+        ```
+        """
+        # Now that we are outside `__init__`, we can initialize it if it is `None` on device
+        if self.flag_tensor is None:
+            self.flag_tensor = torch.tensor(0, device=self.device)
+        flag_tensor = self.reduce(self.flag_tensor)
+        if flag_tensor.item() >= 1:
+            self.flag_tensor = torch.tensor(0, device=self.device)
+            return True
+        return False
 
     def unscale_gradients(self, optimizer=None):
         """
