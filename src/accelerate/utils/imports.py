@@ -116,8 +116,6 @@ def is_bf16_available(ignore_tpu=False):
         return not ignore_tpu
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
-    if is_npu_available():
-        return False
     return True
 
 

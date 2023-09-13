@@ -48,6 +48,10 @@ if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
+if is_npu_available(check_device=False):
+    import torch_npu  # noqa: F401
+
+
 def is_initialized() -> bool:
     """
     Checks if the `AcceleratorState` has been initialized from `Accelerator`. Same as `AcceleratorState.initialized`,

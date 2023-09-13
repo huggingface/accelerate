@@ -135,6 +135,10 @@ if is_tpu_available(check_device=False):
     import torch_xla.distributed.xla_multiprocessing as xmp
 
 
+if is_npu_available(check_device=False):
+    import torch_npu  # noqa: F401
+
+
 try:
     from torch.optim.lr_scheduler import LRScheduler
 except ImportError:
