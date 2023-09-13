@@ -290,7 +290,7 @@ def _gpu_gather(tensor):
 
         state = PartialState()
 
-        if state.backend != "gloo":
+        if state.backend is not None and state.backend != "gloo":
             output_tensors = torch.zeros(
                 state.num_processes * tensor.numel(),
                 dtype=tensor.dtype,
