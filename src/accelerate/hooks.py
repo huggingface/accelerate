@@ -155,7 +155,6 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
     module = hook.init_hook(module)
     module._hf_hook = hook
 
-    @functools.wraps(old_forward)
     def new_forward(self, *args, **kwargs):
         args, kwargs = self._hf_hook.pre_forward(self, *args, **kwargs)
         if self._hf_hook.no_grad:
@@ -165,7 +164,7 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
             output = self._old_forward(*args, **kwargs)
         return self._hf_hook.post_forward(self, output)
 
-    module.forward = new_forward.__get__(module)
+    module.forward = functools.update_wrapper(functools.partial(new_forward, module), old_forward)
 
     return module
 
