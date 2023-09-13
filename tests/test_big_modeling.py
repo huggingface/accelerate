@@ -445,6 +445,18 @@ class BigModelingTester(unittest.TestCase):
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_cuda
+    def test_dispatch_model_force_hooks(self):
+        model = ModelForTest()
+        device_map = {"": 0}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        dispatch_model(model, device_map, force_hooks=True)
+        output = model(x)
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
     def test_load_checkpoint_and_dispatch(self):
         model = ModelForTest()
         device_map = {"linear1": "cpu", "batchnorm": "cpu", "linear2": 0}
