@@ -2447,7 +2447,12 @@ class Accelerator:
         >>> accelerator.save(arr, "array.pkl")
         ```
         """
-        save(obj, f, save_on_each_node=self.project_configuration.save_on_each_node, safe_serialization=safe_serialization)
+        save(
+            obj,
+            f,
+            save_on_each_node=self.project_configuration.save_on_each_node,
+            safe_serialization=safe_serialization,
+        )
 
     def save_model(
         self,
