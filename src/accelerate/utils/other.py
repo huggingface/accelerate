@@ -107,20 +107,20 @@ def wait_for_everyone():
     PartialState().wait_for_everyone()
 
 
-def save(obj, f, global_only: bool = False):
+def save(obj, f, save_on_each_node: bool = False):
     """
     Save the data to disk. Use in place of `torch.save()`.
 
     Args:
         obj: The data to save
         f: The file (or file-like object) to use to save the data
-        global_only: Whether to only save on the global main process
+        save_on_each_node: Whether to only save on the global main process
     """
     if PartialState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
-    elif PartialState().is_main_process and global_only:
+    elif PartialState().is_main_process and save_on_each_node:
         torch.save(obj, f)
-    elif PartialState().is_local_main_process and not global_only:
+    elif PartialState().is_local_main_process and not save_on_each_node:
         torch.save(obj, f)
 
 

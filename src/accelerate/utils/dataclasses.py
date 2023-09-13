@@ -415,10 +415,13 @@ class ProjectConfiguration:
         metadata={"help": "The current save iteration."},
     )
 
-    use_node_global_storage: bool = field(
+    save_on_each_node: bool = field(
         default=False,
         metadata={
-            "help": "Whether to store model and checkpoint states based on the global rank, allowing for them to be loaded and saved on a shared filesystem."
+            "help": (
+                "When doing multi-node distributed training, whether to save models and checkpoints on each node, or"
+                " only on the main one"
+            )
         },
     )
 
