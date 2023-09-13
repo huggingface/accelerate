@@ -156,16 +156,17 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
     module._hf_hook = hook
 
     @functools.wraps(old_forward)
-    def new_forward(*args, **kwargs):
-        args, kwargs = module._hf_hook.pre_forward(module, *args, **kwargs)
-        if module._hf_hook.no_grad:
+    def new_forward(self, *args, **kwargs):
+        args, kwargs = self._hf_hook.pre_forward(self, *args, **kwargs)
+        if self._hf_hook.no_grad:
             with torch.no_grad():
-                output = old_forward(*args, **kwargs)
+                output = self._old_forward(*args, **kwargs)
         else:
-            output = old_forward(*args, **kwargs)
-        return module._hf_hook.post_forward(module, output)
+            output = self._old_forward(*args, **kwargs)
+        return self._hf_hook.post_forward(self, output)
 
-    module.forward = new_forward
+    module.forward = new_forward.__get__(module)
+
     return module
 
 
