@@ -296,9 +296,6 @@ def _gpu_gather(tensor):
         )
         torch.distributed.all_gather_into_tensor(output_tensors, tensor)
         return output_tensors.view(-1, *tensor.size()[1:])
-        # output_tensors = [torch.empty_like(tensor) for _ in range(torch.distributed.get_world_size())]
-        # torch.distributed.all_gather(output_tensors, tensor)
-        # return torch.cat(output_tensors, dim=0)
 
     return recursively_apply(_gpu_gather_one, tensor, error_on_other_type=True)
 
