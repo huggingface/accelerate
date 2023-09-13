@@ -554,6 +554,9 @@ def test_trigger():
     # calls `all_reduce` and triggers a sync
     assert accelerator.check_trigger() is True
 
+    # check it's been reset after the sync
+    assert accelerator.check_trigger() is False
+
 
 def main():
     accelerator = Accelerator()
