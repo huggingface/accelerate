@@ -304,6 +304,7 @@ def dispatch_model(
     offload_buffers: bool = False,
     skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
+    force_hooks: bool = False,
 ):
     """
     Dispatches a model according to a given device map. Layers of the model might be spread across GPUs, offloaded on
@@ -334,6 +335,9 @@ def dispatch_model(
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+        force_hooks (`bool`, *optional*, defaults to `False`):
+            Whether or not to force device hooks to be attached to the model even if all layers are dispatched to a
+            single device.
     """
     # Error early if the device map is incomplete.
     check_device_map(model, device_map)
@@ -343,10 +347,11 @@ def dispatch_model(
         getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
     ) and getattr(model, "quantization_method", "bitsandbytes") == "bitsandbytes"
 
-    # We attach hooks if the device_map have at least 2 different devices. Otherwise, the model in already loaded
+    # We attach hooks if the device_map has at least 2 different devices or if
+    # force_hooks is set to `True`. Otherwise, the model in already loaded
     # in the unique device and the user can decide where to dispatch the model.
     # If the model is quantized, we always force-dispatch the model
-    if (len(set(device_map.values())) > 1) or is_bnb_quantized:
+    if (len(set(device_map.values())) > 1) or is_bnb_quantized or force_hooks:
         if main_device is None:
             if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
                 main_device = "cpu"
@@ -439,6 +444,7 @@ def load_checkpoint_and_dispatch(
     offload_state_dict: Optional[bool] = None,
     skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
+    force_hooks: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -481,6 +487,9 @@ def load_checkpoint_and_dispatch(
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+        force_hooks (`bool`, *optional*, defaults to `False`):
+            Whether or not to force device hooks to be attached to the model even if all layers are dispatched to a
+            single device.
 
     Example:
 
@@ -541,4 +550,5 @@ def load_checkpoint_and_dispatch(
         offload_buffers=offload_buffers,
         skip_keys=skip_keys,
         preload_module_classes=preload_module_classes,
+        force_hooks=force_hooks,
     )
