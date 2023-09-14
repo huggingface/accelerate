@@ -22,7 +22,7 @@ import torch
 import torch.nn as nn
 
 from accelerate import init_empty_weights
-from accelerate.test_utils import require_cuda, require_huggingface_suite, require_multi_gpu, require_safetensors
+from accelerate.test_utils import require_cuda, require_huggingface_suite, require_multi_gpu
 from accelerate.utils.modeling import (
     check_device_map,
     clean_device_map,
@@ -552,7 +552,6 @@ class ModelingUtilsTester(unittest.TestCase):
         self.assertDictEqual({0: 0, "cpu": 100}, max_memory)
 
     @require_cuda
-    @require_safetensors
     def test_load_state_dict(self):
         from safetensors.torch import save_file
 
