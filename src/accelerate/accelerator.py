@@ -2721,9 +2721,11 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         if self.project_configuration.automatic_checkpoint_naming:
             folders = [os.path.join(output_dir, folder) for folder in os.listdir(output_dir)]
-            if self.project_configuration.total_limit is not None and (
-                len(folders) + 1 > self.project_configuration.total_limit
-            ) and self.is_main_process:
+            if (
+                self.project_configuration.total_limit is not None
+                and (len(folders) + 1 > self.project_configuration.total_limit)
+                and self.is_main_process
+            ):
 
                 def _inner(folder):
                     return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
