@@ -282,9 +282,7 @@ class AlignDevicesHook(ModelHook):
             self.input_device = find_device([args, kwargs])
         if self.offload:
             for name, _ in named_module_tensors(
-                module,
-                include_buffers=self.offload_buffers,
-                recurse=self.place_submodules,
+                module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
                 fp16_statistics = None
                 if "weight" in name and name.replace("weight", "SCB") in self.weights_map.keys():
@@ -301,9 +299,7 @@ class AlignDevicesHook(ModelHook):
     def post_forward(self, module, output):
         if self.offload:
             for name, _ in named_module_tensors(
-                module,
-                include_buffers=self.offload_buffers,
-                recurse=self.place_submodules,
+                module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
                 set_module_tensor_to_device(module, name, "meta")
                 if type(module).__name__ == "Linear8bitLt":
