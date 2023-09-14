@@ -265,9 +265,7 @@ class AlignDevicesHook(ModelHook):
                 }
 
             for name, _ in named_module_tensors(
-                module,
-                include_buffers=self.offload_buffers,
-                recurse=self.place_submodules
+                module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
                 set_module_tensor_to_device(module, name, "meta")
             if not self.offload_buffers and self.execution_device is not None:
