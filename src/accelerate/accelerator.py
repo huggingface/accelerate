@@ -421,11 +421,10 @@ class Accelerator:
         if (
             self.state.mixed_precision == "fp16"
             and self.device.type != "cpu"
-            and self.device.type != "xpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("cuda", "mps", "npu"):
+            if self.device.type not in ("xpu", "cuda", "mps", "npu"):
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
