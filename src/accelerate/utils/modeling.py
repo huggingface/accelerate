@@ -362,7 +362,7 @@ def set_module_tensor_to_device(
 
 
 def named_module_tensors(
-    module: nn.Module, include_buffers: bool = True, recurse: bool = False, remove_non_persistent: bool = False
+    module: nn.Module, include_buffers: bool = True, recurse: bool = False, remove_non_persistent: bool = True
 ):
     """
     A helper function that gathers all the tensors (parameters + buffers) of a given module. If `include_buffers=True`
@@ -375,7 +375,7 @@ def named_module_tensors(
             Whether or not to include the buffers in the result.
         recurse (`bool`, *optional`, defaults to `False`):
             Whether or not to go look in every submodule or just return the direct parameters and buffers.
-        remove_non_persistent (`bool`, *optional*, defaults to `False`):
+        remove_non_persistent (`bool`, *optional*, defaults to `True`):
             Whether or not to remove the non persistent buffer from the buffers. Useful only when include_buffers =
             True
     """

@@ -302,7 +302,6 @@ def dispatch_model(
     offload_dir: Optional[Union[str, os.PathLike]] = None,
     offload_index: Optional[Dict[str, str]] = None,
     offload_buffers: bool = False,
-    remove_non_persistent: bool = False,
     skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
 ):
@@ -328,9 +327,6 @@ def dispatch_model(
             to the index saved in `save_folder`.
         offload_buffers (`bool`, *optional*, defaults to `False`):
             Whether or not to offload the buffers with the model parameters.
-        remove_non_persistent (`bool`, *optional*, defaults to `False`):
-            Whether or not to remove the non persistent buffer from the buffers that we want to offload. Useful only
-            when offload_buffers = True
         skip_keys (`str` or `List[str]`, *optional*):
             A list of keys to ignore when moving inputs or outputs between devices.
         preload_module_classes (`List[str]`, *optional*):
@@ -397,7 +393,6 @@ def dispatch_model(
             execution_device=execution_device,
             offload=offload,
             offload_buffers=offload_buffers,
-            remove_non_persistent=remove_non_persistent,
             weights_map=weights_map,
             skip_keys=skip_keys,
             preload_module_classes=preload_module_classes,
