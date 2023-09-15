@@ -353,6 +353,7 @@ class BigModelingTester(unittest.TestCase):
 
         self.assertEqual(original_model.id, original_output_id)
         self.assertEqual(copied_model.id, copied_output_id)
+        self.assertFalse(copied_model.linear1.forward is original_model.linear1.forward)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_cuda
