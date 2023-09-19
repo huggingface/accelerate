@@ -73,7 +73,6 @@ Next, you need to launch it with `accelerate launch`.
 
 </Tip>
 
-
 ## Using accelerate launch
 
 🤗 Accelerate has a special CLI command to help you launch your code in your system through `accelerate launch`.
@@ -153,6 +152,15 @@ the below example enabling unbuffered stdout and stderr:
 python -u -m accelerate.commands.launch --num_processes=2 {script_name.py} {--arg1} {--arg2}
 ```
 
+<Tip>
+
+  You can run your code on CPU as well! This is helpful for debugging and testing purposes on toy models and datasets. 
+
+```bash
+accelerate launch --cpu {script_name.py} {--arg1} {--arg2}
+```  
+
+</Tip>
 
 ## Why you should always use `accelerate config`
 
@@ -200,3 +208,17 @@ Launching a script from the location of that custom yaml file looks like the fol
 ```bash
 accelerate launch --config_file {path/to/config/my_config_file.yaml} {script_name.py} {--arg1} {--arg2} ...
 ```
+
+# Multi-node training
+Multi-node training with 🤗Accelerate is similar to [multi-node training with torchrun](https://pytorch.org/tutorials/intermediate/ddp_series_multinode.html). The simplest way to launch multi-node training runs is to do the following:
+1. Copy your codebase and data to all nodes. (or place them on a shared filesystem)
+2. Setup your python packages on all nodes.
+3. Run `accelerate config` on all nodes. Here, after specifying the number of nodes, you will be asked to specify the rank of each node (this is 0 for the main/master node, and 1,2,3,etc for worker nodes), along with the IP address and port for the main process. This is required for the worker nodes to communicate with the main process. 
+
+Once you have done this, you can start your multi-node training run by running `accelerate launch` on all nodes.
+
+<Tip>
+
+ It is recommended to use the intranet IP of your main node over the public IP for better latency. This is the `192.168.x` or the `172.x` address you see when you run `hostname -I` on the main node.
+
+</Tip>
