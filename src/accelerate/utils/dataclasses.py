@@ -200,6 +200,29 @@ class FP8RecipeKwargs(KwargsHandler):
             raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
 
 
+class EnumWithContains(enum.EnumMeta):
+    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
+
+    def __contains__(cls, item):
+        try:
+            cls(item)
+        except ValueError:
+            return False
+        return True
+
+
+class BaseEnum(enum.Enum, metaclass=EnumWithContains):
+    "An enum class that can get the value of an item with `str(Enum.key)`"
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def list(cls):
+        "Method to list all the possible items in `cls`"
+        return list(map(str, cls))
+
+
 class DistributedType(str, enum.Enum):
     """
     Represents a type of distributed environment.
@@ -259,7 +282,7 @@ class ComputeEnvironment(str, enum.Enum):
     AMAZON_SAGEMAKER = "AMAZON_SAGEMAKER"
 
 
-class DynamoBackend(str, enum.Enum):
+class DynamoBackend(str, BaseEnum):
     """
     Represents a dynamo backend (see https://github.com/pytorch/torchdynamo).
 
@@ -273,19 +296,21 @@ class DynamoBackend(str, enum.Enum):
         - **INDUCTOR** -- Uses TorchInductor backend with AotAutograd and cudagraphs by leveraging codegened Triton
           kernels. [Read
           more](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)
-        - **NVFUSER** -- nvFuser with TorchScript. [Read
+        - **AOT_TS_NVFUSER** -- nvFuser with AotAutograd/TorchScript. [Read
           more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
-        - **AOT_NVFUSER** -- nvFuser with AotAutograd. [Read
+        - **NVPRIMS_NVFUSER** -- nvFuser with PrimTorch. [Read
           more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
-        - **AOT_CUDAGRAPHS** -- cudagraphs with AotAutograd. [Read
-          more](https://github.com/pytorch/torchdynamo/pull/757)
+        - **CUDAGRAPHS** -- cudagraphs with AotAutograd. [Read more](https://github.com/pytorch/torchdynamo/pull/757)
         - **OFI** -- Uses Torchscript optimize_for_inference. Inference only. [Read
           more](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
         - **FX2TRT** -- Uses Nvidia TensorRT for inference optimizations. Inference only. [Read
           more](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst)
         - **ONNXRT** -- Uses ONNXRT for inference on CPU/GPU. Inference only. [Read more](https://onnxruntime.ai/)
+        - **TENSORRT** -- Uses ONNXRT to run TensorRT for inference optimizations. [Read
+          more](https://github.com/onnx/onnx-tensorrt)
         - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
           more](https://github.com/intel/intel-extension-for-pytorch).
+        - **TVM** -- Uses Apach TVM for inference optimizations. [Read more](https://tvm.apache.org/)
 
     """
 
@@ -294,36 +319,15 @@ class DynamoBackend(str, enum.Enum):
     EAGER = "EAGER"
     AOT_EAGER = "AOT_EAGER"
     INDUCTOR = "INDUCTOR"
-    NVFUSER = "NVFUSER"
-    AOT_NVFUSER = "AOT_NVFUSER"
-    AOT_CUDAGRAPHS = "AOT_CUDAGRAPHS"
+    AOT_TS_NVFUSER = "AOT_TS_NVFUSER"
+    NVPRIMS_NVFUSER = "NVPRIMS_NVFUSER"
+    CUDAGRAPHS = "CUDAGRAPHS"
     OFI = "OFI"
     FX2TRT = "FX2TRT"
     ONNXRT = "ONNXRT"
+    TENSORRT = "TENSORRT"
     IPEX = "IPEX"
-
-
-class EnumWithContains(enum.EnumMeta):
-    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
-
-    def __contains__(cls, item):
-        try:
-            cls(item)
-        except ValueError:
-            return False
-        return True
-
-
-class BaseEnum(enum.Enum, metaclass=EnumWithContains):
-    "An enum class that can get the value of an item with `str(Enum.key)`"
-
-    def __str__(self):
-        return self.value
-
-    @classmethod
-    def list(cls):
-        "Method to list all the possible items in `cls`"
-        return list(map(str, cls))
+    TVM = "TVM"
 
 
 class LoggerType(BaseEnum):

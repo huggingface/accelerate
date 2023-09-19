@@ -30,13 +30,15 @@ DYNAMO_BACKENDS = [
     "EAGER",
     "AOT_EAGER",
     "INDUCTOR",
-    "NVFUSER",
-    "AOT_NVFUSER",
-    "AOT_CUDAGRAPHS",
+    "AOT_TS_NVFUSER",
+    "NVPRIMS_NVFUSER",
+    "CUDAGRAPHS",
     "OFI",
     "FX2TRT",
     "ONNXRT",
+    "TENSORRT",
     "IPEX",
+    "TVM",
 ]
 
 
