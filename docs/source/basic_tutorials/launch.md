@@ -73,6 +73,7 @@ Next, you need to launch it with `accelerate launch`.
 
 </Tip>
 
+
 ## Using accelerate launch
 
 🤗 Accelerate has a special CLI command to help you launch your code in your system through `accelerate launch`.
@@ -209,7 +210,7 @@ Launching a script from the location of that custom yaml file looks like the fol
 accelerate launch --config_file {path/to/config/my_config_file.yaml} {script_name.py} {--arg1} {--arg2} ...
 ```
 
-# Multi-node training
+## Multi-node training
 Multi-node training with 🤗Accelerate is similar to [multi-node training with torchrun](https://pytorch.org/tutorials/intermediate/ddp_series_multinode.html). The simplest way to launch multi-node training runs is to do the following:
 1. Copy your codebase and data to all nodes. (or place them on a shared filesystem)
 2. Setup your python packages on all nodes.
