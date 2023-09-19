@@ -2876,7 +2876,7 @@ class Accelerator:
                 return list(map(int, re.findall(r"[\/]?([0-9]+)(?=[^\/]*$)", folder)))[0]
 
             folders.sort(key=_inner)
-            input_dir = os.path.join(input_dir, folders[-1])
+            input_dir = folders[-1]
         else:
             raise ValueError("No input_dir provided and automatic checkpoint naming is disabled.")
         logger.info(f"Loading states from {input_dir}")
