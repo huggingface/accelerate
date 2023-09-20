@@ -2496,6 +2496,8 @@ class Accelerator:
         >>> accelerator.end_training()
         ```
         """
+        if not hasattr(self, "trackers"):
+            return
         for tracker in self.trackers:
             tracker.finish()
 
