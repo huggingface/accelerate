@@ -211,10 +211,11 @@ accelerate launch --config_file {path/to/config/my_config_file.yaml} {script_nam
 ```
 
 ## Multi-node training
-Multi-node training with 🤗Accelerate is similar to [multi-node training with torchrun](https://pytorch.org/tutorials/intermediate/ddp_series_multinode.html). The simplest way to launch multi-node training runs is to do the following:
-1. Copy your codebase and data to all nodes. (or place them on a shared filesystem)
-2. Setup your python packages on all nodes.
-3. Run `accelerate config` on all nodes. Here, after specifying the number of nodes, you will be asked to specify the rank of each node (this is 0 for the main/master node, and 1,2,3,etc for worker nodes), along with the IP address and port for the main process. This is required for the worker nodes to communicate with the main process. 
+Multi-node training with 🤗Accelerate is similar to [multi-node training with torchrun](https://pytorch.org/tutorials/intermediate/ddp_series_multinode.html). The simplest way to launch a multi-node training run is to do the following:
+
+- Copy your codebase and data to all nodes. (or place them on a shared filesystem)
+- Setup your python packages on all nodes.
+- Run `accelerate config` on all nodes. Here, after specifying the number of nodes, you will be asked to specify the rank of each node (this is 0 for the main/master node, and 1,2,3,etc for worker nodes), along with the IP address and port for the main process. This is required for the worker nodes to communicate with the main process. 
 
 Once you have done this, you can start your multi-node training run by running `accelerate launch` on all nodes.
 
