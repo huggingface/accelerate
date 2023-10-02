@@ -280,6 +280,8 @@ def _tpu_gather(tensor):
 
 
 def _gpu_gather(tensor):
+    state = PartialState()
+
     def _gpu_gather_one(tensor):
         if tensor.ndim == 0:
             tensor = tensor.clone()[None]
@@ -288,7 +290,6 @@ def _gpu_gather(tensor):
         if not tensor.is_contiguous():
             tensor = tensor.contiguous()
 
-        state = PartialState()
         if state.backend is not None and state.backend != "gloo":
             output_tensors = torch.zeros(
                 state.num_processes * tensor.numel(),
