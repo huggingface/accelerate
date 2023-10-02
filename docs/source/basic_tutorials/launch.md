@@ -225,6 +225,8 @@ Once you have done this, you can start your multi-node training run by running `
 
 <Tip>
 
- It is recommended to use the intranet IP of your main node over the public IP for better latency. This is the `192.168.x` or the `172.x` address you see when you run `hostname -I` on the main node.
+ It is recommended to use the intranet IP of your main node over the public IP for better latency. This is the `192.168.x.x` or the `172.x.x.x` address you see when you run `hostname -I` on the main node.
 
 </Tip>
+
+To get a better idea about multi-node training, check out our example for [multi-node training with FSDP](https://huggingface.co/blog/ram-efficient-pytorch-fsdp).
