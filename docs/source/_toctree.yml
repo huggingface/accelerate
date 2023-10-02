@@ -55,6 +55,8 @@
     title: How to use 🤗 Accelerate with Intel® Extension for PyTorch for cpu
   title: How-To Guides
 - sections:
+  - local: concept_guides/internal_mechanism
+    title: 🤗 Accelerate's internal mechanism
   - local: concept_guides/big_model_inference
     title: Loading big models into memory
   - local: concept_guides/performance
