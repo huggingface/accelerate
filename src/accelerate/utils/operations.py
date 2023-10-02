@@ -296,7 +296,9 @@ def _gpu_gather(tensor):
 
         if state.backend is not None and state.backend != "gloo":
             # We use `zeros` as `all_gather_into_tensor` slightly
-            # differs from `all_gather` for better efficiency
+            # differs from `all_gather` for better efficiency,
+            # and we rely on the number of items in the tensor
+            # rather than its direct shape
             output_tensors = torch.zeros(
                 state.num_processes * tensor.numel(),
                 dtype=tensor.dtype,
