@@ -215,7 +215,7 @@ Multi-node training with 🤗Accelerate is similar to [multi-node training with 
 
 - Copy your codebase and data to all nodes. (or place them on a shared filesystem)
 - Setup your python packages on all nodes.
-- Run `accelerate config` on all nodes. Here, after specifying the number of nodes, you will be asked to specify the rank of each node (this is 0 for the main/master node, and 1,2,3,etc for worker nodes), along with the IP address and port for the main process. This is required for the worker nodes to communicate with the main process. 
+- Run `accelerate config` on the main single node first. After specifying the number of nodes, you will be asked to specify the rank of each node (this will be 0 for the main/master node), along with the IP address and port for the main process. This is required for the worker nodes to communicate with the main process. Afterwards, you can copy or send this config file across all of your nodes, changing the `machine_rank` to 1, 2,3, etc. to avoid having to run the command (or just follow their directions directly for launching with `torchrun` as well)
 
 Once you have done this, you can start your multi-node training run by running `accelerate launch` on all nodes.
 
