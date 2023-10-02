@@ -153,6 +153,15 @@ the below example enabling unbuffered stdout and stderr:
 python -u -m accelerate.commands.launch --num_processes=2 {script_name.py} {--arg1} {--arg2}
 ```
 
+<Tip>
+
+  You can run your code on CPU as well! This is helpful for debugging and testing purposes on toy models and datasets. 
+
+```bash
+accelerate launch --cpu {script_name.py} {--arg1} {--arg2}
+```  
+
+</Tip>
 
 ## Why you should always use `accelerate config`
 
@@ -200,3 +209,24 @@ Launching a script from the location of that custom yaml file looks like the fol
 ```bash
 accelerate launch --config_file {path/to/config/my_config_file.yaml} {script_name.py} {--arg1} {--arg2} ...
 ```
+
+## Multi-node training
+Multi-node training with 🤗Accelerate is similar to [multi-node training with torchrun](https://pytorch.org/tutorials/intermediate/ddp_series_multinode.html). The simplest way to launch a multi-node training run is to do the following:
+
+- Copy your codebase and data to all nodes. (or place them on a shared filesystem)
+- Setup your python packages on all nodes.
+- Run `accelerate config` on the main single node first. After specifying the number of nodes, you will be asked to specify the rank of each node (this will be 0 for the main/master node), along with the IP address and port for the main process. This is required for the worker nodes to communicate with the main process. Afterwards, you can copy or send this config file across all of your nodes, changing the `machine_rank` to 1, 2,3, etc. to avoid having to run the command (or just follow their directions directly for launching with `torchrun` as well)
+
+Once you have done this, you can start your multi-node training run by running `accelerate launch` (or `torchrun`) on all nodes.
+
+<Tip>
+    It is required that the command be ran on all nodes for everything to start, not just running it from the main node. You can use something like SLURM or a different process executor to wrap around this requirement and call everything from a single command.
+</Tip>
+
+<Tip>
+
+ It is recommended to use the intranet IP of your main node over the public IP for better latency. This is the `192.168.x.x` or the `172.x.x.x` address you see when you run `hostname -I` on the main node.
+
+</Tip>
+
+To get a better idea about multi-node training, check out our example for [multi-node training with FSDP](https://huggingface.co/blog/ram-efficient-pytorch-fsdp).
