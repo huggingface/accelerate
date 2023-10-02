@@ -299,7 +299,7 @@ def _gpu_gather(tensor):
             # differs from `all_gather` for better efficiency,
             # and we rely on the number of items in the tensor
             # rather than its direct shape
-            output_tensors = torch.zeros(
+            output_tensors = torch.empty(
                 state.num_processes * tensor.numel(),
                 dtype=tensor.dtype,
                 device=state.device,
