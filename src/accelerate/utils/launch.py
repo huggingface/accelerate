@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Tuple
 import torch
 
 from ..commands.config.config_args import SageMakerConfig
-from ..commands.config.config_utils import DYNAMO_BACKENDS
 from ..utils import (
     DynamoBackend,
     PrecisionType,
@@ -89,7 +88,9 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
-        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+        raise ValueError(
+            f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DynamoBackend.list()}."
+        )
     current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
@@ -163,7 +164,9 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
-        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+        raise ValueError(
+            f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DynamoBackend.list()}."
+        )
     current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
@@ -419,7 +422,9 @@ def prepare_sagemager_args_inputs(
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
-        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+        raise ValueError(
+            f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DynamoBackend.list()}."
+        )
 
     # Environment variables to be set for use during training job
     environment = {
