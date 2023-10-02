@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# 🤗 Accelerate's internal mechanism
+# 🤗 Accelerate's internal mechanisms
 
 Internally, 🤗 Accelerate works by first analyzing the environment in which the script is launched to determine which
 kind of distributed setup is used, how many different processes there are and which one the current script is in. All
@@ -21,18 +21,19 @@ that information is stored in the [`~AcceleratorState`].
 
 This class is initialized the first time you instantiate an [`~Accelerator`] as well as performing any
 specific initialization your distributed setup needs. Its state is then uniquely shared through all instances of
-[`~state.AcceleratorState`].
+[`~state.AcceleratorState`]. (The same can also be done with the [`PartialState`], a more barebones version it inherits)
 
 Then, when calling [`~Accelerator.prepare`], the library:
 
 - wraps your model(s) in the container adapted for the distributed setup,
-- wraps your optimizer(s) in a [`~optimizer.AcceleratedOptimizer`],
-- creates a new version of your dataloader(s) in a [`~data_loader.DataLoaderShard`].
+- wraps your optimizer(s) in an [`~optimizer.AcceleratedOptimizer`],
+- wraps your scheduler(s) in an [`~scheduler.AcceleratedScheduler`]
+- creates a new version of your dataloader(s) in a [`~data_loader.DataLoaderShard`] or [`~data_loader.DataLoaderDispatcher`]
 
-While the model(s) and optimizer(s) are just put in simple wrappers, the dataloader(s) are re-created. This is mostly
+While the model(s), optimizer(s), and scheduler(s) are just put in simple wrappers, the dataloader(s) are re-created. This is mostly
 because PyTorch does not let the user change the `batch_sampler` of a dataloader once it's been created and the
 library handles the sharding of your data between processes by changing that `batch_sampler` to yield every other
-`num_processes` batches.
+`num_processes` batches (if enabled).
 
 The [`~data_loader.DataLoaderShard`] subclasses `DataLoader` to add the following functionality:
 
@@ -40,6 +41,8 @@ The [`~data_loader.DataLoaderShard`] subclasses `DataLoader` to add the followin
   randomization (like shuffling) is done the exact same way across processes.
 - it puts the batches on the proper device before yielding them (unless you have opted out of
   `device_placement=True`).
+  
+The [`~data_loader.DataLoaderDispatcher`] subclasses differs from the [`~data_loader.DataLoaderShard`] in that when iterating through the `DataLoader`, the data is all starting from process 0 and *then* split and sent off to each process rather than it happening at the dataset level.
 
 The random number generator synchronization will by default synchronize:
 
