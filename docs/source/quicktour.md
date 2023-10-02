@@ -48,13 +48,13 @@ If you choose to leave those `.to(device)` calls, make sure to use the device pr
 <Tip warning={true}>
 
     You can fully deactivate the automatic device placement by passing along `device_placement=False` when 
-    initializing [`Accelerator`].
+    initializing the [`Accelerator`].
     However, if you place your objects manually on the proper device, be careful to create your optimizer after putting your
     model on `accelerator.device` or your training will fail on TPU.
 
 </Tip>
 
-3. Pass all objects relevant to training (optimizer, model, training dataloader, learning rate scheduler) to the
+3. Pass all PyTorch objects relevant to training (optimizer, model, dataloader(s), learning rate scheduler) to the
 [`~Accelerator.prepare`] method as soon as these objects are created, before starting your actual
 training loop:
 
@@ -66,14 +66,14 @@ model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
 
 **Important notes**:
 
-* Only pass the learning rate scheduler to [`~Accelerator.prepare`] when the scheduler needs to be stepped at each optimizer step.
-* While you can send your dataloader to [`~Accelerator.prepare`] on its own, it's best to send it to [`~Accelerator.prepare`] together with the model and optimizer.
+* You should always pass the the learning rate scheduler to [`~Accelerator.prepare`], however if the scheduler should *not* be stepped at each optimization step, pass `step_with_optimizer=False` to the [`Accelerator`] init.
+* While you can send your dataloader to [`~Accelerator.prepare`] on its own (and there are cases for doing so, such as distributed inference), it's best to send it to [`~Accelerator.prepare`] together with the model and optimizer.
 * If you wish to run distributed evaluation, send your validation dataloader to [`~Accelerator.prepare`] as well. There are some nuances to distributed validation, check the [Distributed evaluation](#add-distributed-evaluation) section of the guide.
 * Any instruction using your training dataloader length (for instance if you want to log the number of total training
 steps) should go after the call to [`~Accelerator.prepare`].
 
-Passing these objects to the [`~Accelerator.prepare`] method ensures that your training dataloader will be sharded across 
-all GPUs/TPU cores available so that each one sees a different portion of the training dataset. Also, the random states 
+Passing `DataLoader` objects to the [`~Accelerator.prepare`] method ensures that your dataloader will be sharded across 
+all GPUs/TPU cores available so that each one sees a different portion of the training dataset. In other words, if there are 8 processes and a dataset of 64 items, each process will see 8 of these items per iteration. Also, the random states 
 of all processes will be synchronized at the beginning of each iteration through your dataloader, to make sure the data 
 is shuffled the same way (if you decided to use `shuffle=True` or any kind of random sampler).
 
@@ -81,7 +81,7 @@ is shuffled the same way (if you decided to use `shuffle=True` or any kind of ra
 
     The actual batch size for your training will be the number of devices used multiplied by the batch size you set in
     your script. For instance, training on 4 GPUs with a batch size of 16 set when creating the training dataloader will
-    train at an actual batch size of 64. 
+    train at an actual batch size of 64 (4 * 16).
     If you want the batch size remain the same regardless of how many GPUs the script is run on, you can use the 
     option `split_batches=True` when creating and initializing [`Accelerator`].
     Your training dataloader may change length when going through this method: if you run on X GPUs, it will have its
@@ -99,7 +99,7 @@ launcher.
 
 ### Add distributed evaluation
 
-You can perform regular evaluation in your training script, if you leave your validation dataloader out of the
+You can perform regular evaluation in your training script if you leave your validation dataloader out of the
 [`~Accelerator.prepare`] method. In this case, you will need to put the input data on the
 `accelerator.device` manually.
 
@@ -133,7 +133,7 @@ for inputs, targets in validation_dataloader:
 
 Some data at the end of the dataset may be duplicated so the batch can be divided equally among all workers. As a result, 
 metrics should be calculated through the [`~Accelerator.gather_for_metrics`] method to automatically remove the duplicated 
-data while gathering.
+data while gathering and provide a more accurate metric.
 
 <Tip>
 
@@ -201,7 +201,7 @@ accelerate launch --config_file path_to_config.yaml path_to_script.py --args_for
 ```
 
 You can override any of the arguments determined by your config file. To see the complete list of parameters that you 
-can pass in, run `accelerate launch -h`. 
+can pass in, run `accelerate launch -h`. (And further niche argument help by passing in partial commands, such as `accelerate launch --multi_gpu -h` for all `multi_gpu` args)
 
 Check out the [Launch tutorial](basic_tutorials/launch) for more information about launching your scripts.
 
@@ -212,8 +212,8 @@ Here we describe common modifications/deviations from the base case scenario and
 
 ### Launch distributed training from a notebook
 
-In Accelerate 0.3.0, a new [`notebook_launcher`] has been introduced to help you launch your training function from a 
-notebook. This launcher supports launching a training with TPUs on Colab or Kaggle, as well as training on several GPUs 
+Accelerate has a [`notebook_launcher`] to help you launch your training function from a 
+notebook. This launcher supports launching a training with TPUs on Colab or Kaggle, as well as training on several GPUs and machines
 (if the machine on which you are running your notebook has them).
 
 Define a function responsible for your whole training and/or evaluation in a cell of the notebook, then execute a
