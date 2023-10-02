@@ -32,6 +32,7 @@ import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
+from .imports import is_xpu_available
 from .versions import compare_versions
 
 
@@ -920,7 +921,8 @@ class FullyShardedDataParallelPlugin:
         self.activation_checkpointing = str_to_bool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
 
         if self.sync_module_states:
-            self.param_init_fn = lambda x: x.to_empty(device=torch.cuda.current_device(), recurse=False)
+            device = torch.cuda.current_device() if not is_xpu_available() else torch.xpu.current_device()
+            self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
 
     @staticmethod
     def get_module_class_from_name(module, name):
