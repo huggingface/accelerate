@@ -917,10 +917,8 @@ class FullyShardedDataParallelPlugin:
         self.activation_checkpointing = str_to_bool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
 
         if self.sync_module_states:
-            if is_xpu_available():
-                self.param_init_fn = lambda x: x.to_empty(device=torch.xpu.current_device(), recurse=False)
-            else:
-                self.param_init_fn = lambda x: x.to_empty(device=torch.cuda.current_device(), recurse=False)
+            device = torch.cuda.current_device() if not is_xpu_available() else torch.xpu.current_device()
+            self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
 
     @staticmethod
     def get_module_class_from_name(module, name):
