@@ -420,6 +420,16 @@ class ProjectConfiguration:
         metadata={"help": "The current save iteration."},
     )
 
+    save_on_each_node: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "When doing multi-node distributed training, whether to save models and checkpoints on each node, or"
+                " only on the main one"
+            )
+        },
+    )
+
     def set_directories(self, project_dir: str = None):
         "Sets `self.project_dir` and `self.logging_dir` to the appropriate values."
         self.project_dir = project_dir

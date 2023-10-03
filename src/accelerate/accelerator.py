@@ -2508,6 +2508,10 @@ class Accelerator:
             f (`str` or `os.PathLike`): Where to save the content of `obj`.
             safe_serialization (`bool`, *optional*, defaults to `False`): Whether to save `obj` using `safetensors`
 
+        Note:
+            If `save_on_each_node` was passed in as a `ProjectConfiguration`, will save the object once per node,
+            rather than only once on the main node.
+
         Example:
 
         ```python
@@ -2518,7 +2522,12 @@ class Accelerator:
         >>> accelerator.save(arr, "array.pkl")
         ```
         """
-        save(obj, f, safe_serialization=safe_serialization)
+        save(
+            obj,
+            f,
+            save_on_each_node=self.project_configuration.save_on_each_node,
+            safe_serialization=safe_serialization,
+        )
 
     def save_model(
         self,
@@ -2793,10 +2802,16 @@ class Accelerator:
             hook(self._models, weights, output_dir)
 
         save_location = save_accelerator_state(
-            output_dir, weights, optimizers, schedulers, self.state.process_index, self.scaler
+            output_dir,
+            weights,
+            optimizers,
+            schedulers,
+            self.state.process_index,
+            self.scaler,
+            save_on_each_node=self.project_configuration.save_on_each_node,
         )
         for i, obj in enumerate(self._custom_objects):
-            save_custom_state(obj, output_dir, i)
+            save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)
         self.project_configuration.iteration += 1
         return save_location
 

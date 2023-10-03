@@ -15,6 +15,7 @@
 import os
 import socket
 from contextlib import contextmanager
+from functools import partial
 from types import MethodType
 
 import torch
@@ -109,22 +110,27 @@ def wait_for_everyone():
     PartialState().wait_for_everyone()
 
 
-def save(obj, f, safe_serialization=False):
+def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = False):
     """
     Save the data to disk. Use in place of `torch.save()`.
 
     Args:
-        obj: The data to save
-        f: The file (or file-like object) to use to save the data
-        safe_serialization (`bool`, *optional*, defaults to `False`): Whether to save `obj` using `safetensors`
+        obj:
+            The data to save
+        f:
+            The file (or file-like object) to use to save the data
+        save_on_each_node (`bool`, *optional*, defaults to `False`):
+            Whether to only save on the global main process
+        safe_serialization (`bool`, *optional*, defaults to `False`):
+            Whether to save `obj` using `safetensors`
     """
+    save_func = torch.save if not safe_serialization else partial(safe_save_file, metadata={"format": "pt"})
     if PartialState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
-    elif PartialState().local_process_index == 0:
-        if safe_serialization:
-            safe_save_file(obj, f, metadata={"format": "pt"})
-        else:
-            torch.save(obj, f)
+    elif PartialState().is_main_process and not save_on_each_node:
+        save_func(obj, f)
+    elif PartialState().is_local_main_process and save_on_each_node:
+        save_func(obj, f)
 
 
 @contextmanager
