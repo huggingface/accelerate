@@ -264,6 +264,7 @@ class Accelerator:
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
     ):
+        self.trackers = []
         if project_config is not None:
             self.project_configuration = project_config
         else:
@@ -2399,7 +2400,6 @@ class Accelerator:
         ... )
         ```
         """
-        self.trackers = []
         for tracker in self.log_with:
             if issubclass(type(tracker), GeneralTracker):
                 # Custom trackers are already initialized
@@ -2496,8 +2496,6 @@ class Accelerator:
         >>> accelerator.end_training()
         ```
         """
-        if not hasattr(self, "trackers"):
-            return
         for tracker in self.trackers:
             tracker.finish()
 
