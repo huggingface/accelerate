@@ -14,12 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+from dataclasses import dataclass
+from typing import Literal
 
 from huggingface_hub import model_info
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 from accelerate import init_empty_weights
 from accelerate.utils import (
+    Arguments,
     calculate_maximum_sizes,
     convert_bytes,
     is_timm_available,
@@ -177,6 +180,31 @@ def create_ascii_table(headers: list, rows: list, title: str):
     return table
 
 
+@dataclass
+class EstimateArguments(Arguments):
+    """
+    Arguments for the `accelerate estimate` command.
+
+    Args:
+        model_name (`str`):
+            The model name on the Hugging Face Hub.
+        library_name (`str`):
+            The library the model has an integration with, such as `transformers`, needed only if this information is
+            not stored on the Hub. Must be one of `timm` or `transformers`.
+        dtypes (`list[str]`, `optional`, defaults to `["float32", "float16", "int8", "int4"]`):
+            The dtypes to use for the model, must be one (or many) of `float32`, `float16`, `int8`, and `int4`.
+        trust_remote_code (`bool`, `optional`, defaults to `False`):
+            Whether or not to allow for custom models defined on the Hub in their own modeling files. This flag should
+            only be used for repositories you trust and in which you have read the code, as it will execute code
+            present on the Hub on your local machine.
+    """
+
+    model_name: str
+    library_name: Literal["timm", "transformers"]
+    dtypes: list[str]
+    trust_remote_code: bool = False
+
+
 def estimate_command_parser(subparsers=None):
     if subparsers is not None:
         parser = subparsers.add_parser("estimate-memory")
@@ -207,11 +235,11 @@ def estimate_command_parser(subparsers=None):
     )
 
     if subparsers is not None:
-        parser.set_defaults(func=estimate_command)
+        parser.set_defaults(func=estimate_memory)
     return parser
 
 
-def gather_data(args):
+def gather_data(args: EstimateArguments):
     "Creates an empty model and gathers the data for the sizes"
     try:
         model = create_empty_model(
@@ -246,7 +274,7 @@ def gather_data(args):
     return data
 
 
-def estimate_command(args):
+def estimate_memory(args: EstimateArguments):
     data = gather_data(args)
     for row in data:
         for i, item in enumerate(row):
@@ -263,7 +291,7 @@ def estimate_command(args):
 def main():
     parser = estimate_command_parser()
     args = parser.parse_args()
-    estimate_command(args)
+    estimate_memory(args)
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ import os
 import typing
 import warnings
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import timedelta
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -1508,3 +1508,33 @@ class BnbQuantizationConfig:
 
         if not isinstance(self.torch_dtype, torch.dtype):
             raise ValueError("torch_dtype must be a torch.dtype")
+
+
+class Arguments:
+    """
+    Base dataclass for CLI arguments. Contains methods for type validation and conversion to argparse afterwards.
+
+    Allows for compatibility between raw python and using argparse.
+    """
+
+    def __post_init__(self):
+        self.validate_types()
+
+    def validate_types(self):
+        for arg in fields(self):
+            parameter_type = typing.get_origin(arg.type)
+            if parameter_type == typing.Literal:
+                if self.__dict__[arg.name] not in arg.type.__args__:
+                    raise ValueError(
+                        f"Invalid value for `{arg.name}`. Must be one of {list(arg.type.__args__)} not {self.__dict__[arg.name]}"
+                    )
+
+    def to_argparse(self):
+        command = []
+        for arg in fields(self):
+            parameter_type = typing.get_origin(arg.type)
+            if parameter_type != typing.Literal:
+                command.append(f"{self.__dict__[arg.name]}")
+            else:
+                command.append(f"--{arg.name}={self.__dict__[arg.name]}")
+        return command
