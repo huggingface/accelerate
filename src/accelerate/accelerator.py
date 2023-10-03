@@ -2731,10 +2731,10 @@ class Accelerator:
             schedulers,
             self.state.process_index,
             self.scaler,
-            self.project_configuration.save_on_each_node,
+            save_on_each_node=self.project_configuration.save_on_each_node,
         )
         for i, obj in enumerate(self._custom_objects):
-            save_custom_state(obj, output_dir, i, self.project_configuration.save_on_each_node)
+            save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)
         self.project_configuration.iteration += 1
         return save_location
 
