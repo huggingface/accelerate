@@ -154,7 +154,7 @@ When using transformers `save_pretrained`, pass `state_dict=accelerator.get_stat
       args.output_dir,
       is_main_process=accelerator.is_main_process,
       save_function=accelerator.save,
-+     state_dict=accelerator.get_state_dict(model),
++     state_dict=accelerator.get_state_dict(model, unwrap=False),
 )
 ```
 
