@@ -28,9 +28,9 @@ from .state import PartialState
 from .utils import (
     LoggerType,
     is_aim_available,
+    is_clearml_available,
     is_comet_ml_available,
     is_mlflow_available,
-    is_clearml_available,
     is_tensorboard_available,
     is_wandb_available,
     listify,
