@@ -263,12 +263,45 @@ class TPUArguments(Arguments):
 
 @dataclass
 class DeepSpeedArguments(Arguments):
+    """
+    Arguments related to DeepSpeed
+
+    Args:
+        deepspeed_config_file (`str`, *optional*):
+            DeepSpeed config file to use.
+        zero_stage (`int`, *optional*, defaults to 2):
+            DeepSpeed's ZeRO optimization stage.
+        offload_optimizer_device (`str`, *optional*, defaults to "none"):
+            Decides where (none|cpu|nvme) to offload optimizer states.
+        offload_param_device (`str`, *optional*, defaults to "none"):
+            Decides where (none|cpu|nvme) to offload parameters.
+        offload_optimizer_nvme_path (`str`, *optional*, defaults to "none"):
+            Decides Nvme Path to offload optimizer states.
+        offload_param_nvme_path (`str`, *optional*, defaults to "none"):
+            Decides Nvme Path to offload parameters.
+        gradient_accumulation_steps (`int`, *optional*, defaults to 1):
+            Number of gradient_accumulation_steps used in your training script when using deepspeed.
+        gradient_clipping (`float`, *optional*, defaults to 1.0):
+            Gradient clipping value used in your training script when using deepspeed.
+        zero3_init_flag (`bool`, *optional*):
+            Whether to enable `deepspeed.zero.Init` for constructing massive models. Only applicable with DeepSpeed ZeRO Stage-3.
+        zero3_save_16bit_model (`bool`, *optional*):
+            Whether to save 16-bit model weights when using ZeRO Stage-3. Only applicable with DeepSpeed ZeRO Stage-3.
+        deepspeed_hostfile (`str`, *optional*):
+            DeepSpeed hostfile for configuring multi-node compute resources.
+        deepspeed_exclusion_filter (`str`, *optional*):
+            DeepSpeed exclusion filter string when using mutli-node setup.
+        deepspeed_inclusion_filter (`str`, *optional*):
+            DeepSpeed inclusion filter string when using mutli-node setup.
+        deepspeed_multinode_launcher (`str`, *optional*, defaults to "pdsh"):
+            DeepSpeed multi-node launcher to use.
+    """
     config_file: str = None
-    zero_stage: int = None
+    zero_stage: int = 2
     offload_optimizer_device: Literal["none", "cpu", "nvme"] = "none"
     offload_param_device: Literal["none", "cpu", "nvme"] = "none"
-    offload_optimizer_nvme_path: str = None
-    offload_param_nvme_path: str = None
+    offload_optimizer_nvme_path: str = "none"
+    offload_param_nvme_path: str = "none"
     gradient_accumulation_steps: int = 1
     gradient_clipping: float = 1.0
     zero3_init_flag: bool = True
@@ -365,117 +398,9 @@ def launch_command_parser(subparsers=None):
         dest="tpu_use_cluster",
         help="Should not be passed explicitly, this is for internal use only.",
     )
-    # tpu_args.add_argument(
-    #     "--vm",
-    #     type=str,
-    #     action="append",
-    #     help=(
-    #         "List of single Compute VM instance names. "
-    #         "If not provided we assume usage of instance groups. For TPU pods."
-    #     ),
-    # )
-    # tpu_args.add_argument(
-    #     "--env",
-    #     type=str,
-    #     action="append",
-    #     help="List of environment variables to set on the Compute VM instances. For TPU pods.",
-    # )
-
     # DeepSpeed arguments
     deepspeed_args = parser.add_argument_group("DeepSpeed Arguments", "Arguments related to DeepSpeed.")
-    deepspeed_args.add_argument(
-        "--deepspeed_config_file",
-        default=None,
-        type=str,
-        help="DeepSpeed config file.",
-    )
-    deepspeed_args.add_argument(
-        "--zero_stage",
-        default=None,
-        type=int,
-        help="DeepSpeed's ZeRO optimization stage (useful only when `use_deepspeed` flag is passed). "
-        "If unspecified, will default to `2`.",
-    )
-    deepspeed_args.add_argument(
-        "--offload_optimizer_device",
-        default=None,
-        type=str,
-        help="Decides where (none|cpu|nvme) to offload optimizer states (useful only when `use_deepspeed` flag is passed). "
-        "If unspecified, will default to 'none'.",
-    )
-    deepspeed_args.add_argument(
-        "--offload_param_device",
-        default=None,
-        type=str,
-        help="Decides where (none|cpu|nvme) to offload parameters (useful only when `use_deepspeed` flag is passed). "
-        "If unspecified, will default to 'none'.",
-    )
-    deepspeed_args.add_argument(
-        "--offload_optimizer_nvme_path",
-        default=None,
-        type=str,
-        help="Decides Nvme Path to offload optimizer states (useful only when `use_deepspeed` flag is passed). "
-        "If unspecified, will default to 'none'.",
-    )
-    deepspeed_args.add_argument(
-        "--offload_param_nvme_path",
-        default=None,
-        type=str,
-        help="Decides Nvme Path to offload parameters (useful only when `use_deepspeed` flag is passed). "
-        "If unspecified, will default to 'none'.",
-    )
-    deepspeed_args.add_argument(
-        "--gradient_accumulation_steps",
-        default=None,
-        type=int,
-        help="No of gradient_accumulation_steps used in your training script (useful only when `use_deepspeed` flag is passed). "
-        "If unspecified, will default to `1`.",
-    )
-    deepspeed_args.add_argument(
-        "--gradient_clipping",
-        default=None,
-        type=float,
-        help="gradient clipping value used in your training script (useful only when `use_deepspeed` flag is passed). "
-        "If unspecified, will default to `1.0`.",
-    )
-    deepspeed_args.add_argument(
-        "--zero3_init_flag",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to enable `deepspeed.zero.Init` for constructing massive models. "
-        "Only applicable with DeepSpeed ZeRO Stage-3. If unspecified, will default to `true`.",
-    )
-    deepspeed_args.add_argument(
-        "--zero3_save_16bit_model",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to save 16-bit model weights when using ZeRO Stage-3. "
-        "Only applicable with DeepSpeed ZeRO Stage-3. If unspecified, will default to `false`.",
-    )
-    deepspeed_args.add_argument(
-        "--deepspeed_hostfile",
-        default=None,
-        type=str,
-        help="DeepSpeed hostfile for configuring multi-node compute resources.",
-    )
-    deepspeed_args.add_argument(
-        "--deepspeed_exclusion_filter",
-        default=None,
-        type=str,
-        help="DeepSpeed exclusion filter string when using mutli-node setup.",
-    )
-    deepspeed_args.add_argument(
-        "--deepspeed_inclusion_filter",
-        default=None,
-        type=str,
-        help="DeepSpeed inclusion filter string when using mutli-node setup.",
-    )
-    deepspeed_args.add_argument(
-        "--deepspeed_multinode_launcher",
-        default=None,
-        type=str,
-        help="DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.",
-    )
+    DeepSpeedArguments().add_to_parser(deepspeed_args)
 
     # fsdp arguments
     fsdp_args = parser.add_argument_group("FSDP Arguments", "Arguments related to Fully Shared Data Parallelism.")
