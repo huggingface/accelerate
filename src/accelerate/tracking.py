@@ -690,15 +690,15 @@ class ClearMLTracker(GeneralTracker):
     A `Tracker` class that supports `clearml`. Should be initialized at the start of your script.
 
     Environment:
-    - **CLEARML_PROJECT** (`str`, *optional*) - The default ClearML project name. Can be overwritten
-      by setting `project_name` in `task_init_kwargs`.
-    - **CLEARML_TASK** (`str`, *optional*) - The default ClearML task name. Can be overwritten
-      by setting `task_name` in `task_init_kwargs`.
+    - **CLEARML_PROJECT** (`str`, *optional*) - The default ClearML project name. Can be overwritten by setting
+      `project_name` in `task_init_kwargs`.
+    - **CLEARML_TASK** (`str`, *optional*) - The default ClearML task name. Can be overwritten by setting `task_name`
+      in `task_init_kwargs`.
 
     Args:
         run_name (`str`, *optional*):
-            Name of the experiment. If ClearML's `Task.init`'s `task_name` and `project_name` are not
-            specified in kwargs, they will default to this value
+            Name of the experiment. If ClearML's `Task.init`'s `task_name` and `project_name` are not specified in
+            kwargs, they will default to this value
         task_init_kwargs:
             Kwargs passed along to the `Run.__init__` method.
     """
@@ -746,22 +746,20 @@ class ClearMLTracker(GeneralTracker):
     @on_main_process
     def log(self, values: dict, step: Optional[int] = None, **kwargs):
         """
-        Logs `values` dictionary to the current run. The dictionary keys must be strings.
-        The dictionary values must be ints or floats
+        Logs `values` dictionary to the current run. The dictionary keys must be strings. The dictionary values must be
+        ints or floats
 
         Args:
             values (`dict`):
-                Values to be logged as key-value pairs.
-                If the key starts with 'eval_'/'test_'/'train_',the value will be reported under
-                the 'eval'/'test'/'train' series and the respective prefix will be removed.
-                Otherwise, the value will be reported under the 'train' series, and no prefix will
-                be removed.
+                Values to be logged as key-value pairs. If the key starts with 'eval_'/'test_'/'train_',the value will
+                be reported under the 'eval'/'test'/'train' series and the respective prefix will be removed.
+                Otherwise, the value will be reported under the 'train' series, and no prefix will be removed.
             step (`int`, *optional*):
-                If None (default), the values will be reported as single values. If specified,
-                the values will be reported as scalars, with the iteration number equal to `step`.
+                If None (default), the values will be reported as single values. If specified, the values will be
+                reported as scalars, with the iteration number equal to `step`.
             kwargs:
-                Additional key word arguments passed along to the `clearml.Logger.report_single_value`
-                or `clearml.Logger.report_scalar` methods.
+                Additional key word arguments passed along to the `clearml.Logger.report_single_value` or
+                `clearml.Logger.report_scalar` methods.
         """
         if not self.task:
             return
@@ -847,8 +845,8 @@ class ClearMLTracker(GeneralTracker):
     @on_main_process
     def finish(self):
         """
-        Close the ClearML task. If the task was initialized externally (e.g. by manually calling `Task.init`),
-        this function is a noop
+        Close the ClearML task. If the task was initialized externally (e.g. by manually calling `Task.init`), this
+        function is a noop
         """
         if self.task and not self._initialized_externally:
             self.task.close()
