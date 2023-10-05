@@ -1577,6 +1577,9 @@ class Arguments:
             if parameter_type == typing.Literal:
                 arg_dict["choices"] = arg.type.__args__
                 arg_dict["type"] = str
+            elif parameter_type == list:
+                arg_dict["action"] = "append"
+                arg_dict["type"] = str
             elif arg_dict.get("action", "store_true") != "store_true":
                 arg_dict["type"] = parameter_type
             parser.add_argument(f"--{self.prefix}{name}", **arg_dict)

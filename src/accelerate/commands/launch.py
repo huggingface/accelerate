@@ -21,7 +21,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, ClassVar
 
 import psutil
@@ -127,26 +127,11 @@ class _CustomHelpAction(argparse._HelpAction):
 
         super().__call__(parser, namespace, values, option_string)
 
-@dataclass
-class BaseArguments(Arguments):
+@dataclass 
+class ResourceArguments(Arguments):
     """
-    The core arguments for the `accelerate launch` command.
-
-    Args:
-        config_file (`str`, *optional*, defaults to `None`):
-            The config file to use for the default values in the launching script.
-        quiet (`bool`, *optional*, defaults to `False`):
-            Silence subprocess errors from the launch stack trace and only show the relevant tracebacks. (Only
-            applicable to DeepSpeed and single-process configurations)
-        """
-    config_file: str = None
-    quiet: bool = False
-
-@dataclass
-class HardwareArguments(Arguments):
-    """
-    Arguments related to hardware selection.
-
+    Arguments for fine-tuning what and how available hardware should be used.
+    
     Args:
         cpu (`bool`, *optional*, defaults to `False`):
             Whether or not to force the training on the CPU.
@@ -156,18 +141,6 @@ class HardwareArguments(Arguments):
             Whether or not this should launch a TPU training.
         ipex (`bool`, *optional*, defaults to `False`):
             Whether or not this should launch a Intel PyTorch Extension (IPEX) training.
-    """
-    cpu: bool = False
-    multi_gpu: bool = False
-    tpu: bool = False
-    ipex: bool = False
-
-@dataclass 
-class ResourceArguments(Arguments):
-    """
-    Arguments for fine-tuning how available hardware should be used and training paradigms.
-    
-    Args:
         mixed_precision (`str`, *optional*, defaults to `no`):
             Whether or not to use mixed precision training. Choose between FP16, BF16 (bfloat16) or FP8 training. BF16
             training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.
@@ -186,6 +159,10 @@ class ResourceArguments(Arguments):
         use_xpu (`bool`, *optional*, defaults to `False`):
             Whether to use IPEX plugin to speed up training on XPU specifically.
     """
+    cpu: bool = False
+    multi_gpu: bool = False
+    tpu: bool = False
+    ipex: bool = False
     mixed_precision: Literal["no", "fp16", "bf16", "fp8"] = "no"
     num_processes: int = None
     num_machines: int = None
@@ -219,6 +196,33 @@ class DynamoArguments(Arguments):
 
 @dataclass
 class CUDAArguments(Arguments):
+    """
+    Arguments related to CUDA usage.
+
+    Args:
+        gpu_ids (`str`):
+            What GPUs (by id) should be used for training on this machine as a comma-seperated list.
+        same_network (`bool`):
+            Whether all machines used for multinode training exist on the same local network.
+        machine_rank (`int`):
+            The rank of the machine on which this script is launched.
+        main_process_ip (`str`):
+            The IP address of the machine of rank 0.
+        main_process_port (`int`):
+            The port to use to communicate with the machine of rank 0.
+        tee (`str`, *optional*, defaults to "0"):
+            Tee std streams into a log file and also to console.
+        role (`str`, *optional*, defaults to "default"):
+            User-defined role for the workers.
+        rdzv_backend (`str`, *optional*, defaults to "static"):
+            The rendezvous method to use, such as "static" or "c10d".
+        rdzv_conf (`str`, *optional*, defaults to ""):
+            Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).
+        max_restarts (`int`, *optional*, defaults to 0):
+            Maximum number of worker group restarts before failing.
+        monitor_interval (`float`, *optional*, defaults to 5.0):
+            Interval, in seconds, to monitor the state of workers.
+    """
     gpu_ids: str = None
     same_network: bool = False
     machine_rank: int = None
@@ -233,10 +237,27 @@ class CUDAArguments(Arguments):
 
 @dataclass
 class TPUArguments(Arguments):
+    """
+    Arguments related to TPU usage.
+
+    Args:
+        tpu_cluster (`bool`):
+            Whether to use a GCP TPU pod for training.
+        tpu_use_sudo (`bool`):
+            Whether to use `sudo` when running the TPU training script in each pod.
+        vm (list of `str`):
+            List of single Compute VM instance names. If not provided we assume usage of instance groups. For TPU pods.
+        env (list of `str`):
+            List of environment variables to set on the Compute VM instances. For TPU pods.
+        main_training_function (`str`):
+            The name of the main function to be executed in your script (only for TPU training).
+        downcast_bf16 (`bool`):
+            Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.
+    """
     tpu_cluster: bool = False
     tpu_use_sudo: bool = False
-    vm: str = None
-    env: str = None
+    vm: list[str] = field(default_factory=list)
+    env: list[str] = field(default_factory=list)
     main_training_function: str = None
     downcast_bf16: bool = False
 
@@ -299,85 +320,16 @@ def launch_command_parser(subparsers=None):
     parser.register("action", "help", _CustomHelpAction)
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
 
-    BaseArguments().add_to_parser(parser)
-    
-    # Hardware selection arguments
-    hardware_args = parser.add_argument_group(
-        "Hardware Selection Arguments", "Arguments for selecting the hardware to be used."
-    )
-    HardwareArguments().add_to_parser(hardware_args)
-
-    # Resource selection arguments
-    resource_args = parser.add_argument_group(
-        "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
-    )
-    ResourceArguments().add_to_parser(resource_args)
-
-    # Dynamo arguments
-    DynamoArguments().add_to_parser(resource_args)
-
-    # distributed GPU training arguments
-    distributed_args = parser.add_argument_group("Distributed GPUs", "Arguments related to distributed GPU training.")
-    distributed_args.add_argument(
-        "--gpu_ids",
+    parser.add_argument(
+        "--config_file", 
+        type=str,
         default=None,
-        help="What GPUs (by id) should be used for training on this machine as a comma-seperated list",
+        help="The config file to use for the default values in the launching script.",
     )
-    distributed_args.add_argument(
-        "--same_network",
-        default=False,
+    parser.add_argument(
+        "--quiet",
         action="store_true",
-        help="Whether all machines used for multinode training exist on the same local network.",
-    )
-    distributed_args.add_argument(
-        "--machine_rank", type=int, default=None, help="The rank of the machine on which this script is launched."
-    )
-    distributed_args.add_argument(
-        "--main_process_ip", type=str, default=None, help="The IP address of the machine of rank 0."
-    )
-    distributed_args.add_argument(
-        "--main_process_port",
-        type=int,
-        default=None,
-        help="The port to use to communicate with the machine of rank 0.",
-    )
-    distributed_args.add_argument(
-        "-t",
-        "--tee",
-        default="0",
-        type=str,
-        help="Tee std streams into a log file and also to console.",
-    )
-    distributed_args.add_argument(
-        "--role",
-        type=str,
-        default="default",
-        help="User-defined role for the workers.",
-    )
-    # Rendezvous related arguments
-    distributed_args.add_argument(
-        "--rdzv_backend",
-        type=str,
-        default="static",
-        help="The rendezvous method to use, such as 'static' (the default) or 'c10d'",
-    )
-    distributed_args.add_argument(
-        "--rdzv_conf",
-        type=str,
-        default="",
-        help="Additional rendezvous configuration (<key1>=<value1>,<key2>=<value2>,...).",
-    )
-    distributed_args.add_argument(
-        "--max_restarts",
-        type=int,
-        default=0,
-        help="Maximum number of worker group restarts before failing.",
-    )
-    distributed_args.add_argument(
-        "--monitor_interval",
-        type=float,
-        default=5,
-        help="Interval, in seconds, to monitor the state of workers.",
+        help="Silence subprocess errors from the launch stack trace and only show the relevant tracebacks. (Only applicable to DeepSpeed and single-process configurations)",
     )
     parser.add_argument(
         "-m",
@@ -390,52 +342,44 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.",
     )
+    
+    # Resource selection arguments
+    resource_args = parser.add_argument_group(
+        "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
+    )
+    ResourceArguments().add_to_parser(resource_args)
+
+    # Dynamo arguments
+    DynamoArguments().add_to_parser(resource_args)
+
+    # distributed GPU training arguments
+    distributed_args = parser.add_argument_group("Distributed GPUs", "Arguments related to distributed GPU training.")
+    CUDAArguments().add_to_parser(distributed_args)
 
     # TPU arguments
     tpu_args = parser.add_argument_group("TPU", "Arguments related to TPU.")
-    tpu_args.add_argument(
-        "--tpu_cluster",
-        action="store_true",
-        dest="tpu_use_cluster",
-        help="Whether to use a GCP TPU pod for training.",
-    )
+    TPUArguments().add_to_parser(tpu_args)
     tpu_args.add_argument(
         "--no_tpu_cluster",
         action="store_false",
         dest="tpu_use_cluster",
         help="Should not be passed explicitly, this is for internal use only.",
     )
-    tpu_args.add_argument(
-        "--tpu_use_sudo",
-        action="store_true",
-        help="Whether to use `sudo` when running the TPU training script in each pod.",
-    )
-    tpu_args.add_argument(
-        "--vm",
-        type=str,
-        action="append",
-        help=(
-            "List of single Compute VM instance names. "
-            "If not provided we assume usage of instance groups. For TPU pods."
-        ),
-    )
-    tpu_args.add_argument(
-        "--env",
-        type=str,
-        action="append",
-        help="List of environment variables to set on the Compute VM instances. For TPU pods.",
-    )
-    tpu_args.add_argument(
-        "--main_training_function",
-        type=str,
-        default=None,
-        help="The name of the main function to be executed in your script (only for TPU training).",
-    )
-    tpu_args.add_argument(
-        "--downcast_bf16",
-        action="store_true",
-        help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
-    )
+    # tpu_args.add_argument(
+    #     "--vm",
+    #     type=str,
+    #     action="append",
+    #     help=(
+    #         "List of single Compute VM instance names. "
+    #         "If not provided we assume usage of instance groups. For TPU pods."
+    #     ),
+    # )
+    # tpu_args.add_argument(
+    #     "--env",
+    #     type=str,
+    #     action="append",
+    #     help="List of environment variables to set on the Compute VM instances. For TPU pods.",
+    # )
 
     # DeepSpeed arguments
     deepspeed_args = parser.add_argument_group("DeepSpeed Arguments", "Arguments related to DeepSpeed.")
