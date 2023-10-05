@@ -580,7 +580,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
 
             if batch is None:
                 raise ValueError(
-                    f"Batch does not contain any data (`{batch}`). At the end of all iterable data available before expected stop iteration."
+                    f"Batch does not contain any data (`{batch}`). At the end of all iterable data available ({batch_index-1} batches) before expected stop iteration."
                 )
 
             observed_batch_size = find_batch_size(batch)
