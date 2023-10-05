@@ -21,6 +21,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from dataclasses import dataclass
+from typing import Literal, ClassVar
 
 import psutil
 import torch
@@ -30,6 +32,7 @@ from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.commands.config.config_utils import DYNAMO_BACKENDS
 from accelerate.state import get_int_from_env
 from accelerate.utils import (
+    Arguments,
     ComputeEnvironment,
     DistributedType,
     PrepareForLaunch,
@@ -124,6 +127,168 @@ class _CustomHelpAction(argparse._HelpAction):
 
         super().__call__(parser, namespace, values, option_string)
 
+@dataclass
+class BaseArguments(Arguments):
+    """
+    The core arguments for the `accelerate launch` command.
+
+    Args:
+        config_file (`str`, *optional*, defaults to `None`):
+            The config file to use for the default values in the launching script.
+        quiet (`bool`, *optional*, defaults to `False`):
+            Silence subprocess errors from the launch stack trace and only show the relevant tracebacks. (Only
+            applicable to DeepSpeed and single-process configurations)
+        """
+    config_file: str = None
+    quiet: bool = False
+
+@dataclass
+class HardwareArguments(Arguments):
+    """
+    Arguments related to hardware selection.
+
+    Args:
+        cpu (`bool`, *optional*, defaults to `False`):
+            Whether or not to force the training on the CPU.
+        multi_gpu (`bool`, *optional*, defaults to `False`):
+            Whether or not this should launch a distributed GPU training.
+        tpu (`bool`, *optional*, defaults to `False`):
+            Whether or not this should launch a TPU training.
+        ipex (`bool`, *optional*, defaults to `False`):
+            Whether or not this should launch a Intel PyTorch Extension (IPEX) training.
+    """
+    cpu: bool = False
+    multi_gpu: bool = False
+    tpu: bool = False
+    ipex: bool = False
+
+@dataclass 
+class ResourceArguments(Arguments):
+    """
+    Arguments for fine-tuning how available hardware should be used and training paradigms.
+    
+    Args:
+        mixed_precision (`str`, *optional*, defaults to `no`):
+            Whether or not to use mixed precision training. Choose between FP16, BF16 (bfloat16) or FP8 training. BF16
+            training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.
+        num_processes (`int`, *optional*, defaults to `None`):
+            The total number of processes to be launched in parallel.
+        num_machines (`int`, *optional*, defaults to `None`):
+            The total number of machines used in this training.
+        num_cpu_threads_per_process (`int`, *optional*, defaults to `None`):
+            The number of CPU threads per process. Can be tuned for optimal performance.
+        use_deepspeed (`bool`, *optional*, defaults to `False`):
+            Whether to use deepspeed.
+        use_fsdp (`bool`, *optional*, defaults to `False`):
+            Whether to use fsdp.
+        use_megatron_lm (`bool`, *optional*, defaults to `False`):
+            Whether to use Megatron-LM.
+        use_xpu (`bool`, *optional*, defaults to `False`):
+            Whether to use IPEX plugin to speed up training on XPU specifically.
+    """
+    mixed_precision: Literal["no", "fp16", "bf16", "fp8"] = "no"
+    num_processes: int = None
+    num_machines: int = None
+    num_cpu_threads_per_process: int = None
+    use_deepspeed: bool = False
+    use_fsdp: bool = False
+    use_megatron_lm: bool = False 
+    use_xpu:bool = False
+
+@dataclass 
+class DynamoArguments(Arguments):
+    """
+    Arguments related to `torchdynamo`
+
+    Args:
+        backend (`str`):
+            Backend to optimize your training with dynamo, see more at
+            https://github.com/pytorch/torchdynamo.
+        mode (`str`, *optional*, defaults to "default"):
+            Mode to optimize your training with dynamo.
+        use_fullgraph (`bool`, *optional*):
+            Whether to use full graph mode for dynamo or it is ok to break model into several subgraphs.
+        use_dynamic (`bool`, *optional*):
+            Whether to enable dynamic shape tracing.
+    """
+    prefix: ClassVar[str] = "dynamo_"
+    backend: Literal["no", "eager", "aot_eager", "inductor", "nvfuser", "aot_nvfuser", "aot_cudagraphs", "ofi", "fx2trt", "onnxrt", "ipex"] = "no"
+    mode: Literal["default", "reduce-overhead", "max-autotune"] = "default"
+    use_fullgraph: bool = False
+    use_dynamic: bool = False
+
+@dataclass
+class CUDAArguments(Arguments):
+    gpu_ids: str = None
+    same_network: bool = False
+    machine_rank: int = None
+    main_process_ip: str = None
+    main_process_port: int = None
+    tee: str = "0"
+    role: str = "default"
+    rdzv_backend: Literal["static", "c10d"] = "static"
+    rdzv_conf: str = ""
+    max_restarts: int = 0
+    monitor_interval: float = 5.0
+
+@dataclass
+class TPUArguments(Arguments):
+    tpu_cluster: bool = False
+    tpu_use_sudo: bool = False
+    vm: str = None
+    env: str = None
+    main_training_function: str = None
+    downcast_bf16: bool = False
+
+@dataclass
+class DeepSpeedArguments(Arguments):
+    config_file: str = None
+    zero_stage: int = None
+    offload_optimizer_device: Literal["none", "cpu", "nvme"] = "none"
+    offload_param_device: Literal["none", "cpu", "nvme"] = "none"
+    offload_optimizer_nvme_path: str = None
+    offload_param_nvme_path: str = None
+    gradient_accumulation_steps: int = 1
+    gradient_clipping: float = 1.0
+    zero3_init_flag: bool = True
+    zero3_save_16bit_model: bool = False
+    deepspeed_hostfile: str = None
+    deepspeed_exclusion_filter: str = None
+    deepspeed_inclusion_filter: str = None
+    deepspeed_multinode_launcher: Literal["pdsh", "standard", "openmpi", "mvapich", "mpich"] = "pdsh"
+
+@dataclass
+class FSDPArguments(Arguments):
+    prefix: ClassVar[str] = "fsdp_"
+    offload_params: bool = False
+    min_num_params: int = 1e8
+    sharding_strategy: int = 1
+    auto_wrap_policy: str = None
+    transformer_layer_cls_to_wrap: str = None
+    backward_prefetch_policy: str = None
+    state_dict_type: str = None
+    forward_prefetch: bool = False
+    use_orig_params: bool = False
+    sync_module_states: bool = True
+
+@dataclass
+class MegatronLMArguments(Arguments):
+    prefix: ClassVar[str] = "megatron_lm_"
+    tp_degree: int = 1
+    pp_degree: int = 1
+    num_micro_batches: int = None
+    sequence_parallelism: bool = None
+    recompute_activations: bool = None
+    use_distributed_optimizer: bool = None
+    gradient_clipping: float = 1.0
+
+@dataclass
+class AWSArguments(Arguments):
+    prefix: ClassVar[str] = "aws_"
+    access_key_id: str = None
+    secret_access_key: str = None
+
+
 
 def launch_command_parser(subparsers=None):
     if subparsers is not None:
@@ -134,119 +299,22 @@ def launch_command_parser(subparsers=None):
     parser.register("action", "help", _CustomHelpAction)
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
 
-    parser.add_argument(
-        "--config_file", default=None, help="The config file to use for the default values in the launching script."
-    )
-    parser.add_argument(
-        "--quiet",
-        "-q",
-        action="store_true",
-        help="Silence subprocess errors from the launch stack trace and only show the relevant tracebacks. (Only applicable to DeepSpeed and single-process configurations)",
-    )
+    BaseArguments().add_to_parser(parser)
+    
     # Hardware selection arguments
     hardware_args = parser.add_argument_group(
         "Hardware Selection Arguments", "Arguments for selecting the hardware to be used."
     )
-    hardware_args.add_argument(
-        "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
-    )
-    hardware_args.add_argument(
-        "--multi_gpu",
-        default=False,
-        action="store_true",
-        help="Whether or not this should launch a distributed GPU training.",
-    )
-    hardware_args.add_argument(
-        "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
-    )
-    hardware_args.add_argument(
-        "--ipex",
-        default=False,
-        action="store_true",
-        help="Whether or not this should launch a Intel PyTorch Extension (IPEX) training.",
-    )
+    HardwareArguments().add_to_parser(hardware_args)
 
     # Resource selection arguments
     resource_args = parser.add_argument_group(
         "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
     )
-    resource_args.add_argument(
-        "--mixed_precision",
-        type=str,
-        choices=["no", "fp16", "bf16", "fp8"],
-        help="Whether or not to use mixed precision training. "
-        "Choose between FP16 and BF16 (bfloat16) training. "
-        "BF16 training is only supported on Nvidia Ampere GPUs and PyTorch 1.10 or later.",
-    )
-    resource_args.add_argument(
-        "--num_processes", type=int, default=None, help="The total number of processes to be launched in parallel."
-    )
-    resource_args.add_argument(
-        "--num_machines", type=int, default=None, help="The total number of machines used in this training."
-    )
-    resource_args.add_argument(
-        "--num_cpu_threads_per_process",
-        type=int,
-        default=None,
-        help="The number of CPU threads per process. Can be tuned for optimal performance.",
-    )
+    ResourceArguments().add_to_parser(resource_args)
 
     # Dynamo arguments
-    resource_args.add_argument(
-        "--dynamo_backend",
-        type=str,
-        choices=["no"] + [b.lower() for b in DYNAMO_BACKENDS],
-        help="Choose a backend to optimize your training with dynamo, see more at "
-        "https://github.com/pytorch/torchdynamo.",
-    )
-    resource_args.add_argument(
-        "--dynamo_mode",
-        type=str,
-        default="default",
-        choices=TORCH_DYNAMO_MODES,
-        help="Choose a mode to optimize your training with dynamo.",
-    )
-    resource_args.add_argument(
-        "--dynamo_use_fullgraph",
-        default=False,
-        action="store_true",
-        help="Whether to use full graph mode for dynamo or it is ok to break model into several subgraphs",
-    )
-    resource_args.add_argument(
-        "--dynamo_use_dynamic",
-        default=False,
-        action="store_true",
-        help="Whether to enable dynamic shape tracing.",
-    )
-
-    # Training Paradigm arguments
-    paradigm_args = parser.add_argument_group(
-        "Training Paradigm Arguments", "Arguments for selecting which training paradigm to be used."
-    )
-    paradigm_args.add_argument(
-        "--use_deepspeed",
-        default=False,
-        action="store_true",
-        help="Whether to use deepspeed.",
-    )
-    paradigm_args.add_argument(
-        "--use_fsdp",
-        default=False,
-        action="store_true",
-        help="Whether to use fsdp.",
-    )
-    paradigm_args.add_argument(
-        "--use_megatron_lm",
-        default=False,
-        action="store_true",
-        help="Whether to use Megatron-LM.",
-    )
-    paradigm_args.add_argument(
-        "--use_xpu",
-        default=False,
-        action="store_true",
-        help="Whether to use IPEX plugin to speed up training on XPU specifically.",
-    )
+    DynamoArguments().add_to_parser(resource_args)
 
     # distributed GPU training arguments
     distributed_args = parser.add_argument_group("Distributed GPUs", "Arguments related to distributed GPU training.")

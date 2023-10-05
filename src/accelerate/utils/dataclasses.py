@@ -20,13 +20,15 @@ import argparse
 import copy
 import enum
 import functools
+import inspect
 import os
+import re
 import typing
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
 from datetime import timedelta
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, ClassVar, Dict, Iterable, List, Optional, Tuple
 
 import torch
 
@@ -1515,7 +1517,11 @@ class Arguments:
     Base dataclass for CLI arguments. Contains methods for type validation and conversion to argparse afterwards.
 
     Allows for compatibility between raw python and using argparse.
+
+    A `prefix` can be set which will be prepended to each argument name
+    when converting to argparse
     """
+    prefix:ClassVar[str] = ""
 
     def __post_init__(self):
         self.validate_types()
@@ -1536,5 +1542,43 @@ class Arguments:
             if parameter_type != typing.Literal:
                 command.append(f"{self.__dict__[arg.name]}")
             else:
-                command.append(f"--{arg.name}={self.__dict__[arg.name]}")
+                command.append(f"--{self.prefix}{arg.name}={self.__dict__[arg.name]}")
         return command
+    
+    def add_to_parser(self, parser: argparse.ArgumentParser=None):
+        """
+        Creates an argparse.ArgumentParser from the dataclass
+        with `help` based on the docstring of the class.
+        """
+        param_to_docstring = {}
+        docstring = inspect.getdoc(self)
+        args = docstring.split("Args:\n")[1]
+        args = inspect.cleandoc(args)
+        args = re.split(r'\n(?=[^\s])', args)
+        for arg in args:
+            arg = arg.replace("\n    ", " ")
+            param = arg.split(" ")[0]
+            docstring = arg.split(": ")[1]
+            param_to_docstring[param] = docstring
+
+        for arg in fields(self):
+            name = arg.name
+            docstring = param_to_docstring[name]
+            if not isinstance(arg.type, type):
+                parameter_type = typing.get_origin(arg.type)
+            else:
+                parameter_type = arg.type
+            arg_dict = {}
+            if arg.default is not None:
+                arg_dict["default"] = arg.default
+                if arg.default == False:
+                    arg_dict["action"] = "store_true"
+            arg_dict["help"] = docstring
+            if parameter_type == typing.Literal:
+                arg_dict["choices"] = arg.type.__args__
+                arg_dict["type"] = str
+            elif arg_dict.get("action", "store_true") != "store_true":
+                arg_dict["type"] = parameter_type
+            parser.add_argument(f"--{self.prefix}{name}", **arg_dict)
+                
+        
