@@ -53,6 +53,7 @@ from .imports import (
     is_ipex_available,
     is_megatron_lm_available,
     is_mlflow_available,
+    is_clearml_available,
     is_mps_available,
     is_npu_available,
     is_rich_available,

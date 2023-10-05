@@ -210,6 +210,10 @@ def is_tqdm_available():
     return _is_package_available("tqdm")
 
 
+def is_clearml_available():
+    return _is_package_available("clearml")
+
+
 def is_mlflow_available():
     if _is_package_available("mlflow"):
         return True

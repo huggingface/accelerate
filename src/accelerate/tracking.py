@@ -30,6 +30,7 @@ from .utils import (
     is_aim_available,
     is_comet_ml_available,
     is_mlflow_available,
+    is_clearml_available,
     is_tensorboard_available,
     is_wandb_available,
     listify,
@@ -52,6 +53,9 @@ if is_aim_available():
 
 if is_mlflow_available():
     _available_trackers.append(LoggerType.MLFLOW)
+
+if is_clearml_available():
+    _available_trackers.append(LoggerType.CLEARML)
 
 logger = get_logger(__name__)
 
@@ -681,12 +685,189 @@ class MLflowTracker(GeneralTracker):
         mlflow.end_run()
 
 
+class ClearMLTracker(GeneralTracker):
+    """
+    A `Tracker` class that supports `clearml`. Should be initialized at the start of your script.
+
+    Environment:
+    - **CLEARML_PROJECT** (`str`, *optional*) - The default ClearML project name. Can be overwritten
+      by setting `project_name` in `task_init_kwargs`.
+    - **CLEARML_TASK** (`str`, *optional*) - The default ClearML task name. Can be overwritten
+      by setting `task_name` in `task_init_kwargs`.
+
+    Args:
+        run_name (`str`, *optional*):
+            Name of the experiment. If ClearML's `Task.init`'s `task_name` and `project_name` are not
+            specified in kwargs, they will default to this value
+        task_init_kwargs:
+            Kwargs passed along to the `Run.__init__` method.
+    """
+
+    name = "clearml"
+    requires_logging_directory = False
+
+    @on_main_process
+    def __init__(self, run_name: str = None, **task_init_kwargs):
+        from clearml import Task
+
+        current_task = Task.current_task()
+        if current_task:
+            self._initialized_externally = True
+            self.task = current_task
+            return
+
+        if "CLEARML_PROJECT" in os.environ:
+            task_init_kwargs.setdefault("project_name", os.environ["CLEARML_PROJECT"])
+        else:
+            task_init_kwargs.setdefault("project_name", run_name)
+        if "CLEARML_TASK" in os.environ:
+            task_init_kwargs.setdefault("task_name", os.environ["CLEARML_TASK"])
+        else:
+            task_init_kwargs.setdefault("task_name", run_name)
+        self.task = Task.init(**task_init_kwargs)
+
+    @property
+    def tracker(self):
+        return self.task
+
+    @on_main_process
+    def store_init_configuration(self, values: dict):
+        """
+        Connect configuration dictionary to the Task object. Should be run at the beginning of your experiment.
+
+        Args:
+            values (`dict`):
+                Values to be stored as initial hyperparameters as key-value pairs.
+        """
+        if not self.task:
+            return
+        return self.task.connect_configuration(values)
+
+    @on_main_process
+    def log(self, values: dict, step: Optional[int] = None, **kwargs):
+        """
+        Logs `values` dictionary to the current run. The dictionary keys must be strings.
+        The dictionary values must be ints or floats
+
+        Args:
+            values (`dict`):
+                Values to be logged as key-value pairs.
+                If the key starts with 'eval_'/'test_'/'train_',the value will be reported under
+                the 'eval'/'test'/'train' series and the respective prefix will be removed.
+                Otherwise, the value will be reported under the 'train' series, and no prefix will
+                be removed.
+            step (`int`, *optional*):
+                If None (default), the values will be reported as single values. If specified,
+                the values will be reported as scalars, with the iteration number equal to `step`.
+            kwargs:
+                Additional key word arguments passed along to the `clearml.Logger.report_single_value`
+                or `clearml.Logger.report_scalar` methods.
+        """
+        if not self.task:
+            return
+
+        clearml_logger = self.task.get_logger()
+        for k, v in values.items():
+            if not isinstance(v, (int, float)):
+                logger.warning(
+                    "Trainer is attempting to log a value of "
+                    f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
+                    "This invocation of ClearML logger's  report_scalar() "
+                    "is incorrect so we dropped this attribute."
+                )
+                continue
+            if step is None:
+                clearml_logger.report_single_value(name=k, value=v, **kwargs)
+                continue
+            title, series = ClearMLTracker._get_title_series(k)
+            clearml_logger.report_scalar(title=title, series=series, value=v, iteration=step, **kwargs)
+
+    @on_main_process
+    def log_images(self, values: dict, step: Optional[int] = None, **kwargs):
+        """
+        Logs `images` to the current run.
+
+        Args:
+            values (Dictionary `str` to `List` of `np.ndarray` or `PIL.Image`):
+                Values to be logged as key-value pairs. The values need to have type `List` of `np.ndarray` or
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `clearml.Logger.report_image` method.
+        """
+        if not self.task:
+            return
+        clearml_logger = self.task.get_logger()
+        for k, v in values.items():
+            title, series = ClearMLTracker._get_title_series(k)
+            clearml_logger.report_image(title=title, series=series, iteration=step, image=v, **kwargs)
+
+    @on_main_process
+    def log_table(
+        self,
+        table_name: str,
+        columns: List[str] = None,
+        data: List[List[Any]] = None,
+        dataframe: Any = None,
+        step: Optional[int] = None,
+        **kwargs,
+    ):
+        """
+        Log a Table to the task. Can be defined eitherwith `columns` and `data` or with `dataframe`.
+
+        Args:
+            table_name (`str`):
+                The name of the table
+            columns (List of `str`'s *optional*):
+                The name of the columns on the table
+            data (List of List of Any data type *optional*):
+                The data to be logged in the table
+            dataframe (Any data type *optional*):
+                The data to be logged in the table
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs:
+                Additional key word arguments passed along to the `clearml.Logger.report_table` method.
+        """
+        if not self.task:
+            return
+        if dataframe is None:
+            try:
+                import pandas as pd
+
+                if columns is None or data is None:
+                    raise ValueError("columns and data have to be supplied if dataframe is None")
+                dataframe = pd.DataFrame({column: data_entry for column, data_entry in zip(columns, data)})
+            except Exception as e:
+                logger.warning("Could not log_table using columns and data. Error is: '{}'".format(e))
+                return
+        title, series = ClearMLTracker._get_title_series(table_name)
+        self.task.get_logger().report_table(title=title, series=series, table_plot=dataframe, iteration=step, **kwargs)
+
+    @on_main_process
+    def finish(self):
+        """
+        Close the ClearML task. If the task was initialized externally (e.g. by manually calling `Task.init`),
+        this function is a noop
+        """
+        if self.task and not self._initialized_externally:
+            self.task.close()
+
+    @staticmethod
+    def _get_title_series(name):
+        for prefix in ["eval", "test", "train"]:
+            if name.startswith(prefix + "_"):
+                return name[len(prefix) + 1:], prefix
+        return name, "train"
+
+
 LOGGER_TYPE_TO_CLASS = {
     "aim": AimTracker,
     "comet_ml": CometMLTracker,
     "mlflow": MLflowTracker,
     "tensorboard": TensorBoardTracker,
     "wandb": WandBTracker,
+    "clearml": ClearMLTracker
 }
 
 
