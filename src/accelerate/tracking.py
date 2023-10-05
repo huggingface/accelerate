@@ -857,7 +857,7 @@ class ClearMLTracker(GeneralTracker):
     def _get_title_series(name):
         for prefix in ["eval", "test", "train"]:
             if name.startswith(prefix + "_"):
-                return name[len(prefix) + 1:], prefix
+                return name[len(prefix) + 1 :], prefix
         return name, "train"
 
 
@@ -867,7 +867,7 @@ LOGGER_TYPE_TO_CLASS = {
     "mlflow": MLflowTracker,
     "tensorboard": TensorBoardTracker,
     "wandb": WandBTracker,
-    "clearml": ClearMLTracker
+    "clearml": ClearMLTracker,
 }
 
 
