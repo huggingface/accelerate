@@ -821,7 +821,7 @@ class ClearMLTracker(GeneralTracker):
 
             if columns is None or data is None:
                 raise ValueError(
-                    "`ClearMLTracker.log_table` requires that `columns` and `data` to be supplied if dataframe is `None`"
+                    "`ClearMLTracker.log_table` requires that `columns` and `data` to be supplied if `dataframe` is `None`"
                 )
             dataframe = pd.DataFrame(data, columns=columns)
         title, series = ClearMLTracker._get_title_series(table_name)
