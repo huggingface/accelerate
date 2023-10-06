@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
+import numpy as np
 import torch
 
 # We use TF to parse the logs
@@ -253,7 +254,12 @@ class CometMLTest(unittest.TestCase):
 
 
 @require_clearml
-class ClearMLTest(unittest.TestCase):
+class ClearMLTest(TempDirTestCase, MockingTestCase):
+    def setUp(self):
+        super().setUp()
+        # ClearML offline session location is stored in CLEARML_CACHE_DIR
+        self.add_mocks(mock.patch.dict(os.environ, {"CLEARML_CACHE_DIR": self.tmpdir}))
+
     @staticmethod
     def _get_offline_dir(accelerator):
         from clearml.config import get_offline_dir
@@ -317,9 +323,6 @@ class ClearMLTest(unittest.TestCase):
                 self.assertEqual(metric["value"], values_with_iteration[values_with_iteration_key])
 
     def test_log_images(self):
-        from pathlib import Path
-
-        import numpy as np
         from clearml import Task
 
         Task.set_offline(True)
@@ -362,6 +365,13 @@ class ClearMLTest(unittest.TestCase):
         self.assertEqual(len(metrics), 2)
         for metric in metrics:
             self.assertIn(metric["metric"], ["from lists", "from df"])
+            plot = json.loads(metric["plot_str"])
+            if metric["metric"] == "from lists":
+                self.assertCountEqual(plot["data"][0]["header"]["values"], [["A"], ["B"], ["C"]])
+                self.assertCountEqual(plot["data"][0]["cells"]["values"], [[1, 4], [2, 5], [3, 6]])
+            else:
+                self.assertCountEqual(plot["data"][0]["header"]["values"], [["A2"], ["B2"], ["C2"]])
+                self.assertCountEqual(plot["data"][0]["cells"]["values"], [[7, 8], [9, 10], [11, 12]])
 
 
 class MyCustomTracker(GeneralTracker):

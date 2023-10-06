@@ -370,11 +370,11 @@ class WandBTracker(GeneralTracker):
         Args:
             table_name (`str`):
                 The name to give to the logged table on the wandb workspace
-            columns (List of `str`'s *optional*):
+            columns (list of `str`, *optional*):
                 The name of the columns on the table
-            data (List of List of Any data type *optional*):
+            data (List of List of Any data type, *optional*):
                 The data to be logged in the table
-            dataframe (Any data type *optional*):
+            dataframe (Any data type, *optional*):
                 The data to be logged in the table
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
@@ -690,16 +690,10 @@ class ClearMLTracker(GeneralTracker):
     """
     A `Tracker` class that supports `clearml`. Should be initialized at the start of your script.
 
-    Environment:
-    - **CLEARML_PROJECT** (`str`, *optional*) - The default ClearML project name. Can be overwritten by setting
-      `project_name` in `task_init_kwargs`.
-    - **CLEARML_TASK** (`str`, *optional*) - The default ClearML task name. Can be overwritten by setting `task_name`
-      in `task_init_kwargs`.
-
     Args:
         run_name (`str`, *optional*):
-            Name of the experiment. By default will try and pull from either `CLEARML_PROJECT` or `CLEARML_TASK` from
-            the environment if set.
+            Name of the experiment. Environment variables `CLEARML_PROJECT` and `CLEARML_TASK` have priority over this
+            argument.
         kwargs:
             Kwargs passed along to the `Run.__init__` method.
     """
@@ -740,19 +734,19 @@ class ClearMLTracker(GeneralTracker):
         return self.task.connect_configuration(values)
 
     @on_main_process
-    def log(self, values: dict, step: Optional[int] = None, **kwargs):
+    def log(self, values: Dict[str, Union[int, float]], step: Optional[int] = None, **kwargs):
         """
         Logs `values` dictionary to the current run. The dictionary keys must be strings. The dictionary values must be
         ints or floats
 
         Args:
-            values (`dict`):
-                Values to be logged as key-value pairs. If the key starts with 'eval_'/'test_'/'train_',the value will
+            values (`Dict[str, Union[int, float]]`):
+                Values to be logged as key-value pairs. If the key starts with 'eval_'/'test_'/'train_', the value will
                 be reported under the 'eval'/'test'/'train' series and the respective prefix will be removed.
                 Otherwise, the value will be reported under the 'train' series, and no prefix will be removed.
             step (`int`, *optional*):
-                If None (default), the values will be reported as single values. If specified, the values will be
-                reported as scalars, with the iteration number equal to `step`.
+                If specified, the values will be reported as scalars, with the iteration number equal to `step`.
+                Otherwise they will be reported as single values.
             kwargs:
                 Additional key word arguments passed along to the `clearml.Logger.report_single_value` or
                 `clearml.Logger.report_scalar` methods.
@@ -779,7 +773,7 @@ class ClearMLTracker(GeneralTracker):
         Logs `images` to the current run.
 
         Args:
-            values (Dictionary `str` to `List` of `np.ndarray` or `PIL.Image`):
+            values (`Dict[str, List[Union[np.ndarray, PIL.Image]]`):
                 Values to be logged as key-value pairs. The values need to have type `List` of `np.ndarray` or
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
@@ -807,35 +801,29 @@ class ClearMLTracker(GeneralTracker):
         Args:
             table_name (`str`):
                 The name of the table
-            columns (List of `str`'s *optional*):
+            columns (list of `str`, *optional*):
                 The name of the columns on the table
-            data (List of List of Any data type *optional*):
+            data (List of List of Any data type, *optional*):
                 The data to be logged in the table
-            dataframe (Any data type *optional*):
+            dataframe (Any data type, *optional*):
                 The data to be logged in the table
             step (`int`, *optional*):
                 The run step. If included, the log will be affiliated with this step.
             kwargs:
                 Additional key word arguments passed along to the `clearml.Logger.report_table` method.
         """
-        if not is_pandas_available():
-            if not self._pandas_warning_sent:
-                logger.warning("ClearMLTracker.log_table requires pandas to be installed")
-                self._pandas_warning_sent = True
-            return
         if dataframe is None:
-            try:
-                import pandas as pd
+            if not is_pandas_available():
+                raise ImportError(
+                    "`ClearMLTracker.log_table` requires `pandas` be installed. Please fix this by running `pip install pandas`"
+                )
+            import pandas as pd
 
-                if columns is None or data is None:
-                    logger.warning(
-                        "ClearMLTracker.log_table requires that columns and data to be supplied if dataframe is None"
-                    )
-                    return
-                dataframe = pd.DataFrame({column: data_entry for column, data_entry in zip(columns, data)})
-            except Exception as e:
-                logger.warning("Could not log_table using columns and data. Error is: '{}'".format(e))
-                return
+            if columns is None or data is None:
+                raise ValueError(
+                    "`ClearMLTracker.log_table` requires that `columns` and `data` to be supplied if dataframe is `None`"
+                )
+            dataframe = pd.DataFrame(data, columns=columns)
         title, series = ClearMLTracker._get_title_series(table_name)
         self.task.get_logger().report_table(title=title, series=series, table_plot=dataframe, iteration=step, **kwargs)
 
