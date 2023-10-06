@@ -34,9 +34,9 @@ from accelerate.test_utils.testing import (
     TempDirTestCase,
     require_clearml,
     require_comet_ml,
+    require_pandas,
     require_tensorboard,
     require_wandb,
-    require_pandas,
     skip,
 )
 from accelerate.tracking import CometMLTracker, GeneralTracker
@@ -299,7 +299,7 @@ class ClearMLTest(unittest.TestCase):
 
         offline_dir = ClearMLTest._get_offline_dir(accelerator)
         accelerator.end_training()
-        
+
         metrics = ClearMLTest._get_metrics(offline_dir)
         self.assertEqual(len(values_with_iteration) + len(single_values), len(metrics))
         for metric in metrics:
@@ -317,9 +317,10 @@ class ClearMLTest(unittest.TestCase):
                 self.assertEqual(metric["value"], values_with_iteration[values_with_iteration_key])
 
     def test_log_images(self):
-        from clearml import Task
         from pathlib import Path
+
         import numpy as np
+        from clearml import Task
 
         Task.set_offline(True)
         accelerator = Accelerator(log_with="clearml")
@@ -328,7 +329,7 @@ class ClearMLTest(unittest.TestCase):
         base_image = np.eye(256, 256, dtype=np.uint8) * 255
         images = {
             "train_image": base_image,
-            "test_image": np.concatenate((np.atleast_3d(base_image), np.zeros((256, 256, 2), dtype=np.uint8)), axis=2)
+            "test_image": np.concatenate((np.atleast_3d(base_image), np.zeros((256, 256, 2), dtype=np.uint8)), axis=2),
         }
         accelerator.get_tracker("clearml").log_images(images, step=1)
 
@@ -340,22 +341,18 @@ class ClearMLTest(unittest.TestCase):
 
     @require_pandas
     def test_log_table(self):
-        from clearml import Task
         import pandas as pd
+        from clearml import Task
 
         Task.set_offline(True)
         accelerator = Accelerator(log_with="clearml")
         accelerator.init_trackers("test_project_with_log_table")
 
         accelerator.get_tracker("clearml").log_table(
-            "from lists",
-            columns=["A", "B", "C"],
-            data=[[1, 2, 3], [4, 5, 6]]
+            "from lists", columns=["A", "B", "C"], data=[[1, 2, 3], [4, 5, 6]]
         )
         accelerator.get_tracker("clearml").log_table(
-            "from df",
-            dataframe=pd.DataFrame({"A2": [7, 8], "B2": [9, 10], "C2": [11, 12]}),
-            step=1
+            "from df", dataframe=pd.DataFrame({"A2": [7, 8], "B2": [9, 10], "C2": [11, 12]}), step=1
         )
 
         offline_dir = ClearMLTest._get_offline_dir(accelerator)

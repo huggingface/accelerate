@@ -31,6 +31,7 @@ from .utils import (
     is_clearml_available,
     is_comet_ml_available,
     is_mlflow_available,
+    is_pandas_available,
     is_tensorboard_available,
     is_wandb_available,
     listify,
@@ -697,9 +698,9 @@ class ClearMLTracker(GeneralTracker):
 
     Args:
         run_name (`str`, *optional*):
-            Name of the experiment. If ClearML's `Task.init`'s `task_name` and `project_name` are not specified in
-            kwargs, they will default to this value
-        task_init_kwargs:
+            Name of the experiment. By default will try and pull from either `CLEARML_PROJECT` or `CLEARML_TASK` from
+            the environment if set.
+        kwargs:
             Kwargs passed along to the `Run.__init__` method.
     """
 
@@ -707,7 +708,7 @@ class ClearMLTracker(GeneralTracker):
     requires_logging_directory = False
 
     @on_main_process
-    def __init__(self, run_name: str = None, **task_init_kwargs):
+    def __init__(self, run_name: str = None, **kwargs):
         from clearml import Task
 
         current_task = Task.current_task()
@@ -717,15 +718,11 @@ class ClearMLTracker(GeneralTracker):
             self.task = current_task
             return
 
-        if "CLEARML_PROJECT" in os.environ:
-            task_init_kwargs.setdefault("project_name", os.environ["CLEARML_PROJECT"])
-        else:
-            task_init_kwargs.setdefault("project_name", run_name)
-        if "CLEARML_TASK" in os.environ:
-            task_init_kwargs.setdefault("task_name", os.environ["CLEARML_TASK"])
-        else:
-            task_init_kwargs.setdefault("task_name", run_name)
-        self.task = Task.init(**task_init_kwargs)
+        kwargs.setdefault("project_name", os.environ.get("CLEARML_PROJECT", run_name))
+        kwargs.setdefault("task_name", os.environ.get("CLEARML_TASK", run_name))
+        self.task = Task.init(**kwargs)
+
+        self._pandas_warning_sent = False
 
     @property
     def tracker(self):
@@ -740,8 +737,6 @@ class ClearMLTracker(GeneralTracker):
             values (`dict`):
                 Values to be stored as initial hyperparameters as key-value pairs.
         """
-        if not self.task:
-            return
         return self.task.connect_configuration(values)
 
     @on_main_process
@@ -762,9 +757,6 @@ class ClearMLTracker(GeneralTracker):
                 Additional key word arguments passed along to the `clearml.Logger.report_single_value` or
                 `clearml.Logger.report_scalar` methods.
         """
-        if not self.task:
-            return
-
         clearml_logger = self.task.get_logger()
         for k, v in values.items():
             if not isinstance(v, (int, float)):
@@ -794,8 +786,6 @@ class ClearMLTracker(GeneralTracker):
             kwargs:
                 Additional key word arguments passed along to the `clearml.Logger.report_image` method.
         """
-        if not self.task:
-            return
         clearml_logger = self.task.get_logger()
         for k, v in values.items():
             title, series = ClearMLTracker._get_title_series(k)
@@ -828,14 +818,20 @@ class ClearMLTracker(GeneralTracker):
             kwargs:
                 Additional key word arguments passed along to the `clearml.Logger.report_table` method.
         """
-        if not self.task:
+        if not is_pandas_available():
+            if not self._pandas_warning_sent:
+                logger.warning("ClearMLTracker.log_table requires pandas to be installed")
+                self._pandas_warning_sent = True
             return
         if dataframe is None:
             try:
                 import pandas as pd
 
                 if columns is None or data is None:
-                    raise ValueError("columns and data have to be supplied if dataframe is None")
+                    logger.warning(
+                        "ClearMLTracker.log_table requires that columns and data to be supplied if dataframe is None"
+                    )
+                    return
                 dataframe = pd.DataFrame({column: data_entry for column, data_entry in zip(columns, data)})
             except Exception as e:
                 logger.warning("Could not log_table using columns and data. Error is: '{}'".format(e))
