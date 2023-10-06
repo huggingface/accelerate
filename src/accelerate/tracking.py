@@ -711,6 +711,7 @@ class ClearMLTracker(GeneralTracker):
         from clearml import Task
 
         current_task = Task.current_task()
+        self._initialized_externally = False
         if current_task:
             self._initialized_externally = True
             self.task = current_task
@@ -768,7 +769,7 @@ class ClearMLTracker(GeneralTracker):
         for k, v in values.items():
             if not isinstance(v, (int, float)):
                 logger.warning(
-                    "Trainer is attempting to log a value of "
+                    "Accelerator is attempting to log a value of "
                     f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
                     "This invocation of ClearML logger's  report_scalar() "
                     "is incorrect so we dropped this attribute."

@@ -46,6 +46,7 @@ from .imports import (
     is_boto3_available,
     is_ccl_available,
     is_clearml_available,
+    is_pandas_available,
     is_comet_ml_available,
     is_cuda_available,
     is_datasets_available,

@@ -32,6 +32,8 @@ from ..utils import (
     gather,
     is_bnb_available,
     is_comet_ml_available,
+    is_clearml_available,
+    is_pandas_available,
     is_datasets_available,
     is_deepspeed_available,
     is_mps_available,
@@ -229,6 +231,20 @@ def require_comet_ml(test_case):
     Decorator marking a test that requires comet_ml installed. These tests are skipped when comet_ml isn't installed
     """
     return unittest.skipUnless(is_comet_ml_available(), "test requires comet_ml")(test_case)
+
+
+def require_clearml(test_case):
+    """
+    Decorator marking a test that requires clearml installed. These tests are skipped when clearml isn't installed
+    """
+    return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
+
+
+def require_pandas(test_case):
+    """
+    Decorator marking a test that requires pandas installed. These tests are skipped when pandas isn't installed
+    """
+    return unittest.skipUnless(is_pandas_available(), "test requires pandas")(test_case)
 
 
 _atleast_one_tracker_available = (

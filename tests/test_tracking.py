@@ -32,9 +32,11 @@ from accelerate import Accelerator
 from accelerate.test_utils.testing import (
     MockingTestCase,
     TempDirTestCase,
+    require_clearml,
     require_comet_ml,
     require_tensorboard,
     require_wandb,
+    require_pandas,
     skip,
 )
 from accelerate.tracking import CometMLTracker, GeneralTracker
@@ -248,6 +250,121 @@ class CometMLTest(unittest.TestCase):
         self.assertEqual(self.get_value_from_key(list_of_json, "total_loss"), 0.1)
         self.assertEqual(self.get_value_from_key(list_of_json, "iteration"), 1)
         self.assertEqual(self.get_value_from_key(list_of_json, "my_text"), "some_value")
+
+
+@require_clearml
+class ClearMLTest(unittest.TestCase):
+    @staticmethod
+    def _get_offline_dir(accelerator):
+        from clearml.config import get_offline_dir
+
+        return get_offline_dir(task_id=accelerator.get_tracker("clearml", unwrap=True).id)
+
+    @staticmethod
+    def _get_metrics(offline_dir):
+        metrics = []
+        with open(os.path.join(offline_dir, "metrics.jsonl")) as f:
+            json_lines = f.readlines()
+            for json_line in json_lines:
+                metrics.extend(json.loads(json_line))
+        return metrics
+
+    def test_init_trackers(self):
+        from clearml import Task
+        from clearml.utilities.config import text_to_config_dict
+
+        Task.set_offline(True)
+        accelerator = Accelerator(log_with="clearml")
+        config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
+        accelerator.init_trackers("test_project_with_config", config)
+
+        offline_dir = ClearMLTest._get_offline_dir(accelerator)
+        accelerator.end_training()
+
+        with open(os.path.join(offline_dir, "task.json")) as f:
+            offline_session = json.load(f)
+        clearml_offline_config = text_to_config_dict(offline_session["configuration"]["General"]["value"])
+        self.assertDictEqual(config, clearml_offline_config)
+
+    def test_log(self):
+        from clearml import Task
+
+        Task.set_offline(True)
+        accelerator = Accelerator(log_with="clearml")
+        accelerator.init_trackers("test_project_with_log")
+        values_with_iteration = {"should_be_under_train": 1, "eval_value": 2, "test_value": 3.1, "train_value": 4.1}
+        accelerator.log(values_with_iteration, step=1)
+        single_values = {"single_value_1": 1.1, "single_value_2": 2.2}
+        accelerator.log(single_values)
+
+        offline_dir = ClearMLTest._get_offline_dir(accelerator)
+        accelerator.end_training()
+        
+        metrics = ClearMLTest._get_metrics(offline_dir)
+        self.assertEqual(len(values_with_iteration) + len(single_values), len(metrics))
+        for metric in metrics:
+            if metric["metric"] == "Summary":
+                self.assertIn(metric["variant"], single_values)
+                self.assertEqual(metric["value"], single_values[metric["variant"]])
+            elif metric["metric"] == "should_be_under_train":
+                self.assertEqual(metric["variant"], "train")
+                self.assertEqual(metric["iter"], 1)
+                self.assertEqual(metric["value"], values_with_iteration["should_be_under_train"])
+            else:
+                values_with_iteration_key = metric["variant"] + "_" + metric["metric"]
+                self.assertIn(values_with_iteration_key, values_with_iteration)
+                self.assertEqual(metric["iter"], 1)
+                self.assertEqual(metric["value"], values_with_iteration[values_with_iteration_key])
+
+    def test_log_images(self):
+        from clearml import Task
+        from pathlib import Path
+        import numpy as np
+
+        Task.set_offline(True)
+        accelerator = Accelerator(log_with="clearml")
+        accelerator.init_trackers("test_project_with_log_images")
+
+        base_image = np.eye(256, 256, dtype=np.uint8) * 255
+        images = {
+            "train_image": base_image,
+            "test_image": np.concatenate((np.atleast_3d(base_image), np.zeros((256, 256, 2), dtype=np.uint8)), axis=2)
+        }
+        accelerator.get_tracker("clearml").log_images(images, step=1)
+
+        offline_dir = ClearMLTest._get_offline_dir(accelerator)
+        accelerator.end_training()
+
+        images_saved = Path(os.path.join(offline_dir, "data")).rglob("*.jpeg")
+        self.assertEqual(len(list(images_saved)), len(images))
+
+    @require_pandas
+    def test_log_table(self):
+        from clearml import Task
+        import pandas as pd
+
+        Task.set_offline(True)
+        accelerator = Accelerator(log_with="clearml")
+        accelerator.init_trackers("test_project_with_log_table")
+
+        accelerator.get_tracker("clearml").log_table(
+            "from lists",
+            columns=["A", "B", "C"],
+            data=[[1, 2, 3], [4, 5, 6]]
+        )
+        accelerator.get_tracker("clearml").log_table(
+            "from df",
+            dataframe=pd.DataFrame({"A2": [7, 8], "B2": [9, 10], "C2": [11, 12]}),
+            step=1
+        )
+
+        offline_dir = ClearMLTest._get_offline_dir(accelerator)
+        accelerator.end_training()
+
+        metrics = ClearMLTest._get_metrics(offline_dir)
+        self.assertEqual(len(metrics), 2)
+        for metric in metrics:
+            self.assertIn(metric["metric"], ["from lists", "from df"])
 
 
 class MyCustomTracker(GeneralTracker):
