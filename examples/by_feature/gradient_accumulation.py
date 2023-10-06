@@ -203,9 +203,15 @@ def main():
         default=1,
         help="The number of minibatches to be ran before gradients are accumulated.",
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=16,
+        help="Size of each minibatch.",
+    )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
+    config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": args.batch_size}
     training_function(config, args)
 
 
