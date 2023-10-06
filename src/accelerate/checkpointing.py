@@ -96,7 +96,7 @@ def save_accelerator_state(
     if scaler is not None:
         state = scaler.state_dict()
         output_scaler_file = os.path.join(output_dir, SCALER_NAME)
-        torch.save(state, output_scaler_file, save_on_each_node=save_on_each_node)
+        torch.save(state, output_scaler_file)
         logger.info(f"Gradient scaler state saved in {output_scaler_file}")
     # Random number generator states
     states = {}
