@@ -1518,10 +1518,10 @@ class Arguments:
 
     Allows for compatibility between raw python and using argparse.
 
-    A `prefix` can be set which will be prepended to each argument name
-    when converting to argparse
+    A `prefix` can be set which will be prepended to each argument name when converting to argparse
     """
-    prefix:ClassVar[str] = ""
+
+    prefix: ClassVar[str] = ""
 
     def __post_init__(self):
         self.validate_types()
@@ -1544,17 +1544,16 @@ class Arguments:
             else:
                 command.append(f"--{self.prefix}{arg.name}={self.__dict__[arg.name]}")
         return command
-    
-    def add_to_parser(self, parser: argparse.ArgumentParser=None):
+
+    def add_to_parser(self, parser: argparse.ArgumentParser = None):
         """
-        Creates an argparse.ArgumentParser from the dataclass
-        with `help` based on the docstring of the class.
+        Creates an argparse.ArgumentParser from the dataclass with `help` based on the docstring of the class.
         """
         param_to_docstring = {}
         docstring = inspect.getdoc(self)
         args = docstring.split("Args:\n")[1]
         args = inspect.cleandoc(args)
-        args = re.split(r'\n(?=[^\s])', args)
+        args = re.split(r"\n(?=[^\s])", args)
         for arg in args:
             arg = arg.replace("\n    ", " ")
             param = arg.split(" ")[0]
@@ -1571,7 +1570,7 @@ class Arguments:
             arg_dict = {}
             if arg.default is not None:
                 arg_dict["default"] = arg.default
-                if arg.default == False:
+                if arg.default is False:
                     arg_dict["action"] = "store_true"
             arg_dict["help"] = docstring
             if parameter_type == typing.Literal:
@@ -1583,5 +1582,3 @@ class Arguments:
             elif arg_dict.get("action", "store_true") != "store_true":
                 arg_dict["type"] = parameter_type
             parser.add_argument(f"--{self.prefix}{name}", **arg_dict)
-                
-        

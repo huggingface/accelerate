@@ -20,16 +20,15 @@ import logging
 import os
 import subprocess
 import sys
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Literal, ClassVar
+from pathlib import Path
+from typing import ClassVar, Literal
 
 import psutil
 import torch
 
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
-from accelerate.commands.config.config_utils import DYNAMO_BACKENDS
 from accelerate.state import get_int_from_env
 from accelerate.utils import (
     Arguments,
@@ -52,7 +51,7 @@ from accelerate.utils import (
     prepare_simple_launcher_cmd_env,
     prepare_tpu,
 )
-from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS, TORCH_DYNAMO_MODES
+from accelerate.utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
 
 
 if is_rich_available():
@@ -127,11 +126,12 @@ class _CustomHelpAction(argparse._HelpAction):
 
         super().__call__(parser, namespace, values, option_string)
 
-@dataclass 
+
+@dataclass
 class ResourceArguments(Arguments):
     """
     Arguments for fine-tuning what and how available hardware should be used.
-    
+
     Args:
         cpu (`bool`, *optional*, defaults to `False`):
             Whether or not to force the training on the CPU.
@@ -159,6 +159,7 @@ class ResourceArguments(Arguments):
         use_xpu (`bool`, *optional*, defaults to `False`):
             Whether to use IPEX plugin to speed up training on XPU specifically.
     """
+
     cpu: bool = False
     multi_gpu: bool = False
     tpu: bool = False
@@ -169,18 +170,18 @@ class ResourceArguments(Arguments):
     num_cpu_threads_per_process: int = None
     use_deepspeed: bool = False
     use_fsdp: bool = False
-    use_megatron_lm: bool = False 
-    use_xpu:bool = False
+    use_megatron_lm: bool = False
+    use_xpu: bool = False
 
-@dataclass 
+
+@dataclass
 class DynamoArguments(Arguments):
     """
     Arguments related to `torchdynamo`
 
     Args:
         backend (`str`):
-            Backend to optimize your training with dynamo, see more at
-            https://github.com/pytorch/torchdynamo.
+            Backend to optimize your training with dynamo, see more at https://github.com/pytorch/torchdynamo.
         mode (`str`, *optional*, defaults to "default"):
             Mode to optimize your training with dynamo.
         use_fullgraph (`bool`, *optional*):
@@ -188,11 +189,25 @@ class DynamoArguments(Arguments):
         use_dynamic (`bool`, *optional*):
             Whether to enable dynamic shape tracing.
     """
+
     prefix: ClassVar[str] = "dynamo_"
-    backend: Literal["no", "eager", "aot_eager", "inductor", "nvfuser", "aot_nvfuser", "aot_cudagraphs", "ofi", "fx2trt", "onnxrt", "ipex"] = "no"
+    backend: Literal[
+        "no",
+        "eager",
+        "aot_eager",
+        "inductor",
+        "nvfuser",
+        "aot_nvfuser",
+        "aot_cudagraphs",
+        "ofi",
+        "fx2trt",
+        "onnxrt",
+        "ipex",
+    ] = "no"
     mode: Literal["default", "reduce-overhead", "max-autotune"] = "default"
     use_fullgraph: bool = False
     use_dynamic: bool = False
+
 
 @dataclass
 class CUDAArguments(Arguments):
@@ -223,6 +238,7 @@ class CUDAArguments(Arguments):
         monitor_interval (`float`, *optional*, defaults to 5.0):
             Interval, in seconds, to monitor the state of workers.
     """
+
     gpu_ids: str = None
     same_network: bool = False
     machine_rank: int = None
@@ -234,6 +250,7 @@ class CUDAArguments(Arguments):
     rdzv_conf: str = ""
     max_restarts: int = 0
     monitor_interval: float = 5.0
+
 
 @dataclass
 class TPUArguments(Arguments):
@@ -252,14 +269,17 @@ class TPUArguments(Arguments):
         main_training_function (`str`):
             The name of the main function to be executed in your script (only for TPU training).
         downcast_bf16 (`bool`):
-            Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.
+            Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if
+            double tensors remain as float32.
     """
+
     tpu_cluster: bool = False
     tpu_use_sudo: bool = False
     vm: list[str] = field(default_factory=list)
     env: list[str] = field(default_factory=list)
     main_training_function: str = None
     downcast_bf16: bool = False
+
 
 @dataclass
 class DeepSpeedArguments(Arguments):
@@ -284,7 +304,8 @@ class DeepSpeedArguments(Arguments):
         gradient_clipping (`float`, *optional*, defaults to 1.0):
             Gradient clipping value used in your training script when using deepspeed.
         zero3_init_flag (`bool`, *optional*):
-            Whether to enable `deepspeed.zero.Init` for constructing massive models. Only applicable with DeepSpeed ZeRO Stage-3.
+            Whether to enable `deepspeed.zero.Init` for constructing massive models. Only applicable with DeepSpeed
+            ZeRO Stage-3.
         zero3_save_16bit_model (`bool`, *optional*):
             Whether to save 16-bit model weights when using ZeRO Stage-3. Only applicable with DeepSpeed ZeRO Stage-3.
         deepspeed_hostfile (`str`, *optional*):
@@ -296,6 +317,7 @@ class DeepSpeedArguments(Arguments):
         deepspeed_multinode_launcher (`str`, *optional*, defaults to "pdsh"):
             DeepSpeed multi-node launcher to use.
     """
+
     config_file: str = None
     zero_stage: int = 2
     offload_optimizer_device: Literal["none", "cpu", "nvme"] = "none"
@@ -311,8 +333,36 @@ class DeepSpeedArguments(Arguments):
     deepspeed_inclusion_filter: str = None
     deepspeed_multinode_launcher: Literal["pdsh", "standard", "openmpi", "mvapich", "mpich"] = "pdsh"
 
+
 @dataclass
 class FSDPArguments(Arguments):
+    """
+    Arguments related to Fully Shared Data Parallelism (FSDP)
+
+    Args:
+        offload_params (`bool`, *optional*):
+            Decides whether to offload parameters and gradients to CPU.
+        min_num_params (`int`, *optional*, defaults to 1e8):
+            FSDP's minimum number of parameters for Default Auto Wrapping.
+        sharding_strategy (`int`, *optional*, defaults to 1):
+            FSDP's Sharding Strategy.
+        auto_wrap_policy (`str`, *optional*):
+            FSDP's auto wrap policy.
+        transformer_layer_cls_to_wrap (`str`, *optional*):
+            Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ....
+        backward_prefetch_policy (`str`, *optional*):
+            FSDP's backward prefetch policy.
+        state_dict_type (`str`, *optional*):
+            FSDP's state dict type.
+        forward_prefetch (`bool`, *optional*):
+            Whether to explicitly prefetch the next upcoming all-gather while executing in the forward pass.
+        use_orig_params (`bool`, *optional*):
+            Whether to allow non-uniform `requires_grad` during init, which means support for interspersed frozen and
+            trainable parameters.
+        sync_module_states (`bool`, *optional*, defaults to `True`):
+            Whether to broadcast module parameters from rank 0.
+    """
+
     prefix: ClassVar[str] = "fsdp_"
     offload_params: bool = False
     min_num_params: int = 1e8
@@ -325,8 +375,30 @@ class FSDPArguments(Arguments):
     use_orig_params: bool = False
     sync_module_states: bool = True
 
+
 @dataclass
 class MegatronLMArguments(Arguments):
+    """
+    Arguments related to MegaTron-LM
+
+    Args:
+        tp_degree (`int`, *optional*, defaults to 1):
+            Tensor Parallelism (TP) degree.
+        pp_degree (`int`, *optional*, defaults to 1):
+            Pipeline Parallelism (PP) degree.
+        num_micro_batches (`int`, *optional*):
+            Number of micro batches when `pp_degree` > 1.
+        sequence_parallelism (`bool`, *optional*):
+            Whether to enable Sequence Parallelism when `tp_degree` > 1.
+        recompute_activations (`bool`, *optional*):
+            Whether to enable Selective Activation Recomputation.
+        use_distributed_optimizer (`bool`, *optional*):
+            Whether to use distributed optimizer which shards optimizer state and gradients across Data Pralellel (DP)
+            ranks.
+        gradient_clipping (`float`, *optional*, defaults to 1.0):
+            Gradient clipping value based on global L2 Norm (0 to disable).
+    """
+
     prefix: ClassVar[str] = "megatron_lm_"
     tp_degree: int = 1
     pp_degree: int = 1
@@ -336,12 +408,22 @@ class MegatronLMArguments(Arguments):
     use_distributed_optimizer: bool = None
     gradient_clipping: float = 1.0
 
+
 @dataclass
 class AWSArguments(Arguments):
+    """
+    Arguments related to AWS
+
+    Args:
+        access_key_id (`str`, *optional*):
+            The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job.
+        secret_access_key (`str`, *optional*):
+            The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job.
+    """
+
     prefix: ClassVar[str] = "aws_"
     access_key_id: str = None
     secret_access_key: str = None
-
 
 
 def launch_command_parser(subparsers=None):
@@ -354,7 +436,7 @@ def launch_command_parser(subparsers=None):
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
 
     parser.add_argument(
-        "--config_file", 
+        "--config_file",
         type=str,
         default=None,
         help="The config file to use for the default values in the launching script.",
@@ -375,7 +457,7 @@ def launch_command_parser(subparsers=None):
         action="store_true",
         help="Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.",
     )
-    
+
     # Resource selection arguments
     resource_args = parser.add_argument_group(
         "Resource Selection Arguments", "Arguments for fine-tuning how available hardware should be used."
@@ -404,135 +486,16 @@ def launch_command_parser(subparsers=None):
 
     # fsdp arguments
     fsdp_args = parser.add_argument_group("FSDP Arguments", "Arguments related to Fully Shared Data Parallelism.")
-    fsdp_args.add_argument(
-        "--fsdp_offload_params",
-        default="false",
-        type=str,
-        help="Decides Whether (true|false) to offload parameters and gradients to CPU. (useful only when `use_fsdp` flag is passed).",
-    )
-    fsdp_args.add_argument(
-        "--fsdp_min_num_params",
-        type=int,
-        default=1e8,
-        help="FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `use_fsdp` flag is passed).",
-    )
-    fsdp_args.add_argument(
-        "--fsdp_sharding_strategy",
-        type=int,
-        default=1,
-        help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
-    )
-    fsdp_args.add_argument(
-        "--fsdp_auto_wrap_policy",
-        type=str,
-        default=None,
-        help="FSDP's auto wrap policy. (useful only when `use_fsdp` flag is passed).",
-    )
-    fsdp_args.add_argument(
-        "--fsdp_transformer_layer_cls_to_wrap",
-        default=None,
-        type=str,
-        help="Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
-        "(useful only when `use_fsdp` flag is passed).",
-    )
-    fsdp_args.add_argument(
-        "--fsdp_backward_prefetch_policy",
-        default=None,
-        type=str,
-        help="FSDP's backward prefetch policy. (useful only when `use_fsdp` flag is passed).",
-    )
-    fsdp_args.add_argument(
-        "--fsdp_state_dict_type",
-        default=None,
-        type=str,
-        help="FSDP's state dict type. (useful only when `use_fsdp` flag is passed).",
-    )
-    fsdp_args.add_argument(
-        "--fsdp_forward_prefetch",
-        default="false",
-        type=str,
-        help="If True, then FSDP explicitly prefetches the next upcoming "
-        "all-gather while executing in the forward pass (useful only when `use_fsdp` flag is passed).",
-    )
-    fsdp_args.add_argument(
-        "--fsdp_use_orig_params",
-        default="false",
-        type=str,
-        help="If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres."
-        " (useful only when `use_fsdp` flag is passed).",
-    )
-    fsdp_args.add_argument(
-        "--fsdp_sync_module_states",
-        default="true",
-        type=str,
-        help="If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0."
-        " (useful only when `use_fsdp` flag is passed).",
-    )
+    FSDPArguments().add_to_parser(fsdp_args)
 
     # megatron_lm args
     megatron_lm_args = parser.add_argument_group("Megatron-LM Arguments", "Arguments related to Megatron-LM.")
-    megatron_lm_args.add_argument(
-        "--megatron_lm_tp_degree",
-        type=int,
-        default=1,
-        help="Megatron-LM's Tensor Parallelism (TP) degree. (useful only when `use_megatron_lm` flag is passed).",
-    )
-    megatron_lm_args.add_argument(
-        "--megatron_lm_pp_degree",
-        type=int,
-        default=1,
-        help="Megatron-LM's Pipeline Parallelism (PP) degree. (useful only when `use_megatron_lm` flag is passed).",
-    )
-    megatron_lm_args.add_argument(
-        "--megatron_lm_num_micro_batches",
-        type=int,
-        default=None,
-        help="Megatron-LM's number of micro batches when PP degree > 1. (useful only when `use_megatron_lm` flag is passed).",
-    )
-    megatron_lm_args.add_argument(
-        "--megatron_lm_sequence_parallelism",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to enable Sequence Parallelism when TP degree > 1. "
-        "(useful only when `use_megatron_lm` flag is passed).",
-    )
-    megatron_lm_args.add_argument(
-        "--megatron_lm_recompute_activations",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to enable Selective Activation Recomputation. "
-        "(useful only when `use_megatron_lm` flag is passed).",
-    )
-    megatron_lm_args.add_argument(
-        "--megatron_lm_use_distributed_optimizer",
-        default=None,
-        type=str,
-        help="Decides Whether (true|false) to use distributed optimizer "
-        "which shards optimizer state and gradients across Data Pralellel (DP) ranks. "
-        "(useful only when `use_megatron_lm` flag is passed).",
-    )
-    megatron_lm_args.add_argument(
-        "--megatron_lm_gradient_clipping",
-        default=1.0,
-        type=float,
-        help="Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable). "
-        "(useful only when `use_megatron_lm` flag is passed).",
-    )
+    MegatronLMArguments().add_to_parser(megatron_lm_args)
 
     # AWS arguments
     aws_args = parser.add_argument_group("AWS Arguments", "Arguments related to AWS.")
-    aws_args.add_argument(
-        "--aws_access_key_id",
-        type=str,
-        default=None,
-        help="The AWS_ACCESS_KEY_ID used to launch the Amazon SageMaker training job",
-    )
-    aws_args.add_argument(
-        "--aws_secret_access_key",
-        type=str,
-        default=None,
-        help="The AWS_SECRET_ACCESS_KEY used to launch the Amazon SageMaker training job.",
-    )
+    AWSArguments().add_to_parser(aws_args)
+
     parser.add_argument(
         "--debug",
         action="store_true",
