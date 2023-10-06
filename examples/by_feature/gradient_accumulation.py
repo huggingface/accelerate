@@ -42,9 +42,8 @@ from accelerate import Accelerator, DistributedType
 #
 ########################################################################
 
-
-MAX_GPU_BATCH_SIZE = 16
-EVAL_BATCH_SIZE = 32
+def get_memory():
+    return f"\n\tMemory allocated: {torch.cuda.memory_allocated()/1024**2}\n\tMemory reserved: {torch.cuda.memory_reserved()/1024**2}"
 
 
 def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
@@ -103,7 +102,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
         tokenized_datasets["train"], shuffle=True, collate_fn=collate_fn, batch_size=batch_size
     )
     eval_dataloader = DataLoader(
-        tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE
+        tokenized_datasets["validation"], shuffle=False, collate_fn=collate_fn, batch_size=32
     )
 
     return train_dataloader, eval_dataloader
@@ -126,17 +125,13 @@ def training_function(config, args):
     accelerator = Accelerator(
         cpu=args.cpu, mixed_precision=args.mixed_precision, gradient_accumulation_steps=gradient_accumulation_steps
     )
-    if accelerator.distributed_type == DistributedType.TPU and gradient_accumulation_steps > 1:
-        raise NotImplementedError(
-            "Gradient accumulation on TPUs is currently not supported. Pass `gradient_accumulation_steps=1`"
-        )
+    
+    print(f'Gradient accumulation steps: {gradient_accumulation_steps}\nMixed precision: {accelerator.mixed_precision}')
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
     seed = int(config["seed"])
     batch_size = int(config["batch_size"])
-
-    metric = evaluate.load("glue", "mrpc")
 
     set_seed(seed)
     train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
@@ -157,6 +152,10 @@ def training_function(config, args):
         num_warmup_steps=100,
         num_training_steps=(len(train_dataloader) * num_epochs),
     )
+    
+    print(f'Memory before prepare:{get_memory()}')
+    
+    
 
     # Prepare everything
     # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
@@ -164,40 +163,26 @@ def training_function(config, args):
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
+    
+    accelerator.print(f'Memory after prepare:{get_memory()}')
 
     # Now we train the model
-    for epoch in range(num_epochs):
-        model.train()
-        for step, batch in enumerate(train_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
-            batch.to(accelerator.device)
-            # New code #
-            # We use the new `accumulate` context manager to perform gradient accumulation
-            # We also currently do not support TPUs nor advise it as bugs were found on the XLA side when running our tests.
-            with accelerator.accumulate(model):
-                output = model(**batch)
-                loss = output.loss
-                accelerator.backward(loss)
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
-
-        model.eval()
-        for step, batch in enumerate(eval_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
-            batch.to(accelerator.device)
-            with torch.no_grad():
-                outputs = model(**batch)
-            predictions = outputs.logits.argmax(dim=-1)
-            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
-            metric.add_batch(
-                predictions=predictions,
-                references=references,
-            )
-
-        eval_metric = metric.compute()
-        # Use accelerator.print to print only on the main process.
-        accelerator.print(f"epoch {epoch}:", eval_metric)
+    model.train()
+    for step, batch in enumerate(train_dataloader):
+        if step > 10: break
+        accelerator.print(f'Memory at the start of step {step}')
+        with accelerator.accumulate(model):
+            accelerator.print(f'Start:{get_memory()}')
+            output = model(**batch)
+            loss = output.loss
+            accelerator.print(f'After outputs:{get_memory()}')
+            accelerator.backward(loss)
+            accelerator.print(f'After backward:{get_memory()}')
+            optimizer.step()
+            lr_scheduler.step()
+            accelerator.print(f'After after step:{get_memory()}')
+            optimizer.zero_grad()
+            accelerator.print(f'After zero_grad:{get_memory()}')
 
 
 def main():
