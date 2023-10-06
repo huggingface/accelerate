@@ -96,6 +96,8 @@ all-gather while executing in the forward pass. only use with Static graphs.
 Useful in cases such as parameter-efficient fine-tuning. 
 Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019)
 
+`CPU RAM Efficient Model loading`: If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. Only applicable for 🤗 Transformers. When using this, `Sync Module States` needs to True. 
+
 `Sync Module States`: If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0
 ```
 
