@@ -695,7 +695,7 @@ class ClearMLTracker(GeneralTracker):
             Name of the experiment. Environment variables `CLEARML_PROJECT` and `CLEARML_TASK` have priority over this
             argument.
         kwargs:
-            Kwargs passed along to the `Run.__init__` method.
+            Kwargs passed along to the `Task.__init__` method.
     """
 
     name = "clearml"
