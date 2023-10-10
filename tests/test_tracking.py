@@ -353,9 +353,7 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         accelerator.get_tracker("clearml").log_table(
             "from lists with columns", columns=["A", "B", "C"], data=[[1, 3, 5], [2, 4, 6]]
         )
-        accelerator.get_tracker("clearml").log_table(
-            "from lists", data=[["A2", "B2", "C2"], [7, 9, 11], [8, 10, 12]]
-        )
+        accelerator.get_tracker("clearml").log_table("from lists", data=[["A2", "B2", "C2"], [7, 9, 11], [8, 10, 12]])
         offline_dir = ClearMLTest._get_offline_dir(accelerator)
         accelerator.end_training()
 

@@ -801,8 +801,8 @@ class ClearMLTracker(GeneralTracker):
             columns (list of `str`, *optional*):
                 The name of the columns on the table
             data (List of List of Any data type, *optional*):
-                The data to be logged in the table. If `columns` is not specified, then the first entry
-                in data will be the name of the columns of the table 
+                The data to be logged in the table. If `columns` is not specified, then the first entry in data will be
+                the name of the columns of the table
             dataframe (Any data type, *optional*):
                 The data to be logged in the table
             step (`int`, *optional*):
