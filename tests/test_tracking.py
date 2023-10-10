@@ -330,9 +330,10 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         accelerator.init_trackers("test_project_with_log_images")
 
         base_image = np.eye(256, 256, dtype=np.uint8) * 255
+        base_image_3d = np.concatenate((np.atleast_3d(base_image), np.zeros((256, 256, 2), dtype=np.uint8)), axis=2)
         images = {
-            "train_image": base_image,
-            "test_image": np.concatenate((np.atleast_3d(base_image), np.zeros((256, 256, 2), dtype=np.uint8)), axis=2),
+            "base_image": base_image,
+            "base_image_3d": base_image_3d,
         }
         accelerator.get_tracker("clearml").log_images(images, step=1)
 
@@ -342,9 +343,7 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         images_saved = Path(os.path.join(offline_dir, "data")).rglob("*.jpeg")
         self.assertEqual(len(list(images_saved)), len(images))
 
-    @require_pandas
     def test_log_table(self):
-        import pandas as pd
         from clearml import Task
 
         Task.set_offline(True)
@@ -352,26 +351,49 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         accelerator.init_trackers("test_project_with_log_table")
 
         accelerator.get_tracker("clearml").log_table(
-            "from lists", columns=["A", "B", "C"], data=[[1, 2, 3], [4, 5, 6]]
+            "from lists with columns", columns=["A", "B", "C"], data=[[1, 3, 5], [2, 4, 6]]
         )
         accelerator.get_tracker("clearml").log_table(
-            "from df", dataframe=pd.DataFrame({"A2": [7, 8], "B2": [9, 10], "C2": [11, 12]}), step=1
+            "from lists", data=[["A2", "B2", "C2"], [7, 9, 11], [8, 10, 12]]
         )
-
         offline_dir = ClearMLTest._get_offline_dir(accelerator)
         accelerator.end_training()
 
         metrics = ClearMLTest._get_metrics(offline_dir)
         self.assertEqual(len(metrics), 2)
         for metric in metrics:
-            self.assertIn(metric["metric"], ["from lists", "from df"])
+            self.assertIn(metric["metric"], ["from lists", "from lists with columns"])
             plot = json.loads(metric["plot_str"])
-            if metric["metric"] == "from lists":
-                self.assertCountEqual(plot["data"][0]["header"]["values"], [["A"], ["B"], ["C"]])
-                self.assertCountEqual(plot["data"][0]["cells"]["values"], [[1, 4], [2, 5], [3, 6]])
+            if metric["metric"] == "from lists with columns":
+                print(plot["data"][0])
+                self.assertCountEqual(plot["data"][0]["header"]["values"], ["A", "B", "C"])
+                self.assertCountEqual(plot["data"][0]["cells"]["values"], [[1, 2], [3, 4], [5, 6]])
             else:
-                self.assertCountEqual(plot["data"][0]["header"]["values"], [["A2"], ["B2"], ["C2"]])
+                self.assertCountEqual(plot["data"][0]["header"]["values"], ["A2", "B2", "C2"])
                 self.assertCountEqual(plot["data"][0]["cells"]["values"], [[7, 8], [9, 10], [11, 12]])
+
+    @require_pandas
+    def test_log_table_pandas(self):
+        import pandas as pd
+        from clearml import Task
+
+        Task.set_offline(True)
+        accelerator = Accelerator(log_with="clearml")
+        accelerator.init_trackers("test_project_with_log_table_pandas")
+
+        accelerator.get_tracker("clearml").log_table(
+            "from df", dataframe=pd.DataFrame({"A": [1, 2], "B": [3, 4], "C": [5, 6]}), step=1
+        )
+
+        offline_dir = ClearMLTest._get_offline_dir(accelerator)
+        accelerator.end_training()
+
+        metrics = ClearMLTest._get_metrics(offline_dir)
+        self.assertEqual(len(metrics), 1)
+        self.assertEqual(metrics[0]["metric"], "from df")
+        plot = json.loads(metrics[0]["plot_str"])
+        self.assertCountEqual(plot["data"][0]["header"]["values"], [["A"], ["B"], ["C"]])
+        self.assertCountEqual(plot["data"][0]["cells"]["values"], [[1, 2], [3, 4], [5, 6]])
 
 
 class MyCustomTracker(GeneralTracker):

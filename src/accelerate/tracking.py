@@ -31,7 +31,6 @@ from .utils import (
     is_clearml_available,
     is_comet_ml_available,
     is_mlflow_available,
-    is_pandas_available,
     is_tensorboard_available,
     is_wandb_available,
     listify,
@@ -716,8 +715,6 @@ class ClearMLTracker(GeneralTracker):
         kwargs.setdefault("task_name", os.environ.get("CLEARML_TASK", run_name))
         self.task = Task.init(**kwargs)
 
-        self._pandas_warning_sent = False
-
     @property
     def tracker(self):
         return self.task
@@ -804,7 +801,8 @@ class ClearMLTracker(GeneralTracker):
             columns (list of `str`, *optional*):
                 The name of the columns on the table
             data (List of List of Any data type, *optional*):
-                The data to be logged in the table
+                The data to be logged in the table. If `columns` is not specified, then the first entry
+                in data will be the name of the columns of the table 
             dataframe (Any data type, *optional*):
                 The data to be logged in the table
             step (`int`, *optional*):
@@ -812,20 +810,15 @@ class ClearMLTracker(GeneralTracker):
             kwargs:
                 Additional key word arguments passed along to the `clearml.Logger.report_table` method.
         """
+        to_report = dataframe
         if dataframe is None:
-            if not is_pandas_available():
-                raise ImportError(
-                    "`ClearMLTracker.log_table` requires `pandas` be installed. Please fix this by running `pip install pandas`"
-                )
-            import pandas as pd
-
-            if columns is None or data is None:
+            if data is None:
                 raise ValueError(
-                    "`ClearMLTracker.log_table` requires that `columns` and `data` to be supplied if `dataframe` is `None`"
+                    "`ClearMLTracker.log_table` requires that `data` to be supplied if `dataframe` is `None`"
                 )
-            dataframe = pd.DataFrame(data, columns=columns)
+            to_report = [columns] + data if columns else data
         title, series = ClearMLTracker._get_title_series(table_name)
-        self.task.get_logger().report_table(title=title, series=series, table_plot=dataframe, iteration=step, **kwargs)
+        self.task.get_logger().report_table(title=title, series=series, table_plot=to_report, iteration=step, **kwargs)
 
     @on_main_process
     def finish(self):
