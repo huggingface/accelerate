@@ -324,8 +324,9 @@ class DataLoaderStateMixin:
         "Prepares the gradient state for the current dataloader"
         self.reset()
         with suppress(Exception):
-            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-            self.remainder = length % self.total_batch_size
+            if not self._drop_last:
+                length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+                self.remainder = length % self.total_batch_size
         self.gradient_state._add_dataloader(self)
 
     def end(self):
@@ -366,13 +367,23 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         - **total_dataset_length** (`int`) -- Total length of the inner dataset across all processes.
     """
 
-    def __init__(self, dataset, device=None, rng_types=None, synchronized_generator=None, skip_batches=0, **kwargs):
+    def __init__(
+        self,
+        dataset,
+        device=None,
+        rng_types=None,
+        synchronized_generator=None,
+        skip_batches=0,
+        _drop_last: bool = False,
+        **kwargs,
+    ):
         super().__init__(dataset, **kwargs)
         self.device = device
         self.rng_types = rng_types
         self.synchronized_generator = synchronized_generator
         self.skip_batches = skip_batches
         self.gradient_state = GradientState()
+        self._drop_last = _drop_last
 
     def __iter__(self):
         if self.rng_types is not None:
@@ -815,6 +826,7 @@ def prepare_data_loader(
             sampler=new_batch_sampler,
             batch_size=dataloader.batch_size,
             rng_types=rng_types,
+            _drop_last=dataloader.drop_last,
             synchronized_generator=synchronized_generator,
             **kwargs,
         )
@@ -825,6 +837,7 @@ def prepare_data_loader(
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
             synchronized_generator=synchronized_generator,
+            _drop_last=dataloader.drop_last,
             **kwargs,
         )
 
