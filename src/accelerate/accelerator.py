@@ -2441,7 +2441,7 @@ class Accelerator:
         >>> tensorboard_tracker = accelerator.get_tracker("tensorboard")
         ```
         """
-        if len(getattr(self, "trackers", [])) > 0:
+        if len(self.trackers) > 0:
             for tracker in self.trackers:
                 if tracker.name == name:
                     return tracker.tracker if unwrap else tracker
