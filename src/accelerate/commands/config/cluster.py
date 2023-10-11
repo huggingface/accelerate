@@ -387,7 +387,7 @@ def get_cluster_input():
                 error_message="Please enter yes or no.",
             )
             fsdp_config["fsdp_cpu_ram_efficient_loading"] = _ask_field(
-                "Do you want to enable CPU RAM efficient model loading? Only applicable for 🤗 Transformers. [YES/no]: ",
+                "Do you want to enable CPU RAM efficient model loading? Only applicable for 🤗 Transformers models. [YES/no]: ",
                 _convert_yes_no_to_bool,
                 default=True,
                 error_message="Please enter yes or no.",
