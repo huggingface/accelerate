@@ -28,7 +28,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from accelerate import Accelerator
 from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import set_seed
+from accelerate.utils import is_tpu_available, set_seed
 
 
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
@@ -241,34 +241,34 @@ def main():
     else:
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
-    # # These are a bit slower so they should only be ran on the GPU or TPU
-    # if torch.cuda.is_available() or is_tpu_available():
-    #     if accelerator.is_local_main_process:
-    #         print("**Testing gather_for_metrics**")
-    #     for split_batches in [True, False]:
-    #         for dispatch_batches in [True, False]:
-    #             if accelerator.is_local_main_process:
-    #                 print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
-    #             test_mrpc(dispatch_batches, split_batches)
-    #             accelerator.state._reset_state()
-    #     print("test_gather_for_metrics_with_iterable_dataset")
-    #     test_gather_for_metrics_with_iterable_dataset()
-    #     print("test gather_for_metrics_with_non_tensor_objects_iterable_dataset")
-    #     test_gather_for_metrics_with_non_tensor_objects_iterable_dataset()
-    # if accelerator.is_local_main_process:
-    #     print("**Test torch metrics**")
-    # for split_batches in [True, False]:
-    #     for dispatch_batches in [True, False]:
-    #         accelerator = Accelerator(split_batches=split_batches, dispatch_batches=dispatch_batches)
-    #         if accelerator.is_local_main_process:
-    #             print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`, length=99")
-    #         test_torch_metrics(accelerator, 99)
-    #         accelerator.state._reset_state()
-    # if accelerator.is_local_main_process:
-    #     print("**Test last batch is not dropped when perfectly divisible**")
+    # These are a bit slower so they should only be ran on the GPU or TPU
+    if torch.cuda.is_available() or is_tpu_available():
+        if accelerator.is_local_main_process:
+            print("**Testing gather_for_metrics**")
+        for split_batches in [True, False]:
+            for dispatch_batches in [True, False]:
+                if accelerator.is_local_main_process:
+                    print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
+                test_mrpc(dispatch_batches, split_batches)
+                accelerator.state._reset_state()
+        print("test_gather_for_metrics_with_iterable_dataset")
+        test_gather_for_metrics_with_iterable_dataset()
+        print("test gather_for_metrics_with_non_tensor_objects_iterable_dataset")
+        test_gather_for_metrics_with_non_tensor_objects_iterable_dataset()
+    if accelerator.is_local_main_process:
+        print("**Test torch metrics**")
+    for split_batches in [True, False]:
+        for dispatch_batches in [True, False]:
+            accelerator = Accelerator(split_batches=split_batches, dispatch_batches=dispatch_batches)
+            if accelerator.is_local_main_process:
+                print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`, length=99")
+            test_torch_metrics(accelerator, 99)
+            accelerator.state._reset_state()
+    if accelerator.is_local_main_process:
+        print("**Test last batch is not dropped when perfectly divisible**")
     accelerator = Accelerator()
-    # test_torch_metrics(accelerator, 512)
-    # accelerator.state._reset_state()
+    test_torch_metrics(accelerator, 512)
+    accelerator.state._reset_state()
     if accelerator.is_local_main_process:
         print("**Test that `drop_last` is taken into account**")
     test_gather_for_metrics_drop_last()
