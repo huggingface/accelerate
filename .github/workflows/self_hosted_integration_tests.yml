@@ -53,7 +53,7 @@ jobs:
           git config --global --add safe.directory '*'
           git checkout main && git pull
           if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
-            git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
+            git checkout $(git tag --sort=taggerdate | tail -1)
           fi
           pip install .[torch,deepspeed-testing]
       
