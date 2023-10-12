@@ -34,7 +34,7 @@ import torch
 import torch.utils.hooks as hooks
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
-from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
+from .data_loader import DataLoaderDispatcher, DataLoaderShard, prepare_data_loader, skip_first_batches
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -1502,7 +1502,11 @@ class Accelerator:
                 for obj in args
             ]
 
-            batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
+            batch_sizes = [
+                obj.batch_size if not isinstance(obj, DataLoaderShard) else obj.total_batch_size
+                for obj in args
+                if hasattr(obj, "batch_size")
+            ]
             if self.split_batches:
                 batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
 
