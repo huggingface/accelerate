@@ -230,7 +230,7 @@ def test_gather_for_metrics_drop_last():
     gathered_items = accelerator.gather_for_metrics(batch)
     assert gathered_items.size(0) == (
         5 * accelerator.num_processes
-    ), f"Expected number of items: {(5*accelerator.num_processes)}, Actual: {gathered_items.size(0)}"
+    ), f"Expected number of items: {5*accelerator.num_processes}, Actual: {gathered_items.size(0)}"
 
 
 def main():
