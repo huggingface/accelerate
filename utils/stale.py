@@ -17,6 +17,7 @@ https://github.com/allenai/allennlp.
 """
 import os
 from datetime import datetime as dt
+from datetime import timezone
 
 from github import Github
 
@@ -36,7 +37,7 @@ def main():
     for issue in open_issues:
         comments = sorted([comment for comment in issue.get_comments()], key=lambda i: i.created_at, reverse=True)
         last_comment = comments[0] if len(comments) > 0 else None
-        current_time = dt.utcnow()
+        current_time = dt.now(timezone.utc)
         days_since_updated = (current_time - issue.updated_at).days
         days_since_creation = (current_time - issue.created_at).days
         if (
