@@ -174,6 +174,9 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
 
     if args.use_fsdp:
         current_env["ACCELERATE_USE_FSDP"] = "true"
+        if args.fsdp_cpu_ram_efficient_loading and not args.fsdp_sync_module_states:
+            raise ValueError("When using `--fsdp_cpu_ram_efficient_loading` set `--fsdp_sync_module_states` to `True`")
+
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
@@ -187,6 +190,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
         current_env["FSDP_FORWARD_PREFETCH"] = str(args.fsdp_forward_prefetch).lower()
         current_env["FSDP_USE_ORIG_PARAMS"] = str(args.fsdp_use_orig_params).lower()
+        current_env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = str(args.fsdp_cpu_ram_efficient_loading).lower()
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
 
     if args.use_megatron_lm:

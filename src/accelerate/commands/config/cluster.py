@@ -386,12 +386,21 @@ def get_cluster_input():
                 default=False,
                 error_message="Please enter yes or no.",
             )
-            fsdp_config["fsdp_sync_module_states"] = _ask_field(
-                "Do you want each individually wrapped FSDP unit to broadcast module parameters from rank 0 at the start? [YES/no]: ",
+            fsdp_config["fsdp_cpu_ram_efficient_loading"] = _ask_field(
+                "Do you want to enable CPU RAM efficient model loading? Only applicable for 🤗 Transformers models. [YES/no]: ",
                 _convert_yes_no_to_bool,
                 default=True,
                 error_message="Please enter yes or no.",
             )
+            if fsdp_config["fsdp_cpu_ram_efficient_loading"]:
+                fsdp_config["fsdp_sync_module_states"] = True
+            else:
+                fsdp_config["fsdp_sync_module_states"] = _ask_field(
+                    "Do you want each individually wrapped FSDP unit to broadcast module parameters from rank 0 at the start? [YES/no]: ",
+                    _convert_yes_no_to_bool,
+                    default=True,
+                    error_message="Please enter yes or no.",
+                )
 
     megatron_lm_config = {}
     if distributed_type in [DistributedType.MULTI_GPU]:
