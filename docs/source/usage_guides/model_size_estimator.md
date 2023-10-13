@@ -34,7 +34,7 @@ Currently we support searching for models that can be used in `timm` and `transf
 
 ## Gradio Demos
 
-Below are a few gradio demos related to what is described below. The first is the official Hugging Face memory estimation space, utilizing Accelerate directly:
+Below are a few gradio demos related to what was described above. The first is the official Hugging Face memory estimation space, utilizing Accelerate directly:
 
 <div class="block dark:hidden">
 	<iframe 
