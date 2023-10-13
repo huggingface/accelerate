@@ -250,7 +250,7 @@ def set_module_tensor_to_device(
     Args:
         module (`torch.nn.Module`):
             The module in which the tensor we want to move lives.
-        param_name (`str`):
+        tensor_name (`str`):
             The full name of the parameter/buffer.
         device (`int`, `str` or `torch.device`):
             The device on which to set the tensor.
