@@ -683,6 +683,8 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             self.iteration = epoch
         if hasattr(self.batch_sampler.sampler, "set_epoch"):
             self.batch_sampler.sampler.set_epoch(epoch)
+        elif hasattr(self.dataset, "set_epoch"):
+            self.dataset.set_epoch(epoch)
 
     def __len__(self):
         whole_length = super().__len__()
