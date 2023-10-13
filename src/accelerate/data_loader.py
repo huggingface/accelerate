@@ -81,6 +81,9 @@ class SeedableRandomSampler(RandomSampler):
             items = torch.randint(high=n, size=(self.num_samples,), dtype=torch.int64, generator=g).tolist()
         return iter(items)
 
+    def set_epoch(self, epoch: int):
+        self.epoch = epoch
+
 
 class BatchSamplerShard(BatchSampler):
     """
@@ -402,15 +405,14 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         self.skip_batches = skip_batches
         self.gradient_state = GradientState()
         self._drop_last = _drop_last
-
-    def set_epoch(self, epoch):
-        if isinstance(self.sampler, SeedableRandomSampler):
-            self.sampler.set_epoch(epoch)
+        self.iteration = 0
 
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
         self.begin()
+
+        self.set_epoch(self.iteration)
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
@@ -434,7 +436,16 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
+
+        self.iteration += 1
         self.end()
+
+    def set_epoch(self, epoch: int):
+        # In case it is manually passed in, the user can set it to what they like
+        if self.iteration != epoch:
+            self.iteration = epoch
+        if hasattr(self.batch_sampler.sampler, "set_epoch"):
+            self.batch_sampler.sampler.set_epoch(epoch)
 
     @property
     def total_batch_size(self):
@@ -539,6 +550,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         self.skip_batches = skip_batches
 
         self.slice_fn = slice_tensors if slice_fn is None else slice_fn
+        self.iteration = 0
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
@@ -579,6 +591,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
 
     def __iter__(self):
         self.begin()
+        self.set_epoch(self.iteration)
         main_iterator = None
         if is_torch_version(">=", "2.0.1"):
             # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
@@ -648,11 +661,15 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             if batch_index >= self.skip_batches:
                 yield batch
             batch_index += 1
+        self.iteration += 1
         self.end()
 
     def set_epoch(self, epoch: int):
-        if hasattr(self.sampler, "set_epoch"):
-            self.sampler.set_epoch(epoch)
+        # In case it is manually passed in, the user can set it to what they like
+        if self.iteration != epoch:
+            self.iteration = epoch
+        if hasattr(self.batch_sampler.sampler, "set_epoch"):
+            self.batch_sampler.sampler.set_epoch(epoch)
 
     def __len__(self):
         whole_length = super().__len__()
