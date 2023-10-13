@@ -17,7 +17,7 @@ from contextlib import suppress
 from typing import Callable, List, Optional, Union
 
 import torch
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
 from .state import AcceleratorState, DistributedType, GradientState, is_tpu_available
@@ -62,6 +62,24 @@ _PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {}
 for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
     if is_torch_version(">=", v):
         _PYTORCH_DATALOADER_KWARGS.update(additional_kwargs)
+        
+class SeedableRandomSampler(RandomSampler):
+    """Same as a random sampler, except that in `__iter__` a seed can be used"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.epoch = 0
+                
+    def __iter__(self):
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+        n = len(self.data_source)
+        if not self.replacement:
+            items = torch.randperm(n, generator=g).tolist()
+        else:
+            items = torch.randint(high=n, size=(self.num_samples,), dtype=torch.int64, generator=g).tolist()
+        return iter(items)
+
+
 
 
 class BatchSamplerShard(BatchSampler):
@@ -384,6 +402,10 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         self.skip_batches = skip_batches
         self.gradient_state = GradientState()
         self._drop_last = _drop_last
+        
+    def set_epoch(self, epoch):
+        if isinstance(self.sampler, SeedableRandomSampler):
+            self.sampler.set_epoch(epoch)
 
     def __iter__(self):
         if self.rng_types is not None:
@@ -627,6 +649,10 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
                 yield batch
             batch_index += 1
         self.end()
+        
+    def set_epoch(self, epoch:int):
+        if hasattr(self.sampler, "set_epoch"):
+            self.sampler.set_epoch(epoch)
 
     def __len__(self):
         whole_length = super().__len__()
@@ -748,8 +774,10 @@ def prepare_data_loader(
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
+    print(new_batch_sampler)
     sampler_is_batch_sampler = False
     synchronized_generator = None
+    
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
@@ -831,6 +859,13 @@ def prepare_data_loader(
             **kwargs,
         )
     else:
+        if isinstance(new_batch_sampler.batch_sampler.sampler, RandomSampler):
+            sampler = new_batch_sampler.batch_sampler.sampler
+            new_batch_sampler.batch_sampler.sampler = SeedableRandomSampler(
+                data_source = sampler.data_source,
+                replacement = sampler.replacement,
+                num_samples = sampler._num_samples,
+            )
         dataloader = DataLoaderShard(
             new_dataset,
             device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
