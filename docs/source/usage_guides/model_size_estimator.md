@@ -32,6 +32,27 @@ Currently we support searching for models that can be used in `timm` and `transf
 
 </Tip>
 
+## Gradio Demos
+
+Below are a few gradio demos related to what is described below. The first is the official Hugging Face memory estimation space, utilizing Accelerate directly:
+
+<div class="block dark:hidden">
+	<iframe 
+        src="https://hf-accelerate-model-memory-usage.hf.space?__theme=light"
+        width="850"
+        height="1600"
+    ></iframe>
+</div>
+<div class="hidden dark:block">
+    <iframe 
+        src="https://hf-accelerate-model-memory-usage.hf.space?__theme=dark"
+        width="850"
+        height="1600"
+    ></iframe>
+</div>
+
+A community member has taken the idea and expended it further, allowing you to filter models directly and see if you can run a particular LLM given GPU constraints and LoRA configurations. To play with it, see [here](https://huggingface.co/spaces/Vokturz/can-it-run-llm) for more details.
+
 ## The Command
 
 When using `accelerate estimate-memory`, you need to pass in the name of the model you want to use, potentially the framework
@@ -114,8 +135,3 @@ This calculation is accurate within a few % of the actual value, so it is a very
 
 When performing inference you can expect to add up to an additional 20% as found by [EleutherAI](https://blog.eleuther.ai/transformer-math/). We'll be conducting research into finding a more accurate estimate to these values, and will update 
 this calculator once done.
-
-## Live Gradio Demo
-
-Lastly, we invite you to try the [live Gradio demo](https://huggingface.co/spaces/hf-accelerate/model-memory-usage) of this utility,
-which includes an option to post a discussion thread on a models repository with this data. Doing so will help provide access to these numbers in the community faster and help users know what you've learned!
