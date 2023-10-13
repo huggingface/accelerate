@@ -292,7 +292,18 @@ class IterableDatasetShard(IterableDataset):
         self.process_index = process_index
         self.split_batches = split_batches
 
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+        if hasattr(self.dataset, "set_epoch"):
+            self.dataset.set_epoch(epoch)
+
     def __iter__(self):
+        if (
+            not hasattr(self.dataset, "set_epoch")
+            and hasattr(self.dataset, "generator")
+            and isinstance(self.dataset.generator, torch.Generator)
+        ):
+            self.dataset.generator.manual_seed(self.epoch)
         real_batch_size = self.batch_size if self.split_batches else (self.batch_size * self.num_processes)
         process_batch_size = (self.batch_size // self.num_processes) if self.split_batches else self.batch_size
         process_slice = range(self.process_index * process_batch_size, (self.process_index + 1) * process_batch_size)
@@ -446,6 +457,8 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             self.iteration = epoch
         if hasattr(self.batch_sampler.sampler, "set_epoch"):
             self.batch_sampler.sampler.set_epoch(epoch)
+        elif hasattr(self.dataset, "set_epoch"):
+            self.dataset.set_epoch(epoch)
 
     @property
     def total_batch_size(self):
