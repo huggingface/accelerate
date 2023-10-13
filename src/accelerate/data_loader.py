@@ -774,7 +774,6 @@ def prepare_data_loader(
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
-    print(new_batch_sampler)
     sampler_is_batch_sampler = False
     synchronized_generator = None
     
@@ -798,10 +797,13 @@ def prepare_data_loader(
                 sampler = dataloader.sampler.sampler
             else:
                 sampler = dataloader.batch_sampler.sampler
-            if hasattr(sampler, "generator"):
-                if sampler.generator is None:
-                    sampler.generator = torch.Generator()
-                synchronized_generator = sampler.generator
+            if isinstance(sampler, RandomSampler):
+                sampler = SeedableRandomSampler(
+                    data_source = sampler.data_source,
+                    replacement = sampler.replacement,
+                    num_samples = sampler._num_samples,
+                    generator = getattr(sampler, "generator", torch.Generator())
+                )
 
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(
@@ -859,13 +861,8 @@ def prepare_data_loader(
             **kwargs,
         )
     else:
-        if isinstance(new_batch_sampler.batch_sampler.sampler, RandomSampler):
-            sampler = new_batch_sampler.batch_sampler.sampler
-            new_batch_sampler.batch_sampler.sampler = SeedableRandomSampler(
-                data_source = sampler.data_source,
-                replacement = sampler.replacement,
-                num_samples = sampler._num_samples,
-            )
+        if isinstance(sampler, SeedableRandomSampler):
+            new_batch_sampler.batch_sampler.sampler = sampler
         dataloader = DataLoaderShard(
             new_dataset,
             device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
