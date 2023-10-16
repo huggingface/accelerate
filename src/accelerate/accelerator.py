@@ -2795,6 +2795,9 @@ class Accelerator:
                 schedulers.append(scheduler)
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
+            
+        # Save the samplers of the dataloaders
+        dataloaders = self._dataloaders
 
         # Call model loading hooks that might have been registered with
         # accelerator.register_model_state_hook
@@ -2806,6 +2809,7 @@ class Accelerator:
             weights,
             optimizers,
             schedulers,
+            dataloaders,
             self.state.process_index,
             self.scaler,
             save_on_each_node=self.project_configuration.save_on_each_node,
@@ -2934,6 +2938,8 @@ class Accelerator:
                 schedulers.append(scheduler)
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
+            
+        dataloaders = self._dataloaders
 
         # Call model loading hooks that might have been registered with
         # accelerator.register_model_state_hook
@@ -2955,6 +2961,7 @@ class Accelerator:
             models,
             optimizers,
             schedulers,
+            dataloaders,
             self.state.process_index,
             self.scaler,
             map_location,
