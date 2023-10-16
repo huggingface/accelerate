@@ -292,12 +292,17 @@ def mock_training(length, batch_size, generator):
     set_seed(42)
     generator.manual_seed(42)
     train_set = RegressionDataset(length=length, seed=42)
-    sampler = SeedableRandomSampler(
-        generator=generator,
-        data_source=train_set,
-        num_samples=len(train_set),
-    )
-    train_dl = DataLoader(train_set, batch_size=batch_size, sampler=sampler)
+    if AcceleratorState().num_processes > 1:
+        # The SeedableRandomSampler is needed during distributed setups
+        # for full reproducability across processes with the `DataLoader`
+        sampler = SeedableRandomSampler(
+            generator=generator,
+            data_source=train_set,
+            num_samples=len(train_set),
+        )
+        train_dl = DataLoader(train_set, batch_size=batch_size, sampler=sampler)
+    else:
+        train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
     for epoch in range(3):
@@ -330,7 +335,6 @@ def training_check():
     generator.manual_seed(42)
     for epoch in range(3):
         for batch in train_dl:
-            accelerator.print(f"Batch during accelerate training: {batch}")
             model.zero_grad()
             output = model(batch["x"])
             loss = torch.nn.functional.mse_loss(output, batch["y"])

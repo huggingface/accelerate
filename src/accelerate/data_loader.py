@@ -817,7 +817,7 @@ def prepare_data_loader(
         sampler = dataloader.sampler.sampler
     else:
         sampler = dataloader.batch_sampler.sampler
-    if isinstance(sampler, RandomSampler):
+    if isinstance(sampler, RandomSampler) and num_processes > 1:
         sampler = SeedableRandomSampler(
             data_source=sampler.data_source,
             replacement=sampler.replacement,
