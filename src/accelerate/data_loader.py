@@ -73,7 +73,8 @@ class SeedableRandomSampler(RandomSampler):
 
     def __iter__(self):
         g = torch.Generator()
-        g.manual_seed(self.epoch)
+        seed = self.epoch + getattr(self.generator, "initial_seed", 0)
+        g.manual_seed(seed)
         n = len(self.data_source)
         if not self.replacement:
             items = torch.randperm(n, generator=g).tolist()
@@ -868,7 +869,7 @@ def prepare_data_loader(
         kwargs["batch_size"] = (
             dataloader.batch_size // num_processes if split_batches and not dispatch_batches else dataloader.batch_size
         )
-    if isinstance(sampler, SeedableRandomSampler) and num_processes > 1:
+    if isinstance(sampler, SeedableRandomSampler):
         if sampler_is_batch_sampler:
             dataloader.sampler.sampler = sampler
         else:
