@@ -73,7 +73,11 @@ class SeedableRandomSampler(RandomSampler):
 
     def __iter__(self):
         g = torch.Generator()
-        g.manual_seed(self.epoch)
+        if self.generator is not None:
+            seed = self.epoch + self.generator.initial_seed()
+        else:
+            seed = self.epoch
+        g.manual_seed(seed)
         n = len(self.data_source)
         if not self.replacement:
             items = torch.randperm(n, generator=g).tolist()

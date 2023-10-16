@@ -25,7 +25,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
-from accelerate.data_loader import prepare_data_loader
+from accelerate.data_loader import SeedableRandomSampler, prepare_data_loader
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import RegressionDataset, are_the_same_tensors
 from accelerate.utils import (
@@ -292,7 +292,12 @@ def mock_training(length, batch_size, generator):
     set_seed(42)
     generator.manual_seed(42)
     train_set = RegressionDataset(length=length, seed=42)
-    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
+    sampler = SeedableRandomSampler(
+        generator=generator,
+        data_source=train_set,
+        num_samples=len(train_set),
+    )
+    train_dl = DataLoader(train_set, batch_size=batch_size, sampler=sampler)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
     for epoch in range(3):
@@ -325,6 +330,7 @@ def training_check():
     generator.manual_seed(42)
     for epoch in range(3):
         for batch in train_dl:
+            accelerator.print(f"Batch during accelerate training: {batch}")
             model.zero_grad()
             output = model(batch["x"])
             loss = torch.nn.functional.mse_loss(output, batch["y"])
