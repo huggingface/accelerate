@@ -742,7 +742,7 @@ class DeepSpeedPlugin:
                 or ds_config["train_micro_batch_size_per_gpu"] == "auto"
             ):
                 ds_config["train_micro_batch_size_per_gpu"] = 1
-            if ds_config["train_batch_size"] == "auto":
+            if "train_batch_size" in ds_config and ds_config["train_batch_size"] == "auto":
                 del ds_config["train_batch_size"]
 
             if compare_versions("transformers", "<", "4.33"):
