@@ -874,6 +874,7 @@ def prepare_data_loader(
         else:
             dataloader.batch_sampler.sampler = sampler
     if dispatch_batches:
+        kwargs.pop("generator")
         dataloader = DataLoaderDispatcher(
             new_dataset,
             split_batches=split_batches,
