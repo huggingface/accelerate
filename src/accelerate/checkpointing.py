@@ -22,7 +22,6 @@ import torch
 from torch.cuda.amp import GradScaler
 from torch.utils.data import BatchSampler
 
-from .data_loader import SeedableRandomSampler
 from .utils import (
     MODEL_NAME,
     OPTIMIZER_NAME,
@@ -108,6 +107,7 @@ def save_accelerator_state(
             sampler = dataloader.sampler.sampler
         else:
             sampler = dataloader.batch_sampler.sampler
+        from .data_loader import SeedableRandomSampler
         if isinstance(sampler, SeedableRandomSampler):
             save(sampler, output_sampler_file, save_on_each_node=save_on_each_node)
         logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
@@ -207,6 +207,7 @@ def load_accelerator_state(
             sampler = dataloader.sampler.sampler
         else:
             sampler = dataloader.batch_sampler.sampler
+        from .data_loader import SeedableRandomSampler
         if isinstance(sampler, SeedableRandomSampler):
             if sampler_is_batch_sampler:
                 dataloader.sampler.sampler = torch.load(input_sampler_file)
