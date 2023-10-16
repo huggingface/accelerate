@@ -26,6 +26,7 @@ from accelerate.big_modeling import (
     disk_offload,
     dispatch_model,
     init_empty_weights,
+    init_across_devices,
     init_on_device,
     load_checkpoint_and_dispatch,
 )
@@ -336,7 +337,21 @@ class BigModelingTester(unittest.TestCase):
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
-
+            
+    @require_multi_gpu
+    def test_init_across_devices(self):
+        model = init_across_devices(BiggerModelForTest, max_memory={"cuda:0": 5, "cuda:1": 5})
+        
+        print(model)
+        
+        # Check that the model is initialized on the right devices
+        self.assertEqual(model.linear1.weight.device, torch.device("cuda:0"))
+        self.assertEqual(model.linear2.weight.device, torch.device("cuda:1"))
+        self.assertEqual(model.linear3.weight.device, torch.device("cuda:0"))
+        self.assertEqual(model.linear4.weight.device, torch.device("cuda:1"))
+        
+        
+            
     @require_cuda
     def test_dispatch_model_copy(self):
         original_model = ModelForTestCopy(id=1)

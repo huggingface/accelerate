@@ -156,7 +156,39 @@ def init_on_device(device: torch.device, include_buffers: bool = None):
             nn.Module.register_buffer = old_register_buffer
         for torch_function_name, old_torch_function in tensor_constructors_to_patch.items():
             setattr(torch, torch_function_name, old_torch_function)
-
+            
+def init_across_devices(
+    model_class, 
+    model_init_args={},
+    max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,
+    no_split_module_classes: Optional[List[str]] = None,
+    dtype: Optional[Union[str, torch.dtype]] = None,
+    special_dtypes: Optional[Dict[str, Union[str, torch.dtype]]] = None,
+    verbose: bool = False,
+    strict: bool = False,
+):
+    """
+    Same as `init_on_device`, but will use `device_map='auto'` to initialize the model on all devices.
+    
+    Example usage:
+    
+    ```python
+    from accelerate import init_across_devices
+    
+    model = init_across_devices(
+        model_class=MyModel,
+        max_memory={"cuda:0": 5, "cuda:1": 5},
+        dtype="float16",
+    )
+    """
+    with init_empty_weights():
+        model = model_class(**model_init_args)
+    device_map = infer_auto_device_map(model, max_memory=max_memory, no_split_module_classes=no_split_module_classes, dtype=dtype, special_dtypes=special_dtypes, verbose=verbose)
+    if strict and any(device == "cpu" or device == "disk" for device in device_map.values()):
+        raise RuntimeError("`strict` was passed but the model cannot be fully split across GPUs.")
+    
+    return dispatch_model(model, device_map=device_map, force_hooks=True)
+    
 
 def cpu_offload(
     model: nn.Module,
