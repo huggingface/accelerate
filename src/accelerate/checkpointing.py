@@ -188,12 +188,12 @@ def load_accelerator_state(
         input_scheduler_file = os.path.join(input_dir, scheduler_name)
         scheduler.load_state_dict(torch.load(input_scheduler_file))
     logger.info("All scheduler states loaded successfully")
-    
+
     for i, dataloader in enumerate(dataloaders):
         sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
         input_sampler_file = os.path.join(input_dir, sampler_name)
         dataloader.sampler = torch.load(input_sampler_file)
-    logger.info(f"All dataloader sampler states loaded successfully")
+    logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
     if scaler is not None:

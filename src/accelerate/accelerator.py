@@ -2795,7 +2795,7 @@ class Accelerator:
                 schedulers.append(scheduler)
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
-            
+
         # Save the samplers of the dataloaders
         dataloaders = self._dataloaders
 
@@ -2938,7 +2938,7 @@ class Accelerator:
                 schedulers.append(scheduler)
         elif self.distributed_type not in [DistributedType.MEGATRON_LM]:
             schedulers = self._schedulers
-            
+
         dataloaders = self._dataloaders
 
         # Call model loading hooks that might have been registered with
