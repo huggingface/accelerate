@@ -65,7 +65,15 @@ for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
 
 
 class SeedableRandomSampler(RandomSampler):
-    """Same as a random sampler, except that in `__iter__` a seed can be used"""
+    """
+    Same as a random sampler, except that in `__iter__` a seed can be used.
+
+    Needed specifically in distributed cases, when the random generator for each GPU needs to start from the same seed
+    and be fully reproducable on multiple iterations.
+
+    If a custom `generator` is passed, it will rely on its initial seed as well as the current iteration it is on
+    (stored in `self.epoch`).
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -86,6 +94,7 @@ class SeedableRandomSampler(RandomSampler):
         return iter(items)
 
     def set_epoch(self, epoch: int):
+        "Sets the current iteration of the sampler."
         self.epoch = epoch
 
 
@@ -818,6 +827,10 @@ def prepare_data_loader(
     else:
         sampler = dataloader.batch_sampler.sampler
     if isinstance(sampler, RandomSampler) and num_processes > 1:
+        # When iterating through the dataloader during distributed processes
+        # we want to ensure that on each process we are iterating through the same
+        # samples in the same order if a seed is set. This requires a tweak
+        # to the `torch.utils.data.RandomSampler` class (if used).
         sampler = SeedableRandomSampler(
             data_source=sampler.data_source,
             replacement=sampler.replacement,
