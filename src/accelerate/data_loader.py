@@ -271,6 +271,13 @@ class IterableDatasetShard(IterableDataset):
         self.process_index = process_index
         self.split_batches = split_batches
 
+    def __len__(self):
+        # We will just raise the downstream error if the underlying dataset is not sized
+        if self.drop_last:
+            return (len(self.dataset) // (self.batch_size * self.num_processes)) * self.batch_size
+        else:
+            return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
+
     def __iter__(self):
         real_batch_size = self.batch_size if self.split_batches else (self.batch_size * self.num_processes)
         process_batch_size = (self.batch_size // self.num_processes) if self.split_batches else self.batch_size
