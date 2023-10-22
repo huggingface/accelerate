@@ -276,7 +276,7 @@ class AlignDevicesHook(ModelHook):
         if self.io_same_device:
             self.input_device = find_device([args, kwargs])
         if self.offload:
-            for name, param in named_module_tensors(
+            for name, _ in named_module_tensors(
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
                 fp16_statistics = None

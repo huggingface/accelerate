@@ -314,12 +314,9 @@ def set_module_tensor_to_device(
                 if not is_buffer:
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
-            print (device)
             new_value = value.to(device)
         else:
-            print (device)
             new_value = torch.tensor(value, device=device)
-        print (new_value)
         if device_quantization is not None:
             device = device_quantization
         if is_buffer:
