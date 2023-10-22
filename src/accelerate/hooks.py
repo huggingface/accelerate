@@ -255,14 +255,14 @@ class AlignDevicesHook(ModelHook):
             self.original_devices = {
                 name: param.device for name, param in named_module_tensors(module, recurse=self.place_submodules)
             }
-            # if self.weights_map is None:
-            self.weights_map = {
-                name: param.to("cpu")
-                for name, param in named_module_tensors(
-                    module, include_buffers=self.offload_buffers, recurse=self.place_submodules
-                )
-            }
-            # print (self.weights_map)
+            if self.weights_map is None:
+                self.weights_map = {
+                    name: param.to("cpu")
+                    for name, param in named_module_tensors(
+                        module, include_buffers=self.offload_buffers, recurse=self.place_submodules
+                    )
+                }
+
             for name, _ in named_module_tensors(
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
@@ -276,7 +276,7 @@ class AlignDevicesHook(ModelHook):
         if self.io_same_device:
             self.input_device = find_device([args, kwargs])
         if self.offload:
-            for name, _ in named_module_tensors(
+            for name, param in named_module_tensors(
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
                 fp16_statistics = None
@@ -284,6 +284,7 @@ class AlignDevicesHook(ModelHook):
                     if self.weights_map[name].dtype == torch.int8:
                         fp16_statistics = self.weights_map[name.replace("weight", "SCB")]
                 set_module_tensor_to_device(
+                    print ('Preforward values: ', self.weights_map[name], '\n')
                     module, name, self.execution_device, value=self.weights_map[name], fp16_statistics=fp16_statistics
                 )
 
