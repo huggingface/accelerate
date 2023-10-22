@@ -255,18 +255,18 @@ class AlignDevicesHook(ModelHook):
             self.original_devices = {
                 name: param.device for name, param in named_module_tensors(module, recurse=self.place_submodules)
             }
-            if self.weights_map is None:
-                self.weights_map = {
-                    name: param.to("cpu")
-                    for name, param in named_module_tensors(
-                        module, include_buffers=self.offload_buffers, recurse=self.place_submodules
-                    )
-                }
-
+            # if self.weights_map is None:
+            self.weights_map = {
+                name: param.to("cpu")
+                for name, param in named_module_tensors(
+                    module, include_buffers=self.offload_buffers, recurse=self.place_submodules
+                )
+            }
+            # print (self.weights_map)
             for name, _ in named_module_tensors(
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
-                set_module_tensor_to_device(module, name, "cpu")
+                set_module_tensor_to_device(module, name, "meta")
             if not self.offload_buffers and self.execution_device is not None:
                 for name, _ in module.named_buffers(recurse=self.place_submodules):
                     set_module_tensor_to_device(module, name, self.execution_device)
