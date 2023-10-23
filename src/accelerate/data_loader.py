@@ -87,11 +87,12 @@ class SeedableRandomSampler(RandomSampler):
             seed = self.epoch
         g.manual_seed(seed)
         n = len(self.data_source)
-        if not self.replacement:
-            items = torch.randperm(n, generator=g).tolist()
+        # Taken 1:1 from torch.utils.data.sampler.RandomSampler.__iter__
+        if self.replacement:
+            for _ in range(self.num_samples // 32):
+                yield from torch.randint(high=n, size=(32,), dtype=torch.int64, generator=g).tolist()
         else:
-            items = torch.randint(high=n, size=(self.num_samples,), dtype=torch.int64, generator=g).tolist()
-        return iter(items)
+            yield from torch.randperm(n, generator=g).tolist()
 
     def set_epoch(self, epoch: int):
         "Sets the current iteration of the sampler."
