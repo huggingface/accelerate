@@ -55,8 +55,6 @@ from accelerate.utils.other import patch_environment
 
 set_seed(42)
 
-T5_SMALL = "t5-small"
-T5_TINY = "patrickvonplaten/t5-tiny-random"
 GPT2_TINY = "sshleifer/tiny-gpt2"
 
 ZERO2 = "zero2"

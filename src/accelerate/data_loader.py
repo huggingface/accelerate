@@ -311,6 +311,13 @@ class IterableDatasetShard(IterableDataset):
         if hasattr(self.dataset, "set_epoch"):
             self.dataset.set_epoch(epoch)
 
+    def __len__(self):
+        # We will just raise the downstream error if the underlying dataset is not sized
+        if self.drop_last:
+            return (len(self.dataset) // (self.batch_size * self.num_processes)) * self.batch_size
+        else:
+            return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
+
     def __iter__(self):
         if (
             not hasattr(self.dataset, "set_epoch")
