@@ -15,13 +15,17 @@
 import os
 import pickle
 import unittest
+import warnings
 from collections import UserDict, namedtuple
+from unittest.mock import Mock, patch
 
 import torch
 
+from accelerate.state import PartialState
 from accelerate.test_utils.testing import require_cuda, require_torch_min_version
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
+    check_os_kernel,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     find_device,
@@ -36,6 +40,10 @@ ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
 
 
 class UtilsTester(unittest.TestCase):
+    def setUp(self):
+        # logging requires initialized state
+        PartialState()
+
     def test_send_to_device(self):
         tensor = torch.randn(5, 2)
         device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -173,3 +181,27 @@ class UtilsTester(unittest.TestCase):
         self.assertEqual(find_device([1, "a", torch.tensor([1, 2, 3])]), torch.device("cpu"))
         self.assertEqual(find_device({"a": 1, "b": torch.tensor([1, 2, 3])}), torch.device("cpu"))
         self.assertIsNone(find_device([1, "a"]))
+
+    def test_check_os_kernel_no_warning_when_release_gt_min(self):
+        # min version is 5.5
+        with patch("platform.uname", return_value=Mock(release="5.15.0-35-generic", system="Linux")):
+            with warnings.catch_warnings(record=True) as w:
+                check_os_kernel()
+            self.assertEqual(len(w), 0)
+
+    def test_check_os_kernel_no_warning_when_not_linux(self):
+        # system must be Linux
+        with patch("platform.uname", return_value=Mock(release="5.4.0-35-generic", system="Darwin")):
+            with warnings.catch_warnings(record=True) as w:
+                check_os_kernel()
+            self.assertEqual(len(w), 0)
+
+    def test_check_os_kernel_warning_when_release_lt_min(self):
+        # min version is 5.5
+        with patch("platform.uname", return_value=Mock(release="5.4.0-35-generic", system="Linux")):
+            with self.assertLogs() as ctx:
+                check_os_kernel()
+            self.assertEqual(len(ctx.records), 1)
+            self.assertEqual(ctx.records[0].levelname, "WARNING")
+            self.assertIn("5.4.0", ctx.records[0].msg)
+            self.assertIn("5.5.0", ctx.records[0].msg)
