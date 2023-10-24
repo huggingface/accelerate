@@ -87,10 +87,9 @@ def get_logger(name: str, log_level: str = None):
     >>> from accelerate.logging import get_logger
     >>> from accelerate import Accelerator
 
-    >>> accelerator = Accelerator()
-
     >>> logger = get_logger(__name__)
 
+    >>> accelerator = Accelerator()
     >>> logger.info("My log", main_process_only=False)
     >>> logger.debug("My log", main_process_only=True)
 
