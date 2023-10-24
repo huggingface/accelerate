@@ -272,7 +272,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     if main_process_port is None:
         main_process_port = 29500
 
-    if is_port_in_use(main_process_port):
+    need_port_check = num_machines <= 1 or int(args.machine_rank) == 0
+    if need_port_check and is_port_in_use(main_process_port):
         raise ConnectionError(
             f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
             "Please specify a different port (such as using the `----main_process_port` flag or specifying a different `main_process_port` in your config file)"
