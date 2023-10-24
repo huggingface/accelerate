@@ -406,7 +406,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             - `"generator"`: an optional `torch.Generator`
         synchronized_generator (`torch.Generator`, *optional*):
             A random number generator to keep synchronized across processes.
-        split_batches (`int`, *optional*, defaults to 0):
+        skip_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
         kwargs:
             All other keyword arguments to pass to the regular `DataLoader` initialization.
