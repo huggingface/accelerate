@@ -17,7 +17,7 @@ from contextlib import suppress
 from typing import Callable, List, Optional, Union
 
 import torch
-from torch.utils.data import BatchSampler, DataLoader, IterableDataset
+from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
 from .state import AcceleratorState, DistributedType, GradientState, is_tpu_available
@@ -62,6 +62,41 @@ _PYTORCH_DATALOADER_ADDITIONAL_KWARGS = {}
 for v, additional_kwargs in _PYTORCH_DATALOADER_ADDITIONAL_KWARGS.items():
     if is_torch_version(">=", v):
         _PYTORCH_DATALOADER_KWARGS.update(additional_kwargs)
+
+
+class SeedableRandomSampler(RandomSampler):
+    """
+    Same as a random sampler, except that in `__iter__` a seed can be used.
+
+    Needed specifically in distributed cases, when the random generator for each GPU needs to start from the same seed
+    and be fully reproducable on multiple iterations.
+
+    If a custom `generator` is passed, it will rely on its initial seed as well as the current iteration it is on
+    (stored in `self.epoch`).
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.epoch = 0
+
+    def __iter__(self):
+        g = torch.Generator()
+        if self.generator is not None:
+            seed = self.epoch + self.generator.initial_seed()
+        else:
+            seed = self.epoch
+        g.manual_seed(seed)
+        n = len(self.data_source)
+        # Taken 1:1 from torch.utils.data.sampler.RandomSampler.__iter__
+        if self.replacement:
+            for _ in range(self.num_samples // 32):
+                yield from torch.randint(high=n, size=(32,), dtype=torch.int64, generator=g).tolist()
+        else:
+            yield from torch.randperm(n, generator=g).tolist()
+
+    def set_epoch(self, epoch: int):
+        "Sets the current iteration of the sampler."
+        self.epoch = epoch
 
 
 class BatchSamplerShard(BatchSampler):
@@ -271,6 +306,11 @@ class IterableDatasetShard(IterableDataset):
         self.process_index = process_index
         self.split_batches = split_batches
 
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+        if hasattr(self.dataset, "set_epoch"):
+            self.dataset.set_epoch(epoch)
+
     def __len__(self):
         # We will just raise the downstream error if the underlying dataset is not sized
         if self.drop_last:
@@ -279,6 +319,12 @@ class IterableDatasetShard(IterableDataset):
             return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
 
     def __iter__(self):
+        if (
+            not hasattr(self.dataset, "set_epoch")
+            and hasattr(self.dataset, "generator")
+            and isinstance(self.dataset.generator, torch.Generator)
+        ):
+            self.dataset.generator.manual_seed(self.epoch)
         real_batch_size = self.batch_size if self.split_batches else (self.batch_size * self.num_processes)
         process_batch_size = (self.batch_size // self.num_processes) if self.split_batches else self.batch_size
         process_slice = range(self.process_index * process_batch_size, (self.process_index + 1) * process_batch_size)
@@ -391,11 +437,14 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         self.skip_batches = skip_batches
         self.gradient_state = GradientState()
         self._drop_last = _drop_last
+        self.iteration = 0
 
     def __iter__(self):
         if self.rng_types is not None:
             synchronize_rng_states(self.rng_types, self.synchronized_generator)
         self.begin()
+
+        self.set_epoch(self.iteration)
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
@@ -419,7 +468,20 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
                 if batch_index >= self.skip_batches:
                     yield current_batch
                 break
+
+        self.iteration += 1
         self.end()
+
+    def set_epoch(self, epoch: int):
+        # In case it is manually passed in, the user can set it to what they like
+        if self.iteration != epoch:
+            self.iteration = epoch
+        if hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
+            self.batch_sampler.sampler.set_epoch(epoch)
+        # We support if a custom `Dataset` implementation has `set_epoch`
+        # or in general HF datasets `Datasets`
+        elif hasattr(self.dataset, "set_epoch"):
+            self.dataset.set_epoch(epoch)
 
     @property
     def total_batch_size(self):
@@ -524,6 +586,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         self.skip_batches = skip_batches
 
         self.slice_fn = slice_tensors if slice_fn is None else slice_fn
+        self.iteration = 0
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
@@ -564,6 +627,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
 
     def __iter__(self):
         self.begin()
+        self.set_epoch(self.iteration)
         main_iterator = None
         if is_torch_version(">=", "2.0.1"):
             # NOTE PyTorch DataLoader adds forward compatibilities for DataPipes, which broadcasts
@@ -633,7 +697,17 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             if batch_index >= self.skip_batches:
                 yield batch
             batch_index += 1
+        self.iteration += 1
         self.end()
+
+    def set_epoch(self, epoch: int):
+        # In case it is manually passed in, the user can set it to what they like
+        if self.iteration != epoch:
+            self.iteration = epoch
+        if hasattr(self.batch_sampler.sampler, "set_epoch"):
+            self.batch_sampler.sampler.set_epoch(epoch)
+        elif hasattr(self.dataset, "set_epoch"):
+            self.dataset.set_epoch(epoch)
 
     def __len__(self):
         whole_length = super().__len__()
@@ -757,6 +831,23 @@ def prepare_data_loader(
     new_batch_sampler = dataloader.batch_sampler if not isinstance(new_dataset, IterableDataset) else None
     sampler_is_batch_sampler = False
     synchronized_generator = None
+    sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+    if sampler_is_batch_sampler:
+        sampler = dataloader.sampler.sampler
+    else:
+        sampler = dataloader.batch_sampler.sampler
+    if isinstance(sampler, RandomSampler) and num_processes > 1:
+        # When iterating through the dataloader during distributed processes
+        # we want to ensure that on each process we are iterating through the same
+        # samples in the same order if a seed is set. This requires a tweak
+        # to the `torch.utils.data.RandomSampler` class (if used).
+        sampler = SeedableRandomSampler(
+            data_source=sampler.data_source,
+            replacement=sampler.replacement,
+            num_samples=sampler._num_samples,
+            generator=getattr(sampler, "generator", torch.Generator()),
+        )
+
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
@@ -771,17 +862,6 @@ def prepare_data_loader(
                 split_batches=split_batches,
             )
         else:
-            # New batch sampler for the current process.
-            sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
-            if sampler_is_batch_sampler:
-                sampler = dataloader.sampler.sampler
-            else:
-                sampler = dataloader.batch_sampler.sampler
-            if hasattr(sampler, "generator"):
-                if sampler.generator is None:
-                    sampler.generator = torch.Generator()
-                synchronized_generator = sampler.generator
-
             batch_sampler = dataloader.sampler if sampler_is_batch_sampler else dataloader.batch_sampler
             new_batch_sampler = BatchSamplerShard(
                 batch_sampler,
@@ -815,7 +895,11 @@ def prepare_data_loader(
         kwargs["batch_size"] = (
             dataloader.batch_size // num_processes if split_batches and not dispatch_batches else dataloader.batch_size
         )
-
+    if isinstance(sampler, SeedableRandomSampler):
+        if sampler_is_batch_sampler:
+            dataloader.sampler.sampler = sampler
+        else:
+            dataloader.batch_sampler.sampler = sampler
     if dispatch_batches:
         kwargs.pop("generator")
         dataloader = DataLoaderDispatcher(

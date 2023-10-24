@@ -25,7 +25,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from accelerate import Accelerator
-from accelerate.data_loader import prepare_data_loader
+from accelerate.data_loader import SeedableRandomSampler, prepare_data_loader
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import RegressionDataset, are_the_same_tensors
 from accelerate.utils import (
@@ -292,7 +292,17 @@ def mock_training(length, batch_size, generator):
     set_seed(42)
     generator.manual_seed(42)
     train_set = RegressionDataset(length=length, seed=42)
-    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
+    if AcceleratorState().num_processes > 1:
+        # The SeedableRandomSampler is needed during distributed setups
+        # for full reproducability across processes with the `DataLoader`
+        sampler = SeedableRandomSampler(
+            generator=generator,
+            data_source=train_set,
+            num_samples=len(train_set),
+        )
+        train_dl = DataLoader(train_set, batch_size=batch_size, sampler=sampler)
+    else:
+        train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
     for epoch in range(3):

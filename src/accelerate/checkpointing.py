@@ -20,11 +20,13 @@ from typing import List
 import numpy as np
 import torch
 from torch.cuda.amp import GradScaler
+from torch.utils.data import BatchSampler
 
 from .utils import (
     MODEL_NAME,
     OPTIMIZER_NAME,
     RNG_STATE_NAME,
+    SAMPLER_NAME,
     SCALER_NAME,
     SCHEDULER_NAME,
     get_pretty_name,
@@ -49,6 +51,7 @@ def save_accelerator_state(
     model_states: List[dict],
     optimizers: list,
     schedulers: list,
+    dataloaders: list,
     process_index: int,
     scaler: GradScaler = None,
     save_on_each_node: bool = False,
@@ -65,6 +68,8 @@ def save_accelerator_state(
             A list of optimizer instances
         schedulers (`List[torch.optim.lr_scheduler._LRScheduler]`):
             A list of learning rate schedulers
+        dataloaders (`List[torch.utils.data.DataLoader]`):
+            A list of dataloader instances to save their sampler states
         process_index (`int`):
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
@@ -92,6 +97,22 @@ def save_accelerator_state(
         output_scheduler_file = os.path.join(output_dir, scheduler_name)
         save(state, output_scheduler_file, save_on_each_node=save_on_each_node)
         logger.info(f"Scheduler state saved in {output_scheduler_file}")
+    # DataLoader states
+    for i, dataloader in enumerate(dataloaders):
+        sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
+        output_sampler_file = os.path.join(output_dir, sampler_name)
+        # Only save if we have our custom sampler
+        sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+        if sampler_is_batch_sampler:
+            sampler = dataloader.sampler.sampler
+        else:
+            sampler = dataloader.batch_sampler.sampler
+        from .data_loader import SeedableRandomSampler
+
+        if isinstance(sampler, SeedableRandomSampler):
+            save(sampler, output_sampler_file, save_on_each_node=save_on_each_node)
+        logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
+
     # GradScaler state
     if scaler is not None:
         state = scaler.state_dict()
@@ -121,6 +142,7 @@ def load_accelerator_state(
     models,
     optimizers,
     schedulers,
+    dataloaders,
     process_index,
     scaler=None,
     map_location=None,
@@ -176,6 +198,24 @@ def load_accelerator_state(
         input_scheduler_file = os.path.join(input_dir, scheduler_name)
         scheduler.load_state_dict(torch.load(input_scheduler_file))
     logger.info("All scheduler states loaded successfully")
+
+    for i, dataloader in enumerate(dataloaders):
+        sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
+        input_sampler_file = os.path.join(input_dir, sampler_name)
+        # Only load if we have our custom sampler
+        sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
+        if sampler_is_batch_sampler:
+            sampler = dataloader.sampler.sampler
+        else:
+            sampler = dataloader.batch_sampler.sampler
+        from .data_loader import SeedableRandomSampler
+
+        if isinstance(sampler, SeedableRandomSampler):
+            if sampler_is_batch_sampler:
+                dataloader.sampler.sampler = torch.load(input_sampler_file)
+            else:
+                dataloader.batch_sampler.sampler = torch.load(input_sampler_file)
+    logger.info("All dataloader sampler states loaded successfully")
 
     # GradScaler state
     if scaler is not None:
