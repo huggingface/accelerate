@@ -13,20 +13,27 @@
 # limitations under the License.
 
 import os
+import platform
+import re
 import socket
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
 
 import torch
+from packaging.version import Version
 
 from ..commands.config.default import write_basic_config  # noqa: F401
+from ..logging import get_logger
 from ..state import PartialState
 from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
 from .imports import is_deepspeed_available, is_safetensors_available, is_tpu_available
 from .transformer_engine import convert_model
 from .versions import is_torch_version
+
+
+logger = get_logger(__name__)
 
 
 if is_tpu_available(check_device=False):
@@ -252,3 +259,21 @@ def convert_bytes(size):
         size /= 1024.0
 
     return f"{round(size, 2)} PB"
+
+
+def check_os_kernel():
+    """Warns if the kernel version is below the recommended minimum on Linux."""
+    # see issue #1929
+    info = platform.uname()
+    system = info.system
+    if system != "Linux":
+        return
+
+    _, version, *_ = re.split(r"(\d+\.\d+\.\d+)", info.release)
+    min_version = "5.5.0"
+    if Version(version) < Version(min_version):
+        msg = (
+            f"Detected kernel version {version}, which is below the recommended minimum of {min_version}; this can "
+            "cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher."
+        )
+        logger.warning(msg, main_process_only=True)

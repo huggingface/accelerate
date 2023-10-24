@@ -85,6 +85,9 @@ def get_logger(name: str, log_level: str = None):
 
     ```python
     >>> from accelerate.logging import get_logger
+    >>> from accelerate import Accelerator
+
+    >>> accelerator = Accelerator()
 
     >>> logger = get_logger(__name__)
 
@@ -95,9 +98,6 @@ def get_logger(name: str, log_level: str = None):
     >>> logger.info("My log")
     >>> logger.debug("My second log")
 
-    >>> from accelerate import Accelerator
-
-    >>> accelerator = Accelerator()
     >>> array = ["a", "b", "c", "d"]
     >>> letter_at_rank = array[accelerator.process_index]
     >>> logger.info(letter_at_rank, in_order=True)

@@ -63,6 +63,7 @@ from .utils import (
     ProjectConfiguration,
     RNGType,
     TorchDynamoPlugin,
+    check_os_kernel,
     compare_versions,
     convert_model,
     convert_outputs_to_fp32,
@@ -469,6 +470,8 @@ class Accelerator:
 
         # Set a flag tensor for early stopping and other breakpoints
         self.flag_tensor = None
+
+        check_os_kernel()
 
     @property
     def use_distributed(self):
