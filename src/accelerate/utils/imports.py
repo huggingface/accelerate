@@ -151,10 +151,6 @@ def is_megatron_lm_available():
                 return False
 
 
-def is_safetensors_available():
-    return _is_package_available("safetensors")
-
-
 def is_transformers_available():
     return _is_package_available("transformers")
 

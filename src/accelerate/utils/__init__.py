@@ -57,7 +57,6 @@ from .imports import (
     is_mps_available,
     is_npu_available,
     is_rich_available,
-    is_safetensors_available,
     is_sagemaker_available,
     is_tensorboard_available,
     is_timm_available,

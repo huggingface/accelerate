@@ -22,13 +22,14 @@ from types import MethodType
 
 import torch
 from packaging.version import Version
+from safetensors.torch import save_file as safe_save_file
 
 from ..commands.config.default import write_basic_config  # noqa: F401
 from ..logging import get_logger
 from ..state import PartialState
 from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
-from .imports import is_deepspeed_available, is_safetensors_available, is_tpu_available
+from .imports import is_deepspeed_available, is_tpu_available
 from .transformer_engine import convert_model
 from .versions import is_torch_version
 
@@ -38,9 +39,6 @@ logger = get_logger(__name__)
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
-
-if is_safetensors_available():
-    from safetensors.torch import save_file as safe_save_file
 
 
 def is_compiled_module(module):
@@ -117,7 +115,7 @@ def wait_for_everyone():
     PartialState().wait_for_everyone()
 
 
-def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = False):
+def save(obj, f, save_on_each_node: bool = False, unsafe_serialization: bool = False):
     """
     Save the data to disk. Use in place of `torch.save()`.
 
@@ -128,10 +126,10 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
             The file (or file-like object) to use to save the data
         save_on_each_node (`bool`, *optional*, defaults to `False`):
             Whether to only save on the global main process
-        safe_serialization (`bool`, *optional*, defaults to `False`):
-            Whether to save `obj` using `safetensors`
+        unsafe_serialization (`bool`, *optional*, defaults to `False`):
+            Whether to not save `obj` using `safetensors`
     """
-    save_func = torch.save if not safe_serialization else partial(safe_save_file, metadata={"format": "pt"})
+    save_func = torch.save if unsafe_serialization else partial(safe_save_file, metadata={"format": "pt"})
     if PartialState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
     elif PartialState().is_main_process and not save_on_each_node:

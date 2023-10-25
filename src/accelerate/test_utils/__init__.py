@@ -9,7 +9,6 @@ from .testing import (
     require_mps,
     require_multi_gpu,
     require_multi_xpu,
-    require_safetensors,
     require_single_gpu,
     require_single_xpu,
     require_torch_min_version,

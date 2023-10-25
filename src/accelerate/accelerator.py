@@ -80,7 +80,6 @@ from .utils import (
     is_ipex_available,
     is_megatron_lm_available,
     is_npu_available,
-    is_safetensors_available,
     is_torch_version,
     is_tpu_available,
     is_xpu_available,
@@ -2502,14 +2501,19 @@ class Accelerator:
         for tracker in self.trackers:
             tracker.finish()
 
-    def save(self, obj, f, safe_serialization=False):
+    def save(self, obj, f, unsafe_serialization=False):
         """
         Save the object passed to disk once per machine. Use in place of `torch.save`.
 
         Args:
-            obj (`object`): The object to save.
-            f (`str` or `os.PathLike`): Where to save the content of `obj`.
-            safe_serialization (`bool`, *optional*, defaults to `False`): Whether to save `obj` using `safetensors`
+            obj:
+                The data to save
+            f:
+                The file (or file-like object) to use to save the data
+            save_on_each_node (`bool`, *optional*, defaults to `False`):
+                Whether to only save on the global main process
+            unsafe_serialization (`bool`, *optional*, defaults to `False`):
+                Whether to not save `obj` using `safetensors`
 
         Note:
             If `save_on_each_node` was passed in as a `ProjectConfiguration`, will save the object once per node,
@@ -2529,7 +2533,7 @@ class Accelerator:
             obj,
             f,
             save_on_each_node=self.project_configuration.save_on_each_node,
-            safe_serialization=safe_serialization,
+            unsafe_serialization=unsafe_serialization,
         )
 
     def save_model(
@@ -2537,7 +2541,7 @@ class Accelerator:
         model: torch.nn.Module,
         save_directory: Union[str, os.PathLike],
         max_shard_size: Union[int, str] = "10GB",
-        safe_serialization: bool = False,
+        unsafe_serialization: bool = False,
     ):
         """
         Save a model so that it can be re-loaded using load_checkpoint_in_model
@@ -2558,8 +2562,8 @@ class Accelerator:
 
                 </Tip>
 
-            safe_serialization (`bool`, *optional*, defaults to `False`):
-                Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
+            unsafe_serialization (`bool`, *optional*, defaults to `False`):
+                Whether to save the model traditional PyTorch way (that uses `pickle`) instead of with `safetensors`.
 
         Example:
 
@@ -2571,10 +2575,6 @@ class Accelerator:
         >>> accelerator.save_model(model, save_directory)
         ```
         """
-
-        if safe_serialization and not is_safetensors_available():
-            raise ImportError("`safe_serialization` requires the `safetensors library: `pip install safetensors`.")
-
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -2584,7 +2584,7 @@ class Accelerator:
         # get the state_dict of the model
         state_dict = self.get_state_dict(model)
 
-        if safe_serialization:
+        if not unsafe_serialization:
             # Safetensors does not allow tensor aliasing.
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
@@ -2614,7 +2614,7 @@ class Accelerator:
                     f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
                 )
 
-        weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
+        weights_name = WEIGHTS_NAME if unsafe_serialization else SAFE_WEIGHTS_NAME
 
         # Shard the model if it is too big.
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
@@ -2641,13 +2641,13 @@ class Accelerator:
 
         # Save the model
         for shard_file, shard in shards.items():
-            self.save(shard, os.path.join(save_directory, shard_file), safe_serialization=safe_serialization)
+            self.save(shard, os.path.join(save_directory, shard_file), unsafe_serialization=unsafe_serialization)
 
         if index is None:
             path_to_weights = os.path.join(save_directory, WEIGHTS_NAME)
             logger.info(f"Model weights saved in {path_to_weights}")
         else:
-            save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
+            save_index_file = WEIGHTS_INDEX_NAME if unsafe_serialization else SAFE_WEIGHTS_INDEX_NAME
             save_index_file = os.path.join(save_directory, save_index_file)
             # Save the index as well
             with open(save_index_file, "w", encoding="utf-8") as f:
