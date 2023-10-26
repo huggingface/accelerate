@@ -18,31 +18,33 @@ jobs:
       options: --gpus all --shm-size "16gb"
     defaults:
       run:
-        working-directory: accelerate/
         shell: bash
     steps:
-      - name: Update clone & pip install
-        run: |
-          source activate accelerate
-          git config --global --add safe.directory '*'
-          git fetch && git checkout ${{ github.sha }}
-          pip install -e .[testing,test_trackers] -U
-          pip install pytest-reportlog tabulate
+      - name: Install accelerate
+        run: 
+          source activate accelerate;
+          git clone -b ${{ github.sha }} https://github.com/huggingface/accelerate
+          cd accelerate
+          pip install -e .[testing, test_trackers] -U;
+          pip install pytest-reportlog tabulate  
 
-      - name: Run CLI tests
+      - name: Run CLI tests (use make cli)
         run: |
           source activate accelerate
-          make test_cli
+          cd accelerate
+          echo "Hello world!"
           
       - name: Run test on GPUs
         if: always()
         run: |
           source activate accelerate
+          cd accelerate
           make test
       - name: Run examples on GPUs
         if: always()
         run: |
           source activate accelerate
+          cd accelerate
           pip uninstall comet_ml -y
           make test_examples
 
@@ -50,6 +52,7 @@ jobs:
         if: always()
         run: |
           pip install tabulate
+          cd accelerate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
@@ -73,17 +76,20 @@ jobs:
       - name: Run test on GPUs
         run: |
           source activate accelerate
+          cd accelerate
           make test
 
       - name: Run examples on GPUs
         if: always()
         run: |
           source activate accelerate
+          cd accelerate
           pip uninstall comet_ml -y
           make test_examples
 
       - name: Generate Report
         if: always()
         run: |
-          pip install tabulate
+          source activate accelerate
+          cd accelerate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY

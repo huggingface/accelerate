@@ -38,24 +38,25 @@ jobs:
           "0,1"
         ]
     steps:
-      - name: Update accelerate clone and pip install
-        working-directory: accelerate/
-        run: 
-          source activate accelerate;
-          git config --global --add safe.directory '*';
-          git checkout main && git fetch && git checkout ${{ github.sha }};
-          pip install -e .;
-
-      - name: Update transformers clone & pip install
-        working-directory: transformers/
+      - name: Install transformers
         run: |
           source activate accelerate
-          git config --global --add safe.directory '*'
-          git checkout main && git pull && git fetch --tags
+          git clone --filter=blob:none --no-checkout https://github.com/huggingface/transformers
+          cd transformers
           if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
-            git checkout $(git tag --sort=taggerdate | tail -1)
+            git checkout $(git tag --sort=taggerdate | tail -1); else
+            git checkout main
           fi
           pip install .[torch,deepspeed-testing]
+          cd ..
+
+      - name: Install accelerate
+        run: 
+          source activate accelerate;
+          git clone -b ${{ github.sha }} https://github.com/huggingface/accelerate
+          cd accelerate
+          pip install -e .[testing];
+          cd ..
       
       - name: Show installed libraries
         run: |
@@ -94,25 +95,26 @@ jobs:
           github
         ]
     steps:
-      - name: Update accelerate clone and pip install
-        working-directory: accelerate/
+      - name: Install accelerate
         run: 
           source activate accelerate;
-          git config --global --add safe.directory '*';
-          git checkout main && git fetch && git checkout ${{ github.sha }};
-          pip install -e .;
+          git clone -b ${{ github.sha }} https://github.com/huggingface/accelerate
+          cd accelerate
+          pip install -e .[testing];
+          cd ..
 
-      - name: Update skorch clone & pip install
-        working-directory: skorch/
+      - name: Install skorch
         run: |
           source activate accelerate
-          git config --global --add safe.directory '*'
-          git checkout master && git pull
+          git clone --filter=blob:none --no-checkout https://github.com/skorch-dev/skorch
+          cd skorch
           if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
-            git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
+            git checkout $(git describe --tags `git rev-list --tags --max-count=1`); else
+            git checkout main
           fi
           pip install .[testing]
           pip install flaky
+          cd ..
 
       - name: Show installed libraries
         run: |
