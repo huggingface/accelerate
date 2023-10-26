@@ -21,7 +21,7 @@ jobs:
         shell: bash
     steps:
       - name: Install accelerate
-        run: 
+        run: |
           source activate accelerate;
           git clone -b ${{ github.sha }} https://github.com/huggingface/accelerate
           cd accelerate
