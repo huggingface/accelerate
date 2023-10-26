@@ -1357,35 +1357,6 @@ class Accelerator:
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
 
-        if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
-            model, "hf_device_map", False
-        ):
-            model_devices = set(model.hf_device_map.values())
-            if len(model_devices) > 1 and self.distributed_type != DistributedType.NO:
-                raise ValueError(
-                    "You can't train a model that has been loaded in 8-bit precision on multiple devices in any distributed mode."
-                    " In order to use 8-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
-                    " Therefore you should not specify that you are under any distributed regime in your accelerate config."
-                )
-            current_device = list(model_devices)[0]
-            current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
-
-            if torch.device(current_device_index) != self.device:
-                # if on the first device (GPU 0) we don't care
-                if (self.device.index is not None) or (current_device_index != 0):
-                    raise ValueError(
-                        "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
-                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}"
-                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
-                    )
-
-            if "cpu" in model_devices or "disk" in model_devices:
-                raise ValueError(
-                    "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
-                )
-        elif device_placement and not self.verify_device_map(model):
-            model = model.to(self.device)
-
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
@@ -1416,6 +1387,35 @@ class Accelerator:
                     "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
                 )
             model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
+
+        if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
+            model, "hf_device_map", False
+        ):
+            model_devices = set(model.hf_device_map.values())
+            if len(model_devices) > 1 and self.distributed_type != DistributedType.NO:
+                raise ValueError(
+                    "You can't train a model that has been loaded in 8-bit precision on multiple devices in any distributed mode."
+                    " In order to use 8-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
+                    " Therefore you should not specify that you are under any distributed regime in your accelerate config."
+                )
+            current_device = list(model_devices)[0]
+            current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
+
+            if torch.device(current_device_index) != self.device:
+                # if on the first device (GPU 0) we don't care
+                if (self.device.index is not None) or (current_device_index != 0):
+                    raise ValueError(
+                        "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
+                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device()}"
+                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
+                    )
+
+            if "cpu" in model_devices or "disk" in model_devices:
+                raise ValueError(
+                    "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
+                )
+        elif device_placement and not self.verify_device_map(model):
+            model = model.to(self.device)
         if not evaluation_mode:
             if self.distributed_type in (
                 DistributedType.MULTI_GPU,
