@@ -25,8 +25,8 @@ jobs:
           source activate accelerate;
           git clone https://github.com/huggingface/accelerate
           cd accelerate
-          git checkout ${{ github.sha }}
-          pip install -e .[testing, test_trackers] -U;
+          git checkout ${{ github.sha }};
+          pip install -e .[testing,test_trackers] -U;
           pip install pytest-reportlog tabulate  
 
       - name: Run CLI tests (use make cli)
