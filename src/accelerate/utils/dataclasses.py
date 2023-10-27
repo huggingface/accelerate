@@ -32,7 +32,7 @@ import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
-from .imports import is_xpu_available,is_tpu_available,is_npu_available,is_cuda_available
+from .imports import is_xpu_available, is_npu_available, is_cuda_available
 from .versions import compare_versions
 
 
@@ -544,7 +544,7 @@ class DeepSpeedPlugin:
         default=None,
         metadata={
             "help": "Flag to indicate whether to enable `deepspeed.zero.Init` for constructing massive models."
-            "Only applicable with ZeRO Stage-3."
+                    "Only applicable with ZeRO Stage-3."
         },
     )
     zero3_save_16bit_model: bool = field(
@@ -583,15 +583,15 @@ class DeepSpeedPlugin:
 
         if self.zero3_save_16bit_model is None:
             self.zero3_save_16bit_model = (
-                os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
+                    os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL", "false") == "true"
             )
 
         if self.hf_ds_config is None:
             self.hf_ds_config = os.environ.get("ACCELERATE_DEEPSPEED_CONFIG_FILE", "none")
         if (
-            isinstance(self.hf_ds_config, dict)
-            or (isinstance(self.hf_ds_config, str) and self.hf_ds_config != "none")
-            or isinstance(self.hf_ds_config, HfDeepSpeedConfig)
+                isinstance(self.hf_ds_config, dict)
+                or (isinstance(self.hf_ds_config, str) and self.hf_ds_config != "none")
+                or isinstance(self.hf_ds_config, HfDeepSpeedConfig)
         ):
             if not isinstance(self.hf_ds_config, HfDeepSpeedConfig):
                 self.hf_ds_config = HfDeepSpeedConfig(self.hf_ds_config)
@@ -650,7 +650,8 @@ class DeepSpeedPlugin:
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
             self.zero3_init_flag = (
-                str_to_bool(os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
+                    str_to_bool(
+                        os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
             )
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
@@ -738,8 +739,8 @@ class DeepSpeedPlugin:
             if "gradient_accumulation_steps" not in ds_config or ds_config["gradient_accumulation_steps"] == "auto":
                 ds_config["gradient_accumulation_steps"] = 1
             if (
-                "train_micro_batch_size_per_gpu" not in ds_config
-                or ds_config["train_micro_batch_size_per_gpu"] == "auto"
+                    "train_micro_batch_size_per_gpu" not in ds_config
+                    or ds_config["train_micro_batch_size_per_gpu"] == "auto"
             ):
                 ds_config["train_micro_batch_size_per_gpu"] = 1
             if ds_config.get("train_batch_size", None) == "auto":
@@ -819,9 +820,9 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={
             "help": "A config to enable mixed precision training with FullyShardedDataParallel. "
-            "The 3 flags that are set are `param_dtype`, `reduce_dtype`, `buffer_dtype`. "
-            "Each flag expects `torch.dtype` as the value. "
-            "It is of type `torch.distributed.fsdp.fully_sharded_data_parallel.MixedPrecision`."
+                    "The 3 flags that are set are `param_dtype`, `reduce_dtype`, `buffer_dtype`. "
+                    "Each flag expects `torch.dtype` as the value. "
+                    "It is of type `torch.distributed.fsdp.fully_sharded_data_parallel.MixedPrecision`."
         },
     )
     auto_wrap_policy: Optional[Callable] = field(
@@ -832,7 +833,7 @@ class FullyShardedDataParallelPlugin:
         default=None,
         metadata={
             "help": "Decides Whether to offload parameters and gradients to CPU. "
-            "It is of type `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`."
+                    "It is of type `torch.distributed.fsdp.fully_sharded_data_parallel.CPUOffload`."
         },
     )
     ignored_modules: Optional[Iterable[torch.nn.Module]] = field(
@@ -861,46 +862,46 @@ class FullyShardedDataParallelPlugin:
         default=False,
         metadata={
             "help": "If False, then FSDP allows the CPU thread to schedule all-gathers "
-            "without any extra synchronization. If True, then FSDP explicitly synchronizes the CPU thread to prevent "
-            "too many in-flight all-gathers. This bool only affects the sharded strategies that schedule all-gathers. "
-            "Enabling this can help lower the number of CUDA malloc retries."
+                    "without any extra synchronization. If True, then FSDP explicitly synchronizes the CPU thread to prevent "
+                    "too many in-flight all-gathers. This bool only affects the sharded strategies that schedule all-gathers. "
+                    "Enabling this can help lower the number of CUDA malloc retries."
         },
     )
     use_orig_params: bool = field(
         default=False,
         metadata={
             "help": "If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. "
-            "Useful in cases such as parameter-efficient fine-tuning. "
-            "Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019)"
+                    "Useful in cases such as parameter-efficient fine-tuning. "
+                    "Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019)"
         },
     )
     param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
         default=None,
         metadata={
             "help": "A Callable[torch.nn.Module] -> None that specifies how modules "
-            "that are currently on the meta device should be initialized onto an actual device."
+                    "that are currently on the meta device should be initialized onto an actual device."
         },
     )
     sync_module_states: bool = field(
         default=True,
         metadata={
             "help": "If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0 "
-            "to ensure they are the same across all ranks after initialization"
+                    "to ensure they are the same across all ranks after initialization"
         },
     )
     forward_prefetch: bool = field(
         default=False,
         metadata={
             "help": "If True, then FSDP explicitly prefetches the next upcoming "
-            "all-gather while executing in the forward pass. only use with Static graphs."
+                    "all-gather while executing in the forward pass. only use with Static graphs."
         },
     )
     activation_checkpointing: bool = field(
         default=False,
         metadata={
             "help": "If True, activation checkpointing is a technique to reduce memory usage by clearing activations of "
-            "certain layers and recomputing them during a backward pass. Effectively, this trades extra computation time "
-            "for reduced memory usage."
+                    "certain layers and recomputing them during a backward pass. Effectively, this trades extra computation time "
+                    "for reduced memory usage."
         },
     )
 
@@ -1060,14 +1061,14 @@ class MegatronLMPlugin:
         default=None,
         metadata={
             "help": "Total number of iterations to train over all training runs. "
-            "Note that either train-iters or train-samples should be provided when using `MegatronLMDummyScheduler`"
+                    "Note that either train-iters or train-samples should be provided when using `MegatronLMDummyScheduler`"
         },
     )
     train_samples: int = field(
         default=None,
         metadata={
             "help": "Total number of samples to train over all training runs. "
-            "Note that either train-iters or train-samples should be provided when using `MegatronLMDummyScheduler`"
+                    "Note that either train-iters or train-samples should be provided when using `MegatronLMDummyScheduler`"
         },
     )
     weight_decay_incr_style: str = field(
@@ -1195,7 +1196,7 @@ class MegatronLMPlugin:
             self.recompute_activation = str_to_bool(os.environ.get(prefix + "RECOMPUTE_ACTIVATION", "False")) == 1
         if self.use_distributed_optimizer is None:
             self.use_distributed_optimizer = (
-                str_to_bool(os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")) == 1
+                    str_to_bool(os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")) == 1
             )
         if self.sequence_parallelism is None:
             self.sequence_parallelism = str_to_bool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False")) == 1
@@ -1428,7 +1429,7 @@ class BnbQuantizationConfig:
         default="fp16",
         metadata={
             "help": "This sets the computational type which might be different than the input time. For example, inputs might be "
-            "fp32, but computation can be set to bf16 for speedups. Options are {'fp32','fp16','bf16'}."
+                    "fp32, but computation can be set to bf16 for speedups. Options are {'fp32','fp16','bf16'}."
         },
     )
 
@@ -1436,7 +1437,7 @@ class BnbQuantizationConfig:
         default=None,
         metadata={
             "help": "this sets the dtype of the remaining non quantized layers. `bitsandbytes` library suggests to set the value"
-            "to `torch.float16` for 8 bit model and use the same dtype as the compute dtype for 4 bit model "
+                    "to `torch.float16` for 8 bit model and use the same dtype as the compute dtype for 4 bit model "
         },
     )
 
