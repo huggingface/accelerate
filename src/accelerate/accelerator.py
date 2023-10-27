@@ -1372,7 +1372,7 @@ class Accelerator:
                 with torch.no_grad():
                     convert_model(model)
                 model._converted_to_transformer_engine = True
-            model._original_forward = model.forward
+            #model._original_forward = model.forward
 
             kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
             if "fp8_format" in kwargs:
