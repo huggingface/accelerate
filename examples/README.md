@@ -64,7 +64,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on your server
         accelerate launch ./nlp_example.py  # This will run the script on your server
         ```
-    * With traditional PyTorch launcher (`torch.distributed.launch` can be used with older versions of PyTorch)
+    * With traditional PyTorch launcher
         ```bash
         torchrun --nproc_per_node 2 ./nlp_example.py
         ```
@@ -74,21 +74,14 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on each server
         accelerate launch ./nlp_example.py  # This will run the script on each server
         ```
-    * With PyTorch launcher only (`torch.distributed.launch` can be used in older versions of PyTorch)
+    * With PyTorch launcher only. Run this commnad on each node:
         ```bash
         torchrun --nproc_per_node 2 \
             --nnodes 2 \
             --rdzv_id 2299 \ # A unique job id 
             --rdzv_backend c10d \
             --rdzv_endpoint master_node_ip_address:29500 \
-            ./nlp_example.py # On the first server
-
-        torchrun --nproc_per_node 2 \
-            --nnodes 2 \
-            --rdzv_id 2299 \ # A unique job id 
-            --rdzv_backend c10d \
-            --rdzv_endpoint master_node_ip_address:29500 \
-            ./nlp_example.py # On the second server
+            ./nlp_example.py
         ```
 - (multi) TPUs
     * With Accelerate config and launcher
@@ -155,7 +148,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on your server
         accelerate launch ./cv_example.py --data_dir path_to_data  # This will run the script on your server
         ```
-    * With traditional PyTorch launcher (`torch.distributed.launch` can be used with older versions of PyTorch)
+    * With traditional PyTorch launcher
         ```bash
         torchrun --nproc_per_node 2 ./cv_example.py --data_dir path_to_data
         ```
@@ -165,21 +158,14 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on each server
         accelerate launch ./cv_example.py --data_dir path_to_data  # This will run the script on each server
         ```
-    * With PyTorch launcher only (`torch.distributed.launch` can be used with older versions of PyTorch)
+    * With PyTorch launcher only. Run this commnad on each node:
         ```bash
         torchrun --nproc_per_node 2 \
             --nnodes 2 \
             --rdzv_id 2299 \ # A unique job id 
             --rdzv_backend c10d \
             --rdzv_endpoint master_node_ip_address:29500 \
-            ./cv_example.py --data_dir path_to_data  # On the first server
-
-        torchrun --nproc_per_node 2 \
-            --nnodes 2 \
-            --rdzv_id 2299 \ # A unique job id 
-            --rdzv_backend c10d \
-            --rdzv_endpoint master_node_ip_address:29500 \
-            ./cv_example.py --data_dir path_to_data  # On the second server
+            ./cv_example.py --data_dir path_to_data
         ```
 - (multi) TPUs
     * With Accelerate config and launcher
