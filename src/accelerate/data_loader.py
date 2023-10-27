@@ -833,9 +833,9 @@ def prepare_data_loader(
     synchronized_generator = None
     sampler_is_batch_sampler = isinstance(dataloader.sampler, BatchSampler)
     if sampler_is_batch_sampler:
-        sampler = dataloader.sampler.sampler
+        sampler = getattr(dataloader.sampler, "sampler", None)
     else:
-        sampler = dataloader.batch_sampler.sampler
+        sampler = getattr(dataloader.batch_sampler, "sampler", None)
     if isinstance(sampler, RandomSampler) and num_processes > 1:
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
