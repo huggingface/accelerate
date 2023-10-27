@@ -77,7 +77,7 @@ To run it in each of these various modes, use the following commands:
     * With PyTorch launcher only (`torch.distributed.launch` can be used in older versions of PyTorch)
         ```bash
         torchrun --nproc_per_node 2 \
-            --nnodes 2
+            --nnodes 2 \
             --rdzv_id 2299 \ # A unique job id 
             --rdzv_backend c10d \
             --rdzv_endpoint master_node_ip_address:29500 \
