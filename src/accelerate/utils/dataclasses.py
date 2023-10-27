@@ -935,12 +935,10 @@ class FullyShardedDataParallelPlugin:
                 device = torch.npu.current_device()
             elif is_cuda_available():
                 device = torch.cuda.current_device()
-            elif is_tpu_available():
-                device = torch.tpu.current_device()
             elif is_xpu_available():
                 device = torch.xpu.current_device()
             else:
-                raise RuntimeError("There are currently no available device found in ['XPU', 'TPU', 'CUDA', 'NPU']!")
+                raise RuntimeError("There are currently no available device found in ['XPU', 'CUDA', 'NPU']!")
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
 
     @staticmethod
