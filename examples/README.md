@@ -66,7 +66,7 @@ To run it in each of these various modes, use the following commands:
         ```
     * With traditional PyTorch launcher (`torch.distributed.launch` can be used with older versions of PyTorch)
         ```bash
-        python -m torchrun --nproc_per_node 2 --use_env ./nlp_example.py
+        torchrun --nproc_per_node 2 ./nlp_example.py
         ```
 - multi GPUs, multi node (several machines, using PyTorch distributed mode)
     * With Accelerate config and launcher, on each machine:
@@ -76,16 +76,19 @@ To run it in each of these various modes, use the following commands:
         ```
     * With PyTorch launcher only (`torch.distributed.launch` can be used in older versions of PyTorch)
         ```bash
-        python -m torchrun --nproc_per_node 2 \
-            --use_env \
-            --node_rank 0 \
-            --master_addr master_node_ip_address \
-            ./nlp_example.py  # On the first server
-        python -m torchrun --nproc_per_node 2 \
-            --use_env \
-            --node_rank 1 \
-            --master_addr master_node_ip_address \
-            ./nlp_example.py  # On the second server
+        torchrun --nproc_per_node 2 \
+            --nnodes 2
+            --rdzv_id 2299 \ # A unique job id 
+            --rdzv_backend c10d \
+            --rdzv_endpoint master_node_ip_address:29500 \
+            ./nlp_example.py # On the first server
+
+        torchrun --nproc_per_node 2 \
+            --nnodes 2
+            --rdzv_id 2299 \ # A unique job id 
+            --rdzv_backend c10d \
+            --rdzv_endpoint master_node_ip_address:29500 \
+            ./nlp_example.py # On the second server
         ```
 - (multi) TPUs
     * With Accelerate config and launcher
@@ -154,7 +157,7 @@ To run it in each of these various modes, use the following commands:
         ```
     * With traditional PyTorch launcher (`torch.distributed.launch` can be used with older versions of PyTorch)
         ```bash
-        python -m torchrun --nproc_per_node 2 --use_env ./cv_example.py --data_dir path_to_data
+        torchrun --nproc_per_node 2 ./cv_example.py --data_dir path_to_data
         ```
 - multi GPUs, multi node (several machines, using PyTorch distributed mode)
     * With Accelerate config and launcher, on each machine:
@@ -164,15 +167,18 @@ To run it in each of these various modes, use the following commands:
         ```
     * With PyTorch launcher only (`torch.distributed.launch` can be used with older versions of PyTorch)
         ```bash
-        python -m torchrun --nproc_per_node 2 \
-            --use_env \
-            --node_rank 0 \
-            --master_addr master_node_ip_address \
+        torchrun --nproc_per_node 2 \
+            --nnodes 2
+            --rdzv_id 2299 \ # A unique job id 
+            --rdzv_backend c10d \
+            --rdzv_endpoint master_node_ip_address:29500 \
             ./cv_example.py --data_dir path_to_data  # On the first server
-        python -m torchrun --nproc_per_node 2 \
-            --use_env \
-            --node_rank 1 \
-            --master_addr master_node_ip_address \
+
+        torchrun --nproc_per_node 2 \
+            --nnodes 2
+            --rdzv_id 2299 \ # A unique job id 
+            --rdzv_backend c10d \
+            --rdzv_endpoint master_node_ip_address:29500 \
             ./cv_example.py --data_dir path_to_data  # On the second server
         ```
 - (multi) TPUs
