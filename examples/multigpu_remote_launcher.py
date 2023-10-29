@@ -11,7 +11,7 @@ def launch_train(*args):
     num_processes = torch.cuda.device_count()
     print(f"Device count: {num_processes}")
     with patch_environment(
-        world_size=num_processes, master_addr="127.0.01", master_port="29500", mixed_precision=args[1].mixed_precision
+        world_size=num_processes, master_addr="127.0.0.1", master_port="29500", mixed_precision=args[1].mixed_precision
     ):
         launcher = PrepareForLaunch(training_function, distributed_type="MULTI_GPU")
         torch.multiprocessing.start_processes(launcher, args=args, nprocs=num_processes, start_method="spawn")
