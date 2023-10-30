@@ -323,10 +323,10 @@ def custom_sampler_check():
     dataset = CustomDataset(range(32 * state.num_processes))
     sampler = CustomBatchSampler(len(dataset), batch_size=8)
     dl = DataLoader(dataset, batch_sampler=sampler)
-    dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index, put_on_device=True)
-    # We need just ensure that `dl.batch_sampler` remains unchanged
+    dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index)
+    # # We need just ensure that `dl.batch_sampler` remains unchanged inside `dl.batch_sampler.batch_sampler`
     assert isinstance(
-        dl.batch_sampler, CustomBatchSampler
+        dl.batch_sampler.batch_sampler, CustomBatchSampler
     ), "Custom sampler was changed after calling `prepare_data_loader`"
 
 
