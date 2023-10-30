@@ -328,7 +328,6 @@ def custom_sampler_check():
     assert isinstance(
         dl.batch_sampler.batch_sampler, CustomBatchSampler
     ), "Custom sampler was changed after calling `prepare_data_loader`"
-    state._reset_state()
 
 
 def mock_training(length, batch_size, generator):
