@@ -64,7 +64,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on your server
         accelerate launch ./nlp_example.py  # This will run the script on your server
         ```
-    * With traditional PyTorch launcher
+    * With traditional PyTorch launcher (`python -m torch.distributed.run` can be used instead of `torchrun`)
         ```bash
         torchrun --nproc_per_node 2 ./nlp_example.py
         ```
@@ -74,9 +74,10 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on each server
         accelerate launch ./nlp_example.py  # This will run the script on each server
         ```
-    * With PyTorch launcher only. Run this commnad on each node:
+    * With PyTorch launcher only (`python -m torch.distributed.run` can be used instead of `torchrun`). Run this commnad on each node:
         ```bash
-        torchrun --nproc_per_node 2 \
+        torchrun \ # python -m torch.distributed.run 
+            --nproc_per_node 2 \
             --nnodes 2 \
             --rdzv_id 2299 \ # A unique job id 
             --rdzv_backend c10d \
@@ -148,7 +149,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on your server
         accelerate launch ./cv_example.py --data_dir path_to_data  # This will run the script on your server
         ```
-    * With traditional PyTorch launcher
+    * With traditional PyTorch launcher (`python -m torch.distributed.run` can be used instead of `torchrun`)
         ```bash
         torchrun --nproc_per_node 2 ./cv_example.py --data_dir path_to_data
         ```
@@ -158,9 +159,10 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on each server
         accelerate launch ./cv_example.py --data_dir path_to_data  # This will run the script on each server
         ```
-    * With PyTorch launcher only. Run this commnad on each node:
+    * With PyTorch launcher only (`python -m torch.distributed.run` can be used instead of `torchrun`). Run this commnad on each node:
         ```bash
-        torchrun --nproc_per_node 2 \
+        torchrun \ # python -m torch.distributed.run
+            --nproc_per_node 2 \
             --nnodes 2 \
             --rdzv_id 2299 \ # A unique job id 
             --rdzv_backend c10d \
@@ -197,6 +199,13 @@ with `pip install runhouse`, and you can refer to
 [hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/latest/api/python/cluster.html#hardware-setup)
 for hardware setup instructions, or this
 [Colab tutorial](https://colab.research.google.com/drive/1qVwYyLTCPYPSdz9ZX7BZl9Qm0A3j7RJe) for a more in-depth walkthrough.
+
+## SLURM Scripts 
+In [/Slurm/submit-multiGPU.sh](./Slurm/submit-multiGPU.sh) and [/Slurm/submit-multinode.sh](./Slurm/submit-multinode.sh) we present two scripts for running the examples on a machine with [SLURM](https://slurm.schedmd.com/documentation.html) workload manager. 
+
+In [/Slurm/submit-multiGPU.sh](./Slurm/submit-multiGPU.sh) the only parameter in the launcher that needs to be modified is `--nproc_per_node`, which determines the number of GPUs we will use. In this case, using the environment variable `$SLURM_GPUS`, we indicate that we want to utilize all the GPUs available on the node we have requested. 
+
+In [/Slurm/submit-multinode.sh](./Slurm/submit-multinode.sh) we must specify the number of nodes that will be part of the training (`--nnodes`), how many GPUs we will use per node (`--nproc_per_node`), the `--rdzv_id` which is a unique identifier, the [`--rdzv_backend`](https://pytorch.org/docs/stable/elastic/run.html#note-on-rendezvous-backend) and the `--rdzv_endpoint` which will be the address and port of the master node.
 
 ## Finer Examples
 
