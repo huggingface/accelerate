@@ -95,10 +95,7 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
                 forward_func = getattr(forward, "__func__", None)
                 if id(forward) == original_forward_id or id(forward_func) == original_forward_id:
                     break
-            if forward_func is not None:
-                model.forward = MethodType(forward_func, model)
-            else:
-                model.forward = MethodType(forward, model)
+            model.forward = MethodType(forward_func if forward_func is not None else forward, model)
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 
