@@ -222,7 +222,7 @@ def debug_launcher(function, args=(), num_processes=2):
         # process here (the other ones will be set be the launcher).
         with patch_environment(
             world_size=num_processes,
-            master_addr="127.0.01",
+            master_addr="127.0.0.1",
             master_port="29500",
             accelerate_mixed_precision="no",
             accelerate_debug_rdv_file=tmp_file.name,
