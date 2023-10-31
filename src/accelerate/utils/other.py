@@ -86,14 +86,19 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
         model = model.module
 
     if not keep_fp32_wrapper:
+        original_forward_id = getattr(model, "_accelerate_original_forward_id", None)
         forward = getattr(model, "forward")
-        original_forward = model.__dict__.pop("_original_forward", None)
-        if original_forward is not None:
+        forward_func = getattr(forward, "__func__", None)
+        if (original_forward_id is not None) and (id(forward) != original_forward_id):
             while hasattr(forward, "__wrapped__"):
                 forward = forward.__wrapped__
-                if forward == original_forward:
+                forward_func = getattr(forward, "__func__", None)
+                if id(forward) == original_forward_id or id(forward_func) == original_forward_id:
                     break
-            model.forward = MethodType(forward, model)
+            if forward_func is not None:
+                model.forward = MethodType(forward_func, model)
+            else:
+                model.forward = MethodType(forward, model)
         if getattr(model, "_converted_to_transformer_engine", False):
             convert_model(model, to_transformer_engine=False)
 

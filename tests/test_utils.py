@@ -132,7 +132,7 @@ class UtilsTester(unittest.TestCase):
 
     def test_can_undo_convert_outputs(self):
         model = RegressionModel()
-        model._original_forward = model.forward
+        model._accelerate_original_forward_id = id(model.forward)
         model.forward = convert_outputs_to_fp32(model.forward)
         model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
         _ = pickle.dumps(model)
@@ -140,7 +140,7 @@ class UtilsTester(unittest.TestCase):
     @require_cuda
     def test_can_undo_fp16_conversion(self):
         model = RegressionModel()
-        model._original_forward = model.forward
+        model._accelerate_original_forward_id = id(model.forward)
         model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
         model.forward = convert_outputs_to_fp32(model.forward)
         model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
@@ -150,7 +150,7 @@ class UtilsTester(unittest.TestCase):
     @require_torch_min_version(version="2.0")
     def test_dynamo(self):
         model = RegressionModel()
-        model._original_forward = model.forward
+        model._accelerate_original_forward_id = id(model.forward)
         model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
         model.forward = convert_outputs_to_fp32(model.forward)
         model.forward = torch.compile(model.forward, backend="inductor")

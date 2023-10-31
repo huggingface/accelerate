@@ -1357,8 +1357,8 @@ class Accelerator:
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
 
+        model._accelerate_original_forward_id = id(model.forward)
         if self.native_amp:
-            model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
             autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
             new_forward = autocast_context(model_forward_func)
@@ -1372,7 +1372,6 @@ class Accelerator:
                 with torch.no_grad():
                     convert_model(model)
                 model._converted_to_transformer_engine = True
-            model._original_forward = model.forward
 
             kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
             if "fp8_format" in kwargs:
