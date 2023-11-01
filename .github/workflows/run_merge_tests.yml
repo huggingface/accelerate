@@ -30,10 +30,10 @@ jobs:
           pip install pytest-reportlog tabulate  
 
       - name: Run CLI tests (use make cli)
+        working-directory: accelerate
         run: |
           source activate accelerate
-          cd accelerate
-          echo "Hello world!"
+          make test_cli
           
       - name: Run test on GPUs
         if: always()
