@@ -37,6 +37,7 @@ jobs:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
     runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    needs: [clean-env]
     strategy:
       fail-fast: false
       matrix:
@@ -99,6 +100,7 @@ jobs:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
     runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    needs: [clean-env]
     strategy:
       fail-fast: false
       matrix:
