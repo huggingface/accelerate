@@ -21,6 +21,17 @@ defaults:
     shell: bash
 
 jobs:
+  clean-env:
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    steps:
+      - name: Clean local files
+        run: |
+          rm -rf accelerate
+          rm -rf transformers
+          rm -rf skorch
   run-trainer-tests:
     container:
       image: huggingface/accelerate-gpu:latest
