@@ -40,24 +40,24 @@ jobs:
     steps:
       - name: Install transformers
         run: |
-          source activate accelerate
-          git clone --filter=blob:none --no-checkout https://github.com/huggingface/transformers
-          cd transformers
+          source activate accelerate;
+          git clone --filter=blob:none --no-checkout https://github.com/huggingface/transformers;
+          cd transformers;
           if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
             git checkout $(git tag --sort=taggerdate | tail -1); else
             git checkout main
-          fi
-          pip install .[torch,deepspeed-testing]
-          cd ..
+          fi;
+          pip install .[torch,deepspeed-testing];
+          cd ..;
 
       - name: Install accelerate
         run: 
           source activate accelerate;
-          git clone https://github.com/huggingface/accelerate
-          cd accelerate
-          git checkout ${{ github.sha }} 
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
+          git checkout ${{ github.sha }} ;
           pip install -e .[testing];
-          cd ..
+          cd ..;
       
       - name: Show installed libraries
         run: |
@@ -99,23 +99,23 @@ jobs:
       - name: Install accelerate
         run: 
           source activate accelerate;
-          git clone https://github.com/huggingface/accelerate
-          cd accelerate
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
           git checkout ${{ github.sha }};
           pip install -e .[testing];
           cd ..
 
       - name: Install skorch
         run: |
-          source activate accelerate
-          git clone --filter=blob:none --no-checkout https://github.com/skorch-dev/skorch
-          cd skorch
+          source activate accelerate;
+          git clone --filter=blob:none --no-checkout https://github.com/skorch-dev/skorch;
+          cd skorch;
           if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
             git checkout $(git describe --tags `git rev-list --tags --max-count=1`); else
             git checkout main
-          fi
-          pip install .[testing]
-          pip install flaky
+          fi;
+          pip install .[testing];
+          pip install flaky;
           cd ..
 
       - name: Show installed libraries
