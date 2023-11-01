@@ -339,7 +339,7 @@ def mock_training(length, batch_size, generator):
     set_seed(42)
     generator.manual_seed(42)
     train_set = RegressionDataset(length=length, seed=42)
-    if AcceleratorState().num_processes > 1:
+    if not ((AcceleratorState().num_processes == 1) and (AcceleratorState().device.type == "cpu")):
         # The SeedableRandomSampler is needed during distributed setups
         # for full reproducability across processes with the `DataLoader`
         sampler = SeedableRandomSampler(
