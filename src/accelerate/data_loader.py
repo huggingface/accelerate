@@ -839,8 +839,8 @@ def prepare_data_loader(
     else:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
     if isinstance(sampler, RandomSampler):
-        # When iterating through the dataloader during distributed processes
-        # we want to ensure that on each process we are iterating through the same
+        # When iterating through the dataloader we want to ensure that 
+        # on each process we are iterating through the same
         # samples in the same order if a seed is set. This requires a tweak
         # to the `torch.utils.data.RandomSampler` class (if used).
         sampler = SeedableRandomSampler(
