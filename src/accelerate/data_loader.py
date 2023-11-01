@@ -840,16 +840,20 @@ def prepare_data_loader(
     else:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
     if isinstance(sampler, RandomSampler):
-        # When iterating through the dataloader we want to ensure that
-        # on each process we are iterating through the same
-        # samples in the same order if a seed is set. This requires a tweak
-        # to the `torch.utils.data.RandomSampler` class (if used).
-        sampler = SeedableRandomSampler(
-            data_source=sampler.data_source,
-            replacement=sampler.replacement,
-            num_samples=sampler._num_samples,
-            generator=getattr(sampler, "generator", torch.Generator()),
-        )
+        # CPU's specifically do not require this workaround
+        if (AcceleratorState().distributed_type == DistributedType.NO) and (AcceleratorState().device.type == "cpu"):
+            pass
+        else:
+            # When iterating through the dataloader we want to ensure that
+            # on each process we are iterating through the same
+            # samples in the same order if a seed is set. This requires a tweak
+            # to the `torch.utils.data.RandomSampler` class (if used).
+            sampler = SeedableRandomSampler(
+                data_source=sampler.data_source,
+                replacement=sampler.replacement,
+                num_samples=sampler._num_samples,
+                generator=getattr(sampler, "generator", torch.Generator()),
+            )
 
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
