@@ -841,7 +841,7 @@ def prepare_data_loader(
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
     if isinstance(sampler, RandomSampler):
         # CPU's specifically do not require this workaround
-        if (AcceleratorState().distributed_type == DistributedType.NO) and (device.type == "cpu"):
+        if num_processes == 1 and (device.type == "cpu"):
             pass
         else:
             # When iterating through the dataloader we want to ensure that
