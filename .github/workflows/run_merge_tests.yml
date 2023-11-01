@@ -23,37 +23,37 @@ jobs:
       - name: Install accelerate
         run: |
           source activate accelerate;
-          git clone https://github.com/huggingface/accelerate
-          cd accelerate
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
           git checkout ${{ github.sha }};
           pip install -e .[testing,test_trackers] -U;
-          pip install pytest-reportlog tabulate  
+          pip install pytest-reportlog tabulate  ;
 
       - name: Run CLI tests (use make cli)
         working-directory: accelerate
         run: |
-          source activate accelerate
+          source activate accelerate;
           make test_cli
           
       - name: Run test on GPUs
         if: always()
         run: |
-          source activate accelerate
-          cd accelerate
+          source activate accelerate;
+          cd accelerate;
           make test
       - name: Run examples on GPUs
         if: always()
         run: |
-          source activate accelerate
-          cd accelerate
-          pip uninstall comet_ml -y
+          source activate accelerate;
+          cd accelerate;
+          pip uninstall comet_ml -y;
           make test_examples
 
       - name: Generate Report
         if: always()
         run: |
-          pip install tabulate
-          cd accelerate
+          pip install tabulate;
+          cd accelerate;
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
@@ -68,29 +68,29 @@ jobs:
     steps:
       - name: Update clone
         run: |
-          source activate accelerate
-          git config --global --add safe.directory '*'
-          git fetch && git checkout ${{ github.sha }}
-          pip install -e .[testing,test_trackers] -U
+          source activate accelerate;
+          git config --global --add safe.directory '*';
+          git fetch && git checkout ${{ github.sha }};
+          pip install -e .[testing,test_trackers] -U;
           pip install pytest-reportlog tabulate
 
       - name: Run test on GPUs
         run: |
-          source activate accelerate
-          cd accelerate
+          source activate accelerate;
+          cd accelerate;
           make test
 
       - name: Run examples on GPUs
         if: always()
         run: |
-          source activate accelerate
-          cd accelerate
-          pip uninstall comet_ml -y
+          source activate accelerate;
+          cd accelerate;
+          pip uninstall comet_ml -y;
           make test_examples
 
       - name: Generate Report
         if: always()
         run: |
-          source activate accelerate
-          cd accelerate
+          source activate accelerate;
+          cd accelerate;
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
