@@ -83,6 +83,7 @@ jobs:
           source activate accelerate;
           pytest -sv tests/deepspeed
       - name: Clean local files
+        if: always()
         run: |
           rm -rf accelerate transformers
 
@@ -102,7 +103,9 @@ jobs:
       - name: Install accelerate
         run: 
           source activate accelerate;
-          git clone https://github.com/huggingface/accelerate;
+          if [! -d "accelerate"]; then
+            git clone https://github.com/huggingface/accelerate;
+          fi;
           cd accelerate;
           git checkout ${{ github.sha }};
           pip install -e .[testing];
@@ -133,5 +136,6 @@ jobs:
           pytest -sv -k TestAccelerate
 
       - name: Clean local files
+        if: always()
         run: |
           rm -rf accelerate skorch
