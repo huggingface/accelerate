@@ -21,23 +21,11 @@ defaults:
     shell: bash
 
 jobs:
-  clean-env:
-    container:
-      image: huggingface/accelerate-gpu:latest
-      options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
-    steps:
-      - name: Clean local files
-        run: |
-          rm -rf accelerate
-          rm -rf transformers
-          rm -rf skorch
   run-trainer-tests:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
     runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
-    needs: [clean-env]
     strategy:
       fail-fast: false
       matrix:
@@ -94,13 +82,15 @@ jobs:
         run: |
           source activate accelerate;
           pytest -sv tests/deepspeed
+      - name: Clean local files
+        run: |
+          rm -rf accelerate transformers
 
   run-skorch-tests:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
     runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
-    needs: [clean-env]
     strategy:
       fail-fast: false
       matrix:
@@ -141,3 +131,7 @@ jobs:
         run: |
           source activate accelerate;
           pytest -sv -k TestAccelerate
+
+      - name: Clean local files
+        run: |
+          rm -rf accelerate skorch
