@@ -841,9 +841,7 @@ def prepare_data_loader(
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
     if isinstance(sampler, RandomSampler):
         # CPU's specifically do not require this workaround
-        if num_processes == 1 and (device.type == "cpu"):
-            pass
-        else:
+        if not ((num_processes == 1) and (device.type == "cpu")):
             # When iterating through the dataloader we want to ensure that
             # on each process we are iterating through the same
             # samples in the same order if a seed is set. This requires a tweak
