@@ -478,6 +478,8 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             self.iteration = epoch
         if hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
             self.batch_sampler.sampler.set_epoch(epoch)
+        elif hasattr(self.batch_sampler, "set_epoch"):
+            self.batch_sampler.set_epoch(epoch)
         # We support if a custom `Dataset` implementation has `set_epoch`
         # or in general HF datasets `Datasets`
         elif hasattr(self.dataset, "set_epoch"):
@@ -836,7 +838,7 @@ def prepare_data_loader(
         sampler = getattr(dataloader.sampler, "sampler", None)
     else:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
-    if isinstance(sampler, RandomSampler) and num_processes > 1:
+    if isinstance(sampler, RandomSampler):
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
         # samples in the same order if a seed is set. This requires a tweak
