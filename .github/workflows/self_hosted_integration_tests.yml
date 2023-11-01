@@ -103,9 +103,7 @@ jobs:
       - name: Install accelerate
         run: 
           source activate accelerate;
-          if [! -d "accelerate"]; then
-            git clone https://github.com/huggingface/accelerate;
-          fi;
+          git clone https://github.com/huggingface/accelerate;
           cd accelerate;
           git checkout ${{ github.sha }};
           pip install -e .[testing];
