@@ -112,7 +112,7 @@ jobs:
           cd skorch;
           if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
             git checkout $(git describe --tags `git rev-list --tags --max-count=1`); else
-            git checkout main
+            git checkout master
           fi;
           pip install .[testing];
           pip install flaky;
