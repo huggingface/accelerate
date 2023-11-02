@@ -58,6 +58,8 @@ jobs:
 
   run_all_tests_multi_gpu:
     runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4]
+    env:
+      CUDA_VISIBLE_DEVICES: 0,1
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
