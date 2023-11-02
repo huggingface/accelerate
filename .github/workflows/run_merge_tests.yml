@@ -10,7 +10,7 @@ env:
 
 jobs:
   run_all_tests_single_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4]
     env:
       CUDA_VISIBLE_DEVICES: "0"
     container:
@@ -57,7 +57,7 @@ jobs:
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4]
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
