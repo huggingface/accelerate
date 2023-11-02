@@ -26,13 +26,11 @@ head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
 ######################
 
 export LAUNCHER=" \
-    torchrun \
-    --nnodes $SLURM_NNODES \
-    --nproc_per_node $SLURM_GPUS \
-    --rdzv_id $RANDOM \
-    --rdzv_backend c10d \
-    --rdzv_endpoint $head_node_ip:29500 \
-"
+    accelerate launch \
+    --num_processes $((SLURM_NNODES * SLURM_GPUS)) \
+    --num_machines $SLURM_NNODES \ 
+    --rdzv_conf "id=$(RANDOM), backend=c10d",
+    --main_process_ip $head_node_ip \
 
 export SCRIPT=/accelerate/examples/complete_nlp_example.py
 export SCRIPT_ARGS=" \
