@@ -22,4 +22,4 @@ export SCRIPT_ARGS=" \
     --output_dir /accelerate/examples/output \
     "
 
-torchrun --nproc_per_node $SLURM_GPUS $SCRIPT $SCRIPT_ARGS
+accelerate launch --num_processes $SLURM_GPUS $SCRIPT $SCRIPT_ARGS
