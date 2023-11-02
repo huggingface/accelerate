@@ -93,6 +93,7 @@ class SeedableRandomSampler(RandomSampler):
                 yield from torch.randint(high=n, size=(32,), dtype=torch.int64, generator=g).tolist()
         else:
             yield from torch.randperm(n, generator=g).tolist()
+        self.set_epoch(self.epoch + 1)
 
     def set_epoch(self, epoch: int):
         "Sets the current iteration of the sampler."
@@ -836,7 +837,7 @@ def prepare_data_loader(
         sampler = getattr(dataloader.sampler, "sampler", None)
     else:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
-    if isinstance(sampler, RandomSampler) and num_processes > 1:
+    if isinstance(sampler, RandomSampler):
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
         # samples in the same order if a seed is set. This requires a tweak
