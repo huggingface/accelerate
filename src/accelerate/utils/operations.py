@@ -234,6 +234,8 @@ def find_batch_size(data):
     if isinstance(data, (tuple, list)):
         return find_batch_size(data[0])
     elif isinstance(data, Mapping):
+        if len(data) == 0:
+            raise ValueError(f"Can't find the batch size from empty {type(data)}.")
         for k in data.keys():
             return find_batch_size(data[k])
     elif not isinstance(data, torch.Tensor):
