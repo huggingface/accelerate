@@ -205,7 +205,7 @@ In [/Slurm/submit-multiGPU.sh](./Slurm/submit-multiGPU.sh) and [/Slurm/submit-mu
 
 In [/Slurm/submit-multiGPU.sh](./Slurm/submit-multiGPU.sh) the only parameter in the launcher that needs to be modified is `--num_processes`, which determines the number of GPUs we will use. In this case, using the environment variable `$SLURM_GPUS`, we indicate that we want to utilize all the GPUs available on the node we have requested. 
 
-In [/Slurm/submit-multinode.sh](./Slurm/submit-multinode.sh) we must specify the number of nodes that will be part of the training (`--nnodes`), how many GPUs we will use per node (`--nproc_per_node`), the `--rdzv_id` which is a unique identifier, the [`--rdzv_backend`](https://pytorch.org/docs/stable/elastic/run.html#note-on-rendezvous-backend) and the `--rdzv_endpoint` which will be the address and port of the master node.
+In [/Slurm/submit-multinode.sh](./Slurm/submit-multinode.sh) we must specify the number of nodes that will be part of the training (`--nnodes`), how many GPUs we will use per node (`--num_machines`), the `id` which is a unique identifier, the [`backend`](https://pytorch.org/docs/stable/elastic/run.html#note-on-rendezvous-backend) and the `main_process_ip` which will be the address the master node. (Include `main_process_port` too if using another port other than 29500, the default)
 
 ## Finer Examples
 
