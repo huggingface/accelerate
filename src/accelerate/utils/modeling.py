@@ -1144,7 +1144,7 @@ def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, tor
         )
 
 
-def load_state_dict(checkpoint_file, device_map=None, map_location=None):
+def load_state_dict(checkpoint_file, device_map=None):
     """
     Load a checkpoint from a given file. If the checkpoint is in the safetensors format and a device map is passed, the
     weights can be fast-loaded directly on the GPU.
