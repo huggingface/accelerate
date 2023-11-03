@@ -348,6 +348,7 @@ class LoggerType(BaseEnum):
     WANDB = "wandb"
     COMETML = "comet_ml"
     MLFLOW = "mlflow"
+    CLEARML = "clearml"
 
 
 class PrecisionType(BaseEnum):

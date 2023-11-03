@@ -21,8 +21,9 @@ import time
 from copy import deepcopy
 from pathlib import Path
 
+import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from accelerate import Accelerator
 from accelerate.data_loader import SeedableRandomSampler, prepare_data_loader
@@ -288,21 +289,65 @@ def central_dl_preparation_check():
         print("Shuffled central dataloader passing.")
 
 
+def custom_sampler_check():
+    state = AcceleratorState()
+
+    class CustomDataset(Dataset):
+        def __init__(self, data):
+            self.data = data
+
+        def __len__(self):
+            return len(self.data)
+
+        def __getitem__(self, index):
+            return self.data[index]
+
+    class CustomBatchSampler:
+        def __init__(self, dataset_length: int, batch_size: int, shuffle: bool = True):
+            self.batch_size = batch_size
+            self.data_index = np.arange(dataset_length)
+            self.shuffle = shuffle
+
+        def __iter__(self):
+            num_batches = len(self)
+            if self.shuffle:
+                index = np.random.permutation(self.data_index)
+            else:
+                index = self.data_index
+            output = np.array_split(index, num_batches)
+            yield from output
+
+        def __len__(self):
+            return math.ceil(len(self.data_index) / self.batch_size)
+
+    dataset = CustomDataset(range(32 * state.num_processes))
+    sampler = CustomBatchSampler(len(dataset), batch_size=8)
+    dl = DataLoader(dataset, batch_sampler=sampler)
+    dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index)
+    # We need just ensure that `dl.batch_sampler` (or `dl.batch_sampler.batch_sampler` is indeed the old batch sampler
+    if hasattr(dl.batch_sampler, "batch_sampler"):
+        assert isinstance(
+            dl.batch_sampler.batch_sampler, CustomBatchSampler
+        ), "Custom sampler was changed after calling `prepare_data_loader`"
+    else:
+        assert isinstance(
+            dl.batch_sampler, CustomBatchSampler
+        ), "Custom sampler was changed after calling `prepare_data_loader`"
+
+
 def mock_training(length, batch_size, generator):
     set_seed(42)
     generator.manual_seed(42)
     train_set = RegressionDataset(length=length, seed=42)
-    if AcceleratorState().num_processes > 1:
-        # The SeedableRandomSampler is needed during distributed setups
-        # for full reproducability across processes with the `DataLoader`
-        sampler = SeedableRandomSampler(
-            generator=generator,
-            data_source=train_set,
-            num_samples=len(train_set),
-        )
-        train_dl = DataLoader(train_set, batch_size=batch_size, sampler=sampler)
-    else:
-        train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
+
+    # The SeedableRandomSampler is needed during distributed setups
+    # for full reproducability across processes with the `DataLoader`
+    sampler = SeedableRandomSampler(
+        generator=generator,
+        data_source=train_set,
+        num_samples=len(train_set),
+    )
+    train_dl = DataLoader(train_set, batch_size=batch_size, sampler=sampler)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
     for epoch in range(3):
@@ -608,6 +653,7 @@ def main():
     dl_preparation_check()
     if state.distributed_type != DistributedType.TPU:
         central_dl_preparation_check()
+    custom_sampler_check()
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
     if state.distributed_type == DistributedType.DEEPSPEED:

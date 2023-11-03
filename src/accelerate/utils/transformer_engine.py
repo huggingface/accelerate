@@ -36,15 +36,15 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
             te_module = te.Linear(
                 module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
             )
-            te_module.weight.data = module.weight.data.clone()
+            module.weight.copy_(te_module.weight)
             if has_bias:
-                te_module.bias.data = module.bias.data.clone()
+                module.bias.copy_(te_module.bias)
 
             setattr(model, name, te_module)
         elif isinstance(module, nn.LayerNorm) and to_transformer_engine and _convert_ln:
             te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
-            te_module.weight.data = module.weight.data.clone()
-            te_module.bias.data = module.bias.data.clone()
+            module.weight.copy_(te_module.weight)
+            module.bias.copy_(te_module.bias)
 
             setattr(model, name, te_module)
         elif isinstance(module, te.Linear) and not to_transformer_engine and _convert_linear:
@@ -52,15 +52,15 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
             new_module = nn.Linear(
                 module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
             )
-            new_module.weight.data = module.weight.data.clone()
+            module.weight.copy_(new_module.weight)
             if has_bias:
-                new_module.bias.data = module.bias.data.clone()
+                module.bias.copy_(new_module.bias)
 
             setattr(model, name, new_module)
         elif isinstance(module, te.LayerNorm) and not to_transformer_engine and _convert_ln:
             new_module = nn.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
-            new_module.weight.data = module.weight.data.clone()
-            new_module.bias.data = module.bias.data.clone()
+            module.weight.copy_(new_module.weight)
+            module.bias.copy_(new_module.bias)
 
             setattr(model, name, new_module)
         else:
