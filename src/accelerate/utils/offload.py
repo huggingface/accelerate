@@ -19,8 +19,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
-
-from .imports import is_safetensors_available
+from safetensors import safe_open
 
 
 def offload_weight(weight, weight_name, offload_folder, index=None):
@@ -165,11 +164,6 @@ class OffloadedWeightsLoader(Mapping):
             return self.state_dict[key]
         weight_info = self.index[key]
         if weight_info.get("safetensors_file") is not None:
-            if not is_safetensors_available():
-                raise ImportError("These offloaded weights require the use of safetensors: `pip install safetensors`.")
-
-            from safetensors import safe_open
-
             device = "cpu" if self.device is None else self.device
             with safe_open(weight_info["safetensors_file"], framework="pt", device=device) as f:
                 tensor = f.get_tensor(weight_info.get("weight_name", key))

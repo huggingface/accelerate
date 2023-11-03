@@ -80,7 +80,6 @@ from .utils import (
     is_ipex_available,
     is_megatron_lm_available,
     is_npu_available,
-    is_safetensors_available,
     is_torch_version,
     is_tpu_available,
     is_xpu_available,
@@ -2570,9 +2569,6 @@ class Accelerator:
         >>> accelerator.save_model(model, save_directory)
         ```
         """
-
-        if safe_serialization and not is_safetensors_available():
-            raise ImportError("`safe_serialization` requires the `safetensors library: `pip install safetensors`.")
 
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")

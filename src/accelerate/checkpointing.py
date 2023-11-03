@@ -31,6 +31,7 @@ from .utils import (
     get_pretty_name,
     is_tpu_available,
     is_xpu_available,
+    load_state_dict,
     save,
 )
 
@@ -178,7 +179,8 @@ def load_accelerator_state(
     for i, model in enumerate(models):
         weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
         input_model_file = os.path.join(input_dir, weights_name)
-        models[i].load_state_dict(torch.load(input_model_file, map_location=map_location), **load_model_func_kwargs)
+        state_dict = load_state_dict(input_model_file, device_map={"": map_location})
+        models[i].load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
     # Optimizer states

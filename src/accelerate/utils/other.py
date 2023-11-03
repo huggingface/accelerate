@@ -22,13 +22,14 @@ from types import MethodType
 
 import torch
 from packaging.version import Version
+from safetensors.torch import save_file as safe_save_file
 
 from ..commands.config.default import write_basic_config  # noqa: F401
 from ..logging import get_logger
 from ..state import PartialState
 from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
-from .imports import is_deepspeed_available, is_safetensors_available, is_tpu_available
+from .imports import is_deepspeed_available, is_tpu_available
 from .transformer_engine import convert_model
 from .versions import is_torch_version
 
@@ -38,9 +39,6 @@ logger = get_logger(__name__)
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
-
-if is_safetensors_available():
-    from safetensors.torch import save_file as safe_save_file
 
 
 def is_compiled_module(module):
