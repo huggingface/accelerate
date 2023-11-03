@@ -2535,7 +2535,7 @@ class Accelerator:
         model: torch.nn.Module,
         save_directory: Union[str, os.PathLike],
         max_shard_size: Union[int, str] = "10GB",
-        safe_serialization: bool = False,
+        safe_serialization: bool = True,
     ):
         """
         Save a model so that it can be re-loaded using load_checkpoint_in_model
@@ -2556,7 +2556,7 @@ class Accelerator:
 
                 </Tip>
 
-            safe_serialization (`bool`, *optional*, defaults to `False`):
+            safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
 
         Example:
