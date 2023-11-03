@@ -81,6 +81,22 @@ class DummyModel(nn.Module):
 
 
 class CheckpointTest(unittest.TestCase):
+    def test_non_safe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            set_seed(42)
+            model = DummyModel()
+            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+            train_dataloader, valid_dataloader = dummy_dataloaders()
+            # Setup base
+            accelerator = Accelerator()
+            model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
+                model, optimizer, train_dataloader, valid_dataloader
+            )
+            # Save initial
+            accelerator.save_state(tmpdir, safe_serialization=False)
+            # Load it back in
+            accelerator.load_state(tmpdir)
+
     def test_with_save_limit(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)

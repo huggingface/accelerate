@@ -2686,7 +2686,7 @@ class Accelerator:
         self._save_model_state_pre_hook[handle.id] = hook
         return handle
 
-    def save_state(self, output_dir: str = None, **save_model_func_kwargs):
+    def save_state(self, output_dir: str = None, safe_serialization: bool = True, **save_model_func_kwargs):
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
 
@@ -2707,6 +2707,8 @@ class Accelerator:
         Args:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
+            safe_serialization (`bool`, *optional*, defaults to `True`):
+                Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
             save_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for saving model which can be passed to the underlying save function, such
                 as optional arguments for DeepSpeed's `save_checkpoint` function.
@@ -2811,6 +2813,7 @@ class Accelerator:
             self.state.process_index,
             self.scaler,
             save_on_each_node=self.project_configuration.save_on_each_node,
+            safe_serialization=safe_serialization,
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)
