@@ -47,6 +47,7 @@ from ..utils import (
     is_xpu_available,
     str_to_bool,
 )
+from .other import backend_device_count, torch_device
 
 
 def parse_flag_from_env(key, default=False):
@@ -85,7 +86,15 @@ def require_cpu(test_case):
     """
     Decorator marking a test that must be only ran on the CPU. These tests are skipped when a GPU is available.
     """
-    return unittest.skipUnless(not torch.cuda.is_available(), "test requires only a CPU")(test_case)
+    return unittest.skipUnless(torch_device == "cpu", "test requires only a CPU")(test_case)
+
+
+def require_accelerator(test_case):
+    """
+    Decorator marking a test that requires an accelerator backend. These tests are skipped when there are no
+    accelerator available.
+    """
+    return unittest.skipUnless(torch_device != "cpu", "test requires a GPU")(test_case)
 
 
 def require_cuda(test_case):
@@ -147,6 +156,14 @@ def require_tpu(test_case):
     return unittest.skipUnless(is_tpu_available(), "test requires TPU")(test_case)
 
 
+def require_single_accelerator(test_case):
+    """
+    Decorator marking a test that requires a single accelerator. These tests are skipped when there are no accelerator
+    available or number of accelerators is more than one.
+    """
+    return unittest.skipUnless(backend_device_count(torch_device) == 1, "test requires an accelerator")(test_case)
+
+
 def require_single_gpu(test_case):
     """
     Decorator marking a test that requires CUDA on a single GPU. These tests are skipped when there are no GPU
@@ -161,6 +178,16 @@ def require_single_xpu(test_case):
     available or number of xPUs is more than one.
     """
     return unittest.skipUnless(torch.xpu.device_count() == 1, "test requires a XPU")(test_case)
+
+
+def require_multi_accelerator(test_case):
+    """
+    Decorator marking a test that requires a multi-GPU setup. These tests are skipped on a machine without multiple
+    accelerators.
+    """
+    return unittest.skipUnless(backend_device_count(torch_device) > 1, "test requires multiple accelerators")(
+        test_case
+    )
 
 
 def require_multi_gpu(test_case):
