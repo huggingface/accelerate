@@ -80,19 +80,13 @@ class SeedableRandomSampler(RandomSampler):
         self.epoch = 0
 
     def __iter__(self):
-        g = torch.Generator()
-        if self.generator is not None:
-            seed = self.epoch + self.generator.initial_seed()
-        else:
-            seed = self.epoch
-        g.manual_seed(seed)
-        n = len(self.data_source)
-        # Taken 1:1 from torch.utils.data.sampler.RandomSampler.__iter__
-        if self.replacement:
-            for _ in range(self.num_samples // 32):
-                yield from torch.randint(high=n, size=(32,), dtype=torch.int64, generator=g).tolist()
-        else:
-            yield from torch.randperm(n, generator=g).tolist()
+        if self.generator is None:
+            self.generator = torch.Generator()
+        # Allow `self.epoch` to modify the seed of the generator
+        seed = self.epoch + self.generator.initial_seed()
+        self.generator.manual_seed(seed)
+        yield from super().__iter__()
+        self.set_epoch(self.epoch + 1)
 
     def set_epoch(self, epoch: int):
         "Sets the current iteration of the sampler."
@@ -836,7 +830,7 @@ def prepare_data_loader(
         sampler = getattr(dataloader.sampler, "sampler", None)
     else:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
-    if isinstance(sampler, RandomSampler) and num_processes > 1:
+    if isinstance(sampler, RandomSampler):
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
         # samples in the same order if a seed is set. This requires a tweak
