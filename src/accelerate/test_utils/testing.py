@@ -26,6 +26,7 @@ from typing import List, Union
 from unittest import mock
 
 import torch
+from parameterized import parameterized
 
 from ..state import AcceleratorState, PartialState
 from ..utils import (
@@ -62,6 +63,18 @@ def parse_flag_from_env(key, default=False):
             # More values are supported, but let's keep the message simple.
             raise ValueError(f"If set, {key} must be yes or no.")
     return _value
+
+
+def parameterized_custom_name_func(func, param_num, param):
+    # customize the test name generator function as we want both params to appear in the sub-test
+    # name, as by default it shows only the first param
+    param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
+    return f"{func.__name__}_{param_based_name}"
+
+
+SAFETENSORS = True
+PYTORCH = False
+SAVE_TYPES = (SAFETENSORS, PYTORCH)
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)

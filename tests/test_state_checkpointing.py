@@ -29,7 +29,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.test_utils import execute_subprocess_async, require_cuda
+from accelerate.test_utils import SAVE_TYPES, execute_subprocess_async, require_cuda
 from accelerate.utils import ProjectConfiguration, set_seed
 
 
@@ -84,11 +84,11 @@ class DummyModel(nn.Module):
 def parameterized_custom_name_func(func, param_num, param):
     # customize the test name generator function as we want both params to appear in the sub-test
     # name, as by default it shows only the first param
-    param_based_name = "safetensors" if param["use_safetensors"] is True else "pytorch"
+    param_based_name = "use_safetensors" if param["use_safetensors"] is True else "use_pytorch"
     return f"{func.__name__}_{param_based_name}"
 
 
-@parameterized_class(("use_safetensors",), [(True,), (False,)], class_name_func=parameterized_custom_name_func)
+@parameterized_class(("use_safetensors",), [[s] for s in SAVE_TYPES], class_name_func=parameterized_custom_name_func)
 class CheckpointTest(unittest.TestCase):
     def test_with_save_limit(self):
         with tempfile.TemporaryDirectory() as tmpdir:
