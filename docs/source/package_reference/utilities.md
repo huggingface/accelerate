@@ -55,7 +55,7 @@ These are basic dataclasses used throughout 🤗 Accelerate and they can be pass
 These are environmental variables that can be enabled for different use cases
 
 * `ACCELERATE_SEED` (`int`): The seed to use for different internal random states not covered through the base cases. Also set during [`utils.set_seed`]
-* `ACCELERATE_DEBUG_MODE` (`str`, ["1","2"]): Whether to run accelerate in debug mode. More info available [here](../usage_guides/debug.md).
+* `ACCELERATE_DEBUG_MODE` (`str`): Whether to run accelerate in debug mode. More info available [here](../usage_guides/debug.md).
 
 ## Plugins
 
