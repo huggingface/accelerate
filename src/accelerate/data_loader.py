@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import os
 from contextlib import suppress
 from typing import Callable, List, Optional, Union
 
@@ -73,17 +74,22 @@ class SeedableRandomSampler(RandomSampler):
 
     If a custom `generator` is passed, it will rely on its initial seed as well as the current iteration it is on
     (stored in `self.epoch`).
+
+    A manual seed can also be used by setting the `ACCELERATE_SEED` environmental variable.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epoch = 0
+        self.seed = 0
+        if os.environ.get("ACCELERATE_SEED", False):
+            self.seed = int(os.environ["ACCELERATE_SEED"])
 
     def __iter__(self):
         if self.generator is None:
             self.generator = torch.Generator()
         # Allow `self.epoch` to modify the seed of the generator
-        seed = self.epoch + self.generator.initial_seed()
+        seed = self.epoch + (self.seed if self.seed != 0 else self.generator.initial_seed())
         self.generator.manual_seed(seed)
         yield from super().__iter__()
         self.set_epoch(self.epoch + 1)
