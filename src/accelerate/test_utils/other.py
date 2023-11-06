@@ -20,8 +20,11 @@ from typing import Callable, Dict
 import torch
 
 from ..logging import get_logger
+from ..state import PartialState
 
 
+# We must initialize the accelerate state before using the logging utility.
+state = PartialState()
 logger = get_logger(__name__)
 
 # Set a backend environment variable for any extra module import required for a custom accelerator
