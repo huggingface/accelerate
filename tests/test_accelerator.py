@@ -165,7 +165,7 @@ class AcceleratorTester(AccelerateTestCase):
             model.class_name = "random"
 
             # make sure loaded weights match with hooks
-            accelerator.load_state(tmpdirname, safe_serialization=use_safetensors)
+            accelerator.load_state(tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
 
             # mode.class_name is loaded from config
@@ -186,7 +186,7 @@ class AcceleratorTester(AccelerateTestCase):
             model.class_name = "random"
 
             # make sure loaded weights match with hooks removed
-            accelerator.load_state(tmpdirname, safe_serialization=use_safetensors)
+            accelerator.load_state(tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
 
             # mode.class_name is NOT loaded from config
