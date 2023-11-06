@@ -1646,6 +1646,9 @@ class Accelerator:
                     kwargs["model_parameters"] = optimizer.params
                     if isinstance(scheduler, (DummyScheduler)) and scheduler.lr_scheduler_callable is not None:
                         kwargs["lr_scheduler"] = scheduler.lr_scheduler_callable
+                    if isinstance(scheduler, (DummyScheduler)) and 'warmup' in kwargs['config_params']['scheduler']['type'].lower():
+                        # if using warmup, set inintial optimizer learning rate as min lr.
+                        kwargs['config_params']['optimizer']['params']['lr'] = kwargs['config_params']['scheduler']['params']['warmup_min_lr']
                 else:
                     if self.deepspeed_config["zero_optimization"].get("offload_optimizer", {}).get(
                         "device", "none"
