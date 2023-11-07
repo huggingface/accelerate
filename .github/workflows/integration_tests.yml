@@ -69,4 +69,4 @@ jobs:
       run: |
         cd ../transformers/examples/pytorch
         pip install -r _tests_requirements.txt
-        pytest -sv tests/test_accelerate_examples.py tests/test_pytorch_examples.py
+        pytest -sv test_accelerate_examples.py test_pytorch_examples.py
