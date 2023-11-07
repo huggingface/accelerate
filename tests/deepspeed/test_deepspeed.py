@@ -36,7 +36,6 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
-    parameterized_custom_name_func,
     require_cuda,
     require_deepspeed,
     require_multi_gpu,
@@ -76,6 +75,13 @@ if is_torch_bf16_available():
     dtypes = [FP16, BF16]
 else:
     dtypes = [FP16]
+
+
+def parameterized_custom_name_func(func, param_num, param):
+    # customize the test name generator function as we want both params to appear in the sub-test
+    # name, as by default it shows only the first param
+    param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
+    return f"{func.__name__}_{param_based_name}"
 
 
 # Cartesian-product of zero stages with models to test
