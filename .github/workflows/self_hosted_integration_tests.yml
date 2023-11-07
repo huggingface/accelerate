@@ -81,6 +81,15 @@ jobs:
           source activate accelerate;
           pytest -sv tests/deepspeed
 
+      - name: Run transformers examples tests
+        working-directory: transformers/examples/pytorch
+        env:
+          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          WANDB_DISABLED: true
+        run: |
+          pip install -r _test_requirements.txt
+          pytest -sv tests/test_accelerate_examples.py tests/test_pytorch_examples.py
+
   run-skorch-tests:
     container:
       image: huggingface/accelerate-gpu:latest
