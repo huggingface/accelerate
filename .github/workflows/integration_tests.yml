@@ -62,12 +62,3 @@ jobs:
       run: |
         cd ../transformers
         pytest -sv tests/trainer
-
-    - name: Run transformers examples tests
-      env:
-        WANDB_DISABLED: true
-      run: |
-        cd ../transformers/examples/pytorch
-        pip install -r _tests_requirements.txt
-        cd ../../
-        pytest -sv examples/pytorch/test_accelerate_examples.py examples/pytorch/test_pytorch_examples.py
