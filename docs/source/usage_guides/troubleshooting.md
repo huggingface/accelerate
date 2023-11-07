@@ -15,8 +15,8 @@ rendered properly in your Markdown viewer.
 
 # Troubleshooting guide
 
-This guide aims to provide you with the tools and knowledge required to navigate some common issues. However, 
-as 🤗 Accelerate continuously evolves and the use cases are diverse, you might encounter an issue not covered in this 
+This guide aims to provide you the tools and knowledge required to navigate some common issues. However, 
+as 🤗 Accelerate continuously evolves and the use cases and setups are diverse, you might encounter an issue not covered in this 
 guide. If the suggestions listed in this guide do not cover your such situation, please refer to the final section of 
 the guide, [Asking for Help](#ask-for-help), to learn where to find help with your specific issue.
 
