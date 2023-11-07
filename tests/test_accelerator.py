@@ -34,6 +34,7 @@ def load_random_weights(model):
     state = torch.nn.Linear(*tuple(model.weight.T.shape)).state_dict()
     model.load_state_dict(state)
 
+
 class ModelForTest(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -43,6 +44,7 @@ class ModelForTest(torch.nn.Module):
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
+
 
 class AcceleratorTester(AccelerateTestCase):
     @require_cuda

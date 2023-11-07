@@ -2583,7 +2583,7 @@ class Accelerator:
         for param in model.parameters():
             if param.device == torch.device("meta"):
                 raise RuntimeError("You can't save the model since some parameters are on the meta device.")
-        
+
         # get the state_dict of the model
         state_dict = self.get_state_dict(model)
 
