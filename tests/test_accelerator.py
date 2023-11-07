@@ -34,6 +34,15 @@ def load_random_weights(model):
     state = torch.nn.Linear(*tuple(model.weight.T.shape)).state_dict()
     model.load_state_dict(state)
 
+class ModelForTest(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = torch.nn.Linear(3, 4)
+        self.batchnorm = torch.nn.BatchNorm1d(4)
+        self.linear2 = torch.nn.Linear(4, 5)
+
+    def forward(self, x):
+        return self.linear2(self.batchnorm(self.linear1(x)))
 
 class AcceleratorTester(AccelerateTestCase):
     @require_cuda
@@ -138,6 +147,19 @@ class AcceleratorTester(AccelerateTestCase):
             # make sure loaded weights match
             load_checkpoint_in_model(model, tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+
+    @require_safetensors
+    def test_save_model_offload(self):
+        accelerator = Accelerator()
+
+        device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": "cpu"}
+
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            accelerator.save_model(model, tmp_dir, safe_serialization=True)
+            load_checkpoint_in_model(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
+            with self.assertRaises(RuntimeError):
+                accelerator.save_model(model, tmp_dir, safe_serialization=True)
 
     def test_save_load_model_with_hooks(self):
         accelerator = Accelerator()
