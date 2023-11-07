@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-import os
 from contextlib import suppress
 from typing import Callable, List, Optional, Union
 
@@ -81,9 +80,7 @@ class SeedableRandomSampler(RandomSampler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epoch = 0
-        self.seed = None
-        if os.environ.get("ACCELERATE_SEED", False):
-            self.seed = int(os.environ["ACCELERATE_SEED"])
+        self.seed = torch.random.initial_seed()
 
     def __iter__(self):
         if self.generator is None:

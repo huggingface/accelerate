@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import random
 from typing import List, Optional, Union
 
@@ -54,8 +53,6 @@ def set_seed(seed: int, device_specific: bool = False):
     # ^^ safe to call this function even if cuda is not available
     if is_tpu_available():
         xm.set_rng_state(seed)
-    # For `SeedableRandomSampler` samplers
-    os.environ["ACCELERATE_SEED"] = str(seed)
 
 
 def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optional[torch.Generator] = None):
