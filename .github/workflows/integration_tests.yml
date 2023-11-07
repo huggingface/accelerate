@@ -67,6 +67,6 @@ jobs:
       env:
         WANDB_DISABLED: true
       run: |
-        cd examples/pytorch
+        cd ../transformers/examples/pytorch
         pip install -r _test_requirements.txt
         pytest -sv tests/test_accelerate_examples.py tests/test_pytorch_examples.py
