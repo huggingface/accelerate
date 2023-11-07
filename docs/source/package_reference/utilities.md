@@ -50,6 +50,12 @@ These are basic dataclasses used throughout 🤗 Accelerate and they can be pass
 
 [[autodoc]] utils.ProjectConfiguration
 
+## Environmental Variables
+
+These are environmental variables that can be enabled for different use cases
+
+* `ACCELERATE_DEBUG_MODE` (`str`): Whether to run accelerate in debug mode. More info available [here](../usage_guides/debug.md).
+
 ## Plugins
 
 These are plugins that can be passed to the [`Accelerator`] object. While they are defined elsewhere in the documentation, 
