@@ -87,7 +87,7 @@ jobs:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
           WANDB_DISABLED: true
         run: |
-          pip install -r _test_requirements.txt
+          pip install -r _tests_requirements.txt
           pytest -sv tests/test_accelerate_examples.py tests/test_pytorch_examples.py
 
   run-skorch-tests:
