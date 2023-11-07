@@ -30,8 +30,7 @@ if is_tpu_available(check_device=False):
 
 def set_seed(seed: int, device_specific: bool = False):
     """
-    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch`. Also will set the random
-    seed for `SeedableRandomSampler` through the `ACCELERATE_SEED` environment variable.
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch`.
 
     Args:
         seed (`int`):
