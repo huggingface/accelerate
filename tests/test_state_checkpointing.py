@@ -29,7 +29,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.test_utils import SAVE_TYPES, execute_subprocess_async, require_cuda
+from accelerate.test_utils import execute_subprocess_async, require_cuda
 from accelerate.utils import ProjectConfiguration, set_seed
 
 
@@ -88,7 +88,7 @@ def parameterized_custom_name_func(func, param_num, param):
     return f"{func.__name__}_{param_based_name}"
 
 
-@parameterized_class(("use_safetensors",), [[s] for s in SAVE_TYPES], class_name_func=parameterized_custom_name_func)
+@parameterized_class(("use_safetensors",), [[True], [False]], class_name_func=parameterized_custom_name_func)
 class CheckpointTest(unittest.TestCase):
     def test_with_save_limit(self):
         with tempfile.TemporaryDirectory() as tmpdir:

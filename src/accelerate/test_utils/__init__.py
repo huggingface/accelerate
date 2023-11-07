@@ -1,5 +1,4 @@
 from .testing import (
-    SAVE_TYPES,
     are_the_same_tensors,
     assert_exception,
     execute_subprocess_async,

@@ -72,11 +72,6 @@ def parameterized_custom_name_func(func, param_num, param):
     return f"{func.__name__}_{param_based_name}"
 
 
-SAFETENSORS = True
-PYTORCH = False
-SAVE_TYPES = (SAFETENSORS, PYTORCH)
-
-
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
 
 
