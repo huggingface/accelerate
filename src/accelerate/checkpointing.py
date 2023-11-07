@@ -59,6 +59,13 @@ def save_accelerator_state(
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
 
+    <Tip>
+
+    If `safe_serialization` is `True`, models will be saved with `safetensors` while the rest are saved
+    using native `pickle`.
+
+    </Tip>
+
     Args:
         output_dir (`str` or `os.PathLike`):
             The name of the folder to save all relevant weights and states.
