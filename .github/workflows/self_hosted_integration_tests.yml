@@ -88,7 +88,8 @@ jobs:
           WANDB_DISABLED: true
         run: |
           pip install -r _tests_requirements.txt
-          pytest -sv test_accelerate_examples.py test_pytorch_examples.py
+          cd ../../
+          pytest -sv examples/pytorch/test_accelerate_examples.py examples/pytorch/test_pytorch_examples.py
 
   run-skorch-tests:
     container:
