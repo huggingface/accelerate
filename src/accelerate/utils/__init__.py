@@ -2,6 +2,7 @@ from .constants import (
     MODEL_NAME,
     OPTIMIZER_NAME,
     RNG_STATE_NAME,
+    SAFE_MODEL_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     SAMPLER_NAME,

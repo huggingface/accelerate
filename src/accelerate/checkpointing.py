@@ -22,12 +22,13 @@ from safetensors.torch import load_file
 from torch.cuda.amp import GradScaler
 
 from .utils import (
-    MODEL_NAME,
     OPTIMIZER_NAME,
     RNG_STATE_NAME,
+    SAFE_WEIGHTS_NAME,
     SAMPLER_NAME,
     SCALER_NAME,
     SCHEDULER_NAME,
+    WEIGHTS_NAME,
     get_pretty_name,
     is_tpu_available,
     is_xpu_available,
@@ -61,8 +62,8 @@ def save_accelerator_state(
 
     <Tip>
 
-    If `safe_serialization` is `True`, models will be saved with `safetensors` while the rest are saved
-    using native `pickle`.
+    If `safe_serialization` is `True`, models will be saved with `safetensors` while the rest are saved using native
+    `pickle`.
 
     </Tip>
 
@@ -89,8 +90,9 @@ def save_accelerator_state(
     output_dir = Path(output_dir)
     # Model states
     for i, state in enumerate(model_states):
-        weights_name = f"{MODEL_NAME}" if i == 0 else f"{MODEL_NAME}_{i}"
-        weights_name += ".bin" if not safe_serialization else ".safetensors"
+        weights_name = WEIGHTS_NAME if not safe_serialization else SAFE_WEIGHTS_NAME
+        if i > 0:
+            weights_name = weights_name.replace(".", f"_{i}.")
         output_model_file = output_dir.joinpath(weights_name)
         save(state, output_model_file, save_on_each_node=save_on_each_node, safe_serialization=safe_serialization)
         logger.info(f"Model weights saved in {output_model_file}")
@@ -190,7 +192,9 @@ def load_accelerator_state(
     input_dir = Path(input_dir)
     # Model states
     for i, model in enumerate(models):
-        weights_name = f"{MODEL_NAME}.safetensors" if i == 0 else f"{MODEL_NAME}_{i}.safetensors"
+        weights_name = SAFE_WEIGHTS_NAME
+        if i > 0:
+            weights_name = weights_name.replace(".", f"_{i}.")
         input_model_file = input_dir.joinpath(weights_name)
         if input_model_file.exists():
             state_dict = load_file(input_model_file, device=str(map_location))
