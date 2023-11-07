@@ -53,6 +53,8 @@
     title: How to use 🤗 Accelerate with SageMaker
   - local: usage_guides/ipex
     title: How to use 🤗 Accelerate with Intel® Extension for PyTorch for cpu
+  - local: usage_guides/troubleshooting
+    title: Troubleshooting guide
   title: How-To Guides
 - sections:
   - local: concept_guides/internal_mechanism
