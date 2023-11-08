@@ -80,7 +80,6 @@ from .utils import (
     is_ipex_available,
     is_megatron_lm_available,
     is_npu_available,
-    is_safetensors_available,
     is_torch_version,
     is_tpu_available,
     is_xpu_available,
@@ -2536,7 +2535,7 @@ class Accelerator:
         model: torch.nn.Module,
         save_directory: Union[str, os.PathLike],
         max_shard_size: Union[int, str] = "10GB",
-        safe_serialization: bool = False,
+        safe_serialization: bool = True,
     ):
         """
         Save a model so that it can be re-loaded using load_checkpoint_in_model
@@ -2557,7 +2556,7 @@ class Accelerator:
 
                 </Tip>
 
-            safe_serialization (`bool`, *optional*, defaults to `False`):
+            safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
 
         Example:
@@ -2570,9 +2569,6 @@ class Accelerator:
         >>> accelerator.save_model(model, save_directory)
         ```
         """
-
-        if safe_serialization and not is_safetensors_available():
-            raise ImportError("`safe_serialization` requires the `safetensors library: `pip install safetensors`.")
 
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -2690,7 +2686,7 @@ class Accelerator:
         self._save_model_state_pre_hook[handle.id] = hook
         return handle
 
-    def save_state(self, output_dir: str = None, **save_model_func_kwargs):
+    def save_state(self, output_dir: str = None, safe_serialization: bool = True, **save_model_func_kwargs):
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
 
@@ -2711,6 +2707,8 @@ class Accelerator:
         Args:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
+            safe_serialization (`bool`, *optional*, defaults to `True`):
+                Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
             save_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for saving model which can be passed to the underlying save function, such
                 as optional arguments for DeepSpeed's `save_checkpoint` function.
@@ -2815,6 +2813,7 @@ class Accelerator:
             self.state.process_index,
             self.scaler,
             save_on_each_node=self.project_configuration.save_on_each_node,
+            safe_serialization=safe_serialization,
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)

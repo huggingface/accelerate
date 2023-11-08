@@ -54,7 +54,7 @@ setup(
         ]
     },
     python_requires=">=3.8.0",
-    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.10.0", "huggingface_hub"],
+    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.10.0", "huggingface_hub", "safetensors>=0.3.1"],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
