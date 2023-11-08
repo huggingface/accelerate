@@ -22,7 +22,7 @@ the guide, [Asking for Help](#ask-for-help), to learn where to find help with yo
 
 ## Logging
 
-When facing an error, logging can help narrows down where it is coming from. In a distributed setup with multiple processes, 
+When facing an error, logging can help narrow down where it is coming from. In a distributed setup with multiple processes, 
 logging can be a challenge, but 🤗 Accelerate provides a utility that streamlines the logging process and ensures that 
 logs are synchronized and managed effectively across the distributed setup. 
 
@@ -49,12 +49,12 @@ If a log should be called on all processes and in order, also pass `in_order=Tru
 
 ## Hanging code and timeout errors
 
-If your code seems to be hanging for a significant amount time, a common cause is mismatched shapes of tensors on different 
+If your code seems to be hanging for a significant amount time on a distributed setup, a common cause is mismatched shapes of tensors on different 
 devices. 
 
 When running scripts in a distributed fashion, functions such as [`Accelerator.gather`] and [`Accelerator.reduce`] are 
-necessary to grab tensors across devices to perform operations on them. These (and other) functions rely on 
-`torch.distributed`, which requires that tensors have the **exact same shape** across all processes for it to work.
+necessary to grab tensors across devices to perform operations on them collectively. These (and other) functions rely on 
+`torch.distributed` performing a `gather` operation, which requires that tensors have the **exact same shape** across all processes.
 When the tensor shapes don't match, you will experience handing code, and eventually hit a timeout exception. 
 
 If you suspect this to be the case, use Accelerate's operational debug mode to immediately catch the issue. 
@@ -66,14 +66,14 @@ Alternative ways to enable debug mode are:
 
 * From the CLI: 
 
-```
+```bash
 accelerate launch --debug {my_script.py} --arg1 --arg2
 ```
 
 * As an environmental variable (which avoids the need for `accelerate launch`):
 
-```
-ACCELERATE_DEBUG_MODE="1" accelerate launch {my_script.py} --arg1 --arg2
+```bash
+ACCELERATE_DEBUG_MODE="1" torchrun {my_script.py} --arg1 --arg2
 ```
 
 * Manually changing the `config.yaml` file:
@@ -85,21 +85,22 @@ ACCELERATE_DEBUG_MODE="1" accelerate launch {my_script.py} --arg1 --arg2
 
 Once you enable the debug mode, you should get a similar traceback that points to the tensor shape mismatch issue:
 
-```
+```py
 Traceback (most recent call last):
   File "/home/zach_mueller_huggingface_co/test.py", line 18, in <module>
     main()
   File "/home/zach_mueller_huggingface_co/test.py", line 15, in main
-        main()broadcast_tensor = broadcast(tensor)
-  File "/home/zach_mueller_huggingface_co/accelerate/src/accelerate/utils/operations.py", line 303, in wrapper
     broadcast_tensor = broadcast(tensor)
-accelerate.utils.operations.DistributedOperationException: Cannot apply desired operation due to shape mismatches. All shapes across devices must be valid.
+  File "/home/zach_mueller_huggingface_co/accelerate/src/accelerate/utils/operations.py", line 303, in wrapper
+accelerate.utils.operations.DistributedOperationException:
+
+Cannot apply desired operation due to shape mismatches. All shapes across devices must be valid.
 
 Operation: `accelerate.utils.operations.broadcast`
 Input shapes:
   - Process 0: [1, 5]
   - Process 1: [1, 2, 5]
-```
+  ```
 
 ## CUDA out of memory
 
@@ -114,7 +115,12 @@ start their script and let it run.
 This algorithm operates with exponential decay, decreasing the batch size in half after each failed run on some 
 training script. To use it, restructure your training function to include an inner function that includes this wrapper, 
 and build your dataloaders inside it. At a minimum, this could look like 4 new lines of code. 
-> Note: The inner function *must* take in the batch size as the first parameter, but we do not pass one to it when called. The wrapper handles this for us
+
+<Tip warning={true}> 
+
+The inner function *must* take in the batch size as the first parameter, but we do not pass one to it when called. The wrapper handles this for us.
+
+</Tip>
 
 It should also be noted that anything which will consume CUDA memory and passed to the `accelerator` **must** be declared inside the inner function,
 such as models and optimizers.
@@ -156,7 +162,7 @@ For more details, refer to the [Comparing performance between different device s
 
 ## Performance issues on different GPUs
 
-If your milt-GPU setup consists of different GPUs, you may hit some limitations:
+If your milti-GPU setup consists of different GPUs, you may hit some limitations:
 
 - There may be imbalance in GPU memory between the GPUs. In this case, the GPU with smaller memory will limit the batch size or the size of the model that can be loaded onto the GPUs.
 - If you are using GPUs with different performance profiles, the performance will be driven by the slowest GPU that you are using as the other GPUs will have to wait for it to complete its workload.
