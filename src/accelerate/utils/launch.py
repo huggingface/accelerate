@@ -291,10 +291,12 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         current_env["ACCELERATE_DEBUG_MODE"] = "true"
     gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
-        if not is_xpu_available():
-            current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
-        else:
+        if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
+        elif is_npu_available():
+            current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        else:
+            current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
