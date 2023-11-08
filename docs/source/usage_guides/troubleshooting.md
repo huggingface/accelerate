@@ -179,5 +179,6 @@ Post a question on [Discord](http://hf.co/join/discord), and let the team and th
 
 ### GitHub Issues
 
-Create an Issue on the 🤗 Accelerate repository if you suspect to have found a bug related to the library. Try to include 
-as much context regarding the bug and your distributed setup as possible to help us better figure out what's wrong and how we can fix it.
+Create an Issue on the 🤗 Accelerate [GitHub repository](https://github.com/huggingface/accelerate/issues) if you suspect 
+to have found a bug related to the library. Include context regarding the bug and details about your distributed setup
+to help us better figure out what's wrong and how we can fix it.
