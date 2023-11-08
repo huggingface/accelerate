@@ -2574,10 +2574,10 @@ class Accelerator:
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
 
-        os.makedirs(save_directory, exist_ok=True)
-
         if any(param.device == torch.device("meta") for param in model.parameters()):
             raise RuntimeError("You can't save the model since some parameters are on the meta device.")
+
+        os.makedirs(save_directory, exist_ok=True)
 
         # get the state_dict of the model
         state_dict = self.get_state_dict(model)
