@@ -23,8 +23,8 @@ from accelerate.test_utils import (
     execute_subprocess_async,
     require_cpu,
     require_huggingface_suite,
-    require_multi_accelerator,
-    require_single_accelerator,
+    require_multi_device,
+    require_single_device,
     torch_device,
 )
 from accelerate.utils import patch_environment
@@ -50,11 +50,11 @@ class MetricTester(unittest.TestCase):
     def test_metric_cpu_multi(self):
         debug_launcher(self.test_metrics.main)
 
-    @require_single_accelerator
+    @require_single_device
     def test_metric_accelerator(self):
         self.test_metrics.main()
 
-    @require_multi_accelerator
+    @require_multi_device
     def test_metric_accelerator_multi(self):
         device_count = backend_device_count(torch_device)
         print(f"Found {device_count} devices.")

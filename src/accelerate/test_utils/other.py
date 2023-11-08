@@ -19,13 +19,6 @@ from typing import Callable, Dict
 
 import torch
 
-from ..logging import get_logger
-from ..state import PartialState
-
-
-# We must initialize the accelerate state before using the logging utility.
-state = PartialState()
-logger = get_logger(__name__)
 
 # Set a backend environment variable for any extra module import required for a custom accelerator
 if "ACCELERATE_TEST_BACKEND" in os.environ:
@@ -47,7 +40,6 @@ if "ACCELERATE_TEST_DEVICE" in os.environ:
         raise RuntimeError(
             f"Unknown testing device specified by environment variable `ACCELERATE_TEST_DEVICE`: {torch_device}"
         ) from e
-    logger.info(f"torch_device overrode to {torch_device}")
 else:
     torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -89,8 +81,6 @@ def update_mapping_from_spec(device_fn_dict: Dict[str, Callable], attribute_name
         # Try to import the function directly
         spec_fn = getattr(device_spec_module, attribute_name)
         device_fn_dict[torch_device] = spec_fn
-        if spec_fn is None:
-            logger.info(f"The function {attribute_name} set for {torch_device} is None")
     except AttributeError as e:
         # If the function doesn't exist, and there is no default, throw an error
         if "default" not in device_fn_dict:
