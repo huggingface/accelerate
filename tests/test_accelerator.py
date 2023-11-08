@@ -36,7 +36,8 @@ class ModelForTest(torch.nn.Module):
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
-    
+
+
 def get_signature(model):
     return (model.weight.abs().sum() + model.bias.abs().sum()).item()
 
@@ -45,7 +46,7 @@ def load_random_weights(model):
     state = torch.nn.Linear(*tuple(model.weight.T.shape)).state_dict()
     model.load_state_dict(state)
 
-    
+
 def parameterized_custom_name_func(func, param_num, param):
     # customize the test name generator function as we want both params to appear in the sub-test
     # name, as by default it shows only the first param
