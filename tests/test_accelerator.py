@@ -27,6 +27,17 @@ def create_components():
     return model, optimizer, scheduler, train_dl, valid_dl
 
 
+class ModelForTest(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = torch.nn.Linear(3, 4)
+        self.batchnorm = torch.nn.BatchNorm1d(4)
+        self.linear2 = torch.nn.Linear(4, 5)
+
+    def forward(self, x):
+        return self.linear2(self.batchnorm(self.linear1(x)))
+
+
 def get_signature(model):
     return (model.weight.abs().sum() + model.bias.abs().sum()).item()
 
@@ -135,6 +146,19 @@ class AcceleratorTester(AccelerateTestCase):
             # make sure loaded weights match
             load_checkpoint_in_model(model, tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    def test_save_model_offload(self, use_safetensors):
+        accelerator = Accelerator()
+
+        device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": "cpu"}
+
+        model = ModelForTest()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
+            load_checkpoint_in_model(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
+            with self.assertRaises(RuntimeError):
+                accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_load_model_with_hooks(self, use_safetensors):
