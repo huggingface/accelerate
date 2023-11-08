@@ -155,10 +155,16 @@ To find out more, check the documentation [here](../package_reference/utilities#
 
 If you have changed the device setup and are observing different model performance, this is likely due to the fact that 
 you have not updated your script when moving from one setup to another. The same script with the same batch size across TPU, 
-multi-GPU, and single-GPU with Accelerate will have different results. To make sure you can reproduce the results between 
-the setups, make sure to use the same seed, adjust the batch seed accordingly, consider scaling the learning rate. 
+multi-GPU, and single-GPU with Accelerate will have different results. 
 
-For more details, refer to the [Comparing performance between different device setups](../concept_guides/performance) guide.
+For example, if you were previously training on a single GPU with a batch size of 16, when moving to two GPU setup, 
+you need to change the batch size to 8 to have the same effective batch size. This is because when training with Accelerate, 
+the batch size passed to the dataloader is the **batch size per GPU**.
+
+To make sure you can reproduce the results between the setups, make sure to use the same seed, adjust the batch size 
+accordingly, consider scaling the learning rate.
+
+For more details and a quick reference for batch sizes, check out the [Comparing performance between different device setups](../concept_guides/performance) guide.
 
 ## Performance issues on different GPUs
 
