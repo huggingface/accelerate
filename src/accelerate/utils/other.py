@@ -29,7 +29,7 @@ from ..logging import get_logger
 from ..state import PartialState
 from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
-from .imports import is_deepspeed_available, is_tpu_available
+from .imports import is_deepspeed_available, is_torch_distributed_available, is_tpu_availabl
 from .transformer_engine import convert_model
 from .versions import is_torch_version
 
@@ -75,7 +75,7 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
 
         options += (DeepSpeedEngine,)
 
-    if is_torch_version(">=", FSDP_PYTORCH_VERSION):
+    if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_available():
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
         options += (FSDP,)
