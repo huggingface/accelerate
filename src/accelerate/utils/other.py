@@ -29,7 +29,7 @@ from ..logging import get_logger
 from ..state import PartialState
 from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
-from .imports import is_deepspeed_available, is_torch_distributed_available, is_tpu_availabl
+from .imports import is_deepspeed_available, is_torch_distributed_available, is_tpu_available
 from .transformer_engine import convert_model
 from .versions import is_torch_version
 
