@@ -168,7 +168,7 @@ For more details and a quick reference for batch sizes, check out the [Comparing
 
 ## Performance issues on different GPUs
 
-If your milti-GPU setup consists of different GPUs, you may hit some limitations:
+If your multi-GPU setup consists of different GPUs, you may hit some limitations:
 
 - There may be imbalance in GPU memory between the GPUs. In this case, the GPU with smaller memory will limit the batch size or the size of the model that can be loaded onto the GPUs.
 - If you are using GPUs with different performance profiles, the performance will be driven by the slowest GPU that you are using as the other GPUs will have to wait for it to complete its workload.
