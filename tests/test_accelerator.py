@@ -5,12 +5,13 @@ import tempfile
 from unittest.mock import patch
 
 import torch
+from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
-from accelerate.test_utils import require_bnb, require_multi_gpu, require_safetensors, slow
+from accelerate.test_utils import require_bnb, require_multi_gpu, slow
 from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import load_checkpoint_in_model
@@ -26,15 +27,6 @@ def create_components():
     return model, optimizer, scheduler, train_dl, valid_dl
 
 
-def get_signature(model):
-    return (model.weight.abs().sum() + model.bias.abs().sum()).item()
-
-
-def load_random_weights(model):
-    state = torch.nn.Linear(*tuple(model.weight.T.shape)).state_dict()
-    model.load_state_dict(state)
-
-
 class ModelForTest(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -44,6 +36,21 @@ class ModelForTest(torch.nn.Module):
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
+    
+def get_signature(model):
+    return (model.weight.abs().sum() + model.bias.abs().sum()).item()
+
+
+def load_random_weights(model):
+    state = torch.nn.Linear(*tuple(model.weight.T.shape)).state_dict()
+    model.load_state_dict(state)
+
+    
+def parameterized_custom_name_func(func, param_num, param):
+    # customize the test name generator function as we want both params to appear in the sub-test
+    # name, as by default it shows only the first param
+    param_based_name = "use_safetensors" if param.args[0] is True else "use_pytorch"
+    return f"{func.__name__}_{param_based_name}"
 
 
 class AcceleratorTester(AccelerateTestCase):
@@ -108,7 +115,8 @@ class AcceleratorTester(AccelerateTestCase):
             accelerator = Accelerator()
             self.assertEqual(str(accelerator.state.device), "cuda:64")
 
-    def test_save_load_model(self):
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    def test_save_load_model(self, use_safetensors):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
         accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
@@ -116,7 +124,7 @@ class AcceleratorTester(AccelerateTestCase):
         model_signature = get_signature(model)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            accelerator.save_state(tmpdirname)
+            accelerator.save_state(tmpdirname, safe_serialization=use_safetensors)
 
             # make sure random weights don't match
             load_random_weights(model)
@@ -126,44 +134,33 @@ class AcceleratorTester(AccelerateTestCase):
             accelerator.load_state(tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
 
-    def test_save_model_pytorch(self):
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    def test_save_model(self, use_safetensors):
         accelerator = Accelerator()
         model = torch.nn.Linear(10, 10)
 
         model_signature = get_signature(model)
         with tempfile.TemporaryDirectory() as tmpdirname:
-            accelerator.save_model(model, tmpdirname, safe_serialization=False)
+            accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors)
             # make sure loaded weights match
             load_checkpoint_in_model(model, tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
 
-    @require_safetensors
-    def test_save_model_safetensors(self):
-        accelerator = Accelerator()
-        model = torch.nn.Linear(10, 10)
-
-        model_signature = get_signature(model)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            accelerator.save_model(model, tmpdirname, safe_serialization=True)
-
-            # make sure loaded weights match
-            load_checkpoint_in_model(model, tmpdirname)
-            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
-
-    @require_safetensors
-    def test_save_model_offload(self):
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    def test_save_model_offload(self, use_safetensors):
         accelerator = Accelerator()
 
         device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": "cpu"}
 
         model = ModelForTest()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            accelerator.save_model(model, tmp_dir, safe_serialization=True)
+            accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
             load_checkpoint_in_model(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
             with self.assertRaises(RuntimeError):
-                accelerator.save_model(model, tmp_dir, safe_serialization=True)
+                accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
 
-    def test_save_load_model_with_hooks(self):
+    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    def test_save_load_model_with_hooks(self, use_safetensors):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
         accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
@@ -188,7 +185,7 @@ class AcceleratorTester(AccelerateTestCase):
         load_hook = accelerator.register_load_state_pre_hook(load_config)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            accelerator.save_state(tmpdirname)
+            accelerator.save_state(tmpdirname, safe_serialization=use_safetensors)
 
             # make sure random weights don't match with hooks
             load_random_weights(model)
@@ -209,7 +206,7 @@ class AcceleratorTester(AccelerateTestCase):
         load_hook.remove()
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            accelerator.save_state(tmpdirname)
+            accelerator.save_state(tmpdirname, safe_serialization=use_safetensors)
 
             # make sure random weights don't match with hooks removed
             load_random_weights(model)

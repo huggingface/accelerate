@@ -78,21 +78,18 @@ class SeedableRandomSampler(RandomSampler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epoch = 0
+        self.seed = torch.random.initial_seed()
 
     def __iter__(self):
-        g = torch.Generator()
-        if self.generator is not None:
-            seed = self.epoch + self.generator.initial_seed()
+        if self.generator is None:
+            self.generator = torch.Generator()
         else:
-            seed = self.epoch
-        g.manual_seed(seed)
-        n = len(self.data_source)
-        # Taken 1:1 from torch.utils.data.sampler.RandomSampler.__iter__
-        if self.replacement:
-            for _ in range(self.num_samples // 32):
-                yield from torch.randint(high=n, size=(32,), dtype=torch.int64, generator=g).tolist()
-        else:
-            yield from torch.randperm(n, generator=g).tolist()
+            self.seed = self.generator.initial_seed()
+        # Allow `self.epoch` to modify the seed of the generator
+        seed = self.epoch + self.seed
+        self.generator.manual_seed(seed)
+        yield from super().__iter__()
+        self.set_epoch(self.epoch + 1)
 
     def set_epoch(self, epoch: int):
         "Sets the current iteration of the sampler."
@@ -476,10 +473,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         # In case it is manually passed in, the user can set it to what they like
         if self.iteration != epoch:
             self.iteration = epoch
-        if hasattr(self.batch_sampler, "set_epoch"):
-            # Case: `SkipBatchSampler`
-            self.batch_sampler.set_epoch(epoch)
-        elif hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
+        if hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
             self.batch_sampler.sampler.set_epoch(epoch)
         # We support if a custom `Dataset` implementation has `set_epoch`
         # or in general HF datasets `Datasets`
@@ -840,18 +834,16 @@ def prepare_data_loader(
     else:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
     if isinstance(sampler, RandomSampler):
-        # CPU's specifically do not require this workaround
-        if not ((num_processes == 1) and (device.type == "cpu")):
-            # When iterating through the dataloader we want to ensure that
-            # on each process we are iterating through the same
-            # samples in the same order if a seed is set. This requires a tweak
-            # to the `torch.utils.data.RandomSampler` class (if used).
-            sampler = SeedableRandomSampler(
-                data_source=sampler.data_source,
-                replacement=sampler.replacement,
-                num_samples=sampler._num_samples,
-                generator=getattr(sampler, "generator", torch.Generator()),
-            )
+        # When iterating through the dataloader during distributed processes
+        # we want to ensure that on each process we are iterating through the same
+        # samples in the same order if a seed is set. This requires a tweak
+        # to the `torch.utils.data.RandomSampler` class (if used).
+        sampler = SeedableRandomSampler(
+            data_source=sampler.data_source,
+            replacement=sampler.replacement,
+            num_samples=sampler._num_samples,
+            generator=getattr(sampler, "generator", torch.Generator()),
+        )
 
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:

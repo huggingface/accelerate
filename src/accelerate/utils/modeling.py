@@ -30,7 +30,7 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
-from .imports import is_mps_available, is_npu_available, is_safetensors_available, is_xpu_available
+from .imports import is_mps_available, is_npu_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -39,9 +39,9 @@ if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
 
 
-if is_safetensors_available():
-    from safetensors import safe_open
-    from safetensors.torch import load_file as safe_load_file
+from safetensors import safe_open
+from safetensors.torch import load_file as safe_load_file
+
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
@@ -1156,10 +1156,6 @@ def load_state_dict(checkpoint_file, device_map=None):
             name, once a given module name is inside, every submodule of it will be sent to the same device.
     """
     if checkpoint_file.endswith(".safetensors"):
-        if not is_safetensors_available():
-            raise ImportError(
-                f"To load {checkpoint_file}, the `safetensors` library is necessary `pip install safetensors`."
-            )
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
             weight_names = f.keys()

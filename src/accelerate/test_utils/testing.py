@@ -37,7 +37,6 @@ from ..utils import (
     is_deepspeed_available,
     is_mps_available,
     is_pandas_available,
-    is_safetensors_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_version,
@@ -177,14 +176,6 @@ def require_multi_xpu(test_case):
     XPUs.
     """
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
-
-
-def require_safetensors(test_case):
-    """
-    Decorator marking a test that requires safetensors installed. These tests are skipped when safetensors isn't
-    installed
-    """
-    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
 
 
 def require_deepspeed(test_case):
