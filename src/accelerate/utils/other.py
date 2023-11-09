@@ -115,7 +115,7 @@ def wait_for_everyone():
     PartialState().wait_for_everyone()
 
 
-def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = True):
+def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = False):
     """
     Save the data to disk. Use in place of `torch.save()`.
 
@@ -126,8 +126,8 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Tru
             The file (or file-like object) to use to save the data
         save_on_each_node (`bool`, *optional*, defaults to `False`):
             Whether to only save on the global main process
-        safe_serialization (`bool`, *optional*, defaults to `True`):
-            Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
+        safe_serialization (`bool`, *optional*, defaults to `False`):
+            Whether to save `obj` using `safetensors` or the traditional PyTorch way (that uses `pickle`).
     """
     save_func = torch.save if not safe_serialization else partial(safe_save_file, metadata={"format": "pt"})
     if PartialState().distributed_type == DistributedType.TPU:
