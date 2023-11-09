@@ -20,7 +20,7 @@ There are a large number of experiment tracking API's available, however getting
 
 ## Integrated Trackers
 
-Currently `Accelerate` supports six trackers out-of-the-box:
+Currently `Accelerate` supports seven trackers out-of-the-box:
 
 - TensorBoard
 - WandB
@@ -28,6 +28,7 @@ Currently `Accelerate` supports six trackers out-of-the-box:
 - Aim
 - MLFlow
 - ClearML
+- DVCLive
 
 To use any of them, pass in the selected type(s) to the `log_with` parameter in [`Accelerate`]:
 ```python
