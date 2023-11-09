@@ -263,7 +263,7 @@ def save_custom_state(obj, path, index: int = 0, save_on_each_node: bool = False
     # Should this be the right way to get a qual_name type value from `obj`?
     save_location = Path(path) / f"custom_checkpoint_{index}.pkl"
     logger.info(f"Saving the state of {get_pretty_name(obj)} to {save_location}")
-    save(obj.state_dict(), save_location, save_on_each_node=save_on_each_node)
+    save(obj.state_dict(), save_location, save_on_each_node=save_on_each_node, safe_serialization=False)
 
 
 def load_custom_state(obj, path, index: int = 0):
