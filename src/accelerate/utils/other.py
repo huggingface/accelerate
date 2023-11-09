@@ -19,9 +19,11 @@ import socket
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
+from typing import OrderedDict
 
 import torch
 from packaging.version import Version
+from safetensors.torch import _remove_duplicate_names
 from safetensors.torch import save_file as safe_save_file
 
 from ..commands.config.default import write_basic_config  # noqa: F401
@@ -129,7 +131,21 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Tru
         safe_serialization (`bool`, *optional*, defaults to `True`):
             Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
     """
-    save_func = torch.save if not safe_serialization else partial(safe_save_file, metadata={"format": "pt"})
+    # Check if it's a model and remove duplicates
+    if safe_serialization:
+        metadata = {"format": "pt"}
+        if isinstance(obj, OrderedDict):
+            to_removes = _remove_duplicate_names(obj)
+            for kept_name, to_remove_group in to_removes.items():
+                for to_remove in to_remove_group:
+                    if to_remove not in metadata:
+                        metadata[to_remove] = kept_name
+                    del obj[to_remove]
+            obj = {k: v.contiguous() for k, v in obj.items()}
+        save_func = partial(safe_save_file, metadata=metadata)
+    else:
+        save_func = torch.save
+
     if PartialState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
     elif PartialState().is_main_process and not save_on_each_node:

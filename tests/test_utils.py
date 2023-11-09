@@ -14,12 +14,14 @@
 
 import os
 import pickle
+import tempfile
 import unittest
 import warnings
 from collections import UserDict, namedtuple
 from unittest.mock import Mock, patch
 
 import torch
+from torch import nn
 
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import require_cuda, require_torch_min_version
@@ -32,6 +34,7 @@ from accelerate.utils import (
     listify,
     patch_environment,
     recursively_apply,
+    save,
     send_to_device,
 )
 
@@ -205,3 +208,18 @@ class UtilsTester(unittest.TestCase):
             self.assertEqual(ctx.records[0].levelname, "WARNING")
             self.assertIn("5.4.0", ctx.records[0].msg)
             self.assertIn("5.5.0", ctx.records[0].msg)
+
+    def test_save_safetensor_shared_memory(self):
+        class Model(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.a = nn.Linear(100, 100)
+                self.b = self.a
+
+            def forward(self, x):
+                return self.b(self.a(x))
+
+        model = Model()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "model.safetensors")
+            save(model.state_dict(), save_path, safe_serialization=True)
