@@ -222,4 +222,7 @@ class UtilsTester(unittest.TestCase):
         model = Model()
         with tempfile.TemporaryDirectory() as tmp_dir:
             save_path = os.path.join(tmp_dir, "model.safetensors")
-            save(model.state_dict(), save_path, safe_serialization=True)
+            with self.assertLogs(level="WARNING") as log:
+                save(model.state_dict(), save_path, safe_serialization=True)
+                self.assertEqual(len(log.records), 1)
+                self.assertIn("Removed shared tensor", log.output[0])
