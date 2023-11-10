@@ -41,7 +41,7 @@ from accelerate.utils import (
     is_rich_available,
     is_sagemaker_available,
     is_torch_version,
-    is_tpu_available,
+    is_torch_xla_available,
     is_xpu_available,
     patch_environment,
     prepare_deepspeed_cmd_env,
@@ -930,7 +930,7 @@ def _validate_launch_command(args):
                 native_amp = is_torch_version(">=", "1.10")
             else:
                 native_amp = is_bf16_available(True)
-            if args.mixed_precision == "bf16" and not native_amp and not (args.tpu and is_tpu_available()):
+            if args.mixed_precision == "bf16" and not native_amp and not (args.tpu and is_torch_xla_available(tuple(["TPU"]))):
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
         # Silently set the default here

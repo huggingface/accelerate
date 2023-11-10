@@ -21,10 +21,10 @@ import torch
 from ..state import AcceleratorState
 from .constants import CUDA_DISTRIBUTED_TYPES
 from .dataclasses import DistributedType, RNGType
-from .imports import is_npu_available, is_tpu_available, is_xpu_available
+from .imports import is_npu_available, is_torch_xla_available, is_xpu_available
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
@@ -50,7 +50,7 @@ def set_seed(seed: int, device_specific: bool = False):
     else:
         torch.cuda.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
-    if is_tpu_available():
+    if is_torch_xla_available():
         xm.set_rng_state(seed)
 
 
@@ -61,7 +61,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
     elif rng_type == RNGType.CUDA:
         rng_state = torch.cuda.get_rng_state()
     elif rng_type == RNGType.XLA:
-        assert is_tpu_available(), "Can't synchronize XLA seeds on an environment without TPUs."
+        assert is_torch_xla_available(), "Can't synchronize XLA seeds as torch_xla is unavailable."
         rng_state = torch.tensor(xm.get_rng_state())
     elif rng_type == RNGType.NPU:
         assert is_npu_available(), "Can't synchronize NPU seeds on an environment without NPUs."

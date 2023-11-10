@@ -43,7 +43,7 @@ from ..utils import (
     is_tensorboard_available,
     is_timm_available,
     is_torch_version,
-    is_tpu_available,
+    is_torch_xla_available,
     is_transformers_available,
     is_wandb_available,
     is_xpu_available,
@@ -170,7 +170,7 @@ def require_tpu(test_case):
     """
     Decorator marking a test that requires TPUs. These tests are skipped when there are no TPUs available.
     """
-    return unittest.skipUnless(is_tpu_available(), "test requires TPU")(test_case)
+    return unittest.skipUnless(is_torch_xla_available(), "test requires TPU")(test_case)
 
 
 def require_single_device(test_case):

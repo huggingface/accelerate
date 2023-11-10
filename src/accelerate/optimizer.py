@@ -18,10 +18,10 @@ import warnings
 import torch
 
 from .state import AcceleratorState, GradientState
-from .utils import DistributedType, honor_type, is_tpu_available
+from .utils import DistributedType, honor_type, is_torch_xla_available
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
@@ -122,11 +122,12 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 self.optimizer.zero_grad()
 
     def step(self, closure=None):
+        if not self.gradient_state.sync_gradients and self.accelerator_state == DistributedType.TPU:
+            gradients = xm._fetch_gradients(self.optimizer)
+            xm.all_reduce("sum", gradients, scale=1.0/xm.xrt_world_size())
+            self.gradient_state._set_sync_gradients(True)
         if self.gradient_state.sync_gradients:
-            if self.accelerator_state.distributed_type == DistributedType.TPU:
-                optimizer_args = {"closure": closure} if closure is not None else {}
-                xm.optimizer_step(self.optimizer, optimizer_args=optimizer_args)
-            elif self.scaler is not None:
+            if self.scaler is not None:
                 self.optimizer.step = self._optimizer_patched_step_method
 
                 self.scaler.step(self.optimizer, closure)
@@ -143,6 +144,8 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 self._accelerate_step_called = False
             else:
                 self.optimizer.step(closure)
+        if self.accelerator_state == DistributedType.TPU:
+            self.gradient_state._set_sync_gradients(False)
 
     def _switch_parameters(self, parameters_map):
         for param_group in self.optimizer.param_groups:

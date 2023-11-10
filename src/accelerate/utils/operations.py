@@ -26,10 +26,10 @@ import torch
 from ..state import PartialState
 from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
-from .imports import is_npu_available, is_torch_distributed_available, is_torch_version, is_tpu_available
+from .imports import is_npu_available, is_torch_distributed_available, is_torch_version, is_torch_xla_available
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 

@@ -20,7 +20,7 @@ import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
-from .state import AcceleratorState, DistributedType, GradientState, is_tpu_available
+from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
 from .utils import (
     RNGType,
     broadcast,
@@ -500,7 +500,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             return len(self.dataset)
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.distributed.parallel_loader as xpl
 
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):

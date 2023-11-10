@@ -28,7 +28,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from accelerate import Accelerator
 from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.test_utils import RegressionDataset, RegressionModel, torch_device
-from accelerate.utils import set_seed
+from accelerate.utils import is_torch_xla_available, set_seed
 
 
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"

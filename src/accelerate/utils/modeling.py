@@ -30,7 +30,7 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
-from .imports import is_mps_available, is_npu_available, is_xpu_available
+from .imports import is_mps_available, is_npu_available, is_torch_xla_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -1628,8 +1628,9 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
     else:
         autocast_kwargs = autocast_kwargs.to_kwargs()
     if native_amp:
+        device_type = "cuda" if (state.distributed_type == DistributedType.TPU and is_torch_xla_available(tuple(["GPU"]))) else state.device.type
         if state.mixed_precision == "fp16":
-            return torch.autocast(device_type=state.device.type, dtype=torch.float16, **autocast_kwargs)
+            return torch.autocast(device_type=device_type, dtype=torch.float16, **autocast_kwargs)
         elif state.mixed_precision == "bf16" and state.distributed_type in [
             DistributedType.NO,
             DistributedType.MULTI_CPU,
@@ -1637,9 +1638,10 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.FSDP,
+            DistributedType.TPU,
         ]:
-            return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, **autocast_kwargs)
+            return torch.autocast(device_type=device_type, dtype=torch.bfloat16, **autocast_kwargs)
         else:
-            return torch.autocast(device_type=state.device.type, **autocast_kwargs)
+            return torch.autocast(device_type=device_type, **autocast_kwargs)
     else:
         return contextlib.nullcontext()

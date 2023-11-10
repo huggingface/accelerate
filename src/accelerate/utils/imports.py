@@ -25,13 +25,19 @@ from packaging.version import parse
 from .environment import parse_flag_from_env, str_to_bool
 from .versions import compare_versions, is_torch_version
 
+ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
+# Try to run Torch native job in an environment with TorchXLA installed by setting this value to 0.
+USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
 
 try:
-    import torch_xla.core.xla_model as xm  # noqa: F401
+    if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
+        import torch_xla.core.xla_model as xm  # noqa: F401
 
-    _tpu_available = True
+        _torch_xla_available = True
+    else:
+        _torch_xla_available = False
 except ImportError:
-    _tpu_available = False
+    _torch_xla_available = False
 
 
 # Cache this result has it's a C FFI call which can be pretty time-consuming
@@ -106,20 +112,19 @@ def is_cuda_available():
 
 
 @lru_cache
-def is_tpu_available(check_device=True):
-    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    # Due to bugs on the amp series GPUs, we disable torch-xla on them
-    if is_cuda_available():
+def is_torch_xla_available(hardware_types=("TPU", "GPU")):
+    """
+    Check if `torch_xla` is available and real hardware in `hardware_types`. To train a native pytorch job
+    in an environment with torch xla installed, set the USE_TORCH_XLA to false.
+    """
+    if USE_TORCH_XLA not in ENV_VARS_TRUE_VALUES:
         return False
-    if check_device:
-        if _tpu_available:
-            try:
-                # Will raise a RuntimeError if no XLA configuration is found
-                _ = xm.xla_device()
-                return True
-            except RuntimeError:
-                return False
-    return _tpu_available
+
+    if _torch_xla_available:
+        xla_device = xm.xla_device()
+        return xm.xla_device_hw(xla_device) in hardware_types
+
+    return False
 
 
 def is_deepspeed_available():
@@ -128,7 +133,7 @@ def is_deepspeed_available():
 
 def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
-    if is_tpu_available():
+    if is_torch_xla_available(tuple(["TPU"])):
         return not ignore_tpu
     if is_cuda_available():
         return torch.cuda.is_bf16_supported()
