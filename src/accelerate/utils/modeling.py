@@ -535,15 +535,22 @@ def retie_parameters(model, tied_params):
     """
     for tied_group in tied_params:
         param_to_tie = None
-        # First iteration of the loop will set param_to_tie, next ones will tie it to the others
+        # two loops : the first one to set param_to_tie , the second one to change the values of tied_group
         for param_name in tied_group:
             module = model
             splits = param_name.split(".")
             for split in splits[:-1]:
                 module = getattr(module, split)
-            if param_to_tie is None:
-                param_to_tie = getattr(module, splits[-1])
-            else:
+            param = getattr(module, splits[-1])
+            if param_to_tie is None and param.device != torch.device("meta"):
+                param_to_tie = param
+                break
+        if param_to_tie is not None:
+            for param_name in tied_group:
+                module = model
+                splits = param_name.split(".")
+                for split in splits[:-1]:
+                    module = getattr(module, split)
                 setattr(module, splits[-1], param_to_tie)
 
 
