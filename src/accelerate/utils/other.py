@@ -152,7 +152,6 @@ def clean_state_dict_for_safetensors(state_dict: dict):
     state_dict = {k: v.contiguous() for k, v in state_dict.items()}
     return state_dict
 
-
 def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = True):
     """
     Save the data to disk. Use in place of `torch.save()`.
@@ -165,7 +164,7 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Tru
         save_on_each_node (`bool`, *optional*, defaults to `False`):
             Whether to only save on the global main process
         safe_serialization (`bool`, *optional*, defaults to `True`):
-            Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
+            Whether to save `obj` using `safetensors` or the traditional PyTorch way (that uses `pickle`).
     """
     # Check if it's a model and remove duplicates
     if safe_serialization:
