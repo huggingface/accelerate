@@ -168,6 +168,7 @@ from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
 from .memory import find_executable_batch_size, release_memory
 from .other import (
     check_os_kernel,
+    clean_state_dict_for_safetensors,
     clear_environment,
     convert_bytes,
     extract_model_from_parallel,

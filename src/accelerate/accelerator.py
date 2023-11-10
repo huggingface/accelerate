@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import collections
 import contextlib
 import functools
 import json
@@ -64,6 +63,7 @@ from .utils import (
     RNGType,
     TorchDynamoPlugin,
     check_os_kernel,
+    clean_state_dict_for_safetensors,
     compare_versions,
     convert_model,
     convert_outputs_to_fp32,
@@ -73,7 +73,6 @@ from .utils import (
     get_mixed_precision_context_manager,
     get_pretty_name,
     has_transformer_engine_layers,
-    id_tensor_storage,
     is_bf16_available,
     is_deepspeed_available,
     is_fp8_available,
@@ -2583,35 +2582,7 @@ class Accelerator:
         state_dict = self.get_state_dict(model)
 
         if safe_serialization:
-            # Safetensors does not allow tensor aliasing.
-            # We're going to remove aliases before saving
-            ptrs = collections.defaultdict(list)
-            # when bnb serialization is used the weights in the state dict can be strings
-            for name, tensor in state_dict.items():
-                if not isinstance(tensor, str):
-                    ptrs[id_tensor_storage(tensor)].append(name)
-
-            # These are all the pointers of shared tensors.
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            warn_names = set()
-            for names in shared_ptrs.values():
-                # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
-                # If the link between tensors was done at runtime then `from_pretrained` will not get
-                # the key back leading to random tensor. A proper warning will be shown
-                # during reload (if applicable), but since the file is not necessarily compatible with
-                # the config, better show a proper warning.
-                found = 0
-                for name in names:
-                    if name in state_dict:
-                        found += 1
-                        if found > 1:
-                            del state_dict[name]
-                            warn_names.add(name)
-            if len(warn_names) > 0:
-                logger.warning(
-                    f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
-                )
-
+            state_dict = clean_state_dict_for_safetensors(state_dict)
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
 
         # Shard the model if it is too big.
