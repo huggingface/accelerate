@@ -49,6 +49,8 @@ If a log should be called on all processes and in order, also pass `in_order=Tru
 
 ## Hanging code and timeout errors
 
+### Mismatched tensor shapes 
+
 If your code seems to be hanging for a significant amount time on a distributed setup, a common cause is mismatched shapes of tensors on different 
 devices. 
 
@@ -57,9 +59,7 @@ necessary to grab tensors across devices to perform operations on them collectiv
 `torch.distributed` performing a `gather` operation, which requires that tensors have the **exact same shape** across all processes.
 When the tensor shapes don't match, you will experience handing code, and eventually hit a timeout exception. 
 
-If you suspect this to be the case, use Accelerate's operational debug mode to immediately catch the issue. 
-
-### Accelerate's operational debug mode
+If you suspect this to be the case, use Accelerate's operational debug mode to immediately catch the issue.
 
 The recommended way to enable Accelerate's operational debug mode is during `accelerate config` setup. 
 Alternative ways to enable debug mode are: 
@@ -102,13 +102,39 @@ Input shapes:
   - Process 1: [1, 2, 5]
   ```
 
+### Early stopping leads to hanging
+
+When doing early stopping in distributed training, if each process has a specific stopping condition (e.g. validation loss), 
+it may not be synchronized across all of them. As a result, a break can happen on process 0 but not on process 1. 
+This will cause the code to hang indefinitely until a timeout occurs.
+
+If you have early stopping conditionals, use `set_breakpoint` and `check_breakpoint` methods to make sure all the processes
+are ended correctly:
+
+```py
+# Assume `should_do_breakpoint` is a custom defined function that returns a conditional, 
+# and that conditional might be true only on process 1
+if should_do_breakpoint(loss):
+    accelerator.set_breakpoint()
+
+# Later in the training script when we need to check for the breakpoint
+if accelerator.check_breakpoint():
+    break
+```
+
+### Hanging on low kernel versions on Linux
+
+This is a known issue. On Linux with kernel version < 5.5, hanging processes have been reported. To avoid 
+encountering this problem, we recommend upgrading your system to a later kernel version.
+
 ## CUDA out of memory
 
 One of the most frustrating errors when it comes to running training scripts is hitting "CUDA Out-of-Memory", 
 as the entire script needs to be restarted, progress is lost, and typically a developer would want to simply
 start their script and let it run.
 
-`Accelerate` provides a utility heavily based on [toma](https://github.com/BlackHC/toma) to give this capability.
+To address this problem, `Accelerate` offers a utility `find_executable_batch_size` that is heavily based on [toma](https://github.com/BlackHC/toma).
+The utility retries code that fails due to OOM (out-of-memory) conditions and lowers batch sizes automatically.
 
 ### find_executable_batch_size
 
@@ -170,10 +196,10 @@ For more details and a quick reference for batch sizes, check out the [Comparing
 
 If your multi-GPU setup consists of different GPUs, you may hit some limitations:
 
-- There may be imbalance in GPU memory between the GPUs. In this case, the GPU with smaller memory will limit the batch size or the size of the model that can be loaded onto the GPUs.
+- There may be an imbalance in GPU memory between the GPUs. In this case, the GPU with smaller memory will limit the batch size or the size of the model that can be loaded onto the GPUs.
 - If you are using GPUs with different performance profiles, the performance will be driven by the slowest GPU that you are using as the other GPUs will have to wait for it to complete its workload.
 
-Vastly different GPUs within the same setup can lead to performance bottlenecks. 
+Vastly different GPUs within the same setup can lead to performance bottlenecks.
 
 ## Ask for help
 
