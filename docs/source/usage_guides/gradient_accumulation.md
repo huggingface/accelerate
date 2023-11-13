@@ -126,7 +126,15 @@ training on. 🤗 Accelerate automagically does this for you by default. Behind 
 
 <Tip warning={true}>
 
-The [`state.GradientState`] (what runs this code and how Accelerate knows how to do everything) is sync'd with the active dataloader being iterated upon. As such it assumes naively that when we have reached the end of the dataloader everything will sync and a step will be performed. To disable this, set `sync_with_dataloader` to be `False` in the [`GradientAccumulationPlugin`].
+The [`state.GradientState`] is sync'd with the active dataloader being iterated upon. As such it assumes naively that when we have reached the end of the dataloader everything will sync and a step will be performed. To disable this, set `sync_with_dataloader` to be `False` in the [`GradientAccumulationPlugin`]:
+
+```{python}
+from accelerate import Accelerator
+from accelerate.utils import GradientAccumulationPlugin
+
+plugin = GradientAccumulationPlugin(sync_with_dataloader=False)
+accelerator = Accelerator(..., gradient_accumulation_plugin=plugin)
+```
 
 </Tip>
 
