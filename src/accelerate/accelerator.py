@@ -368,6 +368,10 @@ class Accelerator:
                     else:
                         self.autocast_handler = handler
 
+        if self.fp8_recipe_handler is None and self.mixed_precision == "fp8":
+            # Use `ms-amp` by default
+            self.fp8_recipe_handler = MSAMPRecipeKwargs()
+
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
             mixed_precision=mixed_precision,
