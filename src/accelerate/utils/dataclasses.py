@@ -195,6 +195,13 @@ class MSAMPRecipeKwargs(KwargsHandler):
     """
     optimization_level: str = "O2"
 
+    def __post_init__(self):
+        if self.optimization_level not in ["O1", "O2"]:
+            raise ValueError(
+                f"Unsupported optimization level passed (self.optimization_level) "
+                "please use one of `O1` or `O2`."
+            )
+
 
 @dataclass
 class TERecipeKwargs(KwargsHandler):
