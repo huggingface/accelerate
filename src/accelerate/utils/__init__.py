@@ -30,6 +30,8 @@ from .dataclasses import (
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
+    MSAMPRecipeKwargs,
+    TERecipeKwargs,
     PrecisionType,
     ProjectConfiguration,
     RNGType,
