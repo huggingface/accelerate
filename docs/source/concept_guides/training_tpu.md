@@ -36,7 +36,7 @@ Below is an example of a training function passed to the [`notebook_launcher`] i
 
 <Tip>
 
-    This code snippet is based off the one from the `simple_nlp_example` notebook found [here](https://github.com/huggingface/notebooks/blob/main/examples/accelerate/simple_nlp_example.ipynb) with slight 
+    This code snippet is based off the one from the `simple_nlp_example` notebook found [here](https://github.com/huggingface/notebooks/blob/main/examples/accelerate_examples/simple_nlp_example.ipynb) with slight 
     modifications for the sake of simplicity
 
 </Tip>

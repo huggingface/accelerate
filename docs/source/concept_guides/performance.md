@@ -74,7 +74,7 @@ In this example, there are two GPUs for "Multi-GPU" and a TPU pod with 8 workers
 
 ## Learning Rates 
 
-As noted in multiple sources[[1](https://aws.amazon.com/blogs/machine-learning/scalable-multi-node-deep-learning-training-using-gpus-in-the-aws-cloud/)][[2](https://docs.nvidia.com/clara/tlt-mi_archive/clara-train-sdk-v2.0/nvmidl/appendix/training_with_multiple_gpus.html)], the learning rate should be scaled *linearly* based on the number of devices present. The below 
+As noted in multiple sources[[1](https://aws.amazon.com/blogs/machine-learning/scalable-multi-node-deep-learning-training-using-gpus-in-the-aws-cloud/)][[2](https://docs.nvidia.com/clara/clara-train-sdk/pt/model.html#classification-models-multi-gpu-training)], the learning rate should be scaled *linearly* based on the number of devices present. The below 
 snippet shows doing so with Accelerate:
 
 <Tip>
