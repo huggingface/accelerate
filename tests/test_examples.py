@@ -205,7 +205,7 @@ class FeatureExamplesTests(TempDirTestCase):
         run_command(self._launch_args + testargs)
 
     @require_trackers
-    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
     def test_tracking(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             testargs = f"""

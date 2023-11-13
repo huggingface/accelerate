@@ -487,41 +487,38 @@ class CustomTrackerTestCase(unittest.TestCase):
 
 
 @require_dvclive
+@mock.patch("dvclive.live.get_dvc_repo", return_value="something")
 class DVCLiveTrackingTest(unittest.TestCase):
-    def test_init_trackers(self):
-        with mock.patch("dvclive.live.get_dvc_repo") as repo_mock:
-            repo_mock.return_value = None
-            project_name = "test_project_with_config"
-            with tempfile.TemporaryDirectory() as dirpath:
-                accelerator = Accelerator(log_with="dvclive")
-                config = {
-                    "num_iterations": 12,
-                    "learning_rate": 1e-2,
-                    "some_boolean": False,
-                    "some_string": "some_value",
-                }
-                init_kwargs = {"dvclive": {"dir": dirpath, "save_dvc_exp": False, "dvcyaml": None}}
-                accelerator.init_trackers(project_name, config, init_kwargs)
-                accelerator.end_training()
-                live = accelerator.trackers[0].live
-                params = load_yaml(live.params_file)
-                assert params == config
+    def test_init_trackers(self, mock_repo):
+        project_name = "test_project_with_config"
+        with tempfile.TemporaryDirectory() as dirpath:
+            accelerator = Accelerator(log_with="dvclive")
+            config = {
+                "num_iterations": 12,
+                "learning_rate": 1e-2,
+                "some_boolean": False,
+                "some_string": "some_value",
+            }
+            init_kwargs = {"dvclive": {"dir": dirpath, "save_dvc_exp": False, "dvcyaml": None}}
+            accelerator.init_trackers(project_name, config, init_kwargs)
+            accelerator.end_training()
+            live = accelerator.trackers[0].live
+            params = load_yaml(live.params_file)
+            assert params == config
 
-    def test_log(self):
-        with mock.patch("dvclive.live.get_dvc_repo") as repo_mock:
-            repo_mock.return_value = None
-            project_name = "test_project_with_log"
-            with tempfile.TemporaryDirectory() as dirpath:
-                accelerator = Accelerator(log_with="dvclive", project_dir=dirpath)
-                init_kwargs = {"dvclive": {"dir": dirpath, "save_dvc_exp": False, "dvcyaml": None}}
-                accelerator.init_trackers(project_name, init_kwargs=init_kwargs)
-                values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
-                accelerator.log(values, step=0)
-                accelerator.end_training()
-                live = accelerator.trackers[0].live
-                logs, latest = parse_metrics(live)
-                assert latest == values
-                scalars = os.path.join(live.plots_dir, Metric.subfolder)
-                assert os.path.join(scalars, "total_loss.tsv") in logs
-                assert os.path.join(scalars, "iteration.tsv") in logs
-                assert os.path.join(scalars, "my_text.tsv") in logs
+    def test_log(self, mock_repo):
+        project_name = "test_project_with_log"
+        with tempfile.TemporaryDirectory() as dirpath:
+            accelerator = Accelerator(log_with="dvclive", project_dir=dirpath)
+            init_kwargs = {"dvclive": {"dir": dirpath, "save_dvc_exp": False, "dvcyaml": None}}
+            accelerator.init_trackers(project_name, init_kwargs=init_kwargs)
+            values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
+            accelerator.log(values, step=0)
+            accelerator.end_training()
+            live = accelerator.trackers[0].live
+            logs, latest = parse_metrics(live)
+            assert latest == values
+            scalars = os.path.join(live.plots_dir, Metric.subfolder)
+            assert os.path.join(scalars, "total_loss.tsv") in logs
+            assert os.path.join(scalars, "iteration.tsv") in logs
+            assert os.path.join(scalars, "my_text.tsv") in logs
