@@ -168,12 +168,39 @@ class InitProcessGroupKwargs(KwargsHandler):
     init_method: Optional[str] = None
     timeout: timedelta = timedelta(seconds=1800)
 
-
 @dataclass
-class FP8RecipeKwargs(KwargsHandler):
+class MSAMPRecipeKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
-    training. Please refer to the documentation of this
+    training with `ms-amp`.
+
+    Args:
+        `optimization_level` (`str`), one of `O1`, `O2`, or `O3`. (default is `O2`):
+            What level of 8-bit collective communication should be used. In general:
+            * O1: Weight gradients and `all_reduce` communications are done in fp8, reducing GPU
+                  memory usage and communication bandwidth
+            * O2: First-order optimizer states are in 8-bit, and second order states are in FP16.
+                  Only available when using Adam or AdamW. This maintains accuracy and can potentially
+                  save the highest memory.
+            * 03: Specifically for DeepSpeed, implements capabilities so weights and master weights of models
+                  are stored in FP8. If `fp8` is selected and deepspeed is enabled, will be used by default.
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import MSAMPRecipeKwargs
+
+    kwargs = MSAMPRecipeKwargs(optimization_level="02")
+    accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
+    ```
+    """
+    optimization_level: str = "O2"
+
+
+@dataclass
+class TERecipeKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
+    training with `transformers-engine`. Please refer to the documentation of this
     [class](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html#transformer_engine.common.recipe.DelayedScaling)
     for more information on each argument.
 
@@ -185,7 +212,6 @@ class FP8RecipeKwargs(KwargsHandler):
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
     ```
     """
-
     margin: int = 0
     interval: int = 1
     fp8_format: str = "E4M3"
@@ -199,6 +225,16 @@ class FP8RecipeKwargs(KwargsHandler):
             raise ValueError("`fp8_format` must be 'E4M3' or 'HYBRID'.")
         if self.amax_compute_algo not in ["max", "most_recent"]:
             raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
+
+@dataclass
+class FP8RecipeKwargs(TERecipeKwargs):
+    def __post_init__(self):
+        super().__post_init__()
+        warnings.warn(
+            "Using the `FP8RecipeKwargs` deprecated and will be removed in v0.27.0. "
+            "Please use the `TERecipeKwargs` class instead and pass it to the `Accelerator` as a `kwarg_handler`.",
+            FutureWarning,
+        )
 
 
 class EnumWithContains(enum.EnumMeta):

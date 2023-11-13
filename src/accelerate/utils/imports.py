@@ -213,6 +213,9 @@ def is_clearml_available():
 def is_pandas_available():
     return _is_package_available("pandas")
 
+def is_msamp_available():
+    return _is_package_available("msamp")
+
 
 def is_mlflow_available():
     if _is_package_available("mlflow"):
