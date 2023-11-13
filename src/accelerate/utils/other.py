@@ -149,9 +149,7 @@ def clean_state_dict_for_safetensors(state_dict: dict):
         logger.warning(
             f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
         )
-    for k, v in state_dict.items():
-        if hasattr(v, "contiguous"):
-            state_dict[k] = v.contiguous()
+    state_dict = {k: v.contiguous() for k, v in state_dict.items()}
     return state_dict
 
 
