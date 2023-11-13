@@ -116,7 +116,7 @@ class AcceleratorTester(AccelerateTestCase):
             accelerator = Accelerator()
             self.assertEqual(str(accelerator.state.device), "cuda:64")
 
-    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    @parameterized.expand((True, False), name_func=parameterized_custom_name_func)
     def test_save_load_model(self, use_safetensors):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()

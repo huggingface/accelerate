@@ -127,7 +127,7 @@ def clean_state_dict_for_safetensors(state_dict: dict):
             The state dictionary from a model
     """
     ptrs = collections.defaultdict(list)
-    # When bnb serialization is used, weights in state dict can eb strings
+    # When bnb serialization is used, weights in state dict can be strings
     for name, tensor in state_dict.items():
         if not isinstance(tensor, str):
             ptrs[id_tensor_storage(tensor)].append(name)
