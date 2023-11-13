@@ -149,8 +149,8 @@ To run it in each of these various modes, use the following commands:
 - multi GPUs (using PyTorch distributed mode)
     * With Accelerate config and launcher
         ```bash
-        accelerate config  # This will create a config file on your server
-        accelerate launch --config_file generated_config_file ./cv_example.py --data_dir path_to_data  # This will run the script on your server
+        accelerate config --config_file config.yaml  # This will create a config file on your server to `config.yaml`
+        accelerate launch --config_file config.yaml ./cv_example.py --data_dir path_to_data  # This will run the script on your server
         ```
     * With traditional PyTorch launcher (`torch.distributed.launch` can be used with older versions of PyTorch)
         ```bash
@@ -159,8 +159,8 @@ To run it in each of these various modes, use the following commands:
 - multi GPUs, multi node (several machines, using PyTorch distributed mode)
     * With Accelerate config and launcher, on each machine:
         ```bash
-        accelerate config  # This will create a config file on each server
-        accelerate launch --config_file generated_config_file ./cv_example.py --data_dir path_to_data  # This will run the script on each server
+        accelerate config --config_file config.yaml  # This will create a config file on your server to `config.yaml`
+        accelerate launch --config_file config.yaml ./cv_example.py --data_dir path_to_data  # This will run the script on each server
         ```
     * With PyTorch launcher only (`torch.distributed.launch` can be used with older versions of PyTorch)
         ```bash
@@ -178,8 +178,8 @@ To run it in each of these various modes, use the following commands:
 - (multi) TPUs
     * With Accelerate config and launcher
         ```bash
-        accelerate config  # This will create a config file on your TPU server
-        accelerate launch --config_file generated_config_file ./cv_example.py --data_dir path_to_data  # This will run the script on each server
+        accelerate config --config_file config.yaml  # This will create a config file on your server to `config.yaml`
+        accelerate launch --config_file config.yaml ./cv_example.py --data_dir path_to_data  # This will run the script on each server
         ```
     * In PyTorch:
         Add an `xmp.spawn` line in your script as you usually do.
