@@ -124,7 +124,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
     def step(self, closure=None):
         if not self.gradient_state.sync_gradients and self.accelerator_state == DistributedType.TPU:
             gradients = xm._fetch_gradients(self.optimizer)
-            xm.all_reduce("sum", gradients, scale=1.0/xm.xrt_world_size())
+            xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
             self.gradient_state._set_sync_gradients(True)
         if self.gradient_state.sync_gradients:
             if self.scaler is not None:

@@ -25,6 +25,7 @@ from packaging.version import parse
 from .environment import parse_flag_from_env, str_to_bool
 from .versions import compare_versions, is_torch_version
 
+
 ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 # Try to run Torch native job in an environment with TorchXLA installed by setting this value to 0.
 USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
@@ -114,8 +115,8 @@ def is_cuda_available():
 @lru_cache
 def is_torch_xla_available(hardware_types=("TPU", "GPU")):
     """
-    Check if `torch_xla` is available and real hardware in `hardware_types`. To train a native pytorch job
-    in an environment with torch xla installed, set the USE_TORCH_XLA to false.
+    Check if `torch_xla` is available and real hardware in `hardware_types`. To train a native pytorch job in an
+    environment with torch xla installed, set the USE_TORCH_XLA to false.
     """
     if USE_TORCH_XLA not in ENV_VARS_TRUE_VALUES:
         return False
