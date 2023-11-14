@@ -49,6 +49,7 @@ jobs:
           git config --global --add safe.directory '*'
           git checkout main && git pull && git fetch --tags
           pip install .[torch,deepspeed-testing]
+          pip uninstall comet_ml wandb -y
       
       - name: Show installed libraries
         run: |
