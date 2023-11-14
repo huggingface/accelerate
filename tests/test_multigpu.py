@@ -78,6 +78,7 @@ class MultiGPUTester(unittest.TestCase):
         with the `notebook_launcher`
         """
         cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.notebook_launcher_path]
+        print(f"Running {cmd}")
         with patch_environment(omp_num_threads=1):
             run_command(cmd, env=os.environ.copy())
 
