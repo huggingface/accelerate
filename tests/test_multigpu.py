@@ -70,7 +70,6 @@ class MultiGPUTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
-    # Need to see why this test raises forking issues when ran as a suite
     @require_multi_gpu
     def test_notebook_launcher(self):
         """
