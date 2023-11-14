@@ -25,7 +25,7 @@ jobs:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
     strategy:
       fail-fast: false
       matrix:
@@ -91,7 +91,7 @@ jobs:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
     strategy:
       fail-fast: false
       matrix:
