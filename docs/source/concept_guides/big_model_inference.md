@@ -154,7 +154,7 @@ By passing `device_map="auto"`, we tell 🤗 Accelerate to determine automatical
 #### `no_split_module_classes`
 
 This parameter will indicate that some of the modules with the name `"Block"` should not be split across different devices. You should set here all blocks that 
-include a residutal connection of some kind.
+include a residual connection of some kind.
 
 
 #### The `device_map`

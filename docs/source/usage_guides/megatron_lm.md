@@ -128,7 +128,7 @@ Do you want to enable Sequence Parallelism? [YES/no]:
 What is the Pipeline Parallelism degree/size? [1]:2
 What is the number of micro-batches? [1]:2
 Do you want to enable selective activation recomputation? [YES/no]: 
-Do you want to use distributed optimizer which shards optimizer state and gradients across data pralellel ranks? [YES/no]: 
+Do you want to use distributed optimizer which shards optimizer state and gradients across data parallel ranks? [YES/no]: 
 What is the gradient clipping value based on global L2 Norm (0 to disable)? [1.0]: 
 How many GPU(s) should be used for distributed training? [1]:4
 Do you wish to use FP16 or BF16 (mixed precision)? [NO/fp16/bf16]: bf16
@@ -355,8 +355,8 @@ def main():
 
 2. For using the Megatron-LM datasets, a few more changes are required. Dataloaders for these datasets
 are available only on rank 0 of each tensor parallel group. As such, there are rank where dataloader won't be
-avaiable and this requires tweaks to the training loop. Being able to do all this shows how
-felixble and extensible 🤗 Accelerate is. The changes required are as follows.
+available and this requires tweaks to the training loop. Being able to do all this shows how
+flexible and extensible 🤗 Accelerate is. The changes required are as follows.
 
 a. For Megatron-LM indexed datasets, we need to use `MegatronLMDummyDataLoader` 
 and pass the required dataset args to it such as `data_path`, `seq_length` etc. 
@@ -547,7 +547,7 @@ The `model(**batch_data)` call return loss(es) averaged across the data parallel
 This is fine for most cases wherein pre-training jobs are run using Megatron-LM features and
 you can easily compute the `perplexity` using the loss. 
 For GPT model, returning logits in addition to loss(es) is supported. 
-These logits aren't gathered across data prallel ranks. Use `accelerator.utils.gather_across_data_parallel_groups`
+These logits aren't gathered across data parallel ranks. Use `accelerator.utils.gather_across_data_parallel_groups`
 to gather logits across data parallel ranks. These logits along with labels can be used for computing various 
 performance metrics. 
 

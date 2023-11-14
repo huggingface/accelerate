@@ -51,7 +51,7 @@ def run_inference(rank, world_size):
 One will notice how we have to check the rank to know what prompt to send, which can be a bit tedious.
 
 A user might then also think that with 🤗 Accelerate, using the `Accelerator` to prepare a dataloader for such a task might also be 
-a simple way to manage this. (To learn more, check out the relvent section in the [Quick Tour](../quicktour#distributed-evaluation))
+a simple way to manage this. (To learn more, check out the relevant section in the [Quick Tour](../quicktour#distributed-evaluation))
 
 Can it manage it? Yes. Does it add unneeded extra code however: also yes.
 

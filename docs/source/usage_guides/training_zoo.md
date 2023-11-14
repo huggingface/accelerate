@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Example Zoo
 
-Below contains a non-exhuastive list of tutorials and scripts showcasing 🤗 Accelerate
+Below contains a non-exhaustive list of tutorials and scripts showcasing 🤗 Accelerate
 
 ## Official Accelerate Examples:
 
