@@ -29,10 +29,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        transformers-version: [
-          pypi,
-          github
-        ]
         cuda_visible_devices: [
           "0", 
           "0,1"
@@ -52,9 +48,6 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git checkout main && git pull && git fetch --tags
-          if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
-            git checkout $(git tag --sort=taggerdate | tail -1)
-          fi
           pip install .[torch,deepspeed-testing]
       
       - name: Show installed libraries
@@ -82,13 +75,12 @@ jobs:
           pytest -sv tests/deepspeed
 
       - name: Run transformers examples tests
-        working-directory: transformers/examples/pytorch
+        working-directory: transformers/
         env:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
           WANDB_DISABLED: true
         run: |
-          pip install -r _tests_requirements.txt
-          cd ../../
+          pip install -r examples/pytorch/_tests_requirements.txt
           pytest -sv examples/pytorch/test_accelerate_examples.py examples/pytorch/test_pytorch_examples.py
 
   run-skorch-tests:
