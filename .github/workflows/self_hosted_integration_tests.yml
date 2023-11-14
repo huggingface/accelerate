@@ -80,6 +80,7 @@ jobs:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
           WANDB_DISABLED: true
         run: |
+          source activate accelerate;
           pip install -r examples/pytorch/_tests_requirements.txt
           pytest -sv examples/pytorch/test_accelerate_examples.py examples/pytorch/test_pytorch_examples.py
 
