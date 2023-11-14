@@ -91,11 +91,6 @@ jobs:
     runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
     strategy:
       fail-fast: false
-      matrix:
-        skorch-version: [
-          pypi,
-          github
-        ]
     steps:
       - name: Update accelerate clone and pip install
         working-directory: accelerate/
@@ -111,9 +106,6 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git checkout master && git pull
-          if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
-            git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
-          fi
           pip install .[testing]
           pip install flaky
 
