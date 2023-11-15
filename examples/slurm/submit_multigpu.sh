@@ -14,12 +14,14 @@
 ### Set enviroment ###
 ######################
 source activateEnviroment.sh
+export GPUS_PER_NODE=4
 ######################
 
 export SCRIPT=/accelerate/examples/complete_nlp_example.py
 export SCRIPT_ARGS=" \
     --mixed_precision fp16 \
     --output_dir /accelerate/examples/output \
+    --with_tracking \
     "
 
-accelerate launch --num_processes $SLURM_GPUS $SCRIPT $SCRIPT_ARGS
+accelerate launch --num_processes $GPUS_PER_NODE $SCRIPT $SCRIPT_ARGS
