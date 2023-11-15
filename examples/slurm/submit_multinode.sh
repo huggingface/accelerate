@@ -35,6 +35,7 @@ export SCRIPT_ARGS=" \
     --mixed_precision fp16 \
     --output_dir /accelerate/examples/output \
     "
-
-export CMD="$LAUNCHER $PYTHON_FILE $ARGS"
+    
+# This step is necessary because accelerate launch does not handle multiline arguments properly
+export CMD="$LAUNCHER $PYTHON_FILE $ARGS" 
 srun $CMD
