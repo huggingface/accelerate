@@ -310,7 +310,7 @@ def main():
         default="logs",
         help="Location on where to store experiment tracking logs` and relevent project information",
     )
-    args, _ = parser.parse_known_args()
+    args = parser.parse_args()
     config = {"lr": 3e-2, "num_epochs": 3, "seed": 42, "batch_size": 64, "image_size": 224}
     training_function(config, args)
 
