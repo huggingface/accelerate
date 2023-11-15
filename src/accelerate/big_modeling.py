@@ -402,6 +402,16 @@ def dispatch_model(
             skip_keys=skip_keys,
             preload_module_classes=preload_module_classes,
         )
+
+        # warn if there is any params on the meta device
+        offloaded_devices_str = " and ".join(
+            [device for device in set(device_map.values()) if device in ("cpu", "disk")]
+        )
+        if len(offloaded_devices_str) > 0:
+            logging.warning(
+                f"Some parameters are on the meta device device because they were offloaded to the {offloaded_devices_str}."
+            )
+
         # Attaching the hook may break tied weights, so we retie them
         retie_parameters(model, tied_params)
 

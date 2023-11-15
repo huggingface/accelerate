@@ -12,28 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import os
+import platform
+import re
 import socket
 from contextlib import contextmanager
 from functools import partial
 from types import MethodType
+from typing import OrderedDict
 
 import torch
+from packaging.version import Version
+from safetensors.torch import save_file as safe_save_file
 
 from ..commands.config.default import write_basic_config  # noqa: F401
+from ..logging import get_logger
 from ..state import PartialState
 from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
-from .imports import is_deepspeed_available, is_safetensors_available, is_tpu_available
+from .imports import is_deepspeed_available, is_torch_distributed_available, is_tpu_available
+from .modeling import id_tensor_storage
 from .transformer_engine import convert_model
 from .versions import is_torch_version
 
 
+logger = get_logger(__name__)
+
+
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
-
-if is_safetensors_available():
-    from safetensors.torch import save_file as safe_save_file
 
 
 def is_compiled_module(module):
@@ -70,7 +78,7 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
 
         options += (DeepSpeedEngine,)
 
-    if is_torch_version(">=", FSDP_PYTORCH_VERSION):
+    if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_available():
         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
 
         options += (FSDP,)
@@ -110,6 +118,41 @@ def wait_for_everyone():
     PartialState().wait_for_everyone()
 
 
+def clean_state_dict_for_safetensors(state_dict: dict):
+    """
+    Cleans the state dictionary from a model and removes tensor aliasing if present.
+
+    Args:
+        state_dict (`dict`):
+            The state dictionary from a model
+    """
+    ptrs = collections.defaultdict(list)
+    # When bnb serialization is used, weights in state dict can be strings
+    for name, tensor in state_dict.items():
+        if not isinstance(tensor, str):
+            ptrs[id_tensor_storage(tensor)].append(name)
+
+    # These are all pointers of tensors with shared memory
+    shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+    warn_names = set()
+    for names in shared_ptrs.values():
+        # When not all duplicates have been cleaned, we still remove those keys but put a clear warning.
+        # If the link between tensors was done at runtime then `from_pretrained` will not get
+        # the key back leading to random tensor. A proper warning will be shown
+        # during reload (if applicable), but since the file is not necessarily compatible with
+        # the config, better show a proper warning.
+        found_names = [name for name in names if name in state_dict]
+        warn_names.update(found_names[1:])
+        for name in found_names[1:]:
+            del state_dict[name]
+    if len(warn_names) > 0:
+        logger.warning(
+            f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
+        )
+    state_dict = {k: v.contiguous() if isinstance(v, torch.Tensor) else v for k, v in state_dict.items()}
+    return state_dict
+
+
 def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = False):
     """
     Save the data to disk. Use in place of `torch.save()`.
@@ -122,9 +165,16 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
         save_on_each_node (`bool`, *optional*, defaults to `False`):
             Whether to only save on the global main process
         safe_serialization (`bool`, *optional*, defaults to `False`):
-            Whether to save `obj` using `safetensors`
+            Whether to save `obj` using `safetensors` or the traditional PyTorch way (that uses `pickle`).
     """
-    save_func = torch.save if not safe_serialization else partial(safe_save_file, metadata={"format": "pt"})
+    # Check if it's a model and remove duplicates
+    if safe_serialization:
+        save_func = partial(safe_save_file, metadata={"format": "pt"})
+        if isinstance(obj, OrderedDict):
+            obj = clean_state_dict_for_safetensors(obj)
+    else:
+        save_func = torch.save
+
     if PartialState().distributed_type == DistributedType.TPU:
         xm.save(obj, f)
     elif PartialState().is_main_process and not save_on_each_node:
@@ -252,3 +302,21 @@ def convert_bytes(size):
         size /= 1024.0
 
     return f"{round(size, 2)} PB"
+
+
+def check_os_kernel():
+    """Warns if the kernel version is below the recommended minimum on Linux."""
+    # see issue #1929
+    info = platform.uname()
+    system = info.system
+    if system != "Linux":
+        return
+
+    _, version, *_ = re.split(r"(\d+\.\d+\.\d+)", info.release)
+    min_version = "5.5.0"
+    if Version(version) < Version(min_version):
+        msg = (
+            f"Detected kernel version {version}, which is below the recommended minimum of {min_version}; this can "
+            "cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher."
+        )
+        logger.warning(msg, main_process_only=True)

@@ -34,7 +34,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.24.0.dev0",
+    version="0.25.0.dev0",
     description="Accelerate",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -54,7 +54,7 @@ setup(
         ]
     },
     python_requires=">=3.8.0",
-    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.10.0", "huggingface_hub"],
+    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.10.0", "huggingface_hub", "safetensors>=0.3.1"],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",

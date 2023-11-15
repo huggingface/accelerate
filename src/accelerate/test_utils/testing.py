@@ -31,11 +31,12 @@ from ..state import AcceleratorState, PartialState
 from ..utils import (
     gather,
     is_bnb_available,
+    is_clearml_available,
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
     is_mps_available,
-    is_safetensors_available,
+    is_pandas_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_version,
@@ -177,14 +178,6 @@ def require_multi_xpu(test_case):
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
 
-def require_safetensors(test_case):
-    """
-    Decorator marking a test that requires safetensors installed. These tests are skipped when safetensors isn't
-    installed
-    """
-    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
-
-
 def require_deepspeed(test_case):
     """
     Decorator marking a test that requires DeepSpeed installed. These tests are skipped when DeepSpeed isn't installed
@@ -229,6 +222,20 @@ def require_comet_ml(test_case):
     Decorator marking a test that requires comet_ml installed. These tests are skipped when comet_ml isn't installed
     """
     return unittest.skipUnless(is_comet_ml_available(), "test requires comet_ml")(test_case)
+
+
+def require_clearml(test_case):
+    """
+    Decorator marking a test that requires clearml installed. These tests are skipped when clearml isn't installed
+    """
+    return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
+
+
+def require_pandas(test_case):
+    """
+    Decorator marking a test that requires pandas installed. These tests are skipped when pandas isn't installed
+    """
+    return unittest.skipUnless(is_pandas_available(), "test requires pandas")(test_case)
 
 
 _atleast_one_tracker_available = (

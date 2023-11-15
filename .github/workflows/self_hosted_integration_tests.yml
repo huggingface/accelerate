@@ -25,14 +25,10 @@ jobs:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
     strategy:
       fail-fast: false
       matrix:
-        transformers-version: [
-          pypi,
-          github
-        ]
         cuda_visible_devices: [
           "0", 
           "0,1"
@@ -51,11 +47,9 @@ jobs:
         run: |
           source activate accelerate
           git config --global --add safe.directory '*'
-          git checkout main && git pull && git fetch --tags
-          if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
-            git checkout $(git tag --sort=taggerdate | tail -1)
-          fi
+          git checkout main && git pull
           pip install .[torch,deepspeed-testing]
+          pip uninstall comet_ml wandb -y
       
       - name: Show installed libraries
         run: |
@@ -81,18 +75,23 @@ jobs:
           source activate accelerate;
           pytest -sv tests/deepspeed
 
+      - name: Run transformers examples tests
+        working-directory: transformers/
+        env:
+          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          WANDB_DISABLED: true
+        run: |
+          source activate accelerate
+          pip install -r examples/pytorch/_tests_requirements.txt
+          pytest -sv examples/pytorch/test_accelerate_examples.py examples/pytorch/test_pytorch_examples.py
+
   run-skorch-tests:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
     strategy:
       fail-fast: false
-      matrix:
-        skorch-version: [
-          pypi,
-          github
-        ]
     steps:
       - name: Update accelerate clone and pip install
         working-directory: accelerate/
@@ -108,9 +107,6 @@ jobs:
           source activate accelerate
           git config --global --add safe.directory '*'
           git checkout master && git pull
-          if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
-            git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
-          fi
           pip install .[testing]
           pip install flaky
 

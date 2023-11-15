@@ -151,10 +151,6 @@ def is_megatron_lm_available():
                 return False
 
 
-def is_safetensors_available():
-    return _is_package_available("safetensors")
-
-
 def is_transformers_available():
     return _is_package_available("transformers")
 
@@ -208,6 +204,14 @@ def is_sagemaker_available():
 
 def is_tqdm_available():
     return _is_package_available("tqdm")
+
+
+def is_clearml_available():
+    return _is_package_available("clearml")
+
+
+def is_pandas_available():
+    return _is_package_available("pandas")
 
 
 def is_mlflow_available():

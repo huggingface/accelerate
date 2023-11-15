@@ -31,3 +31,5 @@ rendered properly in your Markdown viewer.
     - __init__
 [[autodoc]] tracking.MLflowTracker
     - __init__
+[[autodoc]] tracking.ClearMLTracker
+    - __init__
