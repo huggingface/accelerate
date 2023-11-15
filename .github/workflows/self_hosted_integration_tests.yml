@@ -49,6 +49,7 @@ jobs:
           git config --global --add safe.directory '*'
           git checkout main && git pull
           pip install .[torch,deepspeed-testing]
+          pip uninstall comet_ml wandb -y
       
       - name: Show installed libraries
         run: |
@@ -75,13 +76,13 @@ jobs:
           pytest -sv tests/deepspeed
 
       - name: Run transformers examples tests
-        working-directory: transformers/examples/pytorch
+        working-directory: transformers/
         env:
           CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
           WANDB_DISABLED: true
         run: |
-          pip install -r _tests_requirements.txt
-          cd ../../
+          source activate accelerate
+          pip install -r examples/pytorch/_tests_requirements.txt
           pytest -sv examples/pytorch/test_accelerate_examples.py examples/pytorch/test_pytorch_examples.py
 
   run-skorch-tests:
