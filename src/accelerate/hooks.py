@@ -248,6 +248,7 @@ class AlignDevicesHook(ModelHook):
         )
 
     def init_hook(self, module):
+        print(module)
         if not self.offload and self.execution_device is not None:
             for name, _ in named_module_tensors(module, recurse=self.place_submodules):
                 set_module_tensor_to_device(module, name, self.execution_device)
@@ -283,7 +284,7 @@ class AlignDevicesHook(ModelHook):
                 if "weight" in name and name.replace("weight", "SCB") in self.weights_map.keys():
                     if self.weights_map[name].dtype == torch.int8:
                         fp16_statistics = self.weights_map[name.replace("weight", "SCB")]
-                print ('Preforward values: ', self.weights_map[name], '\n')
+                print("Preforward values: ", self.weights_map[name], "\n")
                 set_module_tensor_to_device(
                     module, name, self.execution_device, value=self.weights_map[name], fp16_statistics=fp16_statistics
                 )

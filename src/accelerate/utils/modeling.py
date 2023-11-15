@@ -21,12 +21,14 @@ import os
 import re
 import shutil
 import tempfile
+import warnings
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 
+from ..hooks import AlignDevicesHook
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
@@ -1229,6 +1231,50 @@ def load_state_dict(checkpoint_file, device_map=None):
             return tensors
     else:
         return torch.load(checkpoint_file, map_location=torch.device("cpu"))
+
+
+def get_state_dict_offloaded_model(model: nn.Module):
+    """
+    Returns the state dictionary for an offloaded model via iterative onloading
+
+    Args:
+        model (`torch.nn.Module`):
+            The offloaded model we want to save
+    """
+    state_dict = {}
+    placeholders = []
+    for name, module in model.named_modules():
+        if name == "":
+            continue
+        if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+            original_device = module._hf_hook.execution_device
+            # assign hook execution device to cpu
+            module._hf_hook.execution_device = "cpu"
+            # onload meta tensors to execution device
+            try:
+                module._hf_hook.pre_forward(module)
+            except MemoryError:
+                print("Model must fit in CPU memory to call save_pretrained!")
+            module_state_dict = module.state_dict()
+            # offload meta tensors from cpu
+            module._hf_hook.post_forward(module, torch.tensor([]))
+            # re-assign hook to original execution device
+            module._hf_hook.execution_device = original_device
+        else:
+            module_state_dict = module.state_dict()
+
+        for key in module_state_dict:
+            # ignore placeholder parameters that are still on the meta device
+            if str(module_state_dict[key].device) == "meta":
+                placeholders.append(key)
+                continue
+            params = module_state_dict[key]
+            state_dict[name + f".{key}"] = params
+
+    if placeholders:
+        warnings.warn(f"The following modules contain unsaved placeholder tensors: {placeholders}")
+
+    return state_dict
 
 
 def load_checkpoint_in_model(

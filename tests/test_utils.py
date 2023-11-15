@@ -22,6 +22,7 @@ from unittest.mock import Mock, patch
 
 import torch
 from torch import nn
+from transformers import AutoModelForCausalLM
 
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import require_cuda, require_torch_min_version
@@ -31,6 +32,7 @@ from accelerate.utils import (
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     find_device,
+    get_state_dict_offloaded_model,
     listify,
     patch_environment,
     recursively_apply,
@@ -226,3 +228,30 @@ class UtilsTester(unittest.TestCase):
                 save(model.state_dict(), save_path, safe_serialization=True)
                 self.assertEqual(len(log.records), 1)
                 self.assertIn("Removed shared tensor", log.output[0])
+
+    @require_cuda
+    def test_offload_save_state_dict(self):
+        device_map = {
+            "transformer.wte": 0,
+            "transformer.wpe": 0,
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": "cpu",
+            "transformer.h.3": "disk",
+            "transformer.h.4": "disk",
+            "transformer.ln_f": 0,
+            "lm_head": 0,
+        }
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", device_map=device_map)
+        offload_state_dict = get_state_dict_offloaded_model(model)
+        onloaded_model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2", device_map=device_map
+        )
+        onload_state_dict = onloaded_model.state_dict()
+        # check equality in onloaded and offloaded state dicts
+        for key in offload_state_dict:
+            self.assertTrue(torch.all(offload_state_dict[key].to("cpu") == onload_state_dict[key].to("cpu")))
+
+        # check that no key in the onloaded model's state dict is absent from the offloaded state dict
+        for key in onload_state_dict:
+            self.assertTrue(key in offload_state_dict)

@@ -34,6 +34,7 @@ import torch.utils.hooks as hooks
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
+from .hooks import AlignDevicesHook
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -72,6 +73,7 @@ from .utils import (
     gather_object,
     get_mixed_precision_context_manager,
     get_pretty_name,
+    get_state_dict_offloaded_model,
     has_transformer_engine_layers,
     is_bf16_available,
     is_deepspeed_available,
@@ -2579,7 +2581,14 @@ class Accelerator:
         os.makedirs(save_directory, exist_ok=True)
 
         # get the state_dict of the model
-        state_dict = self.get_state_dict(model)
+        if (
+            hasattr(model, "_hf_hook")
+            and isinstance(model._hf_hook, AlignDevicesHook)
+            and True in {module._hf_hook.offload for _, module in model.named_modules() if hasattr(module, "_hf_hook")}
+        ):
+            state_dict = get_state_dict_offloaded_model(model)
+        else:
+            state_dict = self.get_state_dict(model)
 
         if safe_serialization:
             state_dict = clean_state_dict_for_safetensors(state_dict)
