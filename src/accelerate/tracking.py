@@ -846,10 +846,22 @@ class DVCLiveTracker(GeneralTracker):
     A `Tracker` class that supports `dvclive`. Should be initialized at the start of your script.
 
     Args:
-        run_name (`str`):
+        run_name (`str`, *optional*):
             Ignored for dvclive. See `kwargs` instead.
         kwargs:
-            Additional key word arguments passed along to `dvclive.Live()`.
+            Additional key word arguments passed along to [`dvclive.Live()`](https://dvc.org/doc/dvclive/live).
+
+    Example:
+
+    ```py
+    from accelerate import Accelerator
+
+    accelerator = Accelerator(log_with="dvclive")
+    accelerator.init_trackers(
+        project_name="my_project",
+        init_kwargs={"dvclive": {"dir": "my_directory"}}
+    )
+    ```
     """
 
     name = "dvclive"
@@ -892,7 +904,7 @@ class DVCLiveTracker(GeneralTracker):
             kwargs:
                 Additional key word arguments passed along to `dvclive.Live.log_metric()`.
         """
-        if step:
+        if step is not None:
             self.live.step = step
         for k, v in values.items():
             self.live.log_metric(k, v, **kwargs)
