@@ -74,7 +74,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on each server
         accelerate launch ./nlp_example.py  # This will run the script on each server
         ```
-    * With PyTorch launcher only (`python -m torch.distributed.run` can be used instead of `torchrun`). Run this commnad on each node:
+    * With PyTorch launcher only (`python -m torch.distributed.run` can be used instead of `torchrun`). Run this command on each node:
         ```bash
         torchrun \ # python -m torch.distributed.run 
             --nproc_per_node 2 \
@@ -159,7 +159,7 @@ To run it in each of these various modes, use the following commands:
         accelerate config  # This will create a config file on each server
         accelerate launch ./cv_example.py --data_dir path_to_data  # This will run the script on each server
         ```
-    * With PyTorch launcher only (`python -m torch.distributed.run` can be used instead of `torchrun`). Run this commnad on each node:
+    * With PyTorch launcher only (`python -m torch.distributed.run` can be used instead of `torchrun`). Run this command on each node:
         ```bash
         torchrun \ # python -m torch.distributed.run
             --nproc_per_node 2 \
