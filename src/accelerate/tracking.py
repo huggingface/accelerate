@@ -857,10 +857,7 @@ class DVCLiveTracker(GeneralTracker):
     from accelerate import Accelerator
 
     accelerator = Accelerator(log_with="dvclive")
-    accelerator.init_trackers(
-        project_name="my_project",
-        init_kwargs={"dvclive": {"dir": "my_directory"}}
-    )
+    accelerator.init_trackers(project_name="my_project", init_kwargs={"dvclive": {"dir": "my_directory"}})
     ```
     """
 
