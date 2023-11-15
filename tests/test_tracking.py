@@ -487,7 +487,7 @@ class CustomTrackerTestCase(unittest.TestCase):
 
 
 @require_dvclive
-@mock.patch("dvclive.live.get_dvc_repo", return_value="something")
+@mock.patch("dvclive.live.get_dvc_repo", return_value=None)
 class DVCLiveTrackingTest(unittest.TestCase):
     def test_init_trackers(self, mock_repo):
         project_name = "test_project_with_config"
