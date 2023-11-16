@@ -55,8 +55,8 @@ their gradients computed, collated, and updated before moving on to the next
 batch of data.
 When performing gradient accumulation, you accumulate `n` loss gradients and
 skip `optimizer.step()` until `n` batches have been reached. As all training
-processes only need to sychronize by the time `optimizer.step()` is called,
-without any modification to your training step, this neededless inter-process
+processes only need to synchronize by the time `optimizer.step()` is called,
+without any modification to your training step, this needless inter-process
 communication can cause a significant slowdown.
 
  How can you avoid this overhead?

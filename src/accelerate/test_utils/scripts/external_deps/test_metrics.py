@@ -149,6 +149,39 @@ def test_mrpc(dispatch_batches: bool = False, split_batches: bool = False):
         ), f"Baseline and Distributed are not the same for key {key}:\n\tBaseline: {baseline[key]}\n\tDistributed: {distributed[key]}\n"
 
 
+def test_gather_for_metrics_with_non_tensor_objects_iterable_dataset():
+    class DummyIterableDataset(IterableDataset):
+        def __init__(self, data):
+            self.data = data
+
+        def __len__(self):
+            return len(self.data)
+
+        def __iter__(self):
+            for element in self.data:
+                yield element
+
+    iterable_dataset = DummyIterableDataset([n for n in range(30)])
+    dataloader = DataLoader(iterable_dataset, batch_size=4)
+    accelerator = Accelerator()
+    prepared_dataloader = accelerator.prepare(dataloader)
+
+    if accelerator.is_main_process:
+        logger = logging.root.manager.loggerDict["accelerate.accelerator"]
+        list_handler = ListHandler()
+        logger.addHandler(list_handler)
+
+    batches_for_metrics = []
+    for batch in prepared_dataloader:
+        batches_for_metrics.append(accelerator.gather_for_metrics(batch))
+
+    assert torch.cat(batches_for_metrics).size(0) == 30
+
+    if accelerator.is_main_process:
+        assert len(list_handler.logs) == 0
+        logger.removeHandler(list_handler)
+
+
 def test_gather_for_metrics_with_iterable_dataset():
     class DummyIterableDataset(IterableDataset):
         def __init__(self, data):
@@ -186,6 +219,25 @@ def test_gather_for_metrics_with_iterable_dataset():
         logger.removeHandler(list_handler)
 
 
+def test_gather_for_metrics_drop_last():
+    accelerator = Accelerator()
+    per_device_batch_size = 5
+    num_items = (10 * accelerator.num_processes) + 1
+    dataloader = DataLoader(range(num_items), batch_size=per_device_batch_size, drop_last=True)
+    dataloader = accelerator.prepare(dataloader)
+
+    iterator = iter(dataloader)
+    next(iterator)  # Skip first batch tensor([0, 1, 2, 3, 4], device='cuda:0')
+    batch = next(iterator)
+    gathered_items = accelerator.gather_for_metrics(batch)
+
+    # Should return a full set of complete batches from each GPU
+    num_expected_items = per_device_batch_size * accelerator.num_processes
+    assert gathered_items.size(0) == (
+        num_expected_items
+    ), f"Expected number of items: {num_expected_items}, Actual: {gathered_items.size(0)}"
+
+
 def main():
     accelerator = Accelerator(split_batches=False, dispatch_batches=False)
     if accelerator.is_local_main_process:
@@ -206,6 +258,8 @@ def main():
                 accelerator.state._reset_state()
         print("test_gather_for_metrics_with_iterable_dataset")
         test_gather_for_metrics_with_iterable_dataset()
+        print("test gather_for_metrics_with_non_tensor_objects_iterable_dataset")
+        test_gather_for_metrics_with_non_tensor_objects_iterable_dataset()
     if accelerator.is_local_main_process:
         print("**Test torch metrics**")
     for split_batches in [True, False]:
@@ -219,6 +273,10 @@ def main():
         print("**Test last batch is not dropped when perfectly divisible**")
     accelerator = Accelerator()
     test_torch_metrics(accelerator, 512)
+    accelerator.state._reset_state()
+    if accelerator.is_local_main_process:
+        print("**Test that `drop_last` is taken into account**")
+    test_gather_for_metrics_drop_last()
     accelerator.state._reset_state()
 
 

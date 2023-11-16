@@ -16,14 +16,13 @@ import importlib
 import importlib.metadata
 import os
 import warnings
-from distutils.util import strtobool
 from functools import lru_cache
 
 import torch
 from packaging import version
 from packaging.version import parse
 
-from .environment import parse_flag_from_env
+from .environment import parse_flag_from_env, str_to_bool
 from .versions import compare_versions, is_torch_version
 
 
@@ -117,8 +116,6 @@ def is_bf16_available(ignore_tpu=False):
         return not ignore_tpu
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
-    if is_npu_available():
-        return False
     return True
 
 
@@ -143,7 +140,7 @@ def is_bnb_available():
 
 
 def is_megatron_lm_available():
-    if strtobool(os.environ.get("ACCELERATE_USE_MEGATRON_LM", "False")) == 1:
+    if str_to_bool(os.environ.get("ACCELERATE_USE_MEGATRON_LM", "False")) == 1:
         package_exists = importlib.util.find_spec("megatron") is not None
         if package_exists:
             try:
@@ -152,10 +149,6 @@ def is_megatron_lm_available():
             except Exception as e:
                 warnings.warn(f"Parse Megatron version failed. Exception:{e}")
                 return False
-
-
-def is_safetensors_available():
-    return _is_package_available("safetensors")
 
 
 def is_transformers_available():
@@ -211,6 +204,14 @@ def is_sagemaker_available():
 
 def is_tqdm_available():
     return _is_package_available("tqdm")
+
+
+def is_clearml_available():
+    return _is_package_available("clearml")
+
+
+def is_pandas_available():
+    return _is_package_available("pandas")
 
 
 def is_mlflow_available():

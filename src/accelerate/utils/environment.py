@@ -13,7 +13,21 @@
 # limitations under the License.
 
 import os
-from distutils.util import strtobool
+
+
+def str_to_bool(value) -> int:
+    """
+    Converts a string representation of truth to `True` (1) or `False` (0).
+
+    True values are `y`, `yes`, `t`, `true`, `on`, and `1`; False value are `n`, `no`, `f`, `false`, `off`, and `0`;
+    """
+    value = value.lower()
+    if value in ("y", "yes", "t", "true", "on", "1"):
+        return 1
+    elif value in ("n", "no", "f", "false", "off", "0"):
+        return 0
+    else:
+        raise ValueError(f"invalid truth value {value}")
 
 
 def get_int_from_env(env_keys, default):
@@ -28,7 +42,7 @@ def get_int_from_env(env_keys, default):
 def parse_flag_from_env(key, default=False):
     """Returns truthy value for `key` from the env if available else the default."""
     value = os.environ.get(key, str(default))
-    return strtobool(value) == 1  # As its name indicates `strtobool` actually returns an int...
+    return str_to_bool(value) == 1  # As its name indicates `str_to_bool` actually returns an int...
 
 
 def parse_choice_from_env(key, default="no"):

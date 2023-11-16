@@ -52,7 +52,7 @@ will attempt to fill all the space in your GPU(s), then loading them to the CPU,
 
 <Tip>
 
-For more details on desigining your own device map, see this section of the [concept guide](../concept_guide/big_model_inference#desigining-a-device-map)
+For more details on desigining your own device map, see this section of the [concept guide](../concept_guide/big_model_inference#designing-a-device-map)
 
 </Tip>
 
@@ -130,7 +130,7 @@ As a brief example, we will look at using `transformers` and loading in Big Scie
 ```py
 from transformers import AutoModelForSeq2SeqLM
 
-model = AutoModelForSeq2SeqLM("bigscience/T0pp", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0pp", device_map="auto")
 ```
 
 After loading the model in, the initial steps from before to prepare a model have all been done and the model is fully
@@ -140,7 +140,7 @@ specifying the precision the model is loaded into as well, through the `torch_dt
 ```py
 from transformers import AutoModelForSeq2SeqLM
 
-model = AutoModelForSeq2SeqLM("bigscience/T0pp", device_map="auto", torch_dtype=torch.float16)
+model = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0pp", device_map="auto", torch_dtype=torch.float16)
 ```
 
 To learn more about this, check out the 🤗 Transformers documentation available [here](https://huggingface.co/docs/transformers/main/en/main_classes/model#large-model-loading).

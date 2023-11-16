@@ -585,8 +585,10 @@ Mixed precision type: fp16
 ds_config: {'bf16': {'enabled': False}, 'zero_optimization': {'stage': 3, 'stage3_gather_16bit_weights_on_model_save': True, 'offload_optimizer': {'device': 'nvme'}, 'offload_param': {'device': 'cpu'}}, 'gradient_clipping': 1.0, 'train_batch_size': 'auto', 'train_micro_batch_size_per_gpu': 'auto', 'gradient_accumulation_steps': 5, 'steps_per_print': inf, 'fp16': {'enabled': True, 'auto_cast': True}}
 ```
 
-**Note**: Remaining `"auto"` values are handled in `accelerator.prepare()` call as explained in point 2 of 
+**Note**: 
+1. Remaining `"auto"` values are handled in `accelerator.prepare()` call as explained in point 2 of 
 `Important code changes when using DeepSpeed Config File`.
+2. Only when `gradient_accumulation_steps` is `auto`, the value passed while creating `Accelerator` object via `Accelerator(gradient_accumulation_steps=k)` will be used. When using DeepSpeed Plugin, the value from it will be used and it will overwrite the value passed while creating Accelerator object. 
 
 ## Saving and loading
 

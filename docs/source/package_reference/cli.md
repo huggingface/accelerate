@@ -199,7 +199,7 @@ The following arguments are only useful when `use_deepspeed` is passed or `deeps
 
 **Fully Sharded Data Parallelism Arguments**:
 
-The following arguments are only useful when `use_fdsp` is passed or Fully Sharded Data Parallelism is configured through `accelerate config`:
+The following arguments are only useful when `use_fsdp` is passed or Fully Sharded Data Parallelism is configured through `accelerate config`:
 
 * `--fsdp_offload_params` (`str`) -- Decides Whether (true|false) to offload parameters and gradients to CPU.
 * `--fsdp_min_num_params` (`int`) -- FSDP's minimum number of parameters for Default Auto Wrapping.

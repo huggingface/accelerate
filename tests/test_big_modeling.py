@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import copy
 import os
 import unittest
 from tempfile import TemporaryDirectory
@@ -70,6 +70,18 @@ class ModelForTestNonPersistentBuffers(nn.Module):
 
     def forward(self, x):
         return self.linear2(self.batchnorm(self.linear1(x)))
+
+
+class ModelForTestCopy(nn.Module):
+    def __init__(self, id: int):
+        super().__init__()
+        self.id = id
+        self.linear1 = nn.Linear(3, 4)
+        self.batchnorm = nn.BatchNorm1d(4)
+        self.linear2 = nn.Linear(4, 5)
+
+    def forward(self, x):
+        return self.linear2(self.batchnorm(self.linear1(x))), self.id
 
 
 class ModelForTestTiedWeights(nn.Module):
@@ -376,6 +388,25 @@ class BigModelingTester(unittest.TestCase):
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_cuda
+    def test_dispatch_model_copy(self):
+        original_model = ModelForTestCopy(id=1)
+        device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": 0}
+
+        x = torch.randn(2, 3)
+        expected, original_output_id = original_model(x)
+
+        dispatch_model(original_model, device_map)
+
+        copied_model = copy.deepcopy(original_model)
+        copied_model.id = 2
+        output, copied_output_id = copied_model(x)
+
+        self.assertEqual(original_model.id, original_output_id)
+        self.assertEqual(copied_model.id, copied_output_id)
+        self.assertFalse(copied_model.linear1.forward is original_model.linear1.forward)
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
     def test_dispatch_model_move_offloaded_model(self):
         model = ModelForTest()
         device_map = {"linear1": "disk", "batchnorm": "cpu", "linear2": 0}
@@ -493,6 +524,18 @@ class BigModelingTester(unittest.TestCase):
             )
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
+    def test_dispatch_model_force_hooks(self):
+        model = ModelForTest()
+        device_map = {"": 0}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        dispatch_model(model, device_map, force_hooks=True)
+        output = model(x)
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_cuda
     def test_load_checkpoint_and_dispatch(self):
@@ -688,22 +731,16 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         model = replace_with_bnb_linear(
             model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
         )
-
-        # TODO: @younesbelkada remove this block on the next `transformers` release
-        for p in model.parameters():
-            p.requires_grad = False
 
         model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
 
         model = load_checkpoint_and_dispatch(
             model,
             checkpoint=model_path,
-            # device_map="auto",
             device_map="balanced",
         )
 
@@ -724,15 +761,10 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         model = replace_with_bnb_linear(
             model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
         )
-
-        # TODO: @younesbelkada remove this block on the next `transformers` release
-        for p in model.parameters():
-            p.requires_grad = False
 
         model_path = hf_hub_download("bigscience/bloom-560m", "pytorch_model.bin")
 
@@ -749,13 +781,9 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
         model = replace_with_bnb_linear(
             model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
         )
-
-        for p in model.parameters():
-            p.requires_grad = False
 
         # test with str device map
         model = load_checkpoint_and_dispatch(
@@ -770,14 +798,9 @@ class BigModelingTester(unittest.TestCase):
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
 
-        # TODO: @younesbelkada remove the positional arg on the next `transformers` release
         model = replace_with_bnb_linear(
             model, modules_to_not_convert=["lm_head"], quantization_config=quantization_config
         )
-
-        # TODO: @younesbelkada remove this block on the next `transformers` release
-        for p in model.parameters():
-            p.requires_grad = False
 
         # test with torch.device device map
         model = load_checkpoint_and_dispatch(
@@ -791,7 +814,6 @@ class BigModelingTester(unittest.TestCase):
 
     @slow
     @require_bnb
-    @unittest.skip("Un-skip in the next transformers release")
     def test_dipatch_model_fp4_simple(self):
         """Tests that `dispatch_model` quantizes fp4 layers"""
         from huggingface_hub import hf_hub_download

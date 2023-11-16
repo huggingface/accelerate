@@ -13,7 +13,7 @@ concurrency:
 jobs:
   clean-storage:
     name: "Clean docker image storage"
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
     steps:
       - name: Clean storage
         run: |
@@ -22,7 +22,7 @@ jobs:
 
   latest-cpu:
     name: "Latest Accelerate CPU [dev]"
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
     needs: clean-storage
     steps:
       - name: Set up Docker Buildx
@@ -41,7 +41,7 @@ jobs:
 
   latest-cuda:
     name: "Latest Accelerate GPU [dev]"
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
+    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
     needs: clean-storage
     steps:
       - name: Set up Docker Buildx

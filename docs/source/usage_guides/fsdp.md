@@ -49,7 +49,7 @@ fsdp_config:
   fsdp_offload_params: false
   fsdp_sharding_strategy: 1
   fsdp_state_dict_type: FULL_STATE_DICT
-  fsdp_transformer_layer_cls_to_wrap: GPT2Block
+  fsdp_transformer_layer_cls_to_wrap: BertLayer
 machine_rank: 0
 main_process_ip: null
 main_process_port: null
@@ -67,19 +67,38 @@ accelerate launch examples/nlp_example.py
 Currently, `Accelerate` supports the following config through the CLI:
 
 ```bash
-`Sharding Strategy`: [1] FULL_SHARD (shards optimizer states, gradients and parameters), [2] SHARD_GRAD_OP (shards optimizer states and gradients), [3] NO_SHARD
+`Sharding Strategy`: [1] FULL_SHARD (shards optimizer states, gradients and parameters), [2] SHARD_GRAD_OP (shards optimizer states and gradients), [3] NO_SHARD (DDP), [4] HYBRID_SHARD (shards optimizer states, gradients and parameters within each node while each node has full copy), [5] HYBRID_SHARD_ZERO2 (shards optimizer states and gradients within each node while each node has full copy)
+
 `Offload Params`: Decides Whether to offload parameters and gradients to CPU
-`Auto Wrap Policy`: [1] TRANSFORMER_BASED_WRAP, [2] SIZE_BASED_WRAP, [3] NO_WRAP [4] "HYBRID_SHARD" [5] "HYBRID_SHARD_ZERO2"
+
+`Auto Wrap Policy`: [1] TRANSFORMER_BASED_WRAP, [2] SIZE_BASED_WRAP, [3] NO_WRAP
+
 `Transformer Layer Class to Wrap`: When using `TRANSFORMER_BASED_WRAP`, user specifies comma-separated string of transformer layer class names (case-sensitive) to wrap ,e.g, 
 `BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput`...
+This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
+Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
+Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit.
+Therefore, use this for transformer based models.
+You can use the `model._no_split_modules` for 🤗 Transformer models by answering `yes` to 
+`Do you want to use the model's `_no_split_modules` to wrap. Only applicable for 🤗 Transformers`. 
+It will try to use `model._no_split_modules` when available.  
+
 `Min Num Params`: minimum number of parameters when using `SIZE_BASED_WRAP`
+
 `Backward Prefetch`: [1] BACKWARD_PRE, [2] BACKWARD_POST, [3] NO_PREFETCH
-`State Dict Type`: [1] FULL_STATE_DICT, [2] LOCAL_STATE_DICT, [3] SHARDED_STATE_DICT  
+
+`State Dict Type`: [1] FULL_STATE_DICT, [2] LOCAL_STATE_DICT, [3] SHARDED_STATE_DICT 
+
+`Forward Prefetch`: if True, then FSDP explicitly prefetches the next upcoming
+all-gather while executing in the forward pass. only use with Static graphs.
+
 `Use Orig Params`: If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. 
 Useful in cases such as parameter-efficient fine-tuning. 
 Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019)
+
+`CPU RAM Efficient Model loading`: If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. Only applicable for 🤗 Transformers models. This should be set to False if you experience errors when loading the pretrained 🤗 Transformers model via `from_pretrained` method. When using this, `Sync Module States` needs to be True else all the processes expect the main process would have random empty weights leading to unexpected behaviour during training.
+
 `Sync Module States`: If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0
-`Forward Prefetch`: If True, then FSDP explicitly prefetches the next upcoming all-gather while executing in the forward pass
 ```
 
 For additional and more nuanced control, you can specify other FSDP parameters via `FullyShardedDataParallelPlugin`. 
@@ -137,7 +156,7 @@ When using transformers `save_pretrained`, pass `state_dict=accelerator.get_stat
       args.output_dir,
       is_main_process=accelerator.is_main_process,
       save_function=accelerator.save,
-+     state_dict=accelerator.get_state_dict(model),
++     state_dict=accelerator.get_state_dict(model, unwrap=False),
 )
 ```
 

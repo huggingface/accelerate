@@ -118,8 +118,24 @@ You can remove all the special checks for the step number and the loss adjustmen
 As you can see the [`Accelerator`] is able to keep track of the batch number you are on and it will automatically know whether to step through the prepared optimizer and how to adjust the loss. 
 
 <Tip>
+
 Typically with gradient accumulation, you would need to adjust the number of steps to reflect the change in total batches you are 
-training on. 🤗 Accelerate automagically does this for you by default. Behind the scenes we instantiate a GradientAccumulationPlugin configured to do this.
+training on. 🤗 Accelerate automagically does this for you by default. Behind the scenes we instantiate a [`GradientAccumulationPlugin`] configured to do this.
+
+</Tip>
+
+<Tip warning={true}>
+
+The [`state.GradientState`] is sync'd with the active dataloader being iterated upon. As such it assumes naively that when we have reached the end of the dataloader everything will sync and a step will be performed. To disable this, set `sync_with_dataloader` to be `False` in the [`GradientAccumulationPlugin`]:
+
+```{python}
+from accelerate import Accelerator
+from accelerate.utils import GradientAccumulationPlugin
+
+plugin = GradientAccumulationPlugin(sync_with_dataloader=False)
+accelerator = Accelerator(..., gradient_accumulation_plugin=plugin)
+```
+
 </Tip>
 
 ## The finished code

@@ -30,14 +30,18 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
-from .imports import is_mps_available, is_npu_available, is_safetensors_available, is_xpu_available
+from .imports import is_mps_available, is_npu_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
 
-if is_safetensors_available():
-    from safetensors import safe_open
-    from safetensors.torch import load_file as safe_load_file
+if is_npu_available(check_device=False):
+    import torch_npu  # noqa: F401
+
+
+from safetensors import safe_open
+from safetensors.torch import load_file as safe_load_file
+
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
@@ -246,7 +250,7 @@ def set_module_tensor_to_device(
     Args:
         module (`torch.nn.Module`):
             The module in which the tensor we want to move lives.
-        param_name (`str`):
+        tensor_name (`str`):
             The full name of the parameter/buffer.
         device (`int`, `str` or `torch.device`):
             The device on which to set the tensor.
@@ -560,15 +564,22 @@ def retie_parameters(model, tied_params):
     """
     for tied_group in tied_params:
         param_to_tie = None
-        # First iteration of the loop will set param_to_tie, next ones will tie it to the others
+        # two loops : the first one to set param_to_tie , the second one to change the values of tied_group
         for param_name in tied_group:
             module = model
             splits = param_name.split(".")
             for split in splits[:-1]:
                 module = getattr(module, split)
-            if param_to_tie is None:
-                param_to_tie = getattr(module, splits[-1])
-            else:
+            param = getattr(module, splits[-1])
+            if param_to_tie is None and param.device != torch.device("meta"):
+                param_to_tie = param
+                break
+        if param_to_tie is not None:
+            for param_name in tied_group:
+                module = model
+                splits = param_name.split(".")
+                for split in splits[:-1]:
+                    module = getattr(module, split)
                 setattr(module, splits[-1], param_to_tie)
 
 
@@ -1181,10 +1192,6 @@ def load_state_dict(checkpoint_file, device_map=None):
             name, once a given module name is inside, every submodule of it will be sent to the same device.
     """
     if checkpoint_file.endswith(".safetensors"):
-        if not is_safetensors_available():
-            raise ImportError(
-                f"To load {checkpoint_file}, the `safetensors` library is necessary `pip install safetensors`."
-            )
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
             weight_names = f.keys()
@@ -1476,15 +1483,14 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
         autocast_kwargs = autocast_kwargs.to_kwargs()
     if native_amp:
         if state.mixed_precision == "fp16":
-            if is_npu_available():
-                return torch.npu.amp.autocast(dtype=torch.float16, **autocast_kwargs)
-            else:
-                return torch.autocast(device_type=state.device.type, dtype=torch.float16, **autocast_kwargs)
+            return torch.autocast(device_type=state.device.type, dtype=torch.float16, **autocast_kwargs)
         elif state.mixed_precision == "bf16" and state.distributed_type in [
             DistributedType.NO,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
+            DistributedType.FSDP,
         ]:
             return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, **autocast_kwargs)
         else:

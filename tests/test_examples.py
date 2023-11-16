@@ -41,6 +41,7 @@ EXCLUDE_EXAMPLES = [
     "fsdp_with_peak_mem_tracking.py",
     "deepspeed_with_config_support.py",
     "megatron_lm_gpt_pretraining.py",
+    "early_stopping.py",
 ]
 
 
@@ -221,4 +222,8 @@ class FeatureExamplesTests(TempDirTestCase):
 
     def test_local_sgd(self):
         testargs = ["examples/by_feature/local_sgd.py"]
+        run_command(self._launch_args + testargs)
+
+    def test_early_stopping(self):
+        testargs = ["examples/by_feature/early_stopping.py"]
         run_command(self._launch_args + testargs)

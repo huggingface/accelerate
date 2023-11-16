@@ -14,20 +14,27 @@
 
 import os
 import pickle
+import tempfile
 import unittest
+import warnings
 from collections import UserDict, namedtuple
+from unittest.mock import Mock, patch
 
 import torch
+from torch import nn
 
+from accelerate.state import PartialState
 from accelerate.test_utils.testing import require_cuda, require_torch_min_version
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
+    check_os_kernel,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     find_device,
     listify,
     patch_environment,
     recursively_apply,
+    save,
     send_to_device,
 )
 
@@ -36,6 +43,10 @@ ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
 
 
 class UtilsTester(unittest.TestCase):
+    def setUp(self):
+        # logging requires initialized state
+        PartialState()
+
     def test_send_to_device(self):
         tensor = torch.randn(5, 2)
         device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -103,6 +114,25 @@ class UtilsTester(unittest.TestCase):
         self.assertNotIn("AA", os.environ)
         self.assertNotIn("BB", os.environ)
 
+    def test_patch_environment_key_exists(self):
+        # check that patch_environment correctly restores pre-existing env vars
+        with patch_environment(aa=1, BB=2):
+            self.assertEqual(os.environ.get("AA"), "1")
+            self.assertEqual(os.environ.get("BB"), "2")
+
+            with patch_environment(Aa=10, bb="20", cC=30):
+                self.assertEqual(os.environ.get("AA"), "10")
+                self.assertEqual(os.environ.get("BB"), "20")
+                self.assertEqual(os.environ.get("CC"), "30")
+
+            self.assertEqual(os.environ.get("AA"), "1")
+            self.assertEqual(os.environ.get("BB"), "2")
+            self.assertNotIn("CC", os.environ)
+
+        self.assertNotIn("AA", os.environ)
+        self.assertNotIn("BB", os.environ)
+        self.assertNotIn("CC", os.environ)
+
     def test_can_undo_convert_outputs(self):
         model = RegressionModel()
         model._original_forward = model.forward
@@ -154,3 +184,45 @@ class UtilsTester(unittest.TestCase):
         self.assertEqual(find_device([1, "a", torch.tensor([1, 2, 3])]), torch.device("cpu"))
         self.assertEqual(find_device({"a": 1, "b": torch.tensor([1, 2, 3])}), torch.device("cpu"))
         self.assertIsNone(find_device([1, "a"]))
+
+    def test_check_os_kernel_no_warning_when_release_gt_min(self):
+        # min version is 5.5
+        with patch("platform.uname", return_value=Mock(release="5.15.0-35-generic", system="Linux")):
+            with warnings.catch_warnings(record=True) as w:
+                check_os_kernel()
+            self.assertEqual(len(w), 0)
+
+    def test_check_os_kernel_no_warning_when_not_linux(self):
+        # system must be Linux
+        with patch("platform.uname", return_value=Mock(release="5.4.0-35-generic", system="Darwin")):
+            with warnings.catch_warnings(record=True) as w:
+                check_os_kernel()
+            self.assertEqual(len(w), 0)
+
+    def test_check_os_kernel_warning_when_release_lt_min(self):
+        # min version is 5.5
+        with patch("platform.uname", return_value=Mock(release="5.4.0-35-generic", system="Linux")):
+            with self.assertLogs() as ctx:
+                check_os_kernel()
+            self.assertEqual(len(ctx.records), 1)
+            self.assertEqual(ctx.records[0].levelname, "WARNING")
+            self.assertIn("5.4.0", ctx.records[0].msg)
+            self.assertIn("5.5.0", ctx.records[0].msg)
+
+    def test_save_safetensor_shared_memory(self):
+        class Model(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.a = nn.Linear(100, 100)
+                self.b = self.a
+
+            def forward(self, x):
+                return self.b(self.a(x))
+
+        model = Model()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_path = os.path.join(tmp_dir, "model.safetensors")
+            with self.assertLogs(level="WARNING") as log:
+                save(model.state_dict(), save_path, safe_serialization=True)
+                self.assertEqual(len(log.records), 1)
+                self.assertIn("Removed shared tensor", log.output[0])

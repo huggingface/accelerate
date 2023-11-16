@@ -2,8 +2,10 @@ from .constants import (
     MODEL_NAME,
     OPTIMIZER_NAME,
     RNG_STATE_NAME,
+    SAFE_MODEL_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
+    SAMPLER_NAME,
     SCALER_NAME,
     SCHEDULER_NAME,
     TORCH_DISTRIBUTED_OPERATION_TYPES,
@@ -35,7 +37,7 @@ from .dataclasses import (
     TensorInformation,
     TorchDynamoPlugin,
 )
-from .environment import get_int_from_env, parse_choice_from_env, parse_flag_from_env
+from .environment import get_int_from_env, parse_choice_from_env, parse_flag_from_env, str_to_bool
 from .imports import (
     get_ccl_version,
     is_4bit_bnb_available,
@@ -45,6 +47,7 @@ from .imports import (
     is_bnb_available,
     is_boto3_available,
     is_ccl_available,
+    is_clearml_available,
     is_comet_ml_available,
     is_cuda_available,
     is_datasets_available,
@@ -55,8 +58,8 @@ from .imports import (
     is_mlflow_available,
     is_mps_available,
     is_npu_available,
+    is_pandas_available,
     is_rich_available,
-    is_safetensors_available,
     is_sagemaker_available,
     is_tensorboard_available,
     is_timm_available,
@@ -164,6 +167,8 @@ from .megatron_lm import prepare_optimizer as megatron_lm_prepare_optimizer
 from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
 from .memory import find_executable_batch_size, release_memory
 from .other import (
+    check_os_kernel,
+    clean_state_dict_for_safetensors,
     clear_environment,
     convert_bytes,
     extract_model_from_parallel,

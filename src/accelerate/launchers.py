@@ -27,10 +27,19 @@ def test_launch():
     _ = PartialState()
 
 
-def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no", use_port="29500"):
+def notebook_launcher(
+    function,
+    args=(),
+    num_processes=None,
+    mixed_precision="no",
+    use_port="29500",
+    master_addr="127.0.0.1",
+    node_rank=0,
+    num_nodes=1,
+):
     """
-    Launches a training function, using several processes if it's possible in the current environment (TPU with
-    multiple cores for instance).
+    Launches a training function, using several processes or multiple nodes if it's possible in the current environment
+    (TPU with multiple cores for instance).
 
     <Tip warning={true}>
 
@@ -55,6 +64,12 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
             If `fp16` or `bf16`, will use mixed precision training on multi-GPU.
         use_port (`str`, *optional*, defaults to `"29500"`):
             The port to use to communicate between processes when launching a multi-GPU training.
+        master_addr (`str`, *optional*, defaults to `"127.0.0.1"`):
+            The address to use for communication between processes.
+        node_rank (`int`, *optional*, defaults to 0):
+            The rank of the current node.
+        num_nodes (`int`, *optional*, defaults to 1):
+            The number of nodes to use for training.
 
     Example:
 
@@ -114,7 +129,8 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
             raise ValueError(
                 "You have to specify the number of GPUs you would like to use, add `num_processes=...` to your call."
             )
-
+        if node_rank >= num_nodes:
+            raise ValueError("The node_rank must be less than the number of nodes.")
         if num_processes > 1:
             # Multi-GPU launch
             from torch.multiprocessing import start_processes
@@ -129,7 +145,12 @@ def notebook_launcher(function, args=(), num_processes=None, mixed_precision="no
             # torch.distributed will expect a few environment variable to be here. We set the ones common to each
             # process here (the other ones will be set be the launcher).
             with patch_environment(
-                world_size=num_processes, master_addr="127.0.01", master_port=use_port, mixed_precision=mixed_precision
+                nproc=num_processes,
+                node_rank=node_rank,
+                world_size=num_nodes * num_processes,
+                master_addr=master_addr,
+                master_port=use_port,
+                mixed_precision=mixed_precision,
             ):
                 # First dummy launch
                 if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
@@ -201,7 +222,7 @@ def debug_launcher(function, args=(), num_processes=2):
         # process here (the other ones will be set be the launcher).
         with patch_environment(
             world_size=num_processes,
-            master_addr="127.0.01",
+            master_addr="127.0.0.1",
             master_port="29500",
             accelerate_mixed_precision="no",
             accelerate_debug_rdv_file=tmp_file.name,

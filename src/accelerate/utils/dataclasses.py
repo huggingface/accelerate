@@ -26,12 +26,13 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from distutils.util import strtobool
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
+from .environment import str_to_bool
+from .imports import is_cuda_available, is_npu_available, is_xpu_available
 from .versions import compare_versions
 
 
@@ -200,6 +201,29 @@ class FP8RecipeKwargs(KwargsHandler):
             raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
 
 
+class EnumWithContains(enum.EnumMeta):
+    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
+
+    def __contains__(cls, item):
+        try:
+            cls(item)
+        except ValueError:
+            return False
+        return True
+
+
+class BaseEnum(enum.Enum, metaclass=EnumWithContains):
+    "An enum class that can get the value of an item with `str(Enum.key)`"
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def list(cls):
+        "Method to list all the possible items in `cls`"
+        return list(map(str, cls))
+
+
 class DistributedType(str, enum.Enum):
     """
     Represents a type of distributed environment.
@@ -259,7 +283,7 @@ class ComputeEnvironment(str, enum.Enum):
     AMAZON_SAGEMAKER = "AMAZON_SAGEMAKER"
 
 
-class DynamoBackend(str, enum.Enum):
+class DynamoBackend(str, BaseEnum):
     """
     Represents a dynamo backend (see https://github.com/pytorch/torchdynamo).
 
@@ -273,19 +297,21 @@ class DynamoBackend(str, enum.Enum):
         - **INDUCTOR** -- Uses TorchInductor backend with AotAutograd and cudagraphs by leveraging codegened Triton
           kernels. [Read
           more](https://dev-discuss.pytorch.org/t/torchinductor-a-pytorch-native-compiler-with-define-by-run-ir-and-symbolic-shapes/747)
-        - **NVFUSER** -- nvFuser with TorchScript. [Read
+        - **AOT_TS_NVFUSER** -- nvFuser with AotAutograd/TorchScript. [Read
           more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
-        - **AOT_NVFUSER** -- nvFuser with AotAutograd. [Read
+        - **NVPRIMS_NVFUSER** -- nvFuser with PrimTorch. [Read
           more](https://dev-discuss.pytorch.org/t/tracing-with-primitives-update-1-nvfuser-and-its-primitives/593)
-        - **AOT_CUDAGRAPHS** -- cudagraphs with AotAutograd. [Read
-          more](https://github.com/pytorch/torchdynamo/pull/757)
+        - **CUDAGRAPHS** -- cudagraphs with AotAutograd. [Read more](https://github.com/pytorch/torchdynamo/pull/757)
         - **OFI** -- Uses Torchscript optimize_for_inference. Inference only. [Read
           more](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html)
         - **FX2TRT** -- Uses Nvidia TensorRT for inference optimizations. Inference only. [Read
           more](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst)
         - **ONNXRT** -- Uses ONNXRT for inference on CPU/GPU. Inference only. [Read more](https://onnxruntime.ai/)
+        - **TENSORRT** -- Uses ONNXRT to run TensorRT for inference optimizations. [Read
+          more](https://github.com/onnx/onnx-tensorrt)
         - **IPEX** -- Uses IPEX for inference on CPU. Inference only. [Read
           more](https://github.com/intel/intel-extension-for-pytorch).
+        - **TVM** -- Uses Apach TVM for inference optimizations. [Read more](https://tvm.apache.org/)
 
     """
 
@@ -294,36 +320,15 @@ class DynamoBackend(str, enum.Enum):
     EAGER = "EAGER"
     AOT_EAGER = "AOT_EAGER"
     INDUCTOR = "INDUCTOR"
-    NVFUSER = "NVFUSER"
-    AOT_NVFUSER = "AOT_NVFUSER"
-    AOT_CUDAGRAPHS = "AOT_CUDAGRAPHS"
+    AOT_TS_NVFUSER = "AOT_TS_NVFUSER"
+    NVPRIMS_NVFUSER = "NVPRIMS_NVFUSER"
+    CUDAGRAPHS = "CUDAGRAPHS"
     OFI = "OFI"
     FX2TRT = "FX2TRT"
     ONNXRT = "ONNXRT"
+    TENSORRT = "TENSORRT"
     IPEX = "IPEX"
-
-
-class EnumWithContains(enum.EnumMeta):
-    "A metaclass that adds the ability to check if `self` contains an item with the `in` operator"
-
-    def __contains__(cls, item):
-        try:
-            cls(item)
-        except ValueError:
-            return False
-        return True
-
-
-class BaseEnum(enum.Enum, metaclass=EnumWithContains):
-    "An enum class that can get the value of an item with `str(Enum.key)`"
-
-    def __str__(self):
-        return self.value
-
-    @classmethod
-    def list(cls):
-        "Method to list all the possible items in `cls`"
-        return list(map(str, cls))
+    TVM = "TVM"
 
 
 class LoggerType(BaseEnum):
@@ -343,6 +348,7 @@ class LoggerType(BaseEnum):
     WANDB = "wandb"
     COMETML = "comet_ml"
     MLFLOW = "mlflow"
+    CLEARML = "clearml"
 
 
 class PrecisionType(BaseEnum):
@@ -415,6 +421,16 @@ class ProjectConfiguration:
         metadata={"help": "The current save iteration."},
     )
 
+    save_on_each_node: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "When doing multi-node distributed training, whether to save models and checkpoints on each node, or"
+                " only on the main one"
+            )
+        },
+    )
+
     def set_directories(self, project_dir: str = None):
         "Sets `self.project_dir` and `self.logging_dir` to the appropriate values."
         self.project_dir = project_dir
@@ -472,9 +488,9 @@ class TorchDynamoPlugin(KwargsHandler):
         if self.mode is None:
             self.mode = os.environ.get(prefix + "MODE", "default")
         if self.fullgraph is None:
-            self.fullgraph = strtobool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
+            self.fullgraph = str_to_bool(os.environ.get(prefix + "USE_FULLGRAPH", "False")) == 1
         if self.dynamic is None:
-            self.dynamic = strtobool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
+            self.dynamic = str_to_bool(os.environ.get(prefix + "USE_DYNAMIC", "False")) == 1
 
     def to_dict(self):
         dynamo_config = copy.deepcopy(self.__dict__)
@@ -635,7 +651,7 @@ class DeepSpeedPlugin:
         self.deepspeed_config["steps_per_print"] = float("inf")  # this will stop deepspeed from logging @ stdout
         if self.zero3_init_flag is None:
             self.zero3_init_flag = (
-                strtobool(os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
+                str_to_bool(os.environ.get("ACCELERATE_DEEPSPEED_ZERO3_INIT", str(self.hf_ds_config.is_zero3()))) == 1
             )
         if self.zero3_init_flag and not self.hf_ds_config.is_zero3():
             warnings.warn("DeepSpeed Zero3 Init flag is only applicable for ZeRO Stage 3. Setting it to False.")
@@ -727,7 +743,7 @@ class DeepSpeedPlugin:
                 or ds_config["train_micro_batch_size_per_gpu"] == "auto"
             ):
                 ds_config["train_micro_batch_size_per_gpu"] = 1
-            if ds_config["train_batch_size"] == "auto":
+            if ds_config.get("train_batch_size", None) == "auto":
                 del ds_config["train_batch_size"]
 
             if compare_versions("transformers", "<", "4.33"):
@@ -897,7 +913,7 @@ class FullyShardedDataParallelPlugin:
             self.sharding_strategy = ShardingStrategy(int(os.environ.get(prefix + "SHARDING_STRATEGY", 1)))
 
         if self.cpu_offload is None:
-            if strtobool(os.environ.get(prefix + "OFFLOAD_PARAMS", "False")) == 1:
+            if str_to_bool(os.environ.get(prefix + "OFFLOAD_PARAMS", "False")) == 1:
                 self.cpu_offload = CPUOffload(offload_params=True)
             else:
                 self.cpu_offload = CPUOffload(offload_params=False)
@@ -910,13 +926,23 @@ class FullyShardedDataParallelPlugin:
         if self.state_dict_type is None:
             state_dict_type_policy = os.environ.get(prefix + "STATE_DICT_TYPE", "FULL_STATE_DICT")
             self.set_state_dict_type(state_dict_type_policy)
-        self.use_orig_params = strtobool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
-        self.sync_module_states = strtobool(os.environ.get(prefix + "SYNC_MODULE_STATES", "True")) == 1
-        self.forward_prefetch = strtobool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
-        self.activation_checkpointing = strtobool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
+        self.use_orig_params = str_to_bool(os.environ.get(prefix + "USE_ORIG_PARAMS", "False")) == 1
+        self.sync_module_states = str_to_bool(os.environ.get(prefix + "SYNC_MODULE_STATES", "True")) == 1
+        self.forward_prefetch = str_to_bool(os.environ.get(prefix + "FORWARD_PREFETCH", "False")) == 1
+        self.activation_checkpointing = str_to_bool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
 
         if self.sync_module_states:
-            self.param_init_fn = lambda x: x.to_empty(device=torch.cuda.current_device(), recurse=False)
+            if is_npu_available():
+                device = torch.npu.current_device()
+            elif is_cuda_available():
+                device = torch.cuda.current_device()
+            elif is_xpu_available():
+                device = torch.xpu.current_device()
+            else:
+                raise RuntimeError(
+                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', or 'NPU'."
+                )
+            self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
 
     @staticmethod
     def get_module_class_from_name(module, name):
@@ -1169,13 +1195,13 @@ class MegatronLMPlugin:
         if self.gradient_clipping is None:
             self.gradient_clipping = float(os.environ.get(prefix + "GRADIENT_CLIPPING", 1.0))
         if self.recompute_activation is None:
-            self.recompute_activation = strtobool(os.environ.get(prefix + "RECOMPUTE_ACTIVATION", "False")) == 1
+            self.recompute_activation = str_to_bool(os.environ.get(prefix + "RECOMPUTE_ACTIVATION", "False")) == 1
         if self.use_distributed_optimizer is None:
             self.use_distributed_optimizer = (
-                strtobool(os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")) == 1
+                str_to_bool(os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")) == 1
             )
         if self.sequence_parallelism is None:
-            self.sequence_parallelism = strtobool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False")) == 1
+            self.sequence_parallelism = str_to_bool(os.environ.get(prefix + "SEQUENCE_PARALLELISM", "False")) == 1
 
         if self.pp_degree > 1 or self.use_distributed_optimizer:
             self.DDP_impl = "local"

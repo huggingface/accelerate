@@ -12,21 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import random
 from pathlib import Path
 from typing import List
 
 import numpy as np
 import torch
+from safetensors.torch import load_file
 from torch.cuda.amp import GradScaler
 
 from .utils import (
     MODEL_NAME,
     OPTIMIZER_NAME,
     RNG_STATE_NAME,
+    SAFE_MODEL_NAME,
+    SAFE_WEIGHTS_NAME,
+    SAMPLER_NAME,
     SCALER_NAME,
     SCHEDULER_NAME,
+    WEIGHTS_NAME,
     get_pretty_name,
     is_tpu_available,
     is_xpu_available,
@@ -49,11 +53,21 @@ def save_accelerator_state(
     model_states: List[dict],
     optimizers: list,
     schedulers: list,
+    dataloaders: list,
     process_index: int,
     scaler: GradScaler = None,
+    save_on_each_node: bool = False,
+    safe_serialization: bool = True,
 ):
     """
     Saves the current states of the models, optimizers, scaler, and RNG generators to a given directory.
+
+    <Tip>
+
+    If `safe_serialization` is `True`, models will be saved with `safetensors` while the rest are saved using native
+    `pickle`.
+
+    </Tip>
 
     Args:
         output_dir (`str` or `os.PathLike`):
@@ -64,35 +78,58 @@ def save_accelerator_state(
             A list of optimizer instances
         schedulers (`List[torch.optim.lr_scheduler._LRScheduler]`):
             A list of learning rate schedulers
+        dataloaders (`List[torch.utils.data.DataLoader]`):
+            A list of dataloader instances to save their sampler states
         process_index (`int`):
             The current process index in the Accelerator state
         scaler (`torch.cuda.amp.GradScaler`, *optional*):
             An optional gradient scaler instance to save
+        save_on_each_node (`bool`, *optional*):
+            Whether to save on every node, or only the main node.
+        safe_serialization (`bool`, *optional*, defaults to `True`):
+            Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
     """
+    output_dir = Path(output_dir)
     # Model states
     for i, state in enumerate(model_states):
-        weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
-        output_model_file = os.path.join(output_dir, weights_name)
-        save(state, output_model_file)
+        weights_name = WEIGHTS_NAME if not safe_serialization else SAFE_WEIGHTS_NAME
+        if i > 0:
+            weights_name = weights_name.replace(".", f"_{i}.")
+        output_model_file = output_dir.joinpath(weights_name)
+        save(state, output_model_file, save_on_each_node=save_on_each_node, safe_serialization=safe_serialization)
         logger.info(f"Model weights saved in {output_model_file}")
     # Optimizer states
     for i, opt in enumerate(optimizers):
         state = opt.state_dict()
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
-        output_optimizer_file = os.path.join(output_dir, optimizer_name)
-        save(state, output_optimizer_file)
+        output_optimizer_file = output_dir.joinpath(optimizer_name)
+        save(state, output_optimizer_file, save_on_each_node=save_on_each_node, safe_serialization=False)
         logger.info(f"Optimizer state saved in {output_optimizer_file}")
     # Scheduler states
     for i, scheduler in enumerate(schedulers):
         state = scheduler.state_dict()
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
-        output_scheduler_file = os.path.join(output_dir, scheduler_name)
-        save(state, output_scheduler_file)
+        output_scheduler_file = output_dir.joinpath(scheduler_name)
+        save(state, output_scheduler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
         logger.info(f"Scheduler state saved in {output_scheduler_file}")
+    # DataLoader states
+    for i, dataloader in enumerate(dataloaders):
+        sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
+        output_sampler_file = output_dir.joinpath(sampler_name)
+        # Only save if we have our custom sampler
+        from .data_loader import IterableDatasetShard, SeedableRandomSampler
+
+        if isinstance(dataloader.dataset, IterableDatasetShard):
+            sampler = dataloader.sampler.sampler
+
+            if isinstance(sampler, SeedableRandomSampler):
+                save(sampler, output_sampler_file, save_on_each_node=save_on_each_node, safe_serialization=False)
+        logger.info(f"Sampler state for dataloader {i} saved in {output_sampler_file}")
+
     # GradScaler state
     if scaler is not None:
         state = scaler.state_dict()
-        output_scaler_file = os.path.join(output_dir, SCALER_NAME)
+        output_scaler_file = output_dir.joinpath(SCALER_NAME)
         torch.save(state, output_scaler_file)
         logger.info(f"Gradient scaler state saved in {output_scaler_file}")
     # Random number generator states
@@ -107,7 +144,7 @@ def save_accelerator_state(
         states["torch_cuda_manual_seed"] = torch.cuda.get_rng_state_all()
     if is_tpu_available():
         states["xm_seed"] = xm.get_rng_state()
-    output_states_file = os.path.join(output_dir, states_name)
+    output_states_file = output_dir.joinpath(states_name)
     torch.save(states, output_states_file)
     logger.info(f"Random states saved in {output_states_file}")
     return output_dir
@@ -118,6 +155,7 @@ def load_accelerator_state(
     models,
     optimizers,
     schedulers,
+    dataloaders,
     process_index,
     scaler=None,
     map_location=None,
@@ -152,17 +190,25 @@ def load_accelerator_state(
         map_location = "cpu"
     elif map_location == "on_device":
         map_location = PartialState().device
+
+    input_dir = Path(input_dir)
     # Model states
     for i, model in enumerate(models):
-        weights_name = f"{MODEL_NAME}.bin" if i == 0 else f"{MODEL_NAME}_{i}.bin"
-        input_model_file = os.path.join(input_dir, weights_name)
-        models[i].load_state_dict(torch.load(input_model_file, map_location=map_location), **load_model_func_kwargs)
+        ending = f"_{i}" if i > 0 else ""
+        input_model_file = input_dir.joinpath(f"{SAFE_MODEL_NAME}{ending}.safetensors")
+        if input_model_file.exists():
+            state_dict = load_file(input_model_file, device=str(map_location))
+        else:
+            # Load with torch
+            input_model_file = input_dir.joinpath(f"{MODEL_NAME}{ending}.bin")
+            state_dict = torch.load(input_model_file, map_location=map_location)
+        models[i].load_state_dict(state_dict, **load_model_func_kwargs)
     logger.info("All model weights loaded successfully")
 
     # Optimizer states
     for i, opt in enumerate(optimizers):
         optimizer_name = f"{OPTIMIZER_NAME}.bin" if i == 0 else f"{OPTIMIZER_NAME}_{i}.bin"
-        input_optimizer_file = os.path.join(input_dir, optimizer_name)
+        input_optimizer_file = input_dir.joinpath(optimizer_name)
         optimizer_state = torch.load(input_optimizer_file, map_location=map_location)
         optimizers[i].load_state_dict(optimizer_state)
     logger.info("All optimizer states loaded successfully")
@@ -170,19 +216,32 @@ def load_accelerator_state(
     # Scheduler states
     for i, scheduler in enumerate(schedulers):
         scheduler_name = f"{SCHEDULER_NAME}.bin" if i == 0 else f"{SCHEDULER_NAME}_{i}.bin"
-        input_scheduler_file = os.path.join(input_dir, scheduler_name)
+        input_scheduler_file = input_dir.joinpath(scheduler_name)
         scheduler.load_state_dict(torch.load(input_scheduler_file))
     logger.info("All scheduler states loaded successfully")
 
+    for i, dataloader in enumerate(dataloaders):
+        sampler_name = f"{SAMPLER_NAME}.bin" if i == 0 else f"{SAMPLER_NAME}_{i}.bin"
+        input_sampler_file = input_dir.joinpath(sampler_name)
+        # Only load if we have our custom sampler
+        from .data_loader import IterableDatasetShard, SeedableRandomSampler
+
+        if isinstance(dataloader.dataset, IterableDatasetShard):
+            sampler = dataloader.sampler.sampler
+
+            if isinstance(sampler, SeedableRandomSampler):
+                dataloader.sampler.sampler = torch.load(input_sampler_file)
+    logger.info("All dataloader sampler states loaded successfully")
+
     # GradScaler state
     if scaler is not None:
-        input_scaler_file = os.path.join(input_dir, SCALER_NAME)
+        input_scaler_file = input_dir.joinpath(SCALER_NAME)
         scaler.load_state_dict(torch.load(input_scaler_file))
         logger.info("GradScaler state loaded successfully")
 
     # Random states
     try:
-        states = torch.load(os.path.join(input_dir, f"{RNG_STATE_NAME}_{process_index}.pkl"))
+        states = torch.load(input_dir.joinpath(f"{RNG_STATE_NAME}_{process_index}.pkl"))
         random.setstate(states["random_state"])
         np.random.set_state(states["numpy_random_seed"])
         torch.set_rng_state(states["torch_manual_seed"])
@@ -197,14 +256,14 @@ def load_accelerator_state(
         logger.info("Could not load random states")
 
 
-def save_custom_state(obj, path, index: int = 0):
+def save_custom_state(obj, path, index: int = 0, save_on_each_node: bool = False):
     """
     Saves the state of `obj` to `{path}/custom_checkpoint_{index}.pkl`
     """
     # Should this be the right way to get a qual_name type value from `obj`?
     save_location = Path(path) / f"custom_checkpoint_{index}.pkl"
     logger.info(f"Saving the state of {get_pretty_name(obj)} to {save_location}")
-    torch.save(obj.state_dict(), save_location)
+    save(obj.state_dict(), save_location, save_on_each_node=save_on_each_node)
 
 
 def load_custom_state(obj, path, index: int = 0):

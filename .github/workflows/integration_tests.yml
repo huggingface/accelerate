@@ -25,11 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        # TODO (@muellerzr, transformers v4.33) Add pypi back after the next release
-        transformers-version: [
-          github
-        ]
     steps:
     - uses: actions/checkout@v3.1.0
     - name: Set up python 3.8
@@ -47,9 +42,6 @@ jobs:
         cd ..
         git clone https://github.com/huggingface/transformers
         cd transformers
-        if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
-          git checkout $(git describe --tags `git rev-list --tags --max-count=1`)
-        fi
         pip install .[torch,testing]
 
     - name: Show installed libraries

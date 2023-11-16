@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Tuple
 import torch
 
 from ..commands.config.config_args import SageMakerConfig
-from ..commands.config.config_utils import DYNAMO_BACKENDS
 from ..utils import (
     DynamoBackend,
     PrecisionType,
@@ -89,7 +88,9 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
-        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+        raise ValueError(
+            f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DynamoBackend.list()}."
+        )
     current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
@@ -163,7 +164,9 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
-        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+        raise ValueError(
+            f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DynamoBackend.list()}."
+        )
     current_env["ACCELERATE_DYNAMO_BACKEND"] = dynamo_backend.value
     current_env["ACCELERATE_DYNAMO_MODE"] = args.dynamo_mode
     current_env["ACCELERATE_DYNAMO_USE_FULLGRAPH"] = str(args.dynamo_use_fullgraph)
@@ -171,6 +174,9 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
 
     if args.use_fsdp:
         current_env["ACCELERATE_USE_FSDP"] = "true"
+        if args.fsdp_cpu_ram_efficient_loading and not args.fsdp_sync_module_states:
+            raise ValueError("When using `--fsdp_cpu_ram_efficient_loading` set `--fsdp_sync_module_states` to `True`")
+
         current_env["FSDP_SHARDING_STRATEGY"] = str(args.fsdp_sharding_strategy)
         current_env["FSDP_OFFLOAD_PARAMS"] = str(args.fsdp_offload_params).lower()
         current_env["FSDP_MIN_NUM_PARAMS"] = str(args.fsdp_min_num_params)
@@ -184,6 +190,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
         current_env["FSDP_FORWARD_PREFETCH"] = str(args.fsdp_forward_prefetch).lower()
         current_env["FSDP_USE_ORIG_PARAMS"] = str(args.fsdp_use_orig_params).lower()
+        current_env["FSDP_CPU_RAM_EFFICIENT_LOADING"] = str(args.fsdp_cpu_ram_efficient_loading).lower()
         current_env["FSDP_SYNC_MODULE_STATES"] = str(args.fsdp_sync_module_states).lower()
 
     if args.use_megatron_lm:
@@ -284,10 +291,12 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         current_env["ACCELERATE_DEBUG_MODE"] = "true"
     gpu_ids = getattr(args, "gpu_ids", "all")
     if gpu_ids != "all" and args.gpu_ids is not None:
-        if not is_xpu_available():
-            current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
-        else:
+        if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
+        elif is_npu_available():
+            current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
+        else:
+            current_env["CUDA_VISIBLE_DEVICES"] = gpu_ids
     try:
         mixed_precision = PrecisionType(args.mixed_precision.lower())
     except ValueError:
@@ -419,7 +428,9 @@ def prepare_sagemager_args_inputs(
     try:
         dynamo_backend = DynamoBackend(args.dynamo_backend.upper())
     except ValueError:
-        raise ValueError(f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DYNAMO_BACKENDS}.")
+        raise ValueError(
+            f"Unknown dynamo backend: {args.dynamo_backend.upper()}. Choose between {DynamoBackend.list()}."
+        )
 
     # Environment variables to be set for use during training job
     environment = {
@@ -537,7 +548,9 @@ class PrepareForLaunch:
         ):
             # Prepare the environment for torch.distributed
             os.environ["LOCAL_RANK"] = str(index)
-            os.environ["RANK"] = str(index)
+            nproc = int(os.environ.get("NPROC", 1))
+            node_rank = int(os.environ.get("NODE_RANK", 0))
+            os.environ["RANK"] = str(nproc * node_rank + index)
 
         os.environ["FORK_LAUNCHED"] = str(1)
         self.launcher(*args)
