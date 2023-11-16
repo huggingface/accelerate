@@ -335,22 +335,11 @@ class BigModelingTester(unittest.TestCase):
         device_map = {"linear1": 0, "batchnorm": "cpu", "linear2": "disk"}
         x = torch.randn(2, 3)
         expected = model(x)
-        print(expected)
 
         with TemporaryDirectory() as tmp_dir:
-            dispatch_model(model, device_map, offload_dir=tmp_dir, offload_buffers=True, remove_non_persistent=True)
+            dispatch_model(model, device_map, offload_dir=tmp_dir, offload_buffers=True)
             output = model(x)
-            print(output)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
-
-        with TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(NotImplementedError) as context:
-                dispatch_model(
-                    model, device_map, offload_dir=tmp_dir, offload_buffers=True, remove_non_persistent=False
-                )
-                output = model(x)
-            # we are not able to retreive the non_persistent buffers
-            self.assertTrue("Cannot copy out of meta tensor; no data!" in str(context.exception))
 
     @require_mps
     def test_dispatch_model_mps(self):
