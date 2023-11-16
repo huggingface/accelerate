@@ -283,7 +283,6 @@ class AlignDevicesHook(ModelHook):
                 if "weight" in name and name.replace("weight", "SCB") in self.weights_map.keys():
                     if self.weights_map[name].dtype == torch.int8:
                         fp16_statistics = self.weights_map[name.replace("weight", "SCB")]
-
                 set_module_tensor_to_device(
                     module, name, self.execution_device, value=self.weights_map[name], fp16_statistics=fp16_statistics
                 )
