@@ -21,7 +21,8 @@ import torch
 import accelerate
 from accelerate import Accelerator
 from accelerate.big_modeling import dispatch_model
-from accelerate.test_utils import assert_exception, execute_subprocess_async, require_multi_gpu, skip
+from accelerate.test_utils import assert_exception, execute_subprocess_async, require_multi_gpu
+from accelerate.test_utils.testing import run_command
 from accelerate.utils import patch_environment
 
 
@@ -33,6 +34,9 @@ class MultiGPUTester(unittest.TestCase):
             mod_file.split(os.path.sep)[:-1] + ["scripts", "test_distributed_data_loop.py"]
         )
         self.operation_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_ops.py"])
+        self.notebook_launcher_path = os.path.sep.join(
+            mod_file.split(os.path.sep)[:-1] + ["scripts", "test_notebook.py"]
+        )
 
     @require_multi_gpu
     def test_multi_gpu(self):
@@ -66,23 +70,16 @@ class MultiGPUTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
-    # Need to see why this test raises forking issues when ran as a suite
-    @skip
     @require_multi_gpu
     def test_notebook_launcher(self):
         """
-        This test checks that the `notebook_launcher` will be able to intialize
-        a `PartialState` without issue
+        This test checks a variety of situations and scenarios
+        with the `notebook_launcher`
         """
-        cmd = [
-            "python",
-            "-m",
-            "accelerate.test_utils.scripts.test_notebook",
-            "--num_processes",
-            str(torch.cuda.device_count()),
-        ]
+        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.notebook_launcher_path]
+        print(f"Running {cmd}")
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            run_command(cmd, env=os.environ.copy())
 
 
 if __name__ == "__main__":

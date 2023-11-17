@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import os
+import sys
+from typing import Dict
 
 
 def str_to_bool(value) -> int:
@@ -48,3 +50,10 @@ def parse_flag_from_env(key, default=False):
 def parse_choice_from_env(key, default="no"):
     value = os.environ.get(key, str(default))
     return value
+
+
+def are_libraries_initialized(*library_names: str) -> Dict[str, bool]:
+    """
+    Checks if any of `library_names` are imported in the environment. Will return results as a `key:bool` pair.
+    """
+    return [lib_name for lib_name in library_names if lib_name in sys.modules]

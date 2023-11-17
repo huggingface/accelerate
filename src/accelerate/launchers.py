@@ -19,7 +19,7 @@ import tempfile
 import torch
 
 from .state import AcceleratorState, PartialState
-from .utils import PrecisionType, PrepareForLaunch, is_mps_available, patch_environment
+from .utils import PrecisionType, PrepareForLaunch, are_libraries_initialized, is_mps_available, patch_environment
 
 
 def test_launch():
@@ -142,6 +142,17 @@ def notebook_launcher(
                     "inside your training function. Restart your notebook and make sure no cells initializes an "
                     "`Accelerator`."
                 )
+            # Check for specific libraries known to initialize CUDA that users constantly use
+            problematic_imports = are_libraries_initialized("bitsandbytes")
+            if len(problematic_imports) > 1:
+                err = (
+                    "Could not start distributed process. Libraries known to initialize CUDA upon import have been "
+                    "imported already. Please keep these imports inside your training function to try and help with this:"
+                )
+                for lib_name in problematic_imports:
+                    err += f"\n\t* `{lib_name}`"
+                raise RuntimeError(err)
+
             # torch.distributed will expect a few environment variable to be here. We set the ones common to each
             # process here (the other ones will be set be the launcher).
             with patch_environment(

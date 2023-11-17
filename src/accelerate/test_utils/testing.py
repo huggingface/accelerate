@@ -431,13 +431,15 @@ class SubprocessCallException(Exception):
     pass
 
 
-def run_command(command: List[str], return_stdout=False):
+def run_command(command: List[str], return_stdout=False, env=None):
     """
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
     if an error occured while running `command`
     """
+    if env is None:
+        env = os.environ.copy()
     try:
-        output = subprocess.check_output(command, stderr=subprocess.STDOUT)
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT, env=env)
         if return_stdout:
             if hasattr(output, "decode"):
                 output = output.decode("utf-8")
