@@ -52,10 +52,8 @@ def parse_choice_from_env(key, default="no"):
     return value
 
 
-def are_libraries_initialized(library_names: list = []) -> Dict[str, bool]:
+def are_libraries_initialized(*library_names: list[str]) -> Dict[str, bool]:
     """
     Checks if any of `library_names` are imported in the environment. Will return results as a `key:bool` pair.
     """
-    if isinstance(library_names, str):
-        library_names = [library_names]
-    return {lib_name: lib_name in sys.modules for lib_name in library_names}
+    return [lib_name for lib_name in library_names if lib_name in sys.modules]

@@ -143,16 +143,15 @@ def notebook_launcher(
                     "`Accelerator`."
                 )
             # Check for specific libraries known to initialize CUDA that users constantly use
-            already_initialized = are_libraries_initialized("bitsandbytes")
-            if any(already_initialized.values()):
+            problematic_imports = are_libraries_initialized("bitsandbytes")
+            if len(problematic_imports) > 1:
                 err = (
                     "Could not start distributed process. Libraries known to initialize CUDA upon import have been "
-                    "imported already. Please keep these imports inside your `function` to try and help with this:"
+                    "imported already. Please keep these imports inside your training function to try and help with this:"
                 )
-                for lib_name, initialized in already_initialized.items():
-                    if initialized:
-                        err += f"\n\t* `{lib_name}`"
-                raise AssertionError(err)
+                for lib_name in problematic_imports:
+                    err += f"\n\t* `{lib_name}`"
+                raise RuntimeError(err)
 
             # torch.distributed will expect a few environment variable to be here. We set the ones common to each
             # process here (the other ones will be set be the launcher).
