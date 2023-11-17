@@ -35,6 +35,7 @@ from ..utils import (
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_dvclive_available,
     is_mps_available,
     is_pandas_available,
     is_tensorboard_available,
@@ -229,6 +230,13 @@ def require_clearml(test_case):
     Decorator marking a test that requires clearml installed. These tests are skipped when clearml isn't installed
     """
     return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
+
+
+def require_dvclive(test_case):
+    """
+    Decorator marking a test that requires dvclive installed. These tests are skipped when dvclive isn't installed
+    """
+    return unittest.skipUnless(is_dvclive_available(), "test requires dvclive")(test_case)
 
 
 def require_pandas(test_case):

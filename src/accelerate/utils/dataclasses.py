@@ -340,6 +340,7 @@ class LoggerType(BaseEnum):
         - **TENSORBOARD** -- TensorBoard as an experiment tracker
         - **WANDB** -- wandb as an experiment tracker
         - **COMETML** -- comet_ml as an experiment tracker
+        - **DVCLIVE** -- dvclive as an experiment tracker
     """
 
     ALL = "all"
@@ -349,6 +350,7 @@ class LoggerType(BaseEnum):
     COMETML = "comet_ml"
     MLFLOW = "mlflow"
     CLEARML = "clearml"
+    DVCLIVE = "dvclive"
 
 
 class PrecisionType(BaseEnum):
