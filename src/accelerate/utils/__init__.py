@@ -2,6 +2,7 @@ from .constants import (
     MODEL_NAME,
     OPTIMIZER_NAME,
     RNG_STATE_NAME,
+    SAFE_MODEL_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     SAMPLER_NAME,
@@ -51,6 +52,7 @@ from .imports import (
     is_cuda_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_dvclive_available,
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
@@ -59,7 +61,6 @@ from .imports import (
     is_npu_available,
     is_pandas_available,
     is_rich_available,
-    is_safetensors_available,
     is_sagemaker_available,
     is_tensorboard_available,
     is_timm_available,
@@ -168,6 +169,7 @@ from .megatron_lm import prepare_scheduler as megatron_lm_prepare_scheduler
 from .memory import find_executable_batch_size, release_memory
 from .other import (
     check_os_kernel,
+    clean_state_dict_for_safetensors,
     clear_environment,
     convert_bytes,
     extract_model_from_parallel,

@@ -32,7 +32,7 @@ import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
-from .imports import is_xpu_available
+from .imports import is_cuda_available, is_npu_available, is_xpu_available
 from .versions import compare_versions
 
 
@@ -340,6 +340,7 @@ class LoggerType(BaseEnum):
         - **TENSORBOARD** -- TensorBoard as an experiment tracker
         - **WANDB** -- wandb as an experiment tracker
         - **COMETML** -- comet_ml as an experiment tracker
+        - **DVCLIVE** -- dvclive as an experiment tracker
     """
 
     ALL = "all"
@@ -349,6 +350,7 @@ class LoggerType(BaseEnum):
     COMETML = "comet_ml"
     MLFLOW = "mlflow"
     CLEARML = "clearml"
+    DVCLIVE = "dvclive"
 
 
 class PrecisionType(BaseEnum):
@@ -932,7 +934,16 @@ class FullyShardedDataParallelPlugin:
         self.activation_checkpointing = str_to_bool(os.environ.get(prefix + "ACTIVATION_CHECKPOINTING", "False")) == 1
 
         if self.sync_module_states:
-            device = torch.cuda.current_device() if not is_xpu_available() else torch.xpu.current_device()
+            if is_npu_available():
+                device = torch.npu.current_device()
+            elif is_cuda_available():
+                device = torch.cuda.current_device()
+            elif is_xpu_available():
+                device = torch.xpu.current_device()
+            else:
+                raise RuntimeError(
+                    "There are currently no available devices found, must be one of 'XPU', 'CUDA', or 'NPU'."
+                )
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
 
     @staticmethod

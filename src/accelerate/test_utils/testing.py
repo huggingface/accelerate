@@ -35,9 +35,9 @@ from ..utils import (
     is_comet_ml_available,
     is_datasets_available,
     is_deepspeed_available,
+    is_dvclive_available,
     is_mps_available,
     is_pandas_available,
-    is_safetensors_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_version,
@@ -179,14 +179,6 @@ def require_multi_xpu(test_case):
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
 
 
-def require_safetensors(test_case):
-    """
-    Decorator marking a test that requires safetensors installed. These tests are skipped when safetensors isn't
-    installed
-    """
-    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
-
-
 def require_deepspeed(test_case):
     """
     Decorator marking a test that requires DeepSpeed installed. These tests are skipped when DeepSpeed isn't installed
@@ -238,6 +230,13 @@ def require_clearml(test_case):
     Decorator marking a test that requires clearml installed. These tests are skipped when clearml isn't installed
     """
     return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
+
+
+def require_dvclive(test_case):
+    """
+    Decorator marking a test that requires dvclive installed. These tests are skipped when dvclive isn't installed
+    """
+    return unittest.skipUnless(is_dvclive_available(), "test requires dvclive")(test_case)
 
 
 def require_pandas(test_case):

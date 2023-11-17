@@ -444,7 +444,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             model_8bit_from_saved = load_and_quantize_model(
                 model_8bit_from_saved,
                 bnb_quantization_config,
-                weights_location=tmpdirname + "/pytorch_model.bin",
+                weights_location=tmpdirname,
                 device_map=device_map,
                 no_split_module_classes=["BloomBlock"],
                 offload_folder=tmpdirname + "/tmp",

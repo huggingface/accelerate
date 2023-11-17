@@ -15,23 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Logging with Accelerate
 
-Accelerate has its own logging utility to handle logging while in a distributed system.
-To utilize this replace cases of `logging` with `accelerate.logging`:
-```diff
-- import logging
-+ from accelerate.logging import get_logger
-- logger = logging.getLogger(__name__)
-+ logger = get_logger(__name__)
-```
-
-## Setting the log level
-
-The log level can be set with the `ACCELERATE_LOG_LEVEL` environment variable or by passing 
-`log_level` to `get_logger`:
-```python
-from accelerate.logging import get_logger
-
-logger = get_logger(__name__, log_level="INFO")
-```
+Refer to the [Troubleshooting guide](../usage_guides/troubleshooting#logging) or to the example below to learn 
+how to use 🤗 Accelerate's logger. 
 
 [[autodoc]] logging.get_logger

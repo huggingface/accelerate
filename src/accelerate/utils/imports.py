@@ -151,10 +151,6 @@ def is_megatron_lm_available():
                 return False
 
 
-def is_safetensors_available():
-    return _is_package_available("safetensors")
-
-
 def is_transformers_available():
     return _is_package_available("transformers")
 
@@ -301,3 +297,7 @@ def is_xpu_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "xpu") and torch.xpu.is_available()
+
+
+def is_dvclive_available():
+    return _is_package_available("dvclive")

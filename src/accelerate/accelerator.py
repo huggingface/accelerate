@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import collections
 import contextlib
 import functools
 import json
@@ -64,6 +63,7 @@ from .utils import (
     RNGType,
     TorchDynamoPlugin,
     check_os_kernel,
+    clean_state_dict_for_safetensors,
     compare_versions,
     convert_model,
     convert_outputs_to_fp32,
@@ -73,14 +73,12 @@ from .utils import (
     get_mixed_precision_context_manager,
     get_pretty_name,
     has_transformer_engine_layers,
-    id_tensor_storage,
     is_bf16_available,
     is_deepspeed_available,
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
     is_npu_available,
-    is_safetensors_available,
     is_torch_version,
     is_tpu_available,
     is_xpu_available,
@@ -2536,7 +2534,7 @@ class Accelerator:
         model: torch.nn.Module,
         save_directory: Union[str, os.PathLike],
         max_shard_size: Union[int, str] = "10GB",
-        safe_serialization: bool = False,
+        safe_serialization: bool = True,
     ):
         """
         Save a model so that it can be re-loaded using load_checkpoint_in_model
@@ -2557,7 +2555,7 @@ class Accelerator:
 
                 </Tip>
 
-            safe_serialization (`bool`, *optional*, defaults to `False`):
+            safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
 
         Example:
@@ -2571,12 +2569,12 @@ class Accelerator:
         ```
         """
 
-        if safe_serialization and not is_safetensors_available():
-            raise ImportError("`safe_serialization` requires the `safetensors library: `pip install safetensors`.")
-
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
+
+        if any(param.device == torch.device("meta") for param in model.parameters()):
+            raise RuntimeError("You can't save the model since some parameters are on the meta device.")
 
         os.makedirs(save_directory, exist_ok=True)
 
@@ -2584,35 +2582,7 @@ class Accelerator:
         state_dict = self.get_state_dict(model)
 
         if safe_serialization:
-            # Safetensors does not allow tensor aliasing.
-            # We're going to remove aliases before saving
-            ptrs = collections.defaultdict(list)
-            # when bnb serialization is used the weights in the state dict can be strings
-            for name, tensor in state_dict.items():
-                if not isinstance(tensor, str):
-                    ptrs[id_tensor_storage(tensor)].append(name)
-
-            # These are all the pointers of shared tensors.
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            warn_names = set()
-            for names in shared_ptrs.values():
-                # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
-                # If the link between tensors was done at runtime then `from_pretrained` will not get
-                # the key back leading to random tensor. A proper warning will be shown
-                # during reload (if applicable), but since the file is not necessarily compatible with
-                # the config, better show a proper warning.
-                found = 0
-                for name in names:
-                    if name in state_dict:
-                        found += 1
-                        if found > 1:
-                            del state_dict[name]
-                            warn_names.add(name)
-            if len(warn_names) > 0:
-                logger.warning(
-                    f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
-                )
-
+            state_dict = clean_state_dict_for_safetensors(state_dict)
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
 
         # Shard the model if it is too big.
@@ -2690,7 +2660,7 @@ class Accelerator:
         self._save_model_state_pre_hook[handle.id] = hook
         return handle
 
-    def save_state(self, output_dir: str = None, **save_model_func_kwargs):
+    def save_state(self, output_dir: str = None, safe_serialization: bool = True, **save_model_func_kwargs):
         """
         Saves the current states of the model, optimizer, scaler, RNG generators, and registered objects to a folder.
 
@@ -2711,6 +2681,8 @@ class Accelerator:
         Args:
             output_dir (`str` or `os.PathLike`):
                 The name of the folder to save all relevant weights and states.
+            safe_serialization (`bool`, *optional*, defaults to `True`):
+                Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
             save_model_func_kwargs (`dict`, *optional*):
                 Additional keyword arguments for saving model which can be passed to the underlying save function, such
                 as optional arguments for DeepSpeed's `save_checkpoint` function.
@@ -2815,6 +2787,7 @@ class Accelerator:
             self.state.process_index,
             self.scaler,
             save_on_each_node=self.project_configuration.save_on_each_node,
+            safe_serialization=safe_serialization,
         )
         for i, obj in enumerate(self._custom_objects):
             save_custom_state(obj, output_dir, i, save_on_each_node=self.project_configuration.save_on_each_node)

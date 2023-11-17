@@ -15,7 +15,7 @@ jobs:
     outputs:
       version: ${{ steps.step1.outputs.version }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
       - id: step1
         run: echo "version=$(python setup.py --version)" >> $GITHUB_OUTPUT
 

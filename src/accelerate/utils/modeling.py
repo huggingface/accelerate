@@ -30,7 +30,7 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
-from .imports import is_mps_available, is_npu_available, is_safetensors_available, is_xpu_available
+from .imports import is_mps_available, is_npu_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -39,9 +39,9 @@ if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
 
 
-if is_safetensors_available():
-    from safetensors import safe_open
-    from safetensors.torch import load_file as safe_load_file
+from safetensors import safe_open
+from safetensors.torch import load_file as safe_load_file
+
 
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
@@ -535,15 +535,22 @@ def retie_parameters(model, tied_params):
     """
     for tied_group in tied_params:
         param_to_tie = None
-        # First iteration of the loop will set param_to_tie, next ones will tie it to the others
+        # two loops : the first one to set param_to_tie , the second one to change the values of tied_group
         for param_name in tied_group:
             module = model
             splits = param_name.split(".")
             for split in splits[:-1]:
                 module = getattr(module, split)
-            if param_to_tie is None:
-                param_to_tie = getattr(module, splits[-1])
-            else:
+            param = getattr(module, splits[-1])
+            if param_to_tie is None and param.device != torch.device("meta"):
+                param_to_tie = param
+                break
+        if param_to_tie is not None:
+            for param_name in tied_group:
+                module = model
+                splits = param_name.split(".")
+                for split in splits[:-1]:
+                    module = getattr(module, split)
                 setattr(module, splits[-1], param_to_tie)
 
 
@@ -1156,10 +1163,6 @@ def load_state_dict(checkpoint_file, device_map=None):
             name, once a given module name is inside, every submodule of it will be sent to the same device.
     """
     if checkpoint_file.endswith(".safetensors"):
-        if not is_safetensors_available():
-            raise ImportError(
-                f"To load {checkpoint_file}, the `safetensors` library is necessary `pip install safetensors`."
-            )
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
             weight_names = f.keys()

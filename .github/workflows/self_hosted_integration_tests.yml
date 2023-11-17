@@ -29,10 +29,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        transformers-version: [
-          pypi,
-          github
-        ]
         cuda_visible_devices: [
           "0", 
           "0,1"
@@ -41,17 +37,13 @@ jobs:
       - name: Install transformers
         run: |
           source activate accelerate;
-          git clone --filter=blob:none --no-checkout https://github.com/huggingface/transformers;
+          git clone https://github.com/huggingface/transformers --depth 1;
           cd transformers;
-          if [[ ${{ matrix.transformers-version }} = pypi ]]; then 
-            git checkout $(git tag --sort=taggerdate | tail -1); else
-            git checkout main
-          fi;
           pip install .[torch,deepspeed-testing];
           cd ..;
 
       - name: Install accelerate
-        run: 
+        run: |
           source activate accelerate;
           git clone https://github.com/huggingface/accelerate;
           cd accelerate;
@@ -87,6 +79,16 @@ jobs:
         run: |
           rm -rf accelerate transformers
 
+      - name: Run transformers examples tests
+        working-directory: transformers/
+        env:
+          CUDA_VISIBLE_DEVICES: ${{ matrix.cuda_visible_devices }}
+          WANDB_DISABLED: true
+        run: |
+          source activate accelerate
+          pip install -r examples/pytorch/_tests_requirements.txt
+          pytest -sv examples/pytorch/test_accelerate_examples.py examples/pytorch/test_pytorch_examples.py
+
   run-skorch-tests:
     container:
       image: huggingface/accelerate-gpu:latest
@@ -94,11 +96,6 @@ jobs:
     runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
     strategy:
       fail-fast: false
-      matrix:
-        skorch-version: [
-          pypi,
-          github
-        ]
     steps:
       - name: Install accelerate
         run: 
@@ -111,16 +108,11 @@ jobs:
 
       - name: Install skorch
         run: |
-          source activate accelerate;
-          git clone --filter=blob:none --no-checkout https://github.com/skorch-dev/skorch;
-          cd skorch;
-          if [[ ${{ matrix.skorch-version }} = pypi ]]; then 
-            git checkout $(git describe --tags `git rev-list --tags --max-count=1`); else
-            git checkout master
-          fi;
-          pip install .[testing];
-          pip install flaky;
-          cd ..
+          source activate accelerate
+          git config --global --add safe.directory '*'
+          git checkout master && git pull
+          pip install .[testing]
+          pip install flaky
 
       - name: Show installed libraries
         run: |
