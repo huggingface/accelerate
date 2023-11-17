@@ -52,7 +52,7 @@ BACKEND_IS_AVAILABLE = {"cuda": torch.cuda.is_available, "cpu": lambda: False, "
 
 
 # This dispatches a defined function according to the accelerator from the function definitions.
-def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
+def device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
     if device not in dispatch_table:
         return dispatch_table["default"](*args, **kwargs)
 
@@ -68,11 +68,11 @@ def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], 
 
 # These are callables which automatically dispatch the function specific to the accelerator
 def backend_device_count(device: str):
-    return _device_agnostic_dispatch(device, BACKEND_DEVICE_COUNT)
+    return device_agnostic_dispatch(device, BACKEND_DEVICE_COUNT)
 
 
 def backend_is_available(device: str):
-    return _device_agnostic_dispatch(device, BACKEND_IS_AVAILABLE)
+    return device_agnostic_dispatch(device, BACKEND_IS_AVAILABLE)
 
 
 # Update device function dict mapping
