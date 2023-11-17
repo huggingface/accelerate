@@ -17,6 +17,7 @@ A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
 
 import pickle
+import warnings
 from functools import update_wrapper, wraps
 from typing import Any, Mapping
 
@@ -525,6 +526,10 @@ def concatenate(data, dim=0):
     return torch.cat(data, dim=dim)
 
 
+class CannotPadNestedTensorWarning(UserWarning):
+    pass
+
+
 @chained_operation
 def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     """
@@ -543,6 +548,12 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     """
 
     def _pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
+        if getattr(tensor, "is_nested", False):
+            warnings.warn(
+                "Cannot pad nested tensors without more information. Leaving unprocessed.",
+                CannotPadNestedTensorWarning,
+            )
+            return tensor
         if dim >= len(tensor.shape):
             return tensor
 

@@ -102,6 +102,7 @@ from .offload import (
     save_offload_index,
 )
 from .operations import (
+    CannotPadNestedTensorWarning,
     broadcast,
     broadcast_object_list,
     concatenate,

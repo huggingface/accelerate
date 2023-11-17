@@ -27,11 +27,13 @@ from accelerate.state import PartialState
 from accelerate.test_utils.testing import require_cuda, require_torch_min_version
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
+    CannotPadNestedTensorWarning,
     check_os_kernel,
     convert_outputs_to_fp32,
     extract_model_from_parallel,
     find_device,
     listify,
+    pad_across_processes,
     patch_environment,
     recursively_apply,
     save,
@@ -226,3 +228,12 @@ class UtilsTester(unittest.TestCase):
                 save(model.state_dict(), save_path, safe_serialization=True)
                 self.assertEqual(len(log.records), 1)
                 self.assertIn("Removed shared tensor", log.output[0])
+
+    @require_torch_min_version(version="1.12")
+    def test_pad_across_processes(self):
+        from torch.nested import nested_tensor
+
+        nt = nested_tensor([[1, 2, 3], [1], [1, 2]])
+        with self.assertWarns(CannotPadNestedTensorWarning):
+            nt2 = pad_across_processes(nt)
+        self.assertIs(nt, nt2)
