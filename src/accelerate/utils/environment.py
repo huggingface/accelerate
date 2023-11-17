@@ -52,7 +52,7 @@ def parse_choice_from_env(key, default="no"):
     return value
 
 
-def are_libraries_initialized(*library_names: list[str]) -> Dict[str, bool]:
+def are_libraries_initialized(*library_names: str) -> Dict[str, bool]:
     """
     Checks if any of `library_names` are imported in the environment. Will return results as a `key:bool` pair.
     """
