@@ -1266,7 +1266,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
         for key in module_state_dict:
             # ignore placeholder parameters that are still on the meta device
             if str(module_state_dict[key].device) == "meta":
-                placeholders.append(key)
+                placeholders.append(name + f".{key}")
                 continue
             params = module_state_dict[key]
             state_dict[name + f".{key}"] = params
