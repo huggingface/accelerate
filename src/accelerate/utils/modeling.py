@@ -1254,7 +1254,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
             try:
                 module._hf_hook.pre_forward(module)
             except MemoryError:
-                print("Model must fit in CPU memory to call save_pretrained!")
+                raise MemoryError("Offloaded module must fit in CPU memory to call save_model!")
             module_state_dict = module.state_dict()
             # offload meta tensors from cpu
             module._hf_hook.post_forward(module, torch.tensor([]))
