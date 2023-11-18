@@ -1272,7 +1272,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
             state_dict[name + f".{key}"] = params
 
     if placeholders:
-        warnings.warn(f"The following modules contain unsaved placeholder tensors: {placeholders}")
+        logger.warning(f"The following tensors were not saved because they were still on meta device: {placeholders}")
 
     return state_dict
 
