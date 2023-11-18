@@ -53,17 +53,7 @@ BACKEND_IS_AVAILABLE = {"cuda": torch.cuda.is_available, "cpu": lambda: False, "
 
 # This dispatches a defined function according to the hardware accelerator from the function definitions.
 def device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
-    if device not in dispatch_table:
-        return dispatch_table["default"](*args, **kwargs)
-
-    fn = dispatch_table[device]
-
-    # Some device agnostic functions return values. Need to guard against 'None' instead at
-    # user level
-    if fn is None:
-        return None
-
-    return fn(*args, **kwargs)
+    return dispatch_table.get(device, dispatch_table["default"])(*args, **kwargs)
 
 
 # These are callables which automatically dispatch the function specific to the hardware accelerator
