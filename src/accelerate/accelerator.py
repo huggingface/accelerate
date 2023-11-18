@@ -2584,7 +2584,7 @@ class Accelerator:
         if (
             hasattr(model, "_hf_hook")
             and isinstance(model._hf_hook, AlignDevicesHook)
-            and True in {module._hf_hook.offload for _, module in model.named_modules() if hasattr(module, "_hf_hook")}
+            and any([module._hf_hook.offload for module in model.modules() if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook)])
         ):
             state_dict = get_state_dict_offloaded_model(model)
         else:
