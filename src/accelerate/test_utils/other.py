@@ -20,7 +20,7 @@ from typing import Callable, Dict
 import torch
 
 
-# Set a backend environment variable for any extra module import required for a custom accelerator
+# Set a backend environment variable for any extra module import required for a custom hardware accelerator
 if "ACCELERATE_TEST_BACKEND" in os.environ:
     backend = os.environ["ACCELERATE_TEST_BACKEND"]
     try:
@@ -44,14 +44,14 @@ else:
     torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# Utils for custom and alternative accelerator devices
+# Utils for custom and alternative hardware accelerator devices
 
 # Mappings from device names to callable functions to support device agnostic testing.
 BACKEND_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
 BACKEND_IS_AVAILABLE = {"cuda": torch.cuda.is_available, "cpu": lambda: False, "default": torch.cuda.is_available}
 
 
-# This dispatches a defined function according to the accelerator from the function definitions.
+# This dispatches a defined function according to the hardware accelerator from the function definitions.
 def device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
     if device not in dispatch_table:
         return dispatch_table["default"](*args, **kwargs)
@@ -66,7 +66,7 @@ def device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *
     return fn(*args, **kwargs)
 
 
-# These are callables which automatically dispatch the function specific to the accelerator
+# These are callables which automatically dispatch the function specific to the hardware accelerator
 def backend_device_count(device: str):
     return device_agnostic_dispatch(device, BACKEND_DEVICE_COUNT)
 

@@ -91,8 +91,8 @@ def require_cpu(test_case):
 
 def require_non_cpu(test_case):
     """
-    Decorator marking a test that requires an accelerator backend. These tests are skipped when there are no
-    accelerator available.
+    Decorator marking a test that requires a hardware accelerator backend. These tests are skipped when there are no
+    hardware accelerator available.
     """
     return unittest.skipUnless(torch_device != "cpu", "test requires a GPU")(test_case)
 
@@ -158,10 +158,12 @@ def require_tpu(test_case):
 
 def require_single_device(test_case):
     """
-    Decorator marking a test that requires a single device. These tests are skipped when there are no accelerator
-    available or number of devices is more than one.
+    Decorator marking a test that requires a single device. These tests are skipped when there is no hardware
+    accelerator available or number of devices is more than one.
     """
-    return unittest.skipUnless(backend_device_count(torch_device) == 1, "test requires an accelerator")(test_case)
+    return unittest.skipUnless(backend_device_count(torch_device) == 1, "test requires a hardware accelerator")(
+        test_case
+    )
 
 
 def require_single_gpu(test_case):
@@ -185,7 +187,7 @@ def require_multi_device(test_case):
     Decorator marking a test that requires a multi-device setup. These tests are skipped on a machine without multiple
     devices.
     """
-    return unittest.skipUnless(backend_device_count(torch_device) > 1, "test requires multiple accelerators")(
+    return unittest.skipUnless(backend_device_count(torch_device) > 1, "test requires multiple hardware accelerators")(
         test_case
     )
 
