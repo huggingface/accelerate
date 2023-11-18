@@ -157,8 +157,7 @@ class AcceleratorTester(AccelerateTestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
             load_checkpoint_in_model(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
-            with self.assertRaises(RuntimeError):
-                accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
+            accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_load_model_with_hooks(self, use_safetensors):

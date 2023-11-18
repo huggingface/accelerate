@@ -21,7 +21,6 @@ import os
 import re
 import shutil
 import tempfile
-import warnings
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
