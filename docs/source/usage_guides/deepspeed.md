@@ -362,7 +362,7 @@ You can use the the features of ZeRO++ by using the appropriate config parameter
         "reduce_bucket_size": "auto",
 
         "zero_quantized_weights": true,
-        "zero_hpz_partition_size": 16,
+        "zero_hpz_partition_size": 8,
         "zero_quantized_gradients": true,
 
         "contiguous_gradients": true,
@@ -370,6 +370,8 @@ You can use the the features of ZeRO++ by using the appropriate config parameter
     }
 }
 ```
+
+For heirarchical partitioning, the partition size `zero_hpz_partition_size` should ideally be set to the number of GPUs per node. (For example, the above config file assumes 8 GPUs per node)
 
 **Important code changes when using DeepSpeed Config File**
 
