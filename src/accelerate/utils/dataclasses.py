@@ -1043,7 +1043,7 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "enable sequence parallelism"},
     )
-    recompute_activation: bool = field(
+    recompute_activations: bool = field(
         default=None,
         metadata={"help": "enable selective activation recomputation"},
     )
@@ -1196,8 +1196,8 @@ class MegatronLMPlugin:
             self.num_micro_batches = int(os.environ.get(prefix + "NUM_MICRO_BATCHES", 1))
         if self.gradient_clipping is None:
             self.gradient_clipping = float(os.environ.get(prefix + "GRADIENT_CLIPPING", 1.0))
-        if self.recompute_activation is None:
-            self.recompute_activation = str_to_bool(os.environ.get(prefix + "RECOMPUTE_ACTIVATION", "False")) == 1
+        if self.recompute_activations is None:
+            self.recompute_activations = str_to_bool(os.environ.get(prefix + "RECOMPUTE_ACTIVATIONS", "False")) == 1
         if self.use_distributed_optimizer is None:
             self.use_distributed_optimizer = (
                 str_to_bool(os.environ.get(prefix + "USE_DISTRIBUTED_OPTIMIZER", "False")) == 1
@@ -1234,7 +1234,7 @@ class MegatronLMPlugin:
             "eval_iters": self.eval_iters,
             "eval_interval": self.eval_interval,
         }
-        if self.recompute_activation:
+        if self.recompute_activations:
             self.megatron_lm_default_args["recompute_granularity"] = "selective"
         if self.tensorboard_dir is not None:
             self.megatron_lm_default_args["tensorboard_dir"] = self.tensorboard_dir
