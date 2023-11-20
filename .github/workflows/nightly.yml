@@ -13,7 +13,7 @@ env:
 
 jobs:
   run_all_tests_single_gpu:
-    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
+    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, daily-ci]
     env:
       CUDA_VISIBLE_DEVICES: "0"
       TEST_TYPE: "single_gpu"
@@ -55,7 +55,7 @@ jobs:
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
-    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
+    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, daily-ci]
     env:
       CUDA_VISIBLE_DEVICES: "0,1"
       TEST_TYPE: "multi_gpu"
