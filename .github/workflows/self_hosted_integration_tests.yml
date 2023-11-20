@@ -105,6 +105,8 @@ jobs:
       - name: Install skorch
         run: |
           source activate accelerate
+          git clone https://github.com/huggingface/skorch;
+          cd skorch;
           git config --global --add safe.directory '*'
           git checkout master && git pull
           pip install .[testing]
