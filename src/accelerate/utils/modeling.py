@@ -27,7 +27,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from ..hooks import AlignDevicesHook
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
@@ -1245,7 +1244,11 @@ def get_state_dict_offloaded_model(model: nn.Module):
     for name, module in model.named_modules():
         if name == "":
             continue
-        if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+        if (
+            hasattr(module, "_hf_hook")
+            and str(module._hf_hook).startswith("AlignDevicesHook")
+            and module._hf_hook.offload
+        ):
             original_device = module._hf_hook.execution_device
             # assign hook execution device to cpu
             module._hf_hook.execution_device = "cpu"

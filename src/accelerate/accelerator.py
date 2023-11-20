@@ -73,7 +73,6 @@ from .utils import (
     gather_object,
     get_mixed_precision_context_manager,
     get_pretty_name,
-    get_state_dict_offloaded_model,
     has_transformer_engine_layers,
     is_bf16_available,
     is_deepspeed_available,
@@ -98,6 +97,7 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import FSDP_PYTORCH_VERSION
+from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
 
