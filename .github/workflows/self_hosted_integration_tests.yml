@@ -74,10 +74,6 @@ jobs:
         run: |
           source activate accelerate;
           pytest -sv tests/deepspeed
-      - name: Clean local files
-        if: always()
-        run: |
-          rm -rf accelerate transformers
 
       - name: Run transformers examples tests
         working-directory: transformers/
@@ -124,8 +120,3 @@ jobs:
         run: |
           source activate accelerate;
           pytest -sv -k TestAccelerate
-
-      - name: Clean local files
-        if: always()
-        run: |
-          rm -rf accelerate skorch

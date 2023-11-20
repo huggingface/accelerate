@@ -21,7 +21,7 @@ jobs:
 
   version-cpu:
     name: "Latest Accelerate CPU [version]"
-    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
+    runs-on: [self-hosted, docker-cpu, intel-cpu]
     needs: get-version
     steps:
       - name: Set up Docker Buildx
@@ -41,7 +41,7 @@ jobs:
 
   version-cuda:
     name: "Latest Accelerate GPU [version]"
-    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
+    runs-on: [self-hosted, docker-gpu]
     needs: get-version
     steps:
       - name: Set up Docker Buildx

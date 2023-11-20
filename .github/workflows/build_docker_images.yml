@@ -13,7 +13,7 @@ concurrency:
 jobs:
   latest-cpu:
     name: "Latest Accelerate CPU [dev]"
-    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
+    runs-on: [self-hosted, docker-cpu, intel-cpu]
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -31,7 +31,7 @@ jobs:
 
   latest-cuda:
     name: "Latest Accelerate GPU [dev]"
-    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
+    runs-on: [self-hosted, docker-gpu]
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
