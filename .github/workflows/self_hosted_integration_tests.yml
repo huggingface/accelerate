@@ -25,7 +25,7 @@ jobs:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, push-ci]
     strategy:
       fail-fast: false
       matrix:
@@ -34,22 +34,22 @@ jobs:
           "0,1"
         ]
     steps:
-      - name: Update accelerate clone and pip install
-        working-directory: accelerate/
-        run: 
-          source activate accelerate;
-          git config --global --add safe.directory '*';
-          git checkout main && git fetch && git checkout ${{ github.sha }};
-          pip install -e .;
-
-      - name: Update transformers clone & pip install
-        working-directory: transformers/
+      - name: Install transformers
         run: |
-          source activate accelerate
-          git config --global --add safe.directory '*'
-          git checkout main && git pull
-          pip install .[torch,deepspeed-testing]
-          pip uninstall comet_ml wandb -y
+          source activate accelerate;
+          git clone https://github.com/huggingface/transformers --depth 1;
+          cd transformers;
+          pip install .[torch,deepspeed-testing];
+          cd ..;
+
+      - name: Install accelerate
+        run: |
+          source activate accelerate;
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
+          git checkout ${{ github.sha }} ;
+          pip install -e .[testing];
+          cd ..;
       
       - name: Show installed libraries
         run: |
@@ -89,20 +89,20 @@ jobs:
     container:
       image: huggingface/accelerate-gpu:latest
       options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, push-ci]
     strategy:
       fail-fast: false
     steps:
-      - name: Update accelerate clone and pip install
-        working-directory: accelerate/
+      - name: Install accelerate
         run: 
           source activate accelerate;
-          git config --global --add safe.directory '*';
-          git checkout main && git fetch && git checkout ${{ github.sha }};
-          pip install -e .;
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
+          git checkout ${{ github.sha }};
+          pip install -e .[testing];
+          cd ..
 
-      - name: Update skorch clone & pip install
-        working-directory: skorch/
+      - name: Install skorch
         run: |
           source activate accelerate
           git config --global --add safe.directory '*'
