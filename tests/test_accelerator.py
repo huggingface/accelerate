@@ -8,7 +8,7 @@ import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
 
-from accelerate import DistributedType, infer_auto_device_map, init_empty_weights
+from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_gpu, slow
@@ -156,7 +156,7 @@ class AcceleratorTester(AccelerateTestCase):
         model = ModelForTest()
         with tempfile.TemporaryDirectory() as tmp_dir:
             accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
-            load_checkpoint_in_model(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
+            load_checkpoint_and_dispatch(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
             accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
