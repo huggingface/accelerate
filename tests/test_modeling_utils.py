@@ -51,6 +51,22 @@ class ModelForTest(nn.Module):
         return self.linear2(self.batchnorm(self.linear1(x)))
 
 
+class LinearWithNonPersistentBuffers(nn.Module):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True, device=None, dtype=None) -> None:
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.register_buffer("weight", torch.empty((out_features, in_features), **factory_kwargs))
+        if bias:
+            self.register_buffer("bias", torch.empty(out_features, **factory_kwargs), persistent=False)
+        else:
+            self.register_buffer("bias", None)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return torch.nn.functional.linear(input, self.weight, self.bias)
+
+
 def sequential_model(num_layers):
     layers = OrderedDict([(f"linear{i}", nn.Linear(1000, 1000)) for i in range(1, num_layers + 1)])
     return nn.Sequential(layers)
@@ -186,6 +202,14 @@ class ModelingUtilsTester(unittest.TestCase):
             [name for name, _ in named_tensors],
             ["linear1.weight", "linear1.bias", "batchnorm.weight", "batchnorm.bias", "linear2.weight", "linear2.bias"],
         )
+
+        model = LinearWithNonPersistentBuffers(10, 10)
+
+        named_tensors = named_module_tensors(model, include_buffers=True, remove_non_persistent=False)
+        self.assertListEqual([name for name, _ in named_tensors], ["weight", "bias"])
+
+        named_tensors = named_module_tensors(model, include_buffers=True, remove_non_persistent=True)
+        self.assertListEqual([name for name, _ in named_tensors], ["weight"])
 
     def test_find_tied_parameters(self):
         model = sequential_model(4)
