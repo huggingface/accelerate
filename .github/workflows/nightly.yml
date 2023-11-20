@@ -13,7 +13,7 @@ env:
 
 jobs:
   run_all_tests_single_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
     env:
       CUDA_VISIBLE_DEVICES: "0"
       TEST_TYPE: "single_gpu"
@@ -22,23 +22,25 @@ jobs:
       options: --gpus all --shm-size "16gb"
     defaults:
       run:
-        working-directory: accelerate/
         shell: bash
     steps:
       - name: Update clone & pip install
         run: |
           source activate accelerate
-          git config --global --add safe.directory '*'
-          git fetch && git checkout ${{ github.sha }} 
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
+          git checkout ${{ github.sha }};
           pip install -e . --no-deps
           pip install pytest-reportlog tabulate
 
       - name: Run test on GPUs
+        working-directory: accelerate
         run: |
           source activate accelerate
           make test
           
       - name: Run examples on GPUs
+        working-directory: accelerate
         if: always()
         run: |
           source activate accelerate
@@ -46,13 +48,14 @@ jobs:
           make test_examples
           
       - name: Generate Report
+        working-directory: accelerate
         if: always()
         run: |
           pip install slack_sdk tabulate
           python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
 
   run_all_tests_multi_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu, gcp]
+    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
     env:
       CUDA_VISIBLE_DEVICES: "0,1"
       TEST_TYPE: "multi_gpu"
@@ -61,18 +64,19 @@ jobs:
       options: --gpus all --shm-size "16gb"
     defaults:
       run:
-        working-directory: accelerate/
         shell: bash
     steps:
       - name: Update clone
         run: |
           source activate accelerate
-          git config --global --add safe.directory '*'
-          git fetch && git checkout ${{ github.sha }}
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
+          git checkout ${{ github.sha }};
           pip install -e . --no-deps
           pip install pytest-reportlog tabulate
 
       - name: Run core and big modeling tests on GPUs
+        working-directory: accelerate
         run: |
           source activate accelerate
           make test_core
@@ -80,12 +84,14 @@ jobs:
           make test_cli
 
       - name: Run Integration tests on GPUs
+        working-directory: accelerate
         if: always()
         run: |
           source activate accelerate
           make test_integrations
 
       - name: Run examples on GPUs
+        working-directory: accelerate
         if: always()
         run: |
           source activate accelerate
@@ -93,6 +99,7 @@ jobs:
           make test_examples
 
       - name: Generate Report
+        working-directory: accelerate
         if: always()
         run: |
           pip install slack_sdk tabulate
