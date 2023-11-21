@@ -1239,16 +1239,14 @@ def get_state_dict_offloaded_model(model: nn.Module):
         model (`torch.nn.Module`):
             The offloaded model we want to save
     """
+    from ..hooks import AlignDevicesHook
+
     state_dict = {}
     placeholders = []
     for name, module in model.named_modules():
         if name == "":
             continue
-        if (
-            hasattr(module, "_hf_hook")
-            and isinstance(module._hf_hook,AlignDevicesHook)
-            and module._hf_hook.offload
-        ):
+        if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
             original_device = module._hf_hook.execution_device
             # assign hook execution device to cpu
             module._hf_hook.execution_device = "cpu"
