@@ -40,23 +40,30 @@ For instance, here is how you would run the NLP example (from the root of the re
 
 ```bash
 compute_environment: LOCAL_MACHINE
-deepspeed_config: {}
+debug: false
 distributed_type: FSDP
 downcast_bf16: 'no'
 fsdp_config:
   fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
   fsdp_backward_prefetch_policy: BACKWARD_PRE
+  fsdp_cpu_ram_efficient_loading: true
+  fsdp_forward_prefetch: false
   fsdp_offload_params: false
   fsdp_sharding_strategy: 1
-  fsdp_state_dict_type: FULL_STATE_DICT
+  fsdp_state_dict_type: SHARDED_STATE_DICT
+  fsdp_sync_module_states: true
   fsdp_transformer_layer_cls_to_wrap: BertLayer
+  fsdp_use_orig_params: true
 machine_rank: 0
-main_process_ip: null
-main_process_port: null
 main_training_function: main
-mixed_precision: 'no'
+mixed_precision: bf16
 num_machines: 1
 num_processes: 2
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
 use_cpu: false
 ```
 
@@ -66,7 +73,7 @@ accelerate launch examples/nlp_example.py
 
 Currently, `Accelerate` supports the following config through the CLI:
 
-```bash
+
 `Sharding Strategy`: [1] FULL_SHARD (shards optimizer states, gradients and parameters), [2] SHARD_GRAD_OP (shards optimizer states and gradients), [3] NO_SHARD (DDP), [4] HYBRID_SHARD (shards optimizer states, gradients and parameters within each node while each node has full copy), [5] HYBRID_SHARD_ZERO2 (shards optimizer states and gradients within each node while each node has full copy)
 
 `Offload Params`: Decides Whether to offload parameters and gradients to CPU
@@ -94,12 +101,12 @@ all-gather while executing in the forward pass. only use with Static graphs.
 
 `Use Orig Params`: If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. 
 Useful in cases such as parameter-efficient fine-tuning. 
-Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019)
+Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019). This also enables to have different optimizer param groups. This should be `True` when creating optimizer object before preparing/wrapping the model with FSDP.
 
 `CPU RAM Efficient Model loading`: If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. Only applicable for 🤗 Transformers models. This should be set to False if you experience errors when loading the pretrained 🤗 Transformers model via `from_pretrained` method. When using this, `Sync Module States` needs to be True else all the processes expect the main process would have random empty weights leading to unexpected behaviour during training.
 
 `Sync Module States`: If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0
-```
+
 
 For additional and more nuanced control, you can specify other FSDP parameters via `FullyShardedDataParallelPlugin`. 
 When creating `FullyShardedDataParallelPlugin` object, pass it the parameters that weren't part of the accelerate config or if you want to override them.

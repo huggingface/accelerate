@@ -164,16 +164,14 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
     ):
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             optim_state = None
-            # below check should work but currently it isn't working (mostly opytorch issue),
-            # in the meantime disabling it at the cost of excess memory usage
-            # if accelerator.process_index == 0 or not fsdp_plugin.optim_state_dict_config.rank0_only:
-            optimizer_name = (
-                f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
-            )
-            input_optimizer_file = os.path.join(input_dir, optimizer_name)
-            logger.info(f"Loading Optimizer state from {input_optimizer_file}")
-            optim_state = torch.load(input_optimizer_file)
-            logger.info(f"Optimizer state loaded from {input_optimizer_file}")
+            if accelerator.process_index == 0 or not fsdp_plugin.optim_state_dict_config.rank0_only:
+                optimizer_name = (
+                    f"{OPTIMIZER_NAME}.bin" if optimizer_index == 0 else f"{OPTIMIZER_NAME}_{optimizer_index}.bin"
+                )
+                input_optimizer_file = os.path.join(input_dir, optimizer_name)
+                logger.info(f"Loading Optimizer state from {input_optimizer_file}")
+                optim_state = torch.load(input_optimizer_file)
+                logger.info(f"Optimizer state loaded from {input_optimizer_file}")
         else:
             ckpt_dir = (
                 os.path.join(input_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
