@@ -1100,52 +1100,6 @@ class Accelerator:
         # Return the unprocessed object if previous criteria was not met
         return obj
 
-    def _prepare_fsdp(self, *args):
-        result = []
-        for obj in args:
-            if isinstance(obj, torch.nn.Module):
-                model = obj
-                break
-        optimizers = []
-
-        self._schedulers = []
-        self._models = []
-        intermediate_result = []
-        for obj in args:
-            if isinstance(obj, torch.optim.Optimizer):
-                if len(obj.param_groups) > 1:
-                    logger.warning(
-                        "FSDP Warning: When using FSDP, several parameter groups will be conflated into "
-                        "a single one due to nested module wrapping and parameter flattening."
-                    )
-                try:
-                    optimizer = obj.optimizer.__class__(model.parameters(), **obj.optimizer.defaults)
-                except TypeError:
-                    if "differentiable" in obj.optimizer.defaults:
-                        # https://github.com/huggingface/accelerate/issues/801
-                        defaults = {k: v for k, v in obj.optimizer.defaults.items() if k != "differentiable"}
-                        optimizer = obj.optimizer.__class__(model.parameters(), **defaults)
-                    else:
-                        raise
-                obj = self.prepare_optimizer(optimizer)
-                optimizers.append(obj)
-            elif isinstance(obj, torch.nn.Module):
-                self._models.append(obj)
-            intermediate_result.append(obj)
-
-        for obj in intermediate_result:
-            if isinstance(obj, AcceleratedScheduler):
-                obj.optimizer = optimizers
-                for i, opt in enumerate(self._optimizers):
-                    if getattr(obj.scheduler, "optimizer", None) == opt.optimizer:
-                        obj.scheduler.optimizer = optimizers[i]
-                        obj.optimizers = [optimizers[i]]
-                        break
-                self._schedulers.append(obj)
-            result.append(obj)
-        self._optimizers = optimizers
-        return tuple(result)
-
     def prepare(self, *args, device_placement=None):
         """
         Prepare all objects passed in `args` for distributed training and mixed precision, then return them in the same
@@ -1214,35 +1168,6 @@ class Accelerator:
                     " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
                 )
 
-        if self.distributed_type == DistributedType.FSDP:
-            from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-
-            model_count = 0
-            optimizer_present = False
-            is_type_fsdp = False
-            for obj in args:
-                if isinstance(obj, torch.nn.Module):
-                    model_count += 1
-                    # if the model is compiled using PyTorch 2.0,
-                    # check that the wrapped model is FSDP or not;
-                    # else check if it is FSDP or not;
-                    is_type_fsdp = isinstance(obj, FSDP) or (
-                        is_compiled_module(obj) and isinstance(obj._orig_mod, FSDP)
-                    )
-                if isinstance(obj, torch.optim.Optimizer):
-                    optimizer_present = True
-            if model_count > 1 and optimizer_present:
-                raise ValueError(
-                    "For FSDP to work with multiple models (>1), "
-                    "prepare must be called for all the models before optimizers are created. "
-                    "Then pass the optimizers to the prepare call in the same order as corresponding models."
-                )
-            elif model_count == 1 and not is_type_fsdp and optimizer_present:
-                logger.warning(
-                    "FSDP Warning: When using FSDP, "
-                    "it is efficient and recommended to call prepare for the model before creating the optimizer"
-                )
-
         if self.distributed_type == DistributedType.DEEPSPEED:
             model_count = 0
             for obj in args:
@@ -1297,14 +1222,6 @@ class Accelerator:
             for obj in result:
                 if isinstance(obj, torch.optim.Optimizer):
                     obj._switch_parameters(mapping)
-
-        if (
-            self.distributed_type == DistributedType.FSDP
-            and model_count == 1
-            and not is_type_fsdp
-            and optimizer_present
-        ):
-            result = self._prepare_fsdp(*result)
 
         for item in result:
             if any(
@@ -3068,6 +2985,16 @@ class Accelerator:
                 from deepspeed.checkpoint.utils import clone_tensors_for_torch_save
 
                 state_dict = clone_tensors_for_torch_save(self.unwrap_model(model).state_dict())
+        elif self.distributed_type == DistributedType.FSDP:
+            from torch.distributed.fsdp import (
+                FullyShardedDataParallel as FSDP,
+                StateDictType,
+                FullStateDictConfig,
+            )
+
+            full_state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+            with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT, full_state_dict_config):
+                state_dict = model.state_dict()
         else:
             if unwrap:
                 model = self.unwrap_model(model)

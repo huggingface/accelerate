@@ -156,72 +156,19 @@ When using transformers `save_pretrained`, pass `state_dict=accelerator.get_stat
       args.output_dir,
       is_main_process=accelerator.is_main_process,
       save_function=accelerator.save,
-+     state_dict=accelerator.get_state_dict(model, unwrap=False),
++     state_dict=accelerator.get_state_dict(model),
 )
 ```
 
 ### State Dict
 
-`accelerator.get_state_dict` will call the underlying `model.state_dict` implementation.  With a model wrapped by FSDP, the default behavior of `state_dict` is to gather all of the state in the rank 0 device.  This can cause CUDA out of memory errors if the parameters don't fit on a single GPU.
-
-To avoid this, PyTorch provides a context manager that adjusts the behavior of `state_dict`.  To offload some of the state dict onto CPU, you can use the following code:
-
-```
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
-
-full_state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-with FSDP.state_dict_type(unwrapped_model, StateDictType.FULL_STATE_DICT, full_state_dict_config):
-    state = accelerator.get_state_dict(unwrapped_model)
-```
+`accelerator.get_state_dict` will call the underlying `model.state_dict` implementation using `FullStateDictConfig(offload_to_cpu=True, rank0_only=True)` context manager to get the state dict only for rank 0 and it will be offloaded to CPU.
 
 You can then pass `state` into the `save_pretrained` method.  There are several modes for `StateDictType` and `FullStateDictConfig` that you can use to control the behavior of `state_dict`.  For more information, see the [PyTorch documentation](https://pytorch.org/docs/stable/fsdp.html).
 
 ## A few caveats to be aware of
 
-- PyTorch FSDP auto wraps sub-modules, flattens the parameters and shards the parameters in place.
-  Due to this, any optimizer created before model wrapping gets broken and occupies more memory.
-  Hence, it is highly recommended and efficient to prepare the model before creating the optimizer.
-  `Accelerate` will automatically wrap the model and create an optimizer for you in case of single model with a warning message.
-  > FSDP Warning: When using FSDP, it is efficient and recommended to call prepare for the model before creating the optimizer
-
-However, below is the recommended way to prepare model and optimizer while using FSDP:
-
-```diff
-  model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
-+ model = accelerator.prepare(model)
-
-  optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr)
-
-- model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
--        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
--    )
-
-+ optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-+         optimizer, train_dataloader, eval_dataloader, lr_scheduler
-+    )
-```
-
-- In case of a single model, if you have created the optimizer with multiple parameter groups and called prepare with them together,
-  then the parameter groups will be lost and the following warning is displayed:
-  > FSDP Warning: When using FSDP, several parameter groups will be conflated into
-  > a single one due to nested module wrapping and parameter flattening.
-  
-  This is because parameter groups created before wrapping will have no meaning post wrapping due to parameter flattening of nested FSDP modules into 1D arrays (which can consume many layers).
-  For instance, below are the named parameters of an FSDP model on GPU 0 (When using 2 GPUs. Around 55M (110M/2) params in 1D arrays as this will have the 1st shard of the parameters). 
-  Here, if one has applied no weight decay for [bias, LayerNorm.weight] the named parameters of an unwrapped BERT model, 
-  it can't be applied to the below FSDP wrapped model as there are no named parameters with either of those strings and 
-  the parameters of those layers are concatenated with parameters of various other layers.
-  ```
-  {
-    '_fsdp_wrapped_module.flat_param': torch.Size([494209]), 
-    '_fsdp_wrapped_module._fpw_module.bert.embeddings.word_embeddings._fsdp_wrapped_module.flat_param': torch.Size([11720448]), 
-    '_fsdp_wrapped_module._fpw_module.bert.encoder._fsdp_wrapped_module.flat_param': torch.Size([42527232])
-  }
-  ```
-
-
-- In case of multiple models, it is necessary to prepare the models before creating optimizers or else it will throw an error. 
-Then pass the optimizers to the prepare call in the same order as corresponding models else `accelerator.save_state()` and `accelerator.load_state()` will result in wrong/unexpected behaviour.
+- In case of multiple models, pass the optimizers to the prepare call in the same order as corresponding models else `accelerator.save_state()` and `accelerator.load_state()` will result in wrong/unexpected behaviour.
 - This feature is incompatible with `--predict_with_generate` in the `run_translation.py` script of 🤗 `Transformers` library.
 
 For more control, users can leverage the `FullyShardedDataParallelPlugin`. After creating an instance of this class, users can pass it to the Accelerator class instantiation.
