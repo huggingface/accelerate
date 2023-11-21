@@ -868,7 +868,7 @@ class FullyShardedDataParallelPlugin:
         },
     )
     use_orig_params: bool = field(
-        default=False,
+        default=True,
         metadata={
             "help": "If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. "
             "Useful in cases such as parameter-efficient fine-tuning. "

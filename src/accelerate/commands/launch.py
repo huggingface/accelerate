@@ -519,7 +519,7 @@ def launch_command_parser(subparsers=None):
     )
     fsdp_args.add_argument(
         "--fsdp_use_orig_params",
-        default="false",
+        default="true",
         type=str,
         help="If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres."
         " (useful only when `use_fsdp` flag is passed).",
