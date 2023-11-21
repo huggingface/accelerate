@@ -1267,7 +1267,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
 
         for key in module_state_dict:
             # ignore placeholder parameters that are still on the meta device
-            if str(module_state_dict[key].device) == "meta":
+            if module_state_dict[key].device == torch.device("meta"):
                 placeholders.append(name + f".{key}")
                 continue
             params = module_state_dict[key]
