@@ -1246,7 +1246,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
             continue
         if (
             hasattr(module, "_hf_hook")
-            and str(module._hf_hook).startswith("AlignDevicesHook")
+            and isinstance(module._hf_hook,AlignDevicesHook)
             and module._hf_hook.offload
         ):
             original_device = module._hf_hook.execution_device
