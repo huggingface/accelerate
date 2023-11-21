@@ -2670,7 +2670,7 @@ class Accelerator:
         # Save the optimizers taking care of FSDP and DeepSpeed nuances
         optimizers = []
         if self.distributed_type == DistributedType.FSDP:
-            for opt in self._optimizers:
+            for i, opt in enumerate(self._optimizers):
                 logger.info("Saving FSDP Optimizer")
                 save_fsdp_optimizer(self.state.fsdp_plugin, self, opt, self._models[i], output_dir, i)
                 logger.info(f"FSDP Optimizer saved to output dir {output_dir}")
