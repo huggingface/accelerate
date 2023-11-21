@@ -2987,9 +2987,11 @@ class Accelerator:
                 state_dict = clone_tensors_for_torch_save(self.unwrap_model(model).state_dict())
         elif self.distributed_type == DistributedType.FSDP:
             from torch.distributed.fsdp import (
-                FullyShardedDataParallel as FSDP,
-                StateDictType,
                 FullStateDictConfig,
+                StateDictType,
+            )
+            from torch.distributed.fsdp import (
+                FullyShardedDataParallel as FSDP,
             )
 
             full_state_dict_config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
