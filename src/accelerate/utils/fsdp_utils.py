@@ -16,7 +16,7 @@ import os
 import torch
 
 from ..logging import get_logger
-from .constants import FSDP_PYTORCH_VERSION, MODEL_NAME, OPTIMIZER_NAME
+from .constants import FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME
 from .imports import is_torch_distributed_available
 from .versions import is_torch_version
 
@@ -47,7 +47,7 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0):
     ):
         state_dict = model.state_dict()
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
-            weights_name = f"{MODEL_NAME}.bin" if model_index == 0 else f"{MODEL_NAME}_{model_index}.bin"
+            weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             output_model_file = os.path.join(output_dir, weights_name)
             if accelerator.process_index == 0:
                 logger.info(f"Saving model to {output_model_file}")
@@ -55,16 +55,16 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0):
                 logger.info(f"Model saved to {output_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.LOCAL_STATE_DICT:
             weights_name = (
-                f"{MODEL_NAME}_rank{accelerator.process_index}.bin"
+                f"{FSDP_MODEL_NAME}_rank{accelerator.process_index}.bin"
                 if model_index == 0
-                else f"{MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
+                else f"{FSDP_MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
             )
             output_model_file = os.path.join(output_dir, weights_name)
             logger.info(f"Saving model to {output_model_file}")
             torch.save(state_dict, output_model_file)
             logger.info(f"Model saved to {output_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT:
-            ckpt_dir = os.path.join(output_dir, f"{MODEL_NAME}_{model_index}")
+            ckpt_dir = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{model_index}")
             os.makedirs(ckpt_dir, exist_ok=True)
             logger.info(f"Saving model to {ckpt_dir}")
             state_dict = {"model": state_dict}
@@ -96,16 +96,16 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0):
                         "initializing FSDP object"
                     )
                 return
-            weights_name = f"{MODEL_NAME}.bin" if model_index == 0 else f"{MODEL_NAME}_{model_index}.bin"
+            weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             input_model_file = os.path.join(input_dir, weights_name)
             logger.info(f"Loading model from {input_model_file}")
             state_dict = torch.load(input_model_file)
             logger.info(f"Model loaded from {input_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.LOCAL_STATE_DICT:
             weights_name = (
-                f"{MODEL_NAME}_rank{accelerator.process_index}.bin"
+                f"{FSDP_MODEL_NAME}_rank{accelerator.process_index}.bin"
                 if model_index == 0
-                else f"{MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
+                else f"{FSDP_MODEL_NAME}_{model_index}_rank{accelerator.process_index}.bin"
             )
             input_model_file = os.path.join(input_dir, weights_name)
             logger.info(f"Loading model from {input_model_file}")
@@ -113,8 +113,8 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0):
             logger.info(f"Model loaded from {input_model_file}")
         elif fsdp_plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT:
             ckpt_dir = (
-                os.path.join(input_dir, f"{MODEL_NAME}_{model_index}")
-                if f"{MODEL_NAME}" not in input_dir
+                os.path.join(input_dir, f"{FSDP_MODEL_NAME}_{model_index}")
+                if f"{FSDP_MODEL_NAME}" not in input_dir
                 else input_dir
             )
             logger.info(f"Loading model from {ckpt_dir}")
