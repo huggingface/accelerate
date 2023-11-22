@@ -298,6 +298,13 @@ def _gpu_gather(tensor):
         if not tensor.is_contiguous():
             tensor = tensor.contiguous()
 
+        # Check if `tensor` is not on CUDA
+        if state.device.type == "cuda" and tensor.device.type != "cuda":
+            raise RuntimeError(
+                "One or more of the tensors passed to `gather` was not on the GPU while the `Accelerator` is configured for CUDA. "
+                "Please move it to the GPU before calling `gather`."
+            )
+
         if state.backend is not None and state.backend != "gloo":
             # We use `empty` as `all_gather_into_tensor` slightly
             # differs from `all_gather` for better efficiency,
