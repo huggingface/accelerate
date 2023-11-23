@@ -45,7 +45,7 @@ Why is this important? Under the hood this will set **5** different seed setting
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     # ^^ safe to call this function even if cuda is not available
-    if is_tpu_available():
+    if is_troch_xla_available():
         xm.set_rng_state(seed)
 ```
 
