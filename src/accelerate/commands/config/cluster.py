@@ -381,9 +381,9 @@ def get_cluster_input():
                 error_message="Please enter yes or no.",
             )
             fsdp_config["fsdp_use_orig_params"] = _ask_field(
-                "Do you want to enable FSDP's `use_orig_params` feature? [yes/NO]: ",
+                "Do you want to enable FSDP's `use_orig_params` feature? [YES/no]: ",
                 _convert_yes_no_to_bool,
-                default=False,
+                default=True,
                 error_message="Please enter yes or no.",
             )
             fsdp_config["fsdp_cpu_ram_efficient_loading"] = _ask_field(

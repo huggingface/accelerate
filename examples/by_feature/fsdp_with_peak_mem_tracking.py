@@ -247,16 +247,19 @@ def training_function(config, args):
         args.model_name_or_path, return_dict=True, low_cpu_mem_usage=True
     )
 
-    # New Code #
-    # For FSDP feature, it is highly recommended and efficient to prepare the model before creating optimizer
-    model = accelerator.prepare(model)
-    accelerator.print(model)
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": 0.003,
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
 
-    # Instantiate optimizer
-    # New Code #
-    # For FSDP feature, at present it doesn't support multiple parameter groups,
-    # so we need to create a single parameter group for the whole model
-    optimizer = torch.optim.AdamW(params=model.parameters(), lr=lr, weight_decay=2e-4)
+    optimizer = torch.optim.AdamW(params=optimizer_grouped_parameters, lr=lr, weight_decay=2e-4)
 
     # Instantiate scheduler
     lr_scheduler = get_linear_schedule_with_warmup(
@@ -265,13 +268,8 @@ def training_function(config, args):
         num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
     )
 
-    # New Code #
-    # For FSDP feature, prepare everything except the model as we have already prepared the model
-    # before creating the optimizer
-    # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
-    # prepare method.
-    optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-        optimizer, train_dataloader, eval_dataloader, lr_scheduler
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
     overall_step = 0
