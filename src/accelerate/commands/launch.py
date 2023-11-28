@@ -642,6 +642,15 @@ def multi_gpu_launcher(args):
     import torch.distributed.run as distrib_run
 
     current_env = prepare_multi_gpu_env(args)
+    device_name = torch.cuda.get_device_name()
+    if any(["RTX 3090", "RTX 40"] in device_name):
+        message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
+        if "NCCL_P2P_DISABLE" not in current_env:
+            current_env["NCCL_P2P_DISABLE"] = str(1)
+        if "NCCL_IB_DISABLE" not in current_env:
+            current_env["NCCL_IB_DISABLE"] = str(1)
+        logger.warning(message)
+
 
     debug = getattr(args, "debug", False)
     args = _filter_args(
@@ -668,6 +677,14 @@ def deepspeed_launcher(args):
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
 
     cmd, current_env = prepare_deepspeed_cmd_env(args)
+    device_name = torch.cuda.get_device_name()
+    if any(["RTX 3090", "RTX 40"] in device_name):
+        message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
+        if "NCCL_P2P_DISABLE" not in current_env:
+            current_env["NCCL_P2P_DISABLE"] = str(1)
+        if "NCCL_IB_DISABLE" not in current_env:
+            current_env["NCCL_IB_DISABLE"] = str(1)
+        logger.warning(message)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         with open(".deepspeed_env", "a") as f:
