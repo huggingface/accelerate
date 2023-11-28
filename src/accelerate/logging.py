@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import logging
 import os
 
@@ -66,6 +67,17 @@ class MultiProcessAdapter(logging.LoggerAdapter):
                         msg, kwargs = self.process(msg, kwargs)
                         self.logger.log(level, msg, *args, **kwargs)
                     state.wait_for_everyone()
+
+    @functools.lru_cache(None)
+    def warning_once(self, *args, **kwargs):
+        """
+        This method is identical to `logger.warning()`, but will emit the warning with the same message only once
+
+        Note: The cache is for the function arguments, so 2 different callers using the same arguments will hit the
+        cache. The assumption here is that all warning messages are unique across the code. If they aren't then need to
+        switch to another type of cache that includes the caller frame information in the hashing function.
+        """
+        self.warning(*args, **kwargs)
 
 
 def get_logger(name: str, log_level: str = None):
