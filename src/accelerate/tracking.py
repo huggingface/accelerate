@@ -901,7 +901,7 @@ class DVCLiveTracker(GeneralTracker):
             kwargs:
                 Additional key word arguments passed along to `dvclive.Live.log_metric()`.
         """
-        from dvclive import Metric
+        from dvclive.plots import Metric
         if step is not None:
             self.live.step = step
         for k, v in values.items():
