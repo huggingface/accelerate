@@ -866,7 +866,7 @@ class DVCLiveTracker(GeneralTracker):
 
     @on_main_process
     def __init__(self, run_name: Optional[str] = None, live: Optional[Any] = None, **kwargs):
-        from dvclive import Live
+        from dvclive import Live, Metric
 
         super().__init__()
         self.live = live if live is not None else Live(**kwargs)
@@ -904,7 +904,15 @@ class DVCLiveTracker(GeneralTracker):
         if step is not None:
             self.live.step = step
         for k, v in values.items():
-            self.live.log_metric(k, v, **kwargs)
+            if Metric.could_log(v):
+                self.live.log_metric(k, v, **kwargs)
+            else:
+                logger.warning(
+                    "Accelerator attempted to log a value of "
+                    f'"{v}" of type {type(v)} for key "{k} as a scalar. '
+                    "This invocation of DVCLive's Live.log_metric() "
+                    "is incorrect so we dropped this attribute."
+                )
 
     @on_main_process
     def finish(self):
