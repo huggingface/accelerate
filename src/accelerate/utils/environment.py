@@ -16,6 +16,8 @@ import os
 import sys
 from typing import Dict
 
+import torch
+
 
 def str_to_bool(value) -> int:
     """
@@ -57,3 +59,19 @@ def are_libraries_initialized(*library_names: str) -> Dict[str, bool]:
     Checks if any of `library_names` are imported in the environment. Will return results as a `key:bool` pair.
     """
     return [lib_name for lib_name in library_names if lib_name in sys.modules]
+
+
+def check_cuda_p2p_ib_support():
+    """
+    Checks if the devices being used have issues with P2P and IB communications, namely any consumer GPU hardware after
+    the 3090.
+    """
+
+    # Get the first device/default
+    device_name = torch.cuda.get_device_name()
+    device_count = torch.cuda.device_count()
+    unsupported_devices = ["RTX 3090", "RTX 40"]
+    if device_count > 1:
+        if any(device in device_name for device in unsupported_devices):
+            return False
+    return True

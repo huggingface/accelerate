@@ -34,6 +34,7 @@ from accelerate.utils import (
     DistributedType,
     PrepareForLaunch,
     _filter_args,
+    check_cuda_p2p_ib_support,
     is_bf16_available,
     is_deepspeed_available,
     is_npu_available,
@@ -642,14 +643,17 @@ def multi_gpu_launcher(args):
     import torch.distributed.run as distrib_run
 
     current_env = prepare_multi_gpu_env(args)
-    device_name = torch.cuda.get_device_name()
-    if any(device in device_name for device in ["RTX 3090", "RTX 40"]):
+    if not check_cuda_p2p_ib_support():
         message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
+        warn = False
         if "NCCL_P2P_DISABLE" not in current_env:
             current_env["NCCL_P2P_DISABLE"] = str(1)
+            warn = True
         if "NCCL_IB_DISABLE" not in current_env:
             current_env["NCCL_IB_DISABLE"] = str(1)
-        logger.warning(message)
+            warn = True
+        if warn:
+            logger.warning(message)
 
     debug = getattr(args, "debug", False)
     args = _filter_args(
@@ -676,14 +680,17 @@ def deepspeed_launcher(args):
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
 
     cmd, current_env = prepare_deepspeed_cmd_env(args)
-    device_name = torch.cuda.get_device_name()
-    if any(device in device_name for device in ["RTX 3090", "RTX 40"]):
+    if not check_cuda_p2p_ib_support():
         message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
+        warn = False
         if "NCCL_P2P_DISABLE" not in current_env:
             current_env["NCCL_P2P_DISABLE"] = str(1)
+            warn = True
         if "NCCL_IB_DISABLE" not in current_env:
             current_env["NCCL_IB_DISABLE"] = str(1)
-        logger.warning(message)
+            warn = True
+        if warn:
+            logger.warning(message)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         with open(".deepspeed_env", "a") as f:
