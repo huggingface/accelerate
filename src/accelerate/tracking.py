@@ -866,7 +866,7 @@ class DVCLiveTracker(GeneralTracker):
 
     @on_main_process
     def __init__(self, run_name: Optional[str] = None, live: Optional[Any] = None, **kwargs):
-        from dvclive import Live, Metric
+        from dvclive import Live
 
         super().__init__()
         self.live = live if live is not None else Live(**kwargs)
@@ -901,6 +901,7 @@ class DVCLiveTracker(GeneralTracker):
             kwargs:
                 Additional key word arguments passed along to `dvclive.Live.log_metric()`.
         """
+        from dvclive import Metric
         if step is not None:
             self.live.step = step
         for k, v in values.items():
