@@ -640,8 +640,8 @@ class MLflowTracker(GeneralTracker):
         for name, value in list(values.items()):
             # internally, all values are converted to str in MLflow
             if len(str(value)) > mlflow.utils.validation.MAX_PARAM_VAL_LENGTH:
-                logger.warning(
-                    f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
+                logger.warning_once(
+                    f'Accelerate is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
                     f" log_param() only accepts values no longer than {mlflow.utils.validation.MAX_PARAM_VAL_LENGTH} characters so we dropped this attribute."
                 )
                 del values[name]
@@ -670,7 +670,7 @@ class MLflowTracker(GeneralTracker):
             if isinstance(v, (int, float)):
                 metrics[k] = v
             else:
-                logger.warning(
+                logger.warning_once(
                     f'MLflowTracker is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
                     "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                 )
@@ -755,7 +755,7 @@ class ClearMLTracker(GeneralTracker):
         clearml_logger = self.task.get_logger()
         for k, v in values.items():
             if not isinstance(v, (int, float)):
-                logger.warning(
+                logger.warning_once(
                     "Accelerator is attempting to log a value of "
                     f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
                     "This invocation of ClearML logger's  report_scalar() "
@@ -902,13 +902,14 @@ class DVCLiveTracker(GeneralTracker):
                 Additional key word arguments passed along to `dvclive.Live.log_metric()`.
         """
         from dvclive.plots import Metric
+
         if step is not None:
             self.live.step = step
         for k, v in values.items():
             if Metric.could_log(v):
                 self.live.log_metric(k, v, **kwargs)
             else:
-                logger.warning(
+                logger.warning_once(
                     "Accelerator attempted to log a value of "
                     f'"{v}" of type {type(v)} for key "{k} as a scalar. '
                     "This invocation of DVCLive's Live.log_metric() "
