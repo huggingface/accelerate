@@ -66,12 +66,12 @@ def check_cuda_p2p_ib_support():
     Checks if the devices being used have issues with P2P and IB communications, namely any consumer GPU hardware after
     the 3090.
     """
-
-    # Get the first device/default
-    device_name = torch.cuda.get_device_name()
-    device_count = torch.cuda.device_count()
-    unsupported_devices = ["RTX 3090", "RTX 40"]
-    if device_count > 1:
-        if any(device in device_name for device in unsupported_devices):
-            return False
+    if torch.cuda.is_available():
+        # Get the first device/default
+        device_name = torch.cuda.get_device_name()
+        device_count = torch.cuda.device_count()
+        unsupported_devices = ["RTX 3090", "RTX 40"]
+        if device_count > 1:
+            if any(device in device_name for device in unsupported_devices):
+                return False
     return True

@@ -213,7 +213,6 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
 
-    # Check and set for P2P and IB
     return current_env
 
 
