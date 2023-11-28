@@ -643,7 +643,7 @@ def multi_gpu_launcher(args):
 
     current_env = prepare_multi_gpu_env(args)
     device_name = torch.cuda.get_device_name()
-    if any(["RTX 3090", "RTX 40"] in device_name):
+    if any(device in device_name for device in ["RTX 3090", "RTX 40"]):
         message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
         if "NCCL_P2P_DISABLE" not in current_env:
             current_env["NCCL_P2P_DISABLE"] = str(1)
@@ -677,7 +677,7 @@ def deepspeed_launcher(args):
 
     cmd, current_env = prepare_deepspeed_cmd_env(args)
     device_name = torch.cuda.get_device_name()
-    if any(["RTX 3090", "RTX 40"] in device_name):
+    if any(device in device_name for device in ["RTX 3090", "RTX 40"]):
         message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
         if "NCCL_P2P_DISABLE" not in current_env:
             current_env["NCCL_P2P_DISABLE"] = str(1)
