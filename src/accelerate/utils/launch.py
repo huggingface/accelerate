@@ -212,7 +212,6 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env[prefix + "USE_DISTRIBUTED_OPTIMIZER"] = str(args.megatron_lm_use_distributed_optimizer)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
-
     return current_env
 
 
