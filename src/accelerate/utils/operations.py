@@ -301,7 +301,7 @@ def _gpu_gather(tensor):
         # Check if `tensor` is not on CUDA
         if state.device.type == "cuda" and tensor.device.type != "cuda":
             raise RuntimeError(
-                "One or more of the tensors passed to `gather` was not on the GPU while the `Accelerator` is configured for CUDA. "
+                "One or more of the tensors passed to `gather` were not on the GPU while the `Accelerator` is configured for CUDA. "
                 "Please move it to the GPU before calling `gather`."
             )
 
