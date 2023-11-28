@@ -911,7 +911,7 @@ class DVCLiveTracker(GeneralTracker):
             else:
                 logger.warning_once(
                     "Accelerator attempted to log a value of "
-                    f'"{v}" of type {type(v)} for key "{k} as a scalar. '
+                    f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
                     "This invocation of DVCLive's Live.log_metric() "
                     "is incorrect so we dropped this attribute."
                 )
