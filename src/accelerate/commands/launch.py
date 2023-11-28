@@ -651,7 +651,6 @@ def multi_gpu_launcher(args):
             current_env["NCCL_IB_DISABLE"] = str(1)
         logger.warning(message)
 
-
     debug = getattr(args, "debug", False)
     args = _filter_args(
         args,
