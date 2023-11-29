@@ -153,7 +153,9 @@ class AcceleratorTester(AccelerateTestCase):
 
         device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": "cpu"}
 
+        inputs = torch.randn(3, 3)
         model = ModelForTest()
+        expected = model(inputs)
         with tempfile.TemporaryDirectory() as tmp_dir:
             accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
             load_checkpoint_and_dispatch(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
