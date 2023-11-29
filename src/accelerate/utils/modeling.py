@@ -1242,7 +1242,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
     from ..hooks import AlignDevicesHook
 
     state_dict = {}
-    placeholders = []
+    placeholders = set()
     for name, module in model.named_modules():
         if name == "":
             continue
