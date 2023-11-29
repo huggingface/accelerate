@@ -348,7 +348,7 @@ def prepare_tpu(
     """
     Prepares and returns an environment with the correct TPU environment variables.
     """
-    if args.mixed_precision == "bf16" and is_torch_xla_available(tuple(["TPU"])):
+    if args.mixed_precision == "bf16" and is_torch_xla_available(check_is_tpu=True):
         if args.downcast_bf16:
             current_env["XLA_DOWNCAST_BF16"] = "1"
         else:

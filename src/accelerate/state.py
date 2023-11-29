@@ -163,7 +163,7 @@ class PartialState:
                 xm.set_replication(self.device, [self.device])
                 self.num_processes = xm.xrt_world_size()
                 self.process_index = xm.get_ordinal()
-                if is_torch_xla_available(tuple("TPU")):
+                if is_torch_xla_available(check_is_tpu=True):
                     self.local_process_index = xm.get_local_ordinal()
                 else:
                     self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
@@ -804,7 +804,7 @@ class AcceleratorState:
                 )
             # deepspeed handles mixed_precision using deepspeed_config
             self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
-            if self.distributed_type == DistributedType.TPU and is_torch_xla_available(tuple(["TPU"])):
+            if self.distributed_type == DistributedType.TPU and is_torch_xla_available(check_is_tpu=True):
                 if mixed_precision == "bf16":
                     if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
                         os.environ["XLA_USE_BF16"] = str(0)

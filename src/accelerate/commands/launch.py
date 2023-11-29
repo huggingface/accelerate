@@ -933,7 +933,7 @@ def _validate_launch_command(args):
             if (
                 args.mixed_precision == "bf16"
                 and not native_amp
-                and not (args.tpu and is_torch_xla_available(tuple(["TPU"])))
+                and not (args.tpu and is_torch_xla_available(check_is_tpu=True))
             ):
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 

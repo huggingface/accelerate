@@ -437,14 +437,16 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("xpu", "cuda", "mps", "npu", "xla") or is_torch_xla_available(tuple(["TPU"])):
+            if self.device.type not in ("xpu", "cuda", "mps", "npu", "xla") or is_torch_xla_available(
+                check_is_tpu=True
+            ):
                 raise ValueError(err.format(mode="fp16", requirement="a GPU"))
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
                 from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
 
                 self.scaler = ShardedGradScaler(**kwargs)
-            elif is_torch_xla_available(tuple(["GPU"])):
+            elif is_torch_xla_available(check_is_gpu=True):
                 self.scaler = xamp.GradScaler(**kwargs)
             elif is_npu_available():
                 self.scaler = torch.npu.amp.GradScaler(**kwargs)
@@ -459,7 +461,7 @@ class Accelerator:
                 self.native_amp = True
             else:
                 self.native_amp = is_bf16_available(True)
-            if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available(tuple(["GPU"])):
+            if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available(check_is_gpu=True):
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
 
         # Start of internal step tracking

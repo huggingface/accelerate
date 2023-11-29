@@ -26,20 +26,20 @@ from .environment import parse_flag_from_env, str_to_bool
 from .versions import compare_versions, is_torch_version
 
 
-ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 # Try to run Torch native job in an environment with TorchXLA installed by setting this value to 0.
-USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
+USE_TORCH_XLA = parse_flag_from_env("USE_TORCH_XLA", default=True)
 
-try:
-    if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
+_torch_xla_available = False
+if USE_TORCH_XLA:
+    try:
         import torch_xla.core.xla_model as xm  # noqa: F401
 
         _torch_xla_available = True
-    else:
-        _torch_xla_available = False
-except ImportError:
-    _torch_xla_available = False
+    except ImportError:
+        pass
 
+# Keep it for is_tpu_available. It will be removed along with is_tpu_available.
+_tpu_available = _torch_xla_available
 
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
@@ -113,19 +113,50 @@ def is_cuda_available():
 
 
 @lru_cache
-def is_torch_xla_available(hardware_types=("TPU", "GPU")):
+def is_tpu_available(check_device=True):
+    "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
+    # Due to bugs on the amp series GPUs, we disable torch-xla on them
+    warnings.warn(
+        "The `is_tpu_available` is deprecated and will be removed in v0.27.0. "
+        "Please use the `is_torch_xla_available` instead.",
+        FutureWarning,
+    )
+    if is_cuda_available():
+        return False
+    if check_device:
+        if _tpu_available:
+            try:
+                # Will raise a RuntimeError if no XLA configuration is found
+                _ = xm.xla_device()
+                return True
+            except RuntimeError:
+                return False
+    return _tpu_available
+
+
+@lru_cache
+def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     """
-    Check if `torch_xla` is available and real hardware in `hardware_types`. To train a native pytorch job in an
-    environment with torch xla installed, set the USE_TORCH_XLA to false.
+    Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
+    the USE_TORCH_XLA to false.
     """
-    if USE_TORCH_XLA not in ENV_VARS_TRUE_VALUES:
+    assert not (check_is_tpu and check_is_gpu), "The check_is_tpu and check_is_gpu cannot both be true."
+
+    if not USE_TORCH_XLA:
         return False
 
-    if _torch_xla_available:
+    try:
         xla_device = xm.xla_device()
-        return xm.xla_device_hw(xla_device) in hardware_types
-
-    return False
+        hardware_type = xm.xla_device_hw(xla_device)
+        return any(
+            [
+                check_is_tpu and hardware_type == "TPU",
+                check_is_gpu and hardware_type == "GPU",
+                not (check_is_tpu or check_is_gpu),
+            ]
+        )
+    except RuntimeError:
+        return False
 
 
 def is_deepspeed_available():
@@ -134,7 +165,7 @@ def is_deepspeed_available():
 
 def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
-    if is_torch_xla_available(tuple(["TPU"])):
+    if is_torch_xla_available(check_is_tpu=True):
         return not ignore_tpu
     if is_cuda_available():
         return torch.cuda.is_bf16_supported()
