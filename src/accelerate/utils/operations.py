@@ -298,6 +298,13 @@ def _gpu_gather(tensor):
         if not tensor.is_contiguous():
             tensor = tensor.contiguous()
 
+        # Check if `tensor` is not on XPU
+        if state.device.type == "xpu" and tensor.device.type != "xpu":
+            raise RuntimeError(
+                "One or more of the tensors passed to `gather` were not on the GPU while the `Accelerator` is configured for XPU. "
+                "Please move it to the GPU before calling `gather`."
+            )
+            
         if state.backend is not None and state.backend != "gloo":
             # We use `empty` as `all_gather_into_tensor` slightly
             # differs from `all_gather` for better efficiency,
