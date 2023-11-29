@@ -1270,7 +1270,9 @@ def get_state_dict_offloaded_model(model: nn.Module):
                 continue
             params = module_state_dict[key]
             state_dict[name + f".{key}"] = params
-
+    for key in placeholders.copy():
+        if key in state_dict:
+            placeholders.remove(key)
     if placeholders:
         logger.warning(f"The following tensors were not saved because they were still on meta device: {placeholders}")
 
