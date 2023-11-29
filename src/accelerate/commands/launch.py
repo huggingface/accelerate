@@ -647,10 +647,10 @@ def multi_gpu_launcher(args):
         message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
         warn = False
         if "NCCL_P2P_DISABLE" not in current_env:
-            current_env["NCCL_P2P_DISABLE"] = str(1)
+            current_env["NCCL_P2P_DISABLE"] = "1"
             warn = True
         if "NCCL_IB_DISABLE" not in current_env:
-            current_env["NCCL_IB_DISABLE"] = str(1)
+            current_env["NCCL_IB_DISABLE"] = "1"
             warn = True
         if warn:
             logger.warning(message)
@@ -684,10 +684,10 @@ def deepspeed_launcher(args):
         message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
         warn = False
         if "NCCL_P2P_DISABLE" not in current_env:
-            current_env["NCCL_P2P_DISABLE"] = str(1)
+            current_env["NCCL_P2P_DISABLE"] = "1"
             warn = True
         if "NCCL_IB_DISABLE" not in current_env:
-            current_env["NCCL_IB_DISABLE"] = str(1)
+            current_env["NCCL_IB_DISABLE"] = "1"
             warn = True
         if warn:
             logger.warning(message)
@@ -779,7 +779,7 @@ def tpu_pod_launcher(args):
         "--tpu",
         "--no_tpu_cluster",
         "--num_machines",
-        str(1),
+        "1",
         "--mixed_precision",
         "no",
         "--dynamo_backend",
