@@ -50,8 +50,6 @@ from .utils import (
     DistributedDataParallelKwargs,
     DistributedType,
     DynamoBackend,
-    MSAMPRecipeKwargs,
-    TERecipeKwargs,
     FP8RecipeKwargs,
     FullyShardedDataParallelPlugin,
     GradientAccumulationPlugin,
@@ -60,9 +58,11 @@ from .utils import (
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
+    MSAMPRecipeKwargs,
     PrecisionType,
     ProjectConfiguration,
     RNGType,
+    TERecipeKwargs,
     TorchDynamoPlugin,
     check_os_kernel,
     clean_state_dict_for_safetensors,
@@ -80,7 +80,6 @@ from .utils import (
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
-    is_msamp_available,
     is_npu_available,
     is_torch_version,
     is_tpu_available,
@@ -1291,19 +1290,21 @@ class Accelerator:
             result = self._prepare_megatron_lm(*args)
         else:
             if self.mixed_precision == "fp8" and isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs):
-                if not is_msamp_available():
-                    raise ImportError("Using `mixed_precision==fp8` and `MSAMPRecipeKwargs` requires `MS-AMP` to be installed")
-                result = self._prepare_ms_amp(*args)
+                # if not is_msamp_available():
+                #     raise ImportError("Using `mixed_precision==fp8` and `MSAMPRecipeKwargs` requires `MS-AMP` to be installed")
+                args = self._prepare_ms_amp(*args)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and not isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs)):
+        if tpu_should_fix_optimizer or (
+            self.mixed_precision == "fp8" and not isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs)
+        ):
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
-            mapping = {p: new_named_params[n] for n, p in old_named_params.items()}
+            mapping = {p: new_named_params[n] for n, p in old_named_params.items() if n in new_named_params}
             # 4. using that map to update the parameters of the optimizer
             for obj in result:
                 if isinstance(obj, torch.optim.Optimizer):
@@ -1353,6 +1354,9 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
+        # MSAMP handles device placement automatically
+        if isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs):
+            device_placement = False
         self._models.append(model)
 
         # TODO: Look at enabling native TP training directly with a proper config
@@ -1844,7 +1848,8 @@ class Accelerator:
 
     def _prepare_ms_amp(self, *args):
         import msamp
-        msamp_plugin = self.fp8_recipe_kwargs
+
+        msamp_plugin = self.fp8_recipe_handler
         model = None
         optimizer = None
         result = [obj for obj in args]
@@ -1856,13 +1861,15 @@ class Accelerator:
         if optimizer is not None and model is not None:
             model, optimizer = msamp.initialize(model, optimizer, opt_level=msamp_plugin.optimization_level)
         else:
-            raise ValueError(f'Using MS-AMP fp8 expects a `model` and a `optimizer` to be passed at the same time to `accelerator.prepare()`')
+            raise ValueError(
+                "Using MS-AMP fp8 expects a `model` and a `optimizer` to be passed at the same time to `accelerator.prepare()`"
+            )
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model
             elif isinstance(result[i], (torch.optim.Optimizer)):
                 result[i] = optimizer
-
+        return tuple(result)
 
     def prepare_data_loader(
         self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
@@ -1944,6 +1951,9 @@ class Accelerator:
             return optimizer
         if device_placement is None:
             device_placement = self.device_placement
+        # MSAMP handles device placement automatically
+        if isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs):
+            device_placement = False
         optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=self.scaler)
         self._optimizers.append(optimizer)
         return optimizer

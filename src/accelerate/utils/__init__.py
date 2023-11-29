@@ -31,12 +31,12 @@ from .dataclasses import (
     LoggerType,
     MegatronLMPlugin,
     MSAMPRecipeKwargs,
-    TERecipeKwargs,
     PrecisionType,
     ProjectConfiguration,
     RNGType,
     SageMakerDistributedType,
     TensorInformation,
+    TERecipeKwargs,
     TorchDynamoPlugin,
 )
 from .environment import get_int_from_env, parse_choice_from_env, parse_flag_from_env, str_to_bool
@@ -58,8 +58,8 @@ from .imports import (
     is_ipex_available,
     is_megatron_lm_available,
     is_mlflow_available,
-    is_msamp_available,
     is_mps_available,
+    is_msamp_available,
     is_npu_available,
     is_pandas_available,
     is_rich_available,

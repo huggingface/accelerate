@@ -168,6 +168,7 @@ class InitProcessGroupKwargs(KwargsHandler):
     init_method: Optional[str] = None
     timeout: timedelta = timedelta(seconds=1800)
 
+
 @dataclass
 class MSAMPRecipeKwargs(KwargsHandler):
     """
@@ -193,13 +194,13 @@ class MSAMPRecipeKwargs(KwargsHandler):
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
     ```
     """
+
     optimization_level: str = "O2"
 
     def __post_init__(self):
         if self.optimization_level not in ["O1", "O2"]:
             raise ValueError(
-                f"Unsupported optimization level passed (self.optimization_level) "
-                "please use one of `O1` or `O2`."
+                "Unsupported optimization level passed (self.optimization_level) " "please use one of `O1` or `O2`."
             )
 
 
@@ -219,6 +220,7 @@ class TERecipeKwargs(KwargsHandler):
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
     ```
     """
+
     margin: int = 0
     interval: int = 1
     fp8_format: str = "E4M3"
@@ -232,6 +234,7 @@ class TERecipeKwargs(KwargsHandler):
             raise ValueError("`fp8_format` must be 'E4M3' or 'HYBRID'.")
         if self.amax_compute_algo not in ["max", "most_recent"]:
             raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
+
 
 @dataclass
 class FP8RecipeKwargs(TERecipeKwargs):
