@@ -158,10 +158,10 @@ class AcceleratorTester(AccelerateTestCase):
         expected = model(inputs)
         with tempfile.TemporaryDirectory() as tmp_dir:
             accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
-            # load and save offloaded model 
+            # load and save offloaded model
             load_checkpoint_and_dispatch(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
             accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
-            
+
             # load weights that were saved from the offloaded model
             load_checkpoint_and_dispatch(model, tmp_dir)
             output = model(inputs)
