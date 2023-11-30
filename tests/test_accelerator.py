@@ -8,7 +8,7 @@ import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
 
-from accelerate import DistributedType, infer_auto_device_map, init_empty_weights
+from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_gpu, slow
@@ -153,12 +153,19 @@ class AcceleratorTester(AccelerateTestCase):
 
         device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": "cpu"}
 
+        inputs = torch.randn(3, 3)
         model = ModelForTest()
+        expected = model(inputs)
         with tempfile.TemporaryDirectory() as tmp_dir:
             accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
-            load_checkpoint_in_model(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
-            with self.assertRaises(RuntimeError):
-                accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
+            # load and save offloaded model
+            load_checkpoint_and_dispatch(model, tmp_dir, device_map=device_map, offload_folder=tmp_dir)
+            accelerator.save_model(model, tmp_dir, safe_serialization=use_safetensors)
+
+            # load weights that were saved from the offloaded model
+            load_checkpoint_and_dispatch(model, tmp_dir)
+            output = model(inputs)
+        self.assertTrue(torch.allclose(expected, output, atol=1e-5))
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_load_model_with_hooks(self, use_safetensors):
