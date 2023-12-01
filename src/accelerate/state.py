@@ -309,7 +309,11 @@ class PartialState:
                 else:
                     self.device = self.default_device
             else:
-                self.distributed_type = DistributedType.NO
+                self.distributed_type = (
+                    DistributedType.NO
+                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "false"
+                    else DistributedType.DEEPSPEED
+                )
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
 
