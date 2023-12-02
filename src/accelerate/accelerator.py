@@ -1427,14 +1427,14 @@ class Accelerator:
 
             if any(bs is None for bs in batch_sizes):
                 raise ValueError(
-                    "At least one of the dataloaders passed to `accelerate.prepare()` has `None` as batch size."
-                    "Please set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file"
+                    "At least one of the dataloaders passed to `accelerate.prepare()` has `None` as batch size. "
+                    "Please set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                 )
             if len(batch_sizes) == 0:
                 raise ValueError(
                     "When using DeepSpeed `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
-                    "or alternatively set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file"
+                    "or alternatively set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                 )
 
