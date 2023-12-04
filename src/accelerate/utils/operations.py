@@ -298,7 +298,6 @@ def _gpu_gather(tensor):
         if not tensor.is_contiguous():
             tensor = tensor.contiguous()
 
-
         if state.backend is not None and state.backend != "gloo":
             # We use `empty` as `all_gather_into_tensor` slightly
             # differs from `all_gather` for better efficiency,
