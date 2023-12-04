@@ -93,10 +93,12 @@ def check_cuda_p2p_ib_support():
 
     Noteably uses `nvidia-smi` instead of torch to not initialize CUDA.
     """
-    if torch.cuda.is_available():
+    try:
         device_count, device_name = get_gpu_info()
         unsupported_devices = ["RTX 3090", "RTX 40"]
         if device_count > 1:
             if any(device in device_name for device in unsupported_devices):
                 return False
+    except:
+        pass
     return True
