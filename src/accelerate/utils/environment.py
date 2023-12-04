@@ -19,8 +19,6 @@ import sys
 from distutils import spawn
 from typing import Dict
 
-import torch
-
 
 def str_to_bool(value) -> int:
     """
@@ -99,6 +97,6 @@ def check_cuda_p2p_ib_support():
         if device_count > 1:
             if any(device in device_name for device in unsupported_devices):
                 return False
-    except:
+    except Exception:
         pass
     return True

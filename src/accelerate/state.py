@@ -182,14 +182,6 @@ class PartialState:
                         self.backend = "nccl"
                     dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
 
-                if not check_cuda_p2p_ib_support():
-                    if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
-                        raise NotImplementedError(
-                            "Using RTX 3090 or 4000 series doesn't support faster communication broadband via P2P or IB. "
-                            'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
-                            "will do this automatically."
-                        )
-
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
@@ -206,6 +198,13 @@ class PartialState:
                         self.device = torch.device("cuda", self.local_process_index)
                         if self.device is not None:
                             torch.cuda.set_device(self.device)
+                if self.device.type == "cuda" and not check_cuda_p2p_ib_support():
+                    if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
+                        raise NotImplementedError(
+                            "Using RTX 3090 or 4000 series doesn't support faster communication broadband via P2P or IB. "
+                            'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
+                            "will do this automatically."
+                        )
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu and torch.cuda.is_available():
                 self.distributed_type = DistributedType.MULTI_GPU
