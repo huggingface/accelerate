@@ -13,11 +13,11 @@
 # limitations under the License.
 
 import os
+import platform
 import subprocess
 import sys
-import platform
-from typing import Dict
 from distutils import spawn
+from typing import Dict
 
 import torch
 
@@ -63,9 +63,10 @@ def are_libraries_initialized(*library_names: str) -> Dict[str, bool]:
     """
     return [lib_name for lib_name in library_names if lib_name in sys.modules]
 
+
 def get_gpu_info():
     """
-    Gets GPU count and names using `nvidia-smi` instead of torch to not initialize CUDA. 
+    Gets GPU count and names using `nvidia-smi` instead of torch to not initialize CUDA.
 
     Largely based on the `gputil` library.
     """
@@ -74,7 +75,7 @@ def get_gpu_info():
         # try from systemd rive with default installation path
         command = spawn.find_executable("nvidia-smi")
         if command is None:
-            command = "%s\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe" % os.environ['systemdrive']
+            command = "%s\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe" % os.environ["systemdrive"]
     else:
         command = "nvidia-smi"
     output = subprocess.check_output([command, "-L"], universal_newlines=True)
