@@ -19,7 +19,14 @@ import tempfile
 import torch
 
 from .state import AcceleratorState, PartialState
-from .utils import PrecisionType, PrepareForLaunch, are_libraries_initialized, is_mps_available, patch_environment
+from .utils import (
+    PrecisionType,
+    PrepareForLaunch,
+    are_libraries_initialized,
+    check_cuda_p2p_ib_support,
+    is_mps_available,
+    patch_environment,
+)
 
 
 def test_launch():
@@ -153,16 +160,23 @@ def notebook_launcher(
                     err += f"\n\t* `{lib_name}`"
                 raise RuntimeError(err)
 
-            # torch.distributed will expect a few environment variable to be here. We set the ones common to each
-            # process here (the other ones will be set be the launcher).
-            with patch_environment(
+            patched_env = dict(
                 nproc=num_processes,
                 node_rank=node_rank,
                 world_size=num_nodes * num_processes,
                 master_addr=master_addr,
                 master_port=use_port,
                 mixed_precision=mixed_precision,
-            ):
+            )
+
+            # Check for CUDA P2P and IB issues
+            if not check_cuda_p2p_ib_support():
+                patched_env["nccl_p2p_disable"] = "1"
+                patched_env["nccl_ib_disable"] = "1"
+
+            # torch.distributed will expect a few environment variable to be here. We set the ones common to each
+            # process here (the other ones will be set be the launcher).
+            with patch_environment(**patched_env):
                 # First dummy launch
                 if os.environ.get("ACCELERATE_DEBUG_MODE", "false").lower() == "true":
                     launcher = PrepareForLaunch(test_launch, distributed_type="MULTI_GPU")
