@@ -158,7 +158,7 @@ class PartialState:
                         self.device = torch.device("cuda", self.local_process_index)
                     torch.cuda.set_device(self.device)
             elif is_torch_xla_available() and not cpu:
-                self.distributed_type = DistributedType.TPU
+                self.distributed_type = DistributedType.XLA
                 self.device = xm.xla_device()
                 xm.set_replication(self.device, [self.device])
                 self.num_processes = xm.xrt_world_size()
@@ -417,7 +417,7 @@ class PartialState:
             DistributedType.FSDP,
         ):
             torch.distributed.barrier()
-        elif self.distributed_type == DistributedType.TPU:
+        elif self.distributed_type == DistributedType.XLA:
             xm.rendezvous("accelerate.utils.wait_for_everyone")
 
     def _goes_first(self, is_main: bool):
@@ -804,7 +804,7 @@ class AcceleratorState:
                 )
             # deepspeed handles mixed_precision using deepspeed_config
             self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
-            if self.distributed_type == DistributedType.TPU and is_torch_xla_available(check_is_tpu=True):
+            if self.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_tpu=True):
                 if mixed_precision == "bf16":
                     if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
                         os.environ["XLA_USE_BF16"] = str(0)

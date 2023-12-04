@@ -397,7 +397,7 @@ class Accelerator:
         if (
             (mixed_precision != "bf16")
             and getattr(self.state, "downcast_bfloat", False)
-            and (self.state.distributedType != DistributedType.TPU)
+            and (self.state.distributedType != DistributedType.XLA)
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
@@ -414,7 +414,7 @@ class Accelerator:
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
-        if self.state.distributed_type == DistributedType.TPU:
+        if self.state.distributed_type == DistributedType.XLA:
             if self.gradient_state.num_steps != 1:
                 raise ValueError(
                     "Gradient accumulation is not supported on TPU. Please set `gradient_accumulation_steps` to 1 and don't pass in a `GradientAccumulationPlugin` object."
@@ -1198,7 +1198,7 @@ class Accelerator:
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
-        if self.distributed_type == DistributedType.TPU:
+        if self.distributed_type == DistributedType.XLA:
             model_device, optimizer_device = self._get_devices()
             if model_device is not None and optimizer_device is not None and model_device != optimizer_device:
                 raise ValueError(
@@ -1210,7 +1210,7 @@ class Accelerator:
                 )
 
         # If we're dealing with device placement, this deals with that by...
-        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
+        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
         if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
@@ -1411,7 +1411,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.MULTI_CPU:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
-            elif self.distributed_type == DistributedType.TPU and self.state.fork_launched:
+            elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
@@ -1847,7 +1847,7 @@ class Accelerator:
                 self._dataloaders.append(data_loader)
             return data_loader
         if device_placement is None:
-            device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
+            device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
@@ -2097,7 +2097,7 @@ class Accelerator:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
             return None
-        elif self.distributed_type == DistributedType.TPU:
+        elif self.distributed_type == DistributedType.XLA:
             # Reduce gradients first for XLA
             for acc_opt in self._optimizers:
                 opt = acc_opt
@@ -2726,7 +2726,7 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
 
-        if self.distributed_type == DistributedType.TPU:
+        if self.distributed_type == DistributedType.XLA:
             # Finish running the previous step before checkpointing
             xm.mark_step()
 

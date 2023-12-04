@@ -75,7 +75,7 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
 
     # Broadcast the rng state from device 0 to other devices
     state = AcceleratorState()
-    if state.distributed_type == DistributedType.TPU:
+    if state.distributed_type == DistributedType.XLA:
         rng_state = rng_state.to(xm.xla_device())
         xm.collective_broadcast([rng_state])
         xm.mark_step()

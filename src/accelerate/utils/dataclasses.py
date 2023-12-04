@@ -281,6 +281,20 @@ class BaseEnum(enum.Enum, metaclass=EnumWithContains):
         return list(map(str, cls))
 
 
+class DeprecatedFieldDescriptor:
+    def __init__(self, field_name, replaced_with):
+        self.field_name = field_name
+        self.replaced_with = replaced_with
+
+    def __get__(self, instance, owner):
+        warnings.warn(
+            f"The `{self.field_name}` of `{owner}` is deprecated and will be removed in v0.27.0. "
+            f"Please use the `{self.replaced_with}` instead.",
+            FutureWarning,
+        )
+        return getattr(owner, self.replaced_with)
+
+
 class DistributedType(str, enum.Enum):
     """
     Represents a type of distributed environment.
@@ -293,7 +307,8 @@ class DistributedType(str, enum.Enum):
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
-        - **TPU** -- Distributed on TPUs.
+        - **XLA** -- Using TorchXLA.
+        - **TPU** -- This field will be deprecated in v0.27.0. Use XLA instead.
     """
 
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
@@ -304,8 +319,9 @@ class DistributedType(str, enum.Enum):
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
-    TPU = "TPU"
+    XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
+    TPU = DeprecatedFieldDescriptor("TPU", "XLA")
 
 
 class SageMakerDistributedType(str, enum.Enum):

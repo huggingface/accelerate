@@ -664,7 +664,7 @@ def main():
     if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
-    if state.distributed_type != DistributedType.TPU:
+    if state.distributed_type != DistributedType.XLA:
         central_dl_preparation_check()
     custom_sampler_check()
 

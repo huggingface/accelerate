@@ -175,7 +175,7 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
     else:
         save_func = torch.save
 
-    if PartialState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.XLA:
         xm.save(obj, f)
     elif PartialState().is_main_process and not save_on_each_node:
         save_func(obj, f)

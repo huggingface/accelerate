@@ -1630,7 +1630,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
     if native_amp:
         device_type = (
             "cuda"
-            if (state.distributed_type == DistributedType.TPU and is_torch_xla_available(check_is_gpu=True))
+            if (state.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_gpu=True))
             else state.device.type
         )
         if state.mixed_precision == "fp16":
@@ -1642,7 +1642,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.FSDP,
-            DistributedType.TPU,
+            DistributedType.XLA,
         ]:
             return torch.autocast(device_type=device_type, dtype=torch.bfloat16, **autocast_kwargs)
         else:

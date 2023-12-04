@@ -68,7 +68,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         # Handle device placement
         if device_placement:
             state_dict = self.optimizer.state_dict()
-            if self.accelerator_state.distributed_type == DistributedType.TPU:
+            if self.accelerator_state.distributed_type == DistributedType.XLA:
                 xm.send_cpu_data_to_device(state_dict, self.accelerator_state.device)
             else:
                 state_dict = move_to_device(state_dict, self.accelerator_state.device)
@@ -102,7 +102,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         self.optimizer.add_param_group(param_group)
 
     def load_state_dict(self, state_dict):
-        if self.accelerator_state.distributed_type == DistributedType.TPU and self.device_placement:
+        if self.accelerator_state.distributed_type == DistributedType.XLA and self.device_placement:
             xm.send_cpu_data_to_device(state_dict, self.accelerator_state.device)
         self.optimizer.load_state_dict(state_dict)
 
@@ -122,7 +122,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 self.optimizer.zero_grad()
 
     def step(self, closure=None):
-        if not self.gradient_state.sync_gradients and self.accelerator_state == DistributedType.TPU:
+        if not self.gradient_state.sync_gradients and self.accelerator_state == DistributedType.XLA:
             gradients = xm._fetch_gradients(self.optimizer)
             xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
             self.gradient_state._set_sync_gradients(True)
@@ -144,7 +144,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 self._accelerate_step_called = False
             else:
                 self.optimizer.step(closure)
-        if self.accelerator_state == DistributedType.TPU:
+        if self.accelerator_state == DistributedType.XLA:
             self.gradient_state._set_sync_gradients(False)
 
     def _switch_parameters(self, parameters_map):

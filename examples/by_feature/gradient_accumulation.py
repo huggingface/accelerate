@@ -81,7 +81,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
-        max_length = 128 if accelerator.distributed_type == DistributedType.TPU else None
+        max_length = 128 if accelerator.distributed_type == DistributedType.XLA else None
         # When using mixed precision we want round multiples of 8/16
         if accelerator.mixed_precision == "fp8":
             pad_to_multiple_of = 16
@@ -126,7 +126,7 @@ def training_function(config, args):
     accelerator = Accelerator(
         cpu=args.cpu, mixed_precision=args.mixed_precision, gradient_accumulation_steps=gradient_accumulation_steps
     )
-    if accelerator.distributed_type == DistributedType.TPU and gradient_accumulation_steps > 1:
+    if accelerator.distributed_type == DistributedType.XLA and gradient_accumulation_steps > 1:
         raise NotImplementedError(
             "Gradient accumulation on TPUs is currently not supported. Pass `gradient_accumulation_steps=1`"
         )

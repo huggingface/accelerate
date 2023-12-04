@@ -258,7 +258,7 @@ To introduce special behavior in your script for TPUs you can check the `distrib
 ```python docstyle-ignore
 from accelerate import DistributedType
 
-if accelerator.distributed_type == DistributedType.TPU:
+if accelerator.distributed_type == DistributedType.XLA:
     # do something of static shape
 else:
     # go crazy and be dynamic
