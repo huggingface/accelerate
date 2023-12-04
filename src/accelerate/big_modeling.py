@@ -412,7 +412,7 @@ def dispatch_model(
 
         # warn if there is any params on the meta device
         offloaded_devices_str = " and ".join(
-            [device for device in set(device_map.values()) if device in ("cpu", "disk")]
+            [device for device in set(device_map.values()) if device in offloaded_devices]
         )
         if len(offloaded_devices_str) > 0:
             logging.warning(
