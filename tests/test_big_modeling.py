@@ -338,6 +338,24 @@ class BigModelingTester(unittest.TestCase):
 
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir, offload_buffers=True)
+
+            output = model(x)
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    def test_dispatch_model_with_cpu_offload(self):
+        model = ModelForTest()
+        device_map = {"linear1": "disk", "batchnorm": "cpu", "linear2": 0}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir, cpu_offload=True)
+
+            self.assertEqual(model.linear1.weight.device, torch.device("meta"))
+            self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
+            self.assertEqual(model.linear2.weight.device, torch.device(0))
+
             output = model(x)
             self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
@@ -547,6 +565,31 @@ class BigModelingTester(unittest.TestCase):
 
         output = new_model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
+    def test_load_checkpoint_and_dispatch_with_cpu_offload(self):
+        model = ModelForTest()
+        device_map = {"linear1": "cpu", "batchnorm": "disk", "linear2": 0}
+
+        x = torch.randn(2, 3)
+        expected = model(x)
+
+        with TemporaryDirectory() as tmp_dir:
+            checkpoint = os.path.join(tmp_dir, "pt_model.bin")
+            torch.save(model.state_dict(), checkpoint)
+
+            new_model = ModelForTest()
+            new_model = load_checkpoint_and_dispatch(
+                new_model, checkpoint, device_map=device_map, cpu_offload=True, offload_folder=tmp_dir
+            )
+
+            # CPU-offloaded weights are on the meta device while waiting for the forward pass.
+            self.assertEqual(new_model.linear1.weight.device, torch.device("cpu"))
+            self.assertEqual(new_model.batchnorm.weight.device, torch.device("meta"))
+            self.assertEqual(new_model.linear2.weight.device, torch.device(0))
+
+            output = new_model(x)
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
     @require_mps
     def test_load_checkpoint_and_dispatch_mps(self):
