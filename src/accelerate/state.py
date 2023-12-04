@@ -28,6 +28,7 @@ from .utils import (
     DistributedType,
     DynamoBackend,
     GradientAccumulationPlugin,
+    check_cuda_p2p_ib_support,
     get_ccl_version,
     get_int_from_env,
     is_ccl_available,
@@ -181,6 +182,14 @@ class PartialState:
                         self.backend = "nccl"
                     dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
 
+                if not check_cuda_p2p_ib_support():
+                    if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
+                        raise NotImplementedError(
+                            "Using RTX 3090 or 4000 series doesn't support faster communication broadband via P2P or IB. "
+                            'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
+                            "will do this automatically."
+                        )
+
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
@@ -206,6 +215,13 @@ class PartialState:
                     if self.backend is None:
                         self.backend = "nccl"
                     torch.distributed.init_process_group(backend=self.backend, **kwargs)
+                if not check_cuda_p2p_ib_support():
+                    if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
+                        raise NotImplementedError(
+                            "Using RTX 3090 or 4000 series doesn't support faster communication broadband via P2P or IB. "
+                            'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
+                            "will do this automatically."
+                        )
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
@@ -293,7 +309,11 @@ class PartialState:
                 else:
                     self.device = self.default_device
             else:
-                self.distributed_type = DistributedType.NO
+                self.distributed_type = (
+                    DistributedType.NO
+                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "false"
+                    else DistributedType.DEEPSPEED
+                )
                 self.num_processes = 1
                 self.process_index = self.local_process_index = 0
 

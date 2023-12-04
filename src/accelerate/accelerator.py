@@ -34,6 +34,7 @@ import torch.utils.hooks as hooks
 
 from .checkpointing import load_accelerator_state, load_custom_state, save_accelerator_state, save_custom_state
 from .data_loader import DataLoaderDispatcher, prepare_data_loader, skip_first_batches
+from .hooks import AlignDevicesHook
 from .logging import get_logger
 from .optimizer import AcceleratedOptimizer
 from .scheduler import AcceleratedScheduler
@@ -96,6 +97,7 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import FSDP_PYTORCH_VERSION
+from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
 
@@ -1425,14 +1427,14 @@ class Accelerator:
 
             if any(bs is None for bs in batch_sizes):
                 raise ValueError(
-                    "At least one of the dataloaders passed to `accelerate.prepare()` has `None` as batch size."
-                    "Please set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file"
+                    "At least one of the dataloaders passed to `accelerate.prepare()` has `None` as batch size. "
+                    "Please set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                 )
             if len(batch_sizes) == 0:
                 raise ValueError(
                     "When using DeepSpeed `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
-                    "or alternatively set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file"
+                    "or alternatively set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                 )
 
@@ -2490,13 +2492,21 @@ class Accelerator:
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
 
-        if any(param.device == torch.device("meta") for param in model.parameters()):
-            raise RuntimeError("You can't save the model since some parameters are on the meta device.")
-
         os.makedirs(save_directory, exist_ok=True)
 
         # get the state_dict of the model
-        state_dict = self.get_state_dict(model)
+        if any(
+            [
+                module._hf_hook.offload
+                for module in model.modules()
+                if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook)
+            ]
+        ):
+            state_dict = get_state_dict_offloaded_model(model)
+        else:
+            if any(param.device == torch.device("meta") for param in model.parameters()):
+                raise RuntimeError("You can't save the model since some parameters are on the meta device.")
+            state_dict = self.get_state_dict(model)
 
         if safe_serialization:
             state_dict = clean_state_dict_for_safetensors(state_dict)

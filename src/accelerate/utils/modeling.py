@@ -1260,6 +1260,54 @@ def load_state_dict(checkpoint_file, device_map=None):
         return torch.load(checkpoint_file, map_location=torch.device("cpu"))
 
 
+def get_state_dict_offloaded_model(model: nn.Module):
+    """
+    Returns the state dictionary for an offloaded model via iterative onloading
+
+    Args:
+        model (`torch.nn.Module`):
+            The offloaded model we want to save
+    """
+    from ..hooks import AlignDevicesHook
+
+    state_dict = {}
+    placeholders = set()
+    for name, module in model.named_modules():
+        if name == "":
+            continue
+        if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
+            original_device = module._hf_hook.execution_device
+            # assign hook execution device to cpu
+            module._hf_hook.execution_device = "cpu"
+            # onload meta tensors to execution device
+            try:
+                module._hf_hook.pre_forward(module)
+            except MemoryError:
+                raise MemoryError("Offloaded module must fit in CPU memory to call save_model!") from None
+            module_state_dict = module.state_dict()
+            # offload meta tensors from cpu
+            module._hf_hook.post_forward(module, torch.tensor([]))
+            # re-assign hook to original execution device
+            module._hf_hook.execution_device = original_device
+        else:
+            module_state_dict = module.state_dict()
+
+        for key in module_state_dict:
+            # ignore placeholder parameters that are still on the meta device
+            if module_state_dict[key].device == torch.device("meta"):
+                placeholders.add(name + f".{key}")
+                continue
+            params = module_state_dict[key]
+            state_dict[name + f".{key}"] = params
+    for key in placeholders.copy():
+        if key in state_dict:
+            placeholders.remove(key)
+    if placeholders:
+        logger.warning(f"The following tensors were not saved because they were still on meta device: {placeholders}")
+
+    return state_dict
+
+
 def load_checkpoint_in_model(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
