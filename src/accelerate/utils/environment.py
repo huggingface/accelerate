@@ -13,8 +13,11 @@
 # limitations under the License.
 
 import os
+import subprocess
 import sys
+import platform
 from typing import Dict
+from distutils import spawn
 
 import torch
 
@@ -60,16 +63,37 @@ def are_libraries_initialized(*library_names: str) -> Dict[str, bool]:
     """
     return [lib_name for lib_name in library_names if lib_name in sys.modules]
 
+def get_gpu_info():
+    """
+    Gets GPU count and names using `nvidia-smi` instead of torch to not initialize CUDA. 
+
+    Largely based on the `gputil` library.
+    """
+    if platform.system() == "Windows":
+        # If platform is Windows and nvidia-smi can't be found in path
+        # try from systemd rive with default installation path
+        command = spawn.find_executable("nvidia-smi")
+        if command is None:
+            command = "%s\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe" % os.environ['systemdrive']
+    else:
+        command = "nvidia-smi"
+    output = subprocess.check_output([command, "-L"], universal_newlines=True)
+    lines = output.split(os.linesep)
+    gpu_count = len(lines) - 1
+    # Get name from first GPU
+    gpu_name = lines[0].split("(")[0].strip()
+    return gpu_count, gpu_name
+
 
 def check_cuda_p2p_ib_support():
     """
     Checks if the devices being used have issues with P2P and IB communications, namely any consumer GPU hardware after
     the 3090.
+
+    Noteably uses `nvidia-smi` instead of torch to not initialize CUDA.
     """
     if torch.cuda.is_available():
-        # Get the first device/default
-        device_name = torch.cuda.get_device_name()
-        device_count = torch.cuda.device_count()
+        device_count, device_name = get_gpu_info()
         unsupported_devices = ["RTX 3090", "RTX 40"]
         if device_count > 1:
             if any(device in device_name for device in unsupported_devices):
