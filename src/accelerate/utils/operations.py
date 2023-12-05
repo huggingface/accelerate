@@ -344,7 +344,7 @@ def verify_operation(function):
             tensor = kwargs["tensor"]
         else:
             tensor = args[0]
-        if PartialState().device.type != tensor.device.type:
+        if PartialState().device.type != find_device(tensor).type:
             raise DistributedOperationException(
                 f"One or more of the tensors passed to {operation} were not on the {tensor.device.type} while the `Accelerator` is configured for {PartialState().device.type}. "
                 f"Please move it to the {PartialState().device.type} before calling {operation}."
