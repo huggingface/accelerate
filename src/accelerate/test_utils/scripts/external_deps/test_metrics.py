@@ -27,8 +27,8 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from accelerate import Accelerator
 from accelerate.data_loader import DataLoaderDispatcher
-from accelerate.test_utils import RegressionDataset, RegressionModel, backend_is_available, torch_device
-from accelerate.utils import is_tpu_available, set_seed
+from accelerate.test_utils import RegressionDataset, RegressionModel, torch_device
+from accelerate.utils import set_seed
 
 
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
@@ -250,7 +250,7 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
     # These are a bit slower so they should only be ran on the GPU or TPU
-    if backend_is_available(torch_device) or is_tpu_available():
+    if accelerator.device != "cpu":
         if accelerator.is_local_main_process:
             print("**Testing gather_for_metrics**")
         for split_batches in [True, False]:

@@ -19,13 +19,12 @@ import unittest
 import accelerate
 from accelerate import debug_launcher
 from accelerate.test_utils import (
-    backend_device_count,
+    device_count,
     execute_subprocess_async,
     require_cpu,
     require_huggingface_suite,
     require_multi_device,
     require_single_device,
-    torch_device,
 )
 from accelerate.utils import patch_environment
 
@@ -56,7 +55,6 @@ class MetricTester(unittest.TestCase):
 
     @require_multi_device
     def test_metric_accelerator_multi(self):
-        device_count = backend_device_count(torch_device)
         print(f"Found {device_count} devices.")
         cmd = ["torchrun", f"--nproc_per_node={device_count}", self.test_file_path]
         with patch_environment(omp_num_threads=1, ACCELERATE_LOG_LEVEL="INFO"):

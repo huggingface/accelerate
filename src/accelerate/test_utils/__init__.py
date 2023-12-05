@@ -1,11 +1,7 @@
-from .other import (
-    backend_device_count,
-    backend_is_available,
-    torch_device,
-)
 from .testing import (
     are_the_same_tensors,
     assert_exception,
+    device_count,
     execute_subprocess_async,
     require_bnb,
     require_cpu,
@@ -24,6 +20,7 @@ from .testing import (
     require_xpu,
     skip,
     slow,
+    torch_device,
 )
 from .training import RegressionDataset, RegressionModel, RegressionModel4XPU
 
