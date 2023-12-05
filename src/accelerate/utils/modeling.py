@@ -664,7 +664,8 @@ def get_max_layer_size(
 
 def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None):
     """
-    Get the maximum memory available if nothing is passed, converts string to int otherwise.
+    Get the maximum memory available if nothing is passed.
+    Otherwise, we convert string to int and we allocate 80% of the cpu memory if cpu is not passed in max_memory.
     """
     import psutil
 
@@ -692,6 +693,12 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     for key in max_memory:
         if isinstance(max_memory[key], str):
             max_memory[key] = convert_file_size_to_int(max_memory[key])
+    if "cpu" not in max_memory:
+        max_memory["cpu"] = psutil.virtual_memory().available * 0.8
+        logger.info(
+            "We will use 80% of the memory on cpu for storing the model."
+            "You can set `max_memory` in to a higher value to use more memory (at your own risk)."
+        )
 
     # Need to sort the device by type to make sure that we allocate the gpu first.
     # As gpu/xpu are represented by int, we need to sort them first.
