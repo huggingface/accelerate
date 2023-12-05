@@ -459,7 +459,7 @@ def attach_align_device_hook_on_blocks(
     module: nn.Module,
     execution_device: Optional[Union[torch.device, Dict[str, torch.device]]] = None,
     offload: Union[bool, Dict[str, bool]] = False,
-    cpu_offload: bool = False,
+    cpu_offload: Union[bool, Dict[str, bool]] = False,
     weights_map: Mapping = None,
     offload_buffers: bool = False,
     module_name: str = "",
@@ -478,7 +478,7 @@ def attach_align_device_hook_on_blocks(
         offload (`bool`, *optional*, defaults to `False`):
             Whether or not the weights should be offloaded after the forward pass. It can be one boolean for the whole
             module, or a dictionary mapping module name to boolean.
-        cpu_offload (`bool`, *optional*, defaults to `False`):
+        cpu_offload (`Union[bool, Dict[str, bool]]`, *optional*, defaults to `False`):
             Whether the weights offloaded on the cpu should be kept in the module or not.
         weights_map (`Mapping[str, torch.Tensor]`, *optional*):
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
@@ -517,7 +517,8 @@ def attach_align_device_hook_on_blocks(
         execution_device = {key: execution_device for key in offload.keys()}
     if not isinstance(offload, Mapping):
         offload = {key: offload for key in execution_device.keys()}
-
+    if not isinstance(cpu_offload, Mapping):
+        cpu_offload = {key: cpu_offload for key in execution_device.keys()}
     if (
         module_name in execution_device
         and module_name in offload
