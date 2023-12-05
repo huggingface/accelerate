@@ -344,11 +344,10 @@ def verify_operation(function):
             tensor = kwargs["tensor"]
         else:
             tensor = args[0]
-        state = PartialState()
-        if state.device.type != tensor.device.type:
-            raise RuntimeError(
-                f"One or more of the tensors passed to {operation} were not on the {tensor.device.type} while the `Accelerator` is configured for {state.device.type}. "
-                f"Please move it to the {state.device.type} before calling {operation}."
+        if PartialState().device.type != tensor.device.type:
+            raise DistributedOperationException(
+                f"One or more of the tensors passed to {operation} were not on the {tensor.device.type} while the `Accelerator` is configured for {PartialState().device.type}. "
+                f"Please move it to the {PartialState().device.type} before calling {operation}."
             )
         shapes = get_shape(tensor)
         output = gather_object([shapes])
