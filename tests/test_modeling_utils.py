@@ -437,13 +437,12 @@ class ModelingUtilsTester(unittest.TestCase):
 
     def test_load_checkpoint_in_model_dtype(self):
         with tempfile.NamedTemporaryFile(suffix=".pt") as tmpfile:
-
             model = ModelSeveralDtypes()
-            torch.save(model.state_dict(), "model.pt")
+            torch.save(model.state_dict(), tmpfile.name)
 
             new_model = ModelSeveralDtypes()
             load_checkpoint_in_model(
-                new_model, "model.pt", offload_state_dict=True, dtype=torch.float16, device_map={"": "cpu"}
+                new_model, tmpfile.name, offload_state_dict=True, dtype=torch.float16, device_map={"": "cpu"}
             )
 
             self.assertEqual(new_model.int_param.dtype, torch.int64)
