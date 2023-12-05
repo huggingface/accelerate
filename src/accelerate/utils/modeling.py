@@ -309,11 +309,8 @@ def set_module_tensor_to_device(
             device = "cpu"
         if value is None:
             new_value = old_value.to(device)
-            if device in ["meta", torch.device("meta")]:
-                if dtype is None:
-                    # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
-                    new_value = new_value.to(old_value.dtype)
-                elif not str(old_value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
+            if dtype is not None and device in ["meta", torch.device("meta")]:
+                if not str(old_value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
                     new_value = new_value.to(dtype)
 
                 if not is_buffer:

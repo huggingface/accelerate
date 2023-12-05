@@ -67,6 +67,16 @@ class LinearWithNonPersistentBuffers(nn.Module):
         return torch.nn.functional.linear(input, self.weight, self.bias)
 
 
+class ModelSeveralDtypes(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("int_param", torch.randint(high=10, size=(15, 30)))
+        self.register_parameter("float_param", torch.nn.Parameter(torch.rand(10, 5)))
+    
+    def forward(self, x):
+        return x + 2
+
+
 def sequential_model(num_layers):
     layers = OrderedDict([(f"linear{i}", nn.Linear(1000, 1000)) for i in range(1, num_layers + 1)])
     return nn.Sequential(layers)
@@ -424,6 +434,19 @@ class ModelingUtilsTester(unittest.TestCase):
         self.assertEqual(model.linear1.weight.device, torch.device(0))
         self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
         self.assertEqual(model.linear2.weight.device, torch.device(1))
+    
+    def test_load_checkpoint_in_model_dtype(self):
+        with tempfile.NamedTemporaryFile(suffix=".pt") as tmpfile:
+            print(tmpfile.name)
+
+            model = ModelSeveralDtypes()
+            torch.save(model.state_dict(), "model.pt")
+
+            new_model = ModelSeveralDtypes()
+            load_checkpoint_in_model(new_model, "model.pt", offload_state_dict=True, dtype=torch.float16, device_map={"": "cpu"})
+
+            self.assertEqual(new_model.int_param.dtype, torch.int64)
+            self.assertEqual(new_model.float_param.dtype, torch.float16)
 
     def test_clean_device_map(self):
         # Regroup everything if all is on the same device
