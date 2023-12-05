@@ -72,7 +72,7 @@ class ModelSeveralDtypes(nn.Module):
         super().__init__()
         self.register_buffer("int_param", torch.randint(high=10, size=(15, 30)))
         self.register_parameter("float_param", torch.nn.Parameter(torch.rand(10, 5)))
-    
+
     def forward(self, x):
         return x + 2
 
@@ -434,7 +434,7 @@ class ModelingUtilsTester(unittest.TestCase):
         self.assertEqual(model.linear1.weight.device, torch.device(0))
         self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
         self.assertEqual(model.linear2.weight.device, torch.device(1))
-    
+
     def test_load_checkpoint_in_model_dtype(self):
         with tempfile.NamedTemporaryFile(suffix=".pt") as tmpfile:
             print(tmpfile.name)
@@ -443,7 +443,9 @@ class ModelingUtilsTester(unittest.TestCase):
             torch.save(model.state_dict(), "model.pt")
 
             new_model = ModelSeveralDtypes()
-            load_checkpoint_in_model(new_model, "model.pt", offload_state_dict=True, dtype=torch.float16, device_map={"": "cpu"})
+            load_checkpoint_in_model(
+                new_model, "model.pt", offload_state_dict=True, dtype=torch.float16, device_map={"": "cpu"}
+            )
 
             self.assertEqual(new_model.int_param.dtype, torch.int64)
             self.assertEqual(new_model.float_param.dtype, torch.float16)
