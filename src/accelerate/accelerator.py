@@ -367,9 +367,16 @@ class Accelerator:
                     else:
                         self.autocast_handler = handler
 
-        if self.fp8_recipe_handler is None and mixed_precision == "fp8":
-            # Use `ms-amp` by default
-            self.fp8_recipe_handler = MSAMPRecipeKwargs()
+        if mixed_precision == "fp8":
+            if self.fp8_recipe_handler is None:
+                # Use `ms-amp` by default
+                self.fp8_recipe_handler = MSAMPRecipeKwargs()
+            if isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs) and deepspeed_plugin is not None:
+                # Include `deepspeed` support for `fp8`
+                deepspeed_plugin.deepspeed_config["msamp"] = {
+                    "enabled": "true",
+                    "opt_level": self.fp8_recipe_handler.optimization_level,
+                }
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
