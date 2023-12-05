@@ -437,7 +437,6 @@ class ModelingUtilsTester(unittest.TestCase):
 
     def test_load_checkpoint_in_model_dtype(self):
         with tempfile.NamedTemporaryFile(suffix=".pt") as tmpfile:
-            print(tmpfile.name)
 
             model = ModelSeveralDtypes()
             torch.save(model.state_dict(), "model.pt")
