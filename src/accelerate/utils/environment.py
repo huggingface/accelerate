@@ -97,9 +97,13 @@ def check_cuda_p2p_ib_support():
     """
     try:
         device_names, device_count = get_gpu_info()
-        unsupported_devices = ["RTX 3090", "RTX 40"]
+        unsupported_devices = {"RTX 3090", "RTX 40"}
         if device_count > 1:
-            if any(device in device_names for device in unsupported_devices):
+            if any(
+                unsupported_device in device_name
+                for device_name in device_names
+                for unsupported_device in unsupported_devices
+            ):
                 return False
     except Exception:
         pass
