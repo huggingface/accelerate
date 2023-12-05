@@ -152,8 +152,10 @@ class BatchSamplerShard(BatchSampler):
         self.batch_size = getattr(batch_sampler, "batch_size", None)
         self.drop_last = getattr(batch_sampler, "drop_last", False)
         if self.batch_size is None and self.even_batches:
-            raise ValueError("You need to use `even_batches=False` when the batch sampler has no batch size. If you "
-                            "are not calling this method directly, set `accelerator.even_batches=False` instead.")
+            raise ValueError(
+                "You need to use `even_batches=False` when the batch sampler has no batch size. If you "
+                "are not calling this method directly, set `accelerator.even_batches=False` instead."
+            )
 
     @property
     def total_length(self):
