@@ -664,8 +664,8 @@ def get_max_layer_size(
 
 def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None):
     """
-    Get the maximum memory available if nothing is passed.
-    Otherwise, we convert string to int and we allocate 80% of the cpu memory if cpu is not passed in max_memory.
+    Get the maximum memory available if nothing is passed. Otherwise, we convert string to int and we allocate 80% of
+    the cpu memory if cpu is not passed in max_memory.
     """
     import psutil
 
