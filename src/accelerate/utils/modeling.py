@@ -1313,7 +1313,7 @@ def get_state_dict_offloaded_model(model: nn.Module):
 def load_checkpoint_in_model(
     model: nn.Module,
     checkpoint: Union[str, os.PathLike],
-    device_map: Dict[str, Union[int, str, torch.device]],
+    device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: bool = False,
@@ -1341,7 +1341,7 @@ def load_checkpoint_in_model(
             - a path to a `.json` file containing the index to a sharded checkpoint
             - a path to a folder containing a unique `.index.json` file and the shards of a checkpoint.
             - a path to a folder containing a unique pytorch_model.bin or a model.safetensors file.
-        device_map (`Dict[str, Union[int, str, torch.device]]`):
+        device_map (`Dict[str, Union[int, str, torch.device]]`, *optional*):
             A map that specifies where each submodule should go. It doesn't need to be refined to each parameter/buffer
             name, once a given module name is inside, every submodule of it will be sent to the same device.
         offload_folder (`str` or `os.PathLike`, *optional*):
