@@ -310,7 +310,9 @@ def set_module_tensor_to_device(
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
-                new_value = new_value.to(dtype)
+                if not str(old_value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
+                    new_value = new_value.to(dtype)
+
                 if not is_buffer:
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
         elif isinstance(value, torch.Tensor):
