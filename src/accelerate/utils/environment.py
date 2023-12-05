@@ -76,12 +76,15 @@ def get_gpu_info():
             command = "%s\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe" % os.environ["systemdrive"]
     else:
         command = "nvidia-smi"
-    output = subprocess.check_output([command, "-L"], universal_newlines=True)
-    lines = output.split(os.linesep)
-    gpu_count = len(lines) - 1
-    # Get name from first GPU
-    gpu_name = lines[0].split("(")[0].strip()
-    return gpu_count, gpu_name
+    # Returns as list of `n` GPUs and their names
+    output = subprocess.check_output(
+        [command, "--query-gpu=count,name", "--format=csv,noheader"], universal_newlines=True
+    )
+    gpus = output.split(os.linesep)
+    # Get names from output
+    gpu_count = len(gpus)
+    gpu_names = [gpu.split(",")[1].strip() for gpu in gpus]
+    return gpu_names, gpu_count
 
 
 def check_cuda_p2p_ib_support():
@@ -92,10 +95,10 @@ def check_cuda_p2p_ib_support():
     Noteably uses `nvidia-smi` instead of torch to not initialize CUDA.
     """
     try:
-        device_count, device_name = get_gpu_info()
+        device_names, device_count = get_gpu_info()
         unsupported_devices = ["RTX 3090", "RTX 40"]
         if device_count > 1:
-            if any(device in device_name for device in unsupported_devices):
+            if any(device in device_names for device in unsupported_devices):
                 return False
     except Exception:
         pass
