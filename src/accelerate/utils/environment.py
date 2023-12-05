@@ -80,6 +80,7 @@ def get_gpu_info():
     output = subprocess.check_output(
         [command, "--query-gpu=count,name", "--format=csv,noheader"], universal_newlines=True
     )
+    output = output.strip()
     gpus = output.split(os.linesep)
     # Get names from output
     gpu_count = len(gpus)
