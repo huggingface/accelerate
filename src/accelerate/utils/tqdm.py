@@ -33,5 +33,5 @@ def tqdm(main_process_only: bool = True, *args, **kwargs):
         raise ImportError("Accelerate's `tqdm` module requires `tqdm` to be installed. Please run `pip install tqdm`.")
     disable = False
     if main_process_only:
-        disable = PartialState().local_process_index == 0
+        disable = PartialState().local_process_index != 0
     return _tqdm(*args, **kwargs, disable=disable)
