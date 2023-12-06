@@ -32,7 +32,7 @@ import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
-from .imports import is_cuda_available, is_npu_available, is_xpu_available
+from .imports import is_cuda_available, is_msamp_available, is_npu_available, is_xpu_available
 from .versions import compare_versions
 
 
@@ -170,42 +170,7 @@ class InitProcessGroupKwargs(KwargsHandler):
 
 
 @dataclass
-class MSAMPRecipeKwargs(KwargsHandler):
-    """
-    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
-    training with `ms-amp`.
-
-    Args:
-        `optimization_level` (`str`), one of `O1`, `O2`, or `O3`. (default is `O2`):
-            What level of 8-bit collective communication should be used. In general:
-            * O1: Weight gradients and `all_reduce` communications are done in fp8, reducing GPU
-                  memory usage and communication bandwidth
-            * O2: First-order optimizer states are in 8-bit, and second order states are in FP16.
-                  Only available when using Adam or AdamW. This maintains accuracy and can potentially save the highest
-                  memory.
-            * 03: Specifically for DeepSpeed, implements capabilities so weights and master weights of models
-                  are stored in FP8. If `fp8` is selected and deepspeed is enabled, will be used by default.
-
-    ```python
-    from accelerate import Accelerator
-    from accelerate.utils import MSAMPRecipeKwargs
-
-    kwargs = MSAMPRecipeKwargs(optimization_level="02")
-    accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
-    ```
-    """
-
-    optimization_level: str = "O2"
-
-    def __post_init__(self):
-        if self.optimization_level not in ["O1", "O2", "03"]:
-            raise ValueError(
-                "Unsupported optimization level passed (self.optimization_level) " "please use one of `O1` or `O2`."
-            )
-
-
-@dataclass
-class TERecipeKwargs(KwargsHandler):
+class FP8RecipeKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
     training with `transformers-engine`. Please refer to the documentation of this
@@ -219,14 +184,48 @@ class TERecipeKwargs(KwargsHandler):
     kwargs = FP8RecipeKwargs(fp8_format="HYBRID")
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
     ```
+
+    To use with MS-AMP, use `enable_ms_amp` and pass the `optimization_level`:
+
+    ```python
+    kwargs = FP8RecipeKwargs(enable_ms_amp=True, optimization_level="02")
+    ```
+
+    Args:
+        margin (`int`, *optional*, default to 0):
+            The margin to use for the gradient scaling.
+        interval (`int`, *optional*, default to 1):
+            The interval to use for how often the scaling factor is recomputed.
+        fp8_format (`str`, *optional*, default to "E4M3"):
+            The format to use for the FP8 recipe. Must be one of `E4M3` or `HYBRID`.
+        amax_history_len (`int`, *optional*, default to 1024):
+            The length of the history to use for the scaling factor computation
+        amax_compute_algo (`str`, *optional*, default to "most_recent"):
+            The algorithm to use for the scaling factor computation. Must be one of `max` or `most_recent`.
+        override_linear_precision (`tuple` of three `bool`, *optional*, default to `(False, False, False)`):
+            Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
+        enable_ms_amp (`bool`, *optional*, default to `True`):
+            Whether or not to enable MS-AMP as an additional optimization backend.
+        optimization_level (`str`), one of `O1`, `O2`. (default is `O2`):
+            What level of 8-bit collective communication should be used with MS-AMP. In general:
+                * O1: Weight gradients and `all_reduce` communications are done in fp8, reducing GPU
+                    memory usage and communication bandwidth
+                * O2: First-order optimizer states are in 8-bit, and second order states are in FP16.
+                    Only available when using Adam or AdamW. This maintains accuracy and can potentially save the highest
+                    memory.
+                * 03: Specifically for DeepSpeed, implements capabilities so weights and master weights of models
+                    are stored in FP8. If `fp8` is selected and deepspeed is enabled, will be used by default.
+                    (Not available currently).
     """
 
     margin: int = 0
     interval: int = 1
     fp8_format: str = "E4M3"
-    amax_history_len: int = 1
+    amax_history_len: int = 1024
     amax_compute_algo: str = "most_recent"
     override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
+    enable_ms_amp: bool = True
+    optimization_level: str = "O2"
 
     def __post_init__(self):
         self.fp8_format = self.fp8_format.upper()
@@ -234,17 +233,10 @@ class TERecipeKwargs(KwargsHandler):
             raise ValueError("`fp8_format` must be 'E4M3' or 'HYBRID'.")
         if self.amax_compute_algo not in ["max", "most_recent"]:
             raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
-
-
-@dataclass
-class FP8RecipeKwargs(TERecipeKwargs):
-    def __post_init__(self):
-        super().__post_init__()
-        warnings.warn(
-            "Using the `FP8RecipeKwargs` deprecated and will be removed in v0.27.0. "
-            "Please use the `TERecipeKwargs` class instead and pass it to the `Accelerator` as a `kwarg_handler`.",
-            FutureWarning,
-        )
+        if self.enable_ms_amp and not is_msamp_available():
+            self.enable_ms_amp = False
+        if self.enable_ms_amp and self.optimization_level not in ("O1", "O2"):
+            raise NotImplementedError("MS-AMP with Accelerate is only supported for `optimization_level` '01' or '02'")
 
 
 class EnumWithContains(enum.EnumMeta):

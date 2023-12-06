@@ -215,7 +215,15 @@ def is_pandas_available():
 
 
 def is_msamp_available():
-    return _is_package_available("msamp")
+    package_exists = importlib.util.find_spec("msamp") is not None
+    if package_exists:
+        try:
+            # ms-amp has a different metadata name
+            _ = importlib.metadata.metadata("ms-amp")
+            return True
+        except importlib.metadata.PackageNotFoundError:
+            return False
+    return False
 
 
 def is_mlflow_available():

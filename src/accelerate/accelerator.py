@@ -58,11 +58,9 @@ from .utils import (
     KwargsHandler,
     LoggerType,
     MegatronLMPlugin,
-    MSAMPRecipeKwargs,
     PrecisionType,
     ProjectConfiguration,
     RNGType,
-    TERecipeKwargs,
     TorchDynamoPlugin,
     check_os_kernel,
     clean_state_dict_for_safetensors,
@@ -356,7 +354,7 @@ class Accelerator:
                         raise ValueError("You can only pass one `InitProcessGroupKwargs` in `kwargs_handler`.")
                     else:
                         self.init_handler = handler
-                elif isinstance(handler, (FP8RecipeKwargs, TERecipeKwargs, MSAMPRecipeKwargs)):
+                elif isinstance(handler, FP8RecipeKwargs):
                     if self.fp8_recipe_handler is not None:
                         raise ValueError("You can only pass one `FP8RecipeKwargs` in `kwargs_handler`.")
                     else:
@@ -367,16 +365,8 @@ class Accelerator:
                     else:
                         self.autocast_handler = handler
 
-        if mixed_precision == "fp8":
-            if self.fp8_recipe_handler is None:
-                # Use `ms-amp` by default
-                self.fp8_recipe_handler = MSAMPRecipeKwargs()
-            if isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs) and deepspeed_plugin is not None:
-                # Include `deepspeed` support for `fp8`
-                deepspeed_plugin.deepspeed_config["msamp"] = {
-                    "enabled": "true",
-                    "opt_level": self.fp8_recipe_handler.optimization_level,
-                }
+        if mixed_precision == "fp8" and self.fp8_recipe_handler is None:
+            self.fp8_recipe_handler = FP8RecipeKwargs()
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -1102,7 +1092,7 @@ class Accelerator:
             if isinstance(obj, torch.utils.data.DataLoader):
                 return self.prepare_data_loader(obj, device_placement=device_placement)
             elif isinstance(obj, torch.nn.Module):
-                return self.prepare_model(obj, device_placement=device_placement)
+                return self.prepare_model(obj, device_placement=device_placement, first_pass=True)
             elif isinstance(obj, torch.optim.Optimizer):
                 optimizer = self.prepare_optimizer(obj, device_placement=device_placement)
                 return optimizer
@@ -1110,6 +1100,9 @@ class Accelerator:
         elif isinstance(obj, LRScheduler):
             scheduler = self.prepare_scheduler(obj)
             return scheduler
+        # Second pass of preparation: FP8 with MS-AMP
+        elif isinstance(obj, torch.nn.Module):
+            return self.prepare_model(obj, device_placement=device_placement)
         # Return the unprocessed object if previous criteria was not met
         return obj
 
@@ -1296,18 +1289,16 @@ class Accelerator:
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
         else:
-            if self.mixed_precision == "fp8" and isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs):
-                # if not is_msamp_available():
-                #     raise ImportError("Using `mixed_precision==fp8` and `MSAMPRecipeKwargs` requires `MS-AMP` to be installed")
-                args = self._prepare_ms_amp(*args)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
+            if self.mixed_precision == "fp8" and self.fp8_recipe_handler.enable_ms_amp:
+                # MS-AMP needs both model and optimizer
+                args = self._prepare_ms_amp(*result)
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-        if tpu_should_fix_optimizer or (
-            self.mixed_precision == "fp8" and not isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs)
-        ):
+        # Zach: Check and see how this affects performance with `MS-AMP`
+        if tpu_should_fix_optimizer and self.mixed_precision == "fp8" and not self.fp8_recipe_handler.enable_ms_amp:
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
@@ -1334,7 +1325,13 @@ class Accelerator:
 
         return result if len(result) > 1 else result[0]
 
-    def prepare_model(self, model: torch.nn.Module, device_placement: bool = None, evaluation_mode: bool = False):
+    def prepare_model(
+        self,
+        model: torch.nn.Module,
+        device_placement: bool = None,
+        evaluation_mode: bool = False,
+        first_pass: bool = True,
+    ):
         """
         Prepares a PyTorch model for training in any distributed setup. It is recommended to use
         [`Accelerator.prepare`] instead.
@@ -1362,7 +1359,7 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement and self.distributed_type != DistributedType.FSDP
         # MSAMP handles device placement automatically
-        if isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs):
+        if getattr(self.fp8_recipe_handler, "enable_msamp", False):
             device_placement = False
         self._models.append(model)
 
@@ -1388,26 +1385,28 @@ class Accelerator:
             else:
                 model.forward = convert_outputs_to_fp32(new_forward)
         elif self.mixed_precision == "fp8":
-            if isinstance(self.fp8_recipe_handler, (TERecipeKwargs, FP8RecipeKwargs)):
-                if not has_transformer_engine_layers(model):
-                    with torch.no_grad():
-                        convert_model(model)
-                    model._converted_to_transformer_engine = True
-                model._original_forward = model.forward
+            if self.fp8_recipe_handler is not None:
+                if first_pass:
+                    if not has_transformer_engine_layers(model):
+                        with torch.no_grad():
+                            convert_model(model)
+                        model._converted_to_transformer_engine = True
+                    model._original_forward = model.forward
 
-                kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
-                if "fp8_format" in kwargs:
-                    kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
-                fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-                cuda_device_capacity = torch.cuda.get_device_capability()
-                fp8_enabled = cuda_device_capacity >= (8, 9)
-                if not fp8_enabled:
-                    logger.warn(
-                        f"The current device has compute capability of {cuda_device_capacity} which is "
-                        "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
-                        "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
-                    )
-                model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
+                    kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
+                    if "fp8_format" in kwargs:
+                        kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
+                    fp8_recipe = te_recipe.DelayedScaling(**kwargs)
+                    cuda_device_capacity = torch.cuda.get_device_capability()
+                    fp8_enabled = cuda_device_capacity >= (8, 9)
+                    if not fp8_enabled:
+                        logger.warn(
+                            f"The current device has compute capability of {cuda_device_capacity} which is "
+                            "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
+                            "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
+                        )
+                else:
+                    model.forward = fp8_autocast(enabled=fp8_enabled, fp8_recipe=fp8_recipe)(model.forward)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
             model, "hf_device_map", False
@@ -1855,6 +1854,7 @@ class Accelerator:
 
     def _prepare_ms_amp(self, *args):
         import msamp
+        from msamp.te import TeReplacer
 
         msamp_plugin = self.fp8_recipe_handler
         model = None
@@ -1866,6 +1866,11 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
         if optimizer is not None and model is not None:
+            old_named_params = self._get_named_parameters(model)
+            model = TeReplacer.replace(model)
+            new_named_params = self._get_named_parameters(model)
+            mapping = {p: new_named_params[n] for n, p in old_named_params.items() if n in new_named_params}
+            optimizer = optimizer._switch_parameters(mapping)
             model, optimizer = msamp.initialize(model, optimizer, opt_level=msamp_plugin.optimization_level)
         else:
             raise ValueError(
@@ -1959,7 +1964,7 @@ class Accelerator:
         if device_placement is None:
             device_placement = self.device_placement
         # MSAMP handles device placement automatically
-        if isinstance(self.fp8_recipe_handler, MSAMPRecipeKwargs):
+        if getattr(self.fp8_recipe_handler, "enable_msamp", False):
             device_placement = False
         optimizer = AcceleratedOptimizer(optimizer, device_placement=device_placement, scaler=self.scaler)
         self._optimizers.append(optimizer)
