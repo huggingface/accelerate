@@ -250,7 +250,7 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
     # These are a bit slower so they should only be ran on the GPU or TPU
-    if accelerator.device != "cpu":
+    if accelerator.device.type != "cpu":
         if accelerator.is_local_main_process:
             print("**Testing gather_for_metrics**")
         for split_batches in [True, False]:
