@@ -133,106 +133,12 @@ def training_function(config, args):
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
     model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
 
-    model.to(accelerator.device)
-
-    # Prepare everything
-    # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
-    # prepare method.
-    from accelerate.utils import convert_bytes
-
-    def print_memory(text, accelerator):
-        accelerator.print(f'Memory used {text}: {convert_bytes(torch.cuda.max_memory_allocated())}')
-        torch.cuda.reset_peak_memory_stats()
-    
-    print_memory('before .prepare()', accelerator)
-    from torch import nn
-    def nested_children(m: torch.nn.Module):
-        children = dict(m.named_children())
-        output = {}
-        if children == {}:
-            # if module has no children; m is last child! :O
-            return m
-        else:
-            # look for children from children... to the last child!
-            for name, child in children.items():
-                try:
-                    output[name] = nested_children(child)
-                except TypeError:
-                    output[name] = nested_children(child)
-        return output
-    
-    children = nested_children(model)
-    
-    from transformer_engine.pytorch.module.layernorm import LayerNorm as te_LayerNorm
-    import transformer_engine.pytorch as te
-
-    def replace_layers(model, keys, replace_func):
-        current_module = model
-
-        for key in keys[:-1]:
-            if isinstance(key, int):
-                current_module = current_module[key]
-            elif isinstance(current_module, nn.Module) and key in current_module._modules:
-                current_module = current_module._modules[key]
-            elif hasattr(current_module, key):
-                current_module = getattr(current_module, key)
-            else:
-                raise KeyError(f"Key '{key}' not found in the model.")
-
-        last_key = keys[-1]
-        if isinstance(last_key, int):
-            current_module[last_key] = replace_func(current_module[last_key])
-        elif isinstance(current_module, nn.Module) and last_key in current_module._modules:
-            current_module._modules[last_key] = replace_func(current_module._modules[last_key])
-        elif hasattr(current_module, last_key):
-            setattr(current_module, last_key, replace_func(getattr(current_module, last_key)))
-        else:
-            raise KeyError(f"Key '{last_key}' not found in the model.")
-
-        return model
-    
-    def check_for_layer(dictionary, layer, current_key=None):
-        if current_key is None:
-            current_key = []
-        matching_keys = []
-
-        for k, v in dictionary.items():
-            if isinstance(v, layer):
-                matching_keys.append(".".join(current_key + [k]))
-            elif isinstance(v, dict):
-                matching_keys.extend(check_for_layer(v, layer, current_key + [k]))
-    
-        return matching_keys
-    
-    # First LayerNorm
-    def replace_layernorm(module):
-        te_module = te_LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
-        module.weight.copy_(te_module.weight)
-        module.bias.copy_(te_module.bias)
-        return te_module
-    layernorm_locations = check_for_layer(children, nn.LayerNorm)
-    # then nn.Linear
-    def replace_linear(module):
-        # Return early if the linear layer weights are not multiples of 16
-        if any(p % 16 != 0 for p in module.weight.shape):
-            return module
-        has_bias = module.bias is not None
-        te_module = te.Linear(
-            module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
-        )
-        module.weight.copy_(te_module.weight)
-        if has_bias:
-            module.bias.copy_(te_module.bias)
-        return te_module
-    linear_locations = check_for_layer(children, nn.Linear)
-    
-    with torch.no_grad():
-        for location in layernorm_locations:
-            model = replace_layers(model, location.split('.'), replace_func=replace_layernorm)
-
-        for location in linear_locations:
-            model = replace_layers(model, location.split('.'), replace_func=replace_linear)
-    optimizer = AdamW(params=model.parameters(), lr=lr) 
+    # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
+    # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
+    # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
+    model = model.to(accelerator.device)
+    # Instantiate optimizer
+    optimizer = AdamW(params=model.parameters(), lr=lr)
 
     # Instantiate scheduler
     lr_scheduler = get_linear_schedule_with_warmup(
@@ -240,34 +146,47 @@ def training_function(config, args):
         num_warmup_steps=100,
         num_training_steps=(len(train_dataloader) * num_epochs) // gradient_accumulation_steps,
     )
-    import msamp
 
-    model, optimizer = msamp.initialize(model, optimizer, opt_level="O2")
-    print_memory('after prepare', accelerator)
+    # Prepare everything
+    # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
+    # prepare method.
 
-    
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+    )
+
     # Now we train the model
-    model.train()
-    import time
-    start_time = time.time()
-    for step, batch in enumerate(train_dataloader):
-        # We could avoid this line since we set the accelerator with `device_placement=True`.
-        batch.to(accelerator.device)
-        outputs = model(**batch)
-        print_memory('after outputs generated', accelerator)
-        loss = outputs.loss
-        loss = loss / gradient_accumulation_steps
-        loss.backward()
-        print_memory('after backward', accelerator)
-        if step % gradient_accumulation_steps == 0:
-            optimizer.step()
-            lr_scheduler.step()
-            print_memory('after step', accelerator)
-            optimizer.zero_grad()
-        if step == 5:
-            break
-    end_time = time.time()
-    print(f'Time taken: {end_time - start_time}')
+    for epoch in range(num_epochs):
+        model.train()
+        for step, batch in enumerate(train_dataloader):
+            # We could avoid this line since we set the accelerator with `device_placement=True`.
+            batch.to(accelerator.device)
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss = loss / gradient_accumulation_steps
+            accelerator.backward(loss)
+            if step % gradient_accumulation_steps == 0:
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+
+        model.eval()
+        for step, batch in enumerate(eval_dataloader):
+            # We could avoid this line since we set the accelerator with `device_placement=True`.
+            batch.to(accelerator.device)
+            with torch.no_grad():
+                outputs = model(**batch)
+            predictions = outputs.logits.argmax(dim=-1)
+            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
+            metric.add_batch(
+                predictions=predictions,
+                references=references,
+            )
+
+        eval_metric = metric.compute()
+        # Use accelerator.print to print only on the main process.
+        accelerator.print(f"epoch {epoch}:", eval_metric)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
