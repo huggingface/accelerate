@@ -1297,7 +1297,7 @@ class Accelerator:
                 args = self._prepare_ms_amp(*result)
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-        if tpu_should_fix_optimizer and self.mixed_precision == "fp8" and not self.fp8_recipe_handler.enable_ms_amp:
+        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and not self.fp8_recipe_handler.enable_ms_amp):
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
