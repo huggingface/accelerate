@@ -211,11 +211,11 @@ class FP8RecipeKwargs(KwargsHandler):
                 * O1: Weight gradients and `all_reduce` communications are done in fp8, reducing GPU
                     memory usage and communication bandwidth
                 * O2: First-order optimizer states are in 8-bit, and second order states are in FP16.
-                    Only available when using Adam or AdamW. This maintains accuracy and can potentially save the highest
-                    memory.
+                    Only available when using Adam or AdamW. This maintains accuracy and can potentially save the
+                    highest memory.
                 * 03: Specifically for DeepSpeed, implements capabilities so weights and master weights of models
-                    are stored in FP8. If `fp8` is selected and deepspeed is enabled, will be used by default.
-                    (Not available currently).
+                    are stored in FP8. If `fp8` is selected and deepspeed is enabled, will be used by default. (Not
+                    available currently).
     """
 
     margin: int = 0
