@@ -846,8 +846,6 @@ class AcceleratorState:
                 mixed_precision = "fp16"
             elif config.get("bf16", {}).get("enabled", False):
                 mixed_precision = "bf16"
-            elif config.get("msamp", {}).get("enabled", False):
-                mixed_precision = "fp8"
             else:
                 mixed_precision = "no"
         else:
