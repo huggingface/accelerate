@@ -24,7 +24,7 @@ def test_can_initialize():
 def test_problematic_imports():
     with raises(AssertionError, match="Please keep these imports"):
         if is_bnb_available():
-            pass
+            import bitsandbytes as bnb  # noqa: F401
         notebook_launcher(basic_function, (), num_processes=NUM_PROCESSES)
 
 
