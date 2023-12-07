@@ -295,7 +295,7 @@ device_map = {"block1": 0, "block2.linear1": 1, "block2.linear2": 1}
 
 </Tip>
 
-# CPU offload only
+## CPU offload only
 
 If you want to offload your model on CPU, you can use [`cpu_offload`]. As a result, all parameters of the model will be offloaded and only one copy of the state dict of the model will be kept. During the forward pass, parameters will be extracted from that state dict and put on the execution device and passed as they are needed, then offloaded again. 
 
@@ -303,7 +303,7 @@ If you want to offload your model on CPU, you can use [`cpu_offload`]. As a resu
 cpu_offload(model, execution_device)
 ```
 
-You can also use `cpu_offload_with_hook`. This function will offloads a model on the CPU and puts it back to an execution device when executed. The difference with [`cpu_offload`] is that the model stays on the execution device after the forward and is only offloaded again when the `offload` method of the returned `hook` is called. Futhermore, ['cpu_offload_with_hook'] is more performant but less memory saving. It is useful for pipelines running a model in a loop:
+You can also use [`cpu_offload_with_hook`]. This function will offloads a model on the CPU and puts it back to an execution device when executed. The difference with [`cpu_offload`] is that the model stays on the execution device after the forward and is only offloaded again when the `offload` method of the returned `hook` is called. Futhermore, ['cpu_offload_with_hook'] is more performant but less memory saving. It is useful for pipelines running a model in a loop:
 
 ```python
 model_1, hook_1 = cpu_offload_with_hook(model_1, execution_device)
@@ -321,7 +321,7 @@ hid_3 = model_3(hid_3)
 hook_3.offload()
 ```
 
-# Disk offload only
+## Disk offload only
 
 To perform disk offload, you can use [`disk_offload`]. As a result, all parameters of the model will be offloaded as memory-mapped array in a given folder. During the forward pass, parameters will be accessed from that folder and put on the execution device passed as they are needed, then offloaded again.
 
