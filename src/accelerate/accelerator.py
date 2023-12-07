@@ -366,6 +366,8 @@ class Accelerator:
                         raise ValueError("You can only pass one `AutocastKwargs` in `kwargs_handler`.")
                     else:
                         self.autocast_handler = handler
+        if self.fp8_recipe_handler is None and mixed_precision == "fp8":
+            self.fp8_recipe_handler = FP8RecipeKwargs()
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -448,6 +450,8 @@ class Accelerator:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
+        elif self.state.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP":
+            self.native_amp = True
 
         # Start of internal step tracking
         self.step = 0
@@ -1196,7 +1200,7 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
-        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
+        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8"):
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
@@ -1212,12 +1216,14 @@ class Accelerator:
         else:
             if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP":
                 args = self._prepare_msamp(*args)
+                # MS-AMP will handle the device placement
+                device_placement = [False for _ in args]
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
+        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8"):
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
