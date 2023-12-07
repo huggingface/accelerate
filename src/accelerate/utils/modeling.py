@@ -305,6 +305,9 @@ def set_module_tensor_to_device(
         ):
             device_quantization = device
             device = "cpu"
+        # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
+        if is_npu_available() and isinstance(device, int):
+            device = f"npu:{device}"
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:

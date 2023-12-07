@@ -36,8 +36,8 @@ from .utils import (
     find_tied_parameters,
     get_balanced_memory,
     infer_auto_device_map,
-    is_torch_version,
     is_npu_available,
+    is_torch_version,
     load_checkpoint_in_model,
     offload_state_dict,
     parse_flag_from_env,
@@ -435,6 +435,9 @@ def dispatch_model(
 
     else:
         device = list(device_map.values())[0]
+        # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
+        if is_npu_available() and isinstance(device, int):
+            device = f"npu:{device}"
         if device != "disk":
             model.to(device)
         else:
