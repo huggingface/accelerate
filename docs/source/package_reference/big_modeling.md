@@ -19,6 +19,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] big_modeling.init_empty_weights
 [[autodoc]] big_modeling.cpu_offload
+[[autodoc]] big_modeling.cpu_offload_with_hook
 [[autodoc]] big_modeling.disk_offload
 [[autodoc]] big_modeling.dispatch_model
 [[autodoc]] big_modeling.load_checkpoint_and_dispatch

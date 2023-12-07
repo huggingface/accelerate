@@ -295,11 +295,44 @@ device_map = {"block1": 0, "block2.linear1": 1, "block2.linear2": 1}
 
 </Tip>
 
+## CPU offload only
+
+If you want to offload your model on CPU, you can use [`cpu_offload`]. As a result, all parameters of the model will be offloaded and only one copy of the state dict of the model will be kept. During the forward pass, parameters will be extracted from that state dict and put on the execution device and passed as they are needed, then offloaded again. 
+
+```python
+cpu_offload(model, execution_device)
+```
+
+You can also use [`cpu_offload_with_hook`]. This function will offloads a model on the CPU and puts it back to an execution device when executed. The difference with [`cpu_offload`] is that the model stays on the execution device after the forward and is only offloaded again when the `offload` method of the returned `hook` is called. Furthermore, [`cpu_offload_with_hook`] is more performant but less memory saving. It is useful for pipelines running a model in a loop:
+
+```python
+model_1, hook_1 = cpu_offload_with_hook(model_1, execution_device)
+model_2, hook_2 = cpu_offload_with_hook(model_2, execution_device, prev_module_hook=hook_1)
+model_3, hook_3 = cpu_offload_with_hook(model_3, execution_device, prev_module_hook=hook_2)
+
+hid_1 = model_1(input)
+for i in range(50):
+    # model1 is offloaded on the CPU at the first iteration, model 2 stays on the GPU for this whole loop.
+    hid_2 = model_2(hid_1)
+# model2 is offloaded to the CPU just before this forward.
+hid_3 = model_3(hid_3)
+
+# For model3, you need to manually call the hook offload method.
+hook_3.offload()
+```
+
+## Disk offload only
+
+To perform disk offload, you can use [`disk_offload`]. As a result, all parameters of the model will be offloaded as memory-mapped array in a given folder. During the forward pass, parameters will be accessed from that folder and put on the execution device passed as they are needed, then offloaded again.
+
+```python
+disk_offload(model, offload_dir, execution_device)
+```
+
 ## Limits and further development
 
 We are aware of the current limitations in the API:
 
-- While this could theoretically work on just one CPU with potential disk offload, you need at least one GPU to run this API. This will be fixed in further development.
 - [`infer_auto_device_map`] (or `device_map="auto"` in [`load_checkpoint_and_dispatch`]) tries to maximize GPU and CPU RAM it sees available when you execute it. While PyTorch is very good at managing GPU RAM efficiently (and giving it back when not needed), it's not entirely true with Python and CPU RAM. Therefore, an automatically computed device map might be too intense on the CPU. Move a few modules to the disk device if you get crashes due to a lack of RAM.
 - [`infer_auto_device_map`] (or `device_map="auto"` in [`load_checkpoint_and_dispatch`]) attributes devices sequentially (to avoid moving things back and forth) so if your first layer is bigger than the size of the GPU you have, it will end up with everything on the CPU/Disk.
 - [`load_checkpoint_and_dispatch`] and [`load_checkpoint_in_model`] do not perform any check on the correctness of your state dict compared to your model at the moment (this will be fixed in a future version), so you may get some weird errors if trying to load a checkpoint with mismatched or missing keys.
