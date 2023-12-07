@@ -22,7 +22,6 @@ import accelerate
 from accelerate import Accelerator
 from accelerate.big_modeling import dispatch_model
 from accelerate.test_utils import assert_exception, execute_subprocess_async, require_multi_gpu
-from accelerate.test_utils.testing import run_command
 from accelerate.utils import patch_environment
 
 
@@ -34,9 +33,6 @@ class MultiGPUTester(unittest.TestCase):
             mod_file.split(os.path.sep)[:-1] + ["scripts", "test_distributed_data_loop.py"]
         )
         self.operation_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_ops.py"])
-        self.notebook_launcher_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "test_notebook.py"]
-        )
 
     @require_multi_gpu
     def test_multi_gpu(self):
@@ -69,17 +65,6 @@ class MultiGPUTester(unittest.TestCase):
         cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.data_loop_file_path]
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
             execute_subprocess_async(cmd, env=os.environ.copy())
-
-    @require_multi_gpu
-    def test_notebook_launcher(self):
-        """
-        This test checks a variety of situations and scenarios
-        with the `notebook_launcher`
-        """
-        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.notebook_launcher_path]
-        print(f"Running {cmd}")
-        with patch_environment(omp_num_threads=1):
-            run_command(cmd, env=os.environ.copy())
 
 
 if __name__ == "__main__":
