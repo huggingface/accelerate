@@ -303,7 +303,7 @@ If you want to offload your model on CPU, you can use [`cpu_offload`]. As a resu
 cpu_offload(model, execution_device)
 ```
 
-You can also use [`cpu_offload_with_hook`]. This function will offloads a model on the CPU and puts it back to an execution device when executed. The difference with [`cpu_offload`] is that the model stays on the execution device after the forward and is only offloaded again when the `offload` method of the returned `hook` is called. Futhermore, ['cpu_offload_with_hook'] is more performant but less memory saving. It is useful for pipelines running a model in a loop:
+You can also use [`cpu_offload_with_hook`]. This function will offloads a model on the CPU and puts it back to an execution device when executed. The difference with [`cpu_offload`] is that the model stays on the execution device after the forward and is only offloaded again when the `offload` method of the returned `hook` is called. Furthermore, [`cpu_offload_with_hook`] is more performant but less memory saving. It is useful for pipelines running a model in a loop:
 
 ```python
 model_1, hook_1 = cpu_offload_with_hook(model_1, execution_device)
