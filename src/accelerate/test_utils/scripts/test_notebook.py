@@ -23,8 +23,7 @@ def test_can_initialize():
 @require_bnb
 def test_problematic_imports():
     with raises(RuntimeError, match="Please keep these imports"):
-        if is_bnb_available():
-            import bitsandbytes as bnb  # noqa: F401
+        import bitsandbytes as bnb  # noqa: F401
         notebook_launcher(basic_function, (), num_processes=NUM_PROCESSES)
 
 
