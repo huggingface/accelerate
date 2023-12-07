@@ -37,6 +37,7 @@ from .utils import (
     get_balanced_memory,
     infer_auto_device_map,
     is_torch_version,
+    is_npu_available,
     load_checkpoint_in_model,
     offload_state_dict,
     parse_flag_from_env,
@@ -429,6 +430,8 @@ def dispatch_model(
 
         model.to = add_warning(model.to, model)
         model.cuda = add_warning(model.cuda, model)
+        if is_npu_available():
+            model.npu = add_warning(model.npu, model)
 
     else:
         device = list(device_map.values())[0]
