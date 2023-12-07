@@ -677,7 +677,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
             if is_npu_available():
                 for i in range(torch.npu.device_count()):
                     _ = torch.tensor(0, device=torch.device("npu", i))
-                max_memory = {i: torch.npu.mem_get_ifo(i)[0] for i in range(torch.npu.device_count())}
+                max_memory = {i: torch.npu.mem_get_info(i)[0] for i in range(torch.npu.device_count())}
             elif is_xpu_available():
                 for i in range(torch.xpu.device_count()):
                     _ = torch.tensor(0, device=torch.device("xpu", i))
