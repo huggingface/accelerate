@@ -1286,7 +1286,7 @@ class Accelerator:
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
             else:
                 model.forward = convert_outputs_to_fp32(new_forward)
-        elif self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "transformer_engine":
+        elif self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
                     convert_model(model)
