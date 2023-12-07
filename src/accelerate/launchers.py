@@ -150,8 +150,6 @@ def notebook_launcher(
                     "`Accelerator`."
                 )
             # Check for specific libraries known to initialize CUDA that users constantly use
-            from pprint import pprint
-            pprint(sys.modules)
             problematic_imports = are_libraries_initialized("bitsandbytes")
             if len(problematic_imports) > 1:
                 err = (
