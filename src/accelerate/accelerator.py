@@ -1196,7 +1196,7 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
-        if tpu_should_fix_optimizer or self.mixed_precision == "fp8":
+        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
@@ -1210,12 +1210,14 @@ class Accelerator:
         elif self.distributed_type == DistributedType.MEGATRON_LM:
             result = self._prepare_megatron_lm(*args)
         else:
+            if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP":
+                args = self._prepare_msamp(*args)
             result = tuple(
                 self._prepare_one(obj, first_pass=True, device_placement=d) for obj, d in zip(args, device_placement)
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-        if tpu_should_fix_optimizer or self.mixed_precision == "fp8":
+        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
@@ -1274,17 +1276,17 @@ class Accelerator:
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
 
-        if self.native_amp:
+        if self.native_amp or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP"):
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
-            autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
+            autocast_context = get_mixed_precision_context_manager(True, self.autocast_handler)
             new_forward = autocast_context(model_forward_func)
             if hasattr(model.forward, "__func__"):
                 model.forward = MethodType(new_forward, model)
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
             else:
                 model.forward = convert_outputs_to_fp32(new_forward)
-        elif self.mixed_precision == "fp8":
+        elif self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "transformer_engine":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
                     convert_model(model)
@@ -1742,6 +1744,26 @@ class Accelerator:
                 )
             else:
                 model, optimizer = ipex.optimize(model, optimizer=optimizer, dtype=dtype, inplace=True, level="O1")
+        for i in range(len(result)):
+            if isinstance(result[i], torch.nn.Module):
+                result[i] = model
+            elif isinstance(result[i], (torch.optim.Optimizer)):
+                result[i] = optimizer
+        return tuple(result)
+
+    def _prepare_msamp(self, *args):
+        import msamp
+
+        model = None
+        optimizer = None
+        result = [obj for obj in args]
+        for obj in result:
+            if isinstance(obj, torch.nn.Module):
+                model = obj
+            elif isinstance(obj, (torch.optim.Optimizer)):
+                optimizer = obj
+        if optimizer is not None and model is not None:
+            model, optimizer = msamp.initialize(model, optimizer, opt_level=self.fp8_recipe_handler.opt_level)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
                 result[i] = model

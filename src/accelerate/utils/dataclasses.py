@@ -171,21 +171,8 @@ class InitProcessGroupKwargs(KwargsHandler):
 
 @dataclass
 class FP8RecipeKwargs(KwargsHandler):
-    """
-    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
-    training. Please refer to the documentation of this
-    [class](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html#transformer_engine.common.recipe.DelayedScaling)
-    for more information on each argument.
-
-    ```python
-    from accelerate import Accelerator
-    from accelerate.utils import FP8RecipeKwargs
-
-    kwargs = FP8RecipeKwargs(fp8_format="HYBRID")
-    accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
-    ```
-    """
-
+    backend: str = "msamp"
+    opt_level: str = "O2"
     margin: int = 0
     interval: int = 1
     fp8_format: str = "E4M3"
@@ -194,6 +181,9 @@ class FP8RecipeKwargs(KwargsHandler):
     override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
 
     def __post_init__(self):
+        self.backend = self.backend.upper()
+        if self.backend not in ["MSAMP", "TE"]:
+            raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
         self.fp8_format = self.fp8_format.upper()
         if self.fp8_format not in ["E4M3", "HYBRID"]:
             raise ValueError("`fp8_format` must be 'E4M3' or 'HYBRID'.")
