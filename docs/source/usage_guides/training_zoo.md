@@ -74,7 +74,7 @@ These are tutorials from libraries that integrate with 🤗 Accelerate:
 
 ### Amphion
 - [Training Text-to-Speech Models with Amphion](https://github.com/open-mmlab/Amphion/blob/main/egs/tts/README.md)
-- [Training Singing Voice Conversion models with Amphion](https://github.com/open-mmlab/Amphion/blob/main/egs/svc/README.md)
+- [Training Singing Voice Conversion Models with Amphion](https://github.com/open-mmlab/Amphion/blob/main/egs/svc/README.md)
 - [Training Vocoders with Amphion](https://github.com/open-mmlab/Amphion/blob/main/egs/vocoder/README.md)
 
 ### Catalyst
