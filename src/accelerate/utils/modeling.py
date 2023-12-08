@@ -957,7 +957,7 @@ def infer_auto_device_map(
             all weights).
         verbose (`bool`, *optional*, defaults to `False`):
             Whether or not to provide debugging statements as the function builds the device_map.
-        clean_result (`bool`, *optional*, defaults to True):
+        clean_result (`bool`, *optional*, defaults to `True`):
             Clean the resulting device_map by grouping all submodules that go on the same device together.
     """
     # Get default / clean up max_memory
