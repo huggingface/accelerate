@@ -365,7 +365,10 @@ def set_module_tensor_to_device(
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
                     module.weight = module.weight.cuda(device_index)
     # clean pre and post foward hook
-    torch.cuda.empty_cache()
+    if is_npu_available():
+        torch.npu.empty_cache()
+    else:
+        torch.cuda.empty_cache()
 
 
 def named_module_tensors(
