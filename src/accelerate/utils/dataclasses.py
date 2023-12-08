@@ -26,7 +26,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
 
 import torch
 
@@ -173,9 +173,15 @@ class InitProcessGroupKwargs(KwargsHandler):
 class FP8RecipeKwargs(KwargsHandler):
     """
     Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
-    training with `transformers-engine`. Please refer to the documentation of this
-    [class](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html#transformer_engine.common.recipe.DelayedScaling)
-    for more information on each argument.
+    training with `transformer-engine` or `ms-amp`.
+
+    <Tip>
+        For more information on `transformer-engine` args, please refer to the API
+        [documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html).
+
+        For more information on the `ms-amp` args, please refer to the Optimization Level
+        [documentation](https://azure.github.io/MS-AMP/docs/user-tutorial/optimization-level).
+    </Tip>
 
     ```python
     from accelerate import Accelerator
@@ -218,13 +224,13 @@ class FP8RecipeKwargs(KwargsHandler):
                     available currently).
     """
 
-    backend: str = "msamp"
-    opt_level: str = "O2"
+    backend: Literal["msamp", "te"] = "msamp"
+    opt_level: Literal["O1", "O2"] = "O2"
     margin: int = 0
     interval: int = 1
-    fp8_format: str = "E4M3"
+    fp8_format: Literal["E4M3", "HYBRID"] = "E4M3"
     amax_history_len: int = 1
-    amax_compute_algo: str = "most_recent"
+    amax_compute_algo: Literal["max", "most_recent"] = "most_recent"
     override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
 
     def __post_init__(self):
