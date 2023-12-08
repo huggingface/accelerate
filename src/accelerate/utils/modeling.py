@@ -21,7 +21,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict, defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -922,8 +922,8 @@ def infer_auto_device_map(
     no_split_module_classes: Optional[List[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     special_dtypes: Optional[Dict[str, Union[str, torch.dtype]]] = None,
-    clean_result: bool = True,
     verbose: bool = False,
+    clean_result: bool = True,
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
@@ -955,10 +955,10 @@ def infer_auto_device_map(
         special_dtypes (`Dict[str, Union[str, torch.device]]`, *optional*):
             If provided, special dtypes to consider for some specific weights (will override dtype used as default for
             all weights).
-        clean_result (`bool`, *optional*, defaults to True):
-            Clean the resulting device_map by grouping all submodules that go on the same device together. 
         verbose (`bool`, *optional*, defaults to `False`):
             Whether or not to provide debugging statements as the function builds the device_map.
+        clean_result (`bool`, *optional*, defaults to True):
+            Clean the resulting device_map by grouping all submodules that go on the same device together.
     """
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
