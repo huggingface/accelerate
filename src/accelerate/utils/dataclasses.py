@@ -185,7 +185,7 @@ class FP8RecipeKwargs(KwargsHandler):
     accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
     ```
 
-    To use with MS-AMP, use `backend="msamp"` and pass the `optimization_level`:
+    To use MS-AMP as an engine, pass `backend="msamp"` and the `optimization_level`:
 
     ```python
     kwargs = FP8RecipeKwargs(backend="msamp", optimization_level="02")
