@@ -21,7 +21,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -922,6 +922,7 @@ def infer_auto_device_map(
     no_split_module_classes: Optional[List[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     special_dtypes: Optional[Dict[str, Union[str, torch.dtype]]] = None,
+    clean_result: Optional[bool] = True,
     verbose: bool = False,
 ):
     """
@@ -954,6 +955,8 @@ def infer_auto_device_map(
         special_dtypes (`Dict[str, Union[str, torch.device]]`, *optional*):
             If provided, special dtypes to consider for some specific weights (will override dtype used as default for
             all weights).
+        clean_result (`bool` *optional*):
+            Clean the resulting device_map by grouping all submodules that go on the same device together. 
         verbose (`bool`, *optional*, defaults to `False`):
             Whether or not to provide debugging statements as the function builds the device_map.
     """
@@ -985,7 +988,7 @@ def infer_auto_device_map(
             "The model weights are not tied. Please use the `tie_weights` method before using the `infer_auto_device` function."
         )
 
-    device_map = {}
+    device_map = OrderedDict()
     current_device = 0
     current_memory_used = 0
 
@@ -1153,7 +1156,9 @@ def infer_auto_device_map(
             current_memory_used += module_size
             device_map[name] = devices[current_device]
 
-    return clean_device_map(device_map)
+    if clean_result:
+        device_map = clean_device_map(device_map)
+    return device_map
 
 
 def check_device_map(model: nn.Module, device_map: Dict[str, Union[int, str, torch.device]]):
