@@ -697,7 +697,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
         max_memory["cpu"] = psutil.virtual_memory().available * 0.8
         logger.info(
             "We will use 80% of the memory on cpu for storing the model."
-            "You can set `max_memory["cpu"]` in to a higher value to use more memory (at your own risk)."
+            "You can set `max_memory['cpu']` in to a higher value to use more memory (at your own risk)."
         )
 
     # Need to sort the device by type to make sure that we allocate the gpu first.
