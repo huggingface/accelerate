@@ -170,6 +170,7 @@ class OffloadedWeightsLoader(Mapping):
                 with safe_open(weight_info["safetensors_file"], framework="pt", device=device) as f:
                     tensor = f.get_tensor(weight_info.get("weight_name", key))
             except TypeError:
+                # if failed to get_tensor on the device, such as bf16 on mps, try to load it on CPU first
                 with safe_open(weight_info["safetensors_file"], framework="pt", device="cpu") as f:
                     tensor = f.get_tensor(weight_info.get("weight_name", key))
 
