@@ -27,8 +27,8 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from accelerate import Accelerator
 from accelerate.data_loader import DataLoaderDispatcher
-from accelerate.test_utils import RegressionDataset, RegressionModel
-from accelerate.utils import is_tpu_available, set_seed
+from accelerate.test_utils import RegressionDataset, RegressionModel, torch_device
+from accelerate.utils import set_seed
 
 
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
@@ -87,7 +87,10 @@ def get_mrpc_setup(dispatch_batches, split_batches):
         "hf-internal-testing/mrpc-bert-base-cased", return_dict=True
     )
     ddp_model, ddp_dataloader = accelerator.prepare(model, dataloader)
-    return {"ddp": [ddp_model, ddp_dataloader, "cuda:0"], "no": [model, dataloader, accelerator.device]}, accelerator
+    return {
+        "ddp": [ddp_model, ddp_dataloader, torch_device],
+        "no": [model, dataloader, accelerator.device],
+    }, accelerator
 
 
 def generate_predictions(model, dataloader, accelerator):
@@ -247,7 +250,7 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
     # These are a bit slower so they should only be ran on the GPU or TPU
-    if torch.cuda.is_available() or is_tpu_available():
+    if accelerator.device.type != "cpu":
         if accelerator.is_local_main_process:
             print("**Testing gather_for_metrics**")
         for split_batches in [True, False]:

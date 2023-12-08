@@ -37,6 +37,7 @@ from ..utils import (
     is_deepspeed_available,
     is_dvclive_available,
     is_mps_available,
+    is_npu_available,
     is_pandas_available,
     is_tensorboard_available,
     is_timm_available,
@@ -47,6 +48,22 @@ from ..utils import (
     is_xpu_available,
     str_to_bool,
 )
+
+
+def get_backend():
+    if torch.cuda.is_available():
+        return "cuda", torch.cuda.device_count()
+    elif is_mps_available():
+        return "mps", 1
+    elif is_npu_available():
+        return "npu", torch.npu.device_count()
+    elif is_xpu_available():
+        return "xpu", torch.xpu.device_count()
+    else:
+        return "cpu", 1
+
+
+torch_device, device_count = get_backend()
 
 
 def parse_flag_from_env(key, default=False):
@@ -85,7 +102,15 @@ def require_cpu(test_case):
     """
     Decorator marking a test that must be only ran on the CPU. These tests are skipped when a GPU is available.
     """
-    return unittest.skipUnless(not torch.cuda.is_available(), "test requires only a CPU")(test_case)
+    return unittest.skipUnless(torch_device == "cpu", "test requires only a CPU")(test_case)
+
+
+def require_non_cpu(test_case):
+    """
+    Decorator marking a test that requires a hardware accelerator backend. These tests are skipped when there are no
+    hardware accelerator available.
+    """
+    return unittest.skipUnless(torch_device != "cpu", "test requires a GPU")(test_case)
 
 
 def require_cuda(test_case):
@@ -147,6 +172,16 @@ def require_tpu(test_case):
     return unittest.skipUnless(is_tpu_available(), "test requires TPU")(test_case)
 
 
+def require_single_device(test_case):
+    """
+    Decorator marking a test that requires a single device. These tests are skipped when there is no hardware
+    accelerator available or number of devices is more than one.
+    """
+    return unittest.skipUnless(torch_device != "cpu" and device_count == 1, "test requires a hardware accelerator")(
+        test_case
+    )
+
+
 def require_single_gpu(test_case):
     """
     Decorator marking a test that requires CUDA on a single GPU. These tests are skipped when there are no GPU
@@ -161,6 +196,14 @@ def require_single_xpu(test_case):
     available or number of xPUs is more than one.
     """
     return unittest.skipUnless(torch.xpu.device_count() == 1, "test requires a XPU")(test_case)
+
+
+def require_multi_device(test_case):
+    """
+    Decorator marking a test that requires a multi-device setup. These tests are skipped on a machine without multiple
+    devices.
+    """
+    return unittest.skipUnless(device_count > 1, "test requires multiple hardware accelerators")(test_case)
 
 
 def require_multi_gpu(test_case):
