@@ -922,7 +922,7 @@ def infer_auto_device_map(
     no_split_module_classes: Optional[List[str]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     special_dtypes: Optional[Dict[str, Union[str, torch.dtype]]] = None,
-    clean_result: Optional[bool] = True,
+    clean_result: bool = True,
     verbose: bool = False,
 ):
     """
@@ -955,7 +955,7 @@ def infer_auto_device_map(
         special_dtypes (`Dict[str, Union[str, torch.device]]`, *optional*):
             If provided, special dtypes to consider for some specific weights (will override dtype used as default for
             all weights).
-        clean_result (`bool` *optional*):
+        clean_result (`bool`, *optional*, defaults to True):
             Clean the resulting device_map by grouping all submodules that go on the same device together. 
         verbose (`bool`, *optional*, defaults to `False`):
             Whether or not to provide debugging statements as the function builds the device_map.
