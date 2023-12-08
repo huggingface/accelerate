@@ -1764,15 +1764,23 @@ class Accelerator:
         else:
             import msamp
 
-        model = None
-        optimizer = None
+        model, optimizer = None, None
+        num_models, num_optimizers = 0, 0
         result = [obj for obj in args]
         for obj in result:
             if isinstance(obj, torch.nn.Module):
                 model = obj
+                num_models += 1
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
-        if optimizer is not None and model is not None:
+                num_optimizers += 1
+        if optimizer is None and model is None:
+            raise ValueError("You must pass a model and an optimizer to `accelerate.prepare()` when using MS-AMP.")
+        elif num_models > 1 or num_optimizers > 1:
+            raise ValueError(
+                f"You can't use multiple models ({num_models}) or optimizers {num_optimizers} with MS-AMP."
+            )
+        else:
             model, optimizer = msamp.initialize(model, optimizer, opt_level=self.fp8_recipe_handler.opt_level)
         for i in range(len(result)):
             if isinstance(result[i], torch.nn.Module):
