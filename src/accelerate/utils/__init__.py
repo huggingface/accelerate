@@ -65,6 +65,7 @@ from .imports import (
     is_megatron_lm_available,
     is_mlflow_available,
     is_mps_available,
+    is_msamp_available,
     is_npu_available,
     is_pandas_available,
     is_rich_available,

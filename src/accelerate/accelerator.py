@@ -79,6 +79,7 @@ from .utils import (
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
+    is_msamp_available,
     is_npu_available,
     is_torch_version,
     is_tpu_available,
@@ -1283,7 +1284,7 @@ class Accelerator:
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
-            autocast_context = get_mixed_precision_context_manager(True, self.autocast_handler)
+            autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
             new_forward = autocast_context(model_forward_func)
             if hasattr(model.forward, "__func__"):
                 model.forward = MethodType(new_forward, model)
@@ -1756,7 +1757,12 @@ class Accelerator:
         return tuple(result)
 
     def _prepare_msamp(self, *args):
-        import msamp
+        if not is_msamp_available():
+            raise ImportError(
+                "MS-AMP was not found on your system. Please ensure that MS-AMP is available or choose `'te'` as the backend for FP8 mixed precision training."
+            )
+        else:
+            import msamp
 
         model = None
         optimizer = None
