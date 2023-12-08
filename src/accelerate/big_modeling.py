@@ -429,9 +429,10 @@ def dispatch_model(
             return wrapper
 
         model.to = add_warning(model.to, model)
-        model.cuda = add_warning(model.cuda, model)
         if is_npu_available():
             model.npu = add_warning(model.npu, model)
+        else:
+            model.cuda = add_warning(model.cuda, model)
 
     else:
         device = list(device_map.values())[0]
