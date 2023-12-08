@@ -40,6 +40,7 @@ from .dataclasses import (
 from .environment import (
     are_libraries_initialized,
     check_cuda_p2p_ib_support,
+    check_fp8_capability,
     get_int_from_env,
     parse_choice_from_env,
     parse_flag_from_env,
@@ -73,6 +74,7 @@ from .imports import (
     is_tensorboard_available,
     is_timm_available,
     is_tpu_available,
+    is_transformer_engine_available,
     is_transformers_available,
     is_wandb_available,
     is_xpu_available,
