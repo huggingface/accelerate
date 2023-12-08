@@ -19,12 +19,9 @@ import torch
 from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed, logging
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils import FP8RecipeKwargs
-
-logging.set_verbosity_error()
 
 
 ########################################################################
@@ -116,11 +113,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
 def training_function(config, args):
     # Initialize accelerator
-    if args.mixed_precision == "fp8":
-        kwargs = [FP8RecipeKwargs(backend="te")]
-    else:
-        kwargs = None
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, kwargs_handlers=kwargs)
+    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])

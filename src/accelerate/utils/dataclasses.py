@@ -222,9 +222,9 @@ class FP8RecipeKwargs(KwargsHandler):
     opt_level: str = "O2"
     margin: int = 0
     interval: int = 1
-    fp8_format: str = "HYBRID"
-    amax_history_len: int = 1024
-    amax_compute_algo: str = "max"
+    fp8_format: str = "E4M3"
+    amax_history_len: int = 1
+    amax_compute_algo: str = "most_recent"
     override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
 
     def __post_init__(self):
