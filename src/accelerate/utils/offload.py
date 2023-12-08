@@ -169,13 +169,13 @@ class OffloadedWeightsLoader(Mapping):
             try:
                 with safe_open(weight_info["safetensors_file"], framework="pt", device=device) as f:
                     tensor = f.get_tensor(weight_info.get("weight_name", key))
-            except TypeError:  
+            except TypeError:
                 with safe_open(weight_info["safetensors_file"], framework="pt", device="cpu") as f:
                     tensor = f.get_tensor(weight_info.get("weight_name", key))
-                    
+
             if "dtype" in weight_info:
                 tensor = tensor.to(getattr(torch, weight_info["dtype"]))
-            
+
             if tensor.device != torch.device(device):
                 tensor = tensor.to(device)
             return tensor
