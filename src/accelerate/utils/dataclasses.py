@@ -176,11 +176,13 @@ class FP8RecipeKwargs(KwargsHandler):
     training with `transformer-engine` or `ms-amp`.
 
     <Tip>
+
         For more information on `transformer-engine` args, please refer to the API
         [documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html).
 
         For more information on the `ms-amp` args, please refer to the Optimization Level
         [documentation](https://azure.github.io/MS-AMP/docs/user-tutorial/optimization-level).
+
     </Tip>
 
     ```python
