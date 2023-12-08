@@ -1759,7 +1759,8 @@ class Accelerator:
     def _prepare_msamp(self, *args):
         if not is_msamp_available():
             raise ImportError(
-                "MS-AMP was not found on your system. Please ensure that MS-AMP is available or choose `'te'` as the backend for FP8 mixed precision training."
+                "MS-AMP was not found on your system. Please ensure that MS-AMP is available "
+                " or choose `'te'` as the backend for FP8 mixed precision training."
             )
         else:
             import msamp

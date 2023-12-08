@@ -240,7 +240,9 @@ class FP8RecipeKwargs(KwargsHandler):
                 raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
         elif self.backend == "MSAMP":
             if self.opt_level not in ["O1", "O2"]:
-                raise NotImplementedError("MS-AMP with Accelerate is only supported for `optimization_level` '01' or '02'")
+                raise NotImplementedError(
+                    "MS-AMP with Accelerate is only supported for `optimization_level` '01' or '02'"
+                )
 
 
 class EnumWithContains(enum.EnumMeta):
