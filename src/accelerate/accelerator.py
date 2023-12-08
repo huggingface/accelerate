@@ -450,8 +450,6 @@ class Accelerator:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
                 raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
-        elif self.state.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP":
-            self.native_amp = True
 
         # Start of internal step tracking
         self.step = 0
@@ -1200,7 +1198,7 @@ class Accelerator:
 
         # If we're dealing with device placement, this deals with that by...
         tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
-        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8"):
+        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
@@ -1223,7 +1221,7 @@ class Accelerator:
             )
             result = tuple(self._prepare_one(obj, device_placement=d) for obj, d in zip(result, device_placement))
 
-        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8"):
+        if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
             # 2. grabbing new model parameters
             new_named_params = self._get_named_parameters(*result)
             # 3. building a map from the first to the second
@@ -1282,7 +1280,7 @@ class Accelerator:
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
 
-        if self.native_amp or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "MSAMP"):
+        if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
             autocast_context = get_mixed_precision_context_manager(True, self.autocast_handler)

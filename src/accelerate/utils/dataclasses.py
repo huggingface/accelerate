@@ -171,13 +171,60 @@ class InitProcessGroupKwargs(KwargsHandler):
 
 @dataclass
 class FP8RecipeKwargs(KwargsHandler):
+    """
+    Use this object in your [`Accelerator`] to customize the initialization of the recipe for FP8 mixed precision
+    training with `transformers-engine`. Please refer to the documentation of this
+    [class](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html#transformer_engine.common.recipe.DelayedScaling)
+    for more information on each argument.
+
+    ```python
+    from accelerate import Accelerator
+    from accelerate.utils import FP8RecipeKwargs
+
+    kwargs = FP8RecipeKwargs(backend="te", fp8_format="HYBRID")
+    accelerator = Accelerator(mixed_precision="fp8", kwargs_handlers=[kwargs])
+    ```
+
+    To use with MS-AMP, use `backend="msamp"` and pass the `optimization_level`:
+
+    ```python
+    kwargs = FP8RecipeKwargs(backend="msamp", optimization_level="02")
+    ```
+
+    Args:
+        backend (`str`, *optional*, defaults to "msamp"):
+            Which FP8 engine to use. Must be one of `"msamp"` (MS-AMP) or `"te"` (TransformerEngine).
+        margin (`int`, *optional*, default to 0):
+            The margin to use for the gradient scaling.
+        interval (`int`, *optional*, default to 1):
+            The interval to use for how often the scaling factor is recomputed.
+        fp8_format (`str`, *optional*, default to "E4M3"):
+            The format to use for the FP8 recipe. Must be one of `E4M3` or `HYBRID`.
+        amax_history_len (`int`, *optional*, default to 1024):
+            The length of the history to use for the scaling factor computation
+        amax_compute_algo (`str`, *optional*, default to "most_recent"):
+            The algorithm to use for the scaling factor computation. Must be one of `max` or `most_recent`.
+        override_linear_precision (`tuple` of three `bool`, *optional*, default to `(False, False, False)`):
+            Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
+        optimization_level (`str`), one of `O1`, `O2`. (default is `O2`):
+            What level of 8-bit collective communication should be used with MS-AMP. In general:
+                * O1: Weight gradients and `all_reduce` communications are done in fp8, reducing GPU
+                    memory usage and communication bandwidth
+                * O2: First-order optimizer states are in 8-bit, and second order states are in FP16.
+                    Only available when using Adam or AdamW. This maintains accuracy and can potentially save the
+                    highest memory.
+                * 03: Specifically for DeepSpeed, implements capabilities so weights and master weights of models
+                    are stored in FP8. If `fp8` is selected and deepspeed is enabled, will be used by default. (Not
+                    available currently).
+    """
+
     backend: str = "msamp"
     opt_level: str = "O2"
     margin: int = 0
     interval: int = 1
-    fp8_format: str = "E4M3"
-    amax_history_len: int = 1
-    amax_compute_algo: str = "most_recent"
+    fp8_format: str = "HYBRID"
+    amax_history_len: int = 1024
+    amax_compute_algo: str = "max"
     override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
 
     def __post_init__(self):
