@@ -231,13 +231,16 @@ class FP8RecipeKwargs(KwargsHandler):
         self.backend = self.backend.upper()
         if self.backend not in ["MSAMP", "TE"]:
             raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
-        if self.opt_level not in ["O1", "O2"]:
-            raise NotImplementedError("MS-AMP with Accelerate is only supported for `optimization_level` '01' or '02'")
-        self.fp8_format = self.fp8_format.upper()
-        if self.fp8_format not in ["E4M3", "HYBRID"]:
-            raise ValueError("`fp8_format` must be 'E4M3' or 'HYBRID'.")
-        if self.amax_compute_algo not in ["max", "most_recent"]:
-            raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
+        # Check TE args
+        if self.backend == "TE":
+            self.fp8_format = self.fp8_format.upper()
+            if self.fp8_format not in ["E4M3", "HYBRID"]:
+                raise ValueError("`fp8_format` must be 'E4M3' or 'HYBRID'.")
+            if self.amax_compute_algo not in ["max", "most_recent"]:
+                raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
+        elif self.backend == "MSAMP":
+            if self.opt_level not in ["O1", "O2"]:
+                raise NotImplementedError("MS-AMP with Accelerate is only supported for `optimization_level` '01' or '02'")
 
 
 class EnumWithContains(enum.EnumMeta):
