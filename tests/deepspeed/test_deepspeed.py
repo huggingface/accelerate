@@ -337,7 +337,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 with self.assertRaises(ValueError) as cm:
                     model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
                 self.assertTrue(
-                    "When using DeepSpeed `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
+                    "When using DeepSpeed, `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
+                    "with `batch_size` attribute returning an integer value "
                     "or alternatively set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                     in str(cm.exception)

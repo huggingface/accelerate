@@ -1415,34 +1415,35 @@ class Accelerator:
         deepspeed_plugin = self.state.deepspeed_plugin
 
         is_dataloader_present = any(isinstance(obj, torch.utils.data.DataLoader) for obj in args)
-        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto" or is_dataloader_present:
-            result = [
-                self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
-                for obj in args
-            ]
+        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto":
+            if is_dataloader_present:
+                result = [
+                    self._prepare_one(obj, first_pass=True) if isinstance(obj, torch.utils.data.DataLoader) else obj
+                    for obj in args
+                ]
 
-            batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
-            if self.split_batches:
-                batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
+                batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
+                if any(bs is None for bs in batch_sizes):
+                    raise ValueError(
+                        "At least one of the dataloaders passed to `accelerate.prepare()` has `None` as batch size. "
+                        "Please set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
+                        "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
+                    )
+                if self.split_batches:
+                    batch_sizes = [batch_size // self.num_processes for batch_size in batch_sizes]
 
-            if any(bs is None for bs in batch_sizes):
+                batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
+                if len(batch_sizes) > 1:
+                    logger.info(
+                        "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
+                        f"{deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
+                    )
+            else:
                 raise ValueError(
-                    "At least one of the dataloaders passed to `accelerate.prepare()` has `None` as batch size. "
-                    "Please set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
-                    "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
-                )
-            if len(batch_sizes) == 0:
-                raise ValueError(
-                    "When using DeepSpeed `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
+                    "When using DeepSpeed, `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
+                    "with `batch_size` attribute returning an integer value "
                     "or alternatively set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
-                )
-
-            batch_size_per_device = min(batch_sizes) if deepspeed_plugin.is_train_batch_min else max(batch_sizes)
-            if len(batch_sizes) > 1:
-                logger.info(
-                    "Since you passed both train and evaluation dataloader, `is_train_batch_min` (here "
-                    f"{deepspeed_plugin.is_train_batch_min} will decide the `train_batch_size` ({batch_size_per_device})."
                 )
         else:
             batch_size_per_device = deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"]
