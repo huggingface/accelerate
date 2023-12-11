@@ -48,6 +48,8 @@ These are basic dataclasses used throughout 🤗 Accelerate and they can be pass
 
 [[autodoc]] utils.PrecisionType
 
+[[autodoc]] utils.FP8RecipeKwargs
+
 [[autodoc]] utils.ProjectConfiguration
 
 ## Environmental Variables
