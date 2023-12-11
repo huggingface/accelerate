@@ -24,6 +24,7 @@ def test_can_initialize():
 def test_problematic_imports():
     with raises(RuntimeError, match="Please keep these imports"):
         import bitsandbytes as bnb  # noqa: F401
+
         notebook_launcher(basic_function, (), num_processes=NUM_PROCESSES)
 
 
