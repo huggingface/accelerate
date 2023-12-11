@@ -151,7 +151,7 @@ def notebook_launcher(
                 )
             # Check for specific libraries known to initialize CUDA that users constantly use
             problematic_imports = are_libraries_initialized("bitsandbytes")
-            if len(problematic_imports) > 1:
+            if len(problematic_imports) > 0:
                 err = (
                     "Could not start distributed process. Libraries known to initialize CUDA upon import have been "
                     "imported already. Please keep these imports inside your training function to try and help with this:"

@@ -59,7 +59,7 @@ def are_libraries_initialized(*library_names: str) -> Dict[str, bool]:
     """
     Checks if any of `library_names` are imported in the environment. Will return results as a `key:bool` pair.
     """
-    return [lib_name for lib_name in library_names if lib_name in sys.modules]
+    return [lib_name for lib_name in library_names if lib_name in sys.modules.keys()]
 
 
 def get_gpu_info():
