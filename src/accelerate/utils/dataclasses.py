@@ -26,7 +26,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, get_args
 
 import torch
 
@@ -169,6 +169,13 @@ class InitProcessGroupKwargs(KwargsHandler):
     timeout: timedelta = timedelta(seconds=1800)
 
 
+# Literals
+Backend = Literal["msamp", "te"]
+OptLevel = Literal["O1", "O2"]
+FP8Format = Literal["E4M3", "HYBRID"]
+AmaxComputeAlgorithm = Literal["max", "most_recent"]
+
+
 @dataclass
 class FP8RecipeKwargs(KwargsHandler):
     """
@@ -226,31 +233,29 @@ class FP8RecipeKwargs(KwargsHandler):
                     available currently).
     """
 
-    backend: Literal["msamp", "te"] = "msamp"
-    opt_level: Literal["O1", "O2"] = "O2"
+    backend: Backend = "msamp"
+    opt_level: OptLevel = "O2"
     margin: int = 0
     interval: int = 1
-    fp8_format: Literal["E4M3", "HYBRID"] = "E4M3"
+    fp8_format: FP8Format = "E4M3"
     amax_history_len: int = 1
-    amax_compute_algo: Literal["max", "most_recent"] = "most_recent"
+    amax_compute_algo: AmaxComputeAlgorithm = "most_recent"
     override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
 
     def __post_init__(self):
         self.backend = self.backend.upper()
-        if self.backend not in ["MSAMP", "TE"]:
+        if self.backend not in get_args(Backend):
             raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
         # Check TE args
         if self.backend == "TE":
             self.fp8_format = self.fp8_format.upper()
-            if self.fp8_format not in ["E4M3", "HYBRID"]:
-                raise ValueError("`fp8_format` must be 'E4M3' or 'HYBRID'.")
-            if self.amax_compute_algo not in ["max", "most_recent"]:
-                raise ValueError("`amax_compute_algo` must be 'max' or 'most_recent'")
+            if self.fp8_format not in get_args(FP8Format):
+                raise ValueError(f"`fp8_format` must be one of {' or '.join(get_args(FP8Format))}.")
+            if self.amax_compute_algo not in get_args(AmaxComputeAlgorithm):
+                raise ValueError(f"`amax_compute_algo` must be one of {' or '.join(get_args(AmaxComputeAlgorithm))}")
         elif self.backend == "MSAMP":
-            if self.opt_level not in ["O1", "O2"]:
-                raise NotImplementedError(
-                    "MS-AMP with Accelerate is only supported for `optimization_level` '01' or '02'"
-                )
+            if self.opt_level not in get_args(OptLevel):
+                raise ValueError(f"`optimization_level` must be one of {' or '.join(get_args(OptLevel))}")
 
 
 class EnumWithContains(enum.EnumMeta):
