@@ -1767,8 +1767,10 @@ class Accelerator:
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
                 num_optimizers += 1
-        if optimizer is None and model is None:
-            raise ValueError("You must pass a model and an optimizer to `accelerate.prepare()` when using MS-AMP.")
+        if optimizer is None or model is None:
+            raise ValueError(
+                "You must pass a model and an optimizer together to `accelerate.prepare()` when using MS-AMP."
+            )
         elif num_models > 1 or num_optimizers > 1:
             raise ValueError(
                 f"You can't use multiple models ({num_models}) or optimizers {num_optimizers} with MS-AMP."
