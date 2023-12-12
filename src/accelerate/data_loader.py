@@ -538,6 +538,10 @@ if is_tpu_available(check_device=False):
         @property
         def total_dataset_length(self):
             return self._loader.total_dataset_length
+        
+        @property
+        def batch_sampler(self):
+            return self._loader.batch_sampler
 
 
 class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
