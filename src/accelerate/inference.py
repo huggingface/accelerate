@@ -13,6 +13,7 @@ from .utils import (
     calculate_maximum_sizes,
     convert_bytes,
     infer_auto_device_map,
+    is_pippy_available,
 )
 
 
@@ -31,8 +32,8 @@ class InferenceHandler:
         self.device_map = device_map
         self.state = PartialState()
         self.parallel_mode = parallel_mode
-        # if parallel_mode == "pipeline_parallel" and not is_pippy_available():
-        #     raise RuntimeError("PiPPy is not installed, but is required for pipeline parallel inference.")
+        if parallel_mode == "pipeline_parallel" and not is_pippy_available():
+            raise RuntimeError("PiPPy is not installed, but is required for pipeline parallel inference.")
 
         # Attrs for native pipeline parallelism
         self.pipeline = None

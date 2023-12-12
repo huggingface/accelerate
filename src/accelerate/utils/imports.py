@@ -111,7 +111,7 @@ def is_deepspeed_available():
 
 
 def is_pippy_available():
-    return _is_package_available("pippy")
+    return _is_package_available("torchpippy")
 
 
 def is_bf16_available(ignore_tpu=False):
