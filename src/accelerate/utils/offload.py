@@ -165,13 +165,21 @@ class OffloadedWeightsLoader(Mapping):
         weight_info = self.index[key]
         if weight_info.get("safetensors_file") is not None:
             device = "cpu" if self.device is None else self.device
-            with safe_open(weight_info["safetensors_file"], framework="pt", device=device) as f:
-                tensor = f.get_tensor(weight_info.get("weight_name", key))
+            tensor = None
+            try:
+                with safe_open(weight_info["safetensors_file"], framework="pt", device=device) as f:
+                    tensor = f.get_tensor(weight_info.get("weight_name", key))
+            except TypeError:
+                # if failed to get_tensor on the device, such as bf16 on mps, try to load it on CPU first
+                with safe_open(weight_info["safetensors_file"], framework="pt", device="cpu") as f:
+                    tensor = f.get_tensor(weight_info.get("weight_name", key))
 
             if "dtype" in weight_info:
-                return tensor.to(getattr(torch, weight_info["dtype"]))
-            else:
-                return tensor
+                tensor = tensor.to(getattr(torch, weight_info["dtype"]))
+
+            if tensor.device != torch.device(device):
+                tensor = tensor.to(device)
+            return tensor
 
         weight_file = os.path.join(self.save_folder, f"{key}.dat")
         return load_offloaded_weight(weight_file, weight_info)
