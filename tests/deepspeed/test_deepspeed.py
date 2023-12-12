@@ -36,9 +36,9 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
-    require_non_cpu,
     require_deepspeed,
     require_multi_device,
+    require_non_cpu,
     slow,
 )
 from accelerate.test_utils.training import RegressionDataset

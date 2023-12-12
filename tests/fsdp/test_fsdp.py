@@ -28,9 +28,9 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
-    require_non_cpu,
     require_fsdp,
     require_multi_device,
+    require_non_cpu,
     slow,
 )
 from accelerate.utils.constants import (
