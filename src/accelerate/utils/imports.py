@@ -110,6 +110,10 @@ def is_deepspeed_available():
     return _is_package_available("deepspeed")
 
 
+def is_pippy_available():
+    return _is_package_available("pippy")
+
+
 def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
     if is_tpu_available():
