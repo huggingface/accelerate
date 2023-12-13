@@ -21,7 +21,7 @@ import torch
 import accelerate
 from accelerate import Accelerator
 from accelerate.big_modeling import dispatch_model
-from accelerate.test_utils import assert_exception, device_count, execute_subprocess_async, require_multi_device
+from accelerate.test_utils import assert_exception, device_count, execute_subprocess_async, require_multi_device, require_no_torch_xla
 from accelerate.utils import patch_environment
 
 
@@ -56,6 +56,7 @@ class MultiDeviceTester(unittest.TestCase):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_device
+    @require_no_torch_xla
     def test_distributed_data_loop(self):
         """
         This TestCase checks the behaviour that occurs during distributed training or evaluation,

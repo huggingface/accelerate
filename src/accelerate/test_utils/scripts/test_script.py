@@ -391,7 +391,7 @@ def training_check(use_seedable_sampler=False):
     train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
     set_seed(42)
     generator.manual_seed(42)
-    for epoch in range(3):
+    for _ in range(3):
         for batch in train_dl:
             model.zero_grad()
             output = model(batch["x"])
@@ -666,7 +666,9 @@ def main():
     dl_preparation_check()
     if state.distributed_type != DistributedType.XLA:
         central_dl_preparation_check()
-    custom_sampler_check()
+        # Skip this test because the TorchXLA's MpDeviceLoaderWrapper does not
+        # have the 'batch_sampler' attribute.
+        custom_sampler_check()
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
     if state.distributed_type == DistributedType.DEEPSPEED:

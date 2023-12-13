@@ -167,6 +167,12 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
         safe_serialization (`bool`, *optional*, defaults to `False`):
             Whether to save `obj` using `safetensors` or the traditional PyTorch way (that uses `pickle`).
     """
+    # When TorchXLA is enabled, it's necessary to transfer all data to the CPU before saving.
+    # Another issue arises with `id_tensor_storage`, which treats all XLA tensors as identical.
+    # If tensors remain on XLA, calling `clean_state_dict_for_safetensors` will result in only
+    # one XLA tensor remaining.
+    if PartialState().distributed_type == DistributedType.XLA:
+        obj = xm._maybe_convert_to_cpu(obj)
     # Check if it's a model and remove duplicates
     if safe_serialization:
         save_func = partial(safe_save_file, metadata={"format": "pt"})
@@ -175,9 +181,7 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
     else:
         save_func = torch.save
 
-    if PartialState().distributed_type == DistributedType.XLA:
-        xm.save(obj, f)
-    elif PartialState().is_main_process and not save_on_each_node:
+    if PartialState().is_main_process and not save_on_each_node:
         save_func(obj, f)
     elif PartialState().is_local_main_process and save_on_each_node:
         save_func(obj, f)

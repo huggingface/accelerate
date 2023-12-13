@@ -2100,15 +2100,16 @@ class Accelerator:
         elif self.distributed_type == DistributedType.XLA:
             # Reduce gradients first for XLA
             for acc_opt in self._optimizers:
-                opt = acc_opt
-                while isinstance(opt, AcceleratedOptimizer):
-                    opt = opt.optimizer
-                gradients = xm._fetch_gradients(opt)
-                # Use xm.all_reduce to perform an in-place all-reduce. Recusrsive all-reduce each tensor
-                # one by one in self.reduce is non-inplace.
-                xm.all_reduce("sum", gradients, scale=1.0 / self.num_processes)
-                # Set sync_gradients to True to avoid all-reduce twice in the AccelerateOptimizer step.
-                acc_opt.gradient_state._set_sync_gradients(True)
+                if not acc_opt.gradient_state.is_xla_gradients_synced:
+                    opt = acc_opt
+                    while isinstance(opt, AcceleratedOptimizer):
+                        opt = opt.optimizer
+                    gradients = xm._fetch_gradients(opt)
+                    # Use xm.all_reduce to perform an in-place all-reduce. Recusrsive all-reduce each tensor
+                    # one by one in self.reduce is non-inplace.
+                    xm.all_reduce("sum", gradients, scale=1.0 / self.num_processes)
+                    # Set is_xla_gradients_synced to True to avoid all-reduce twice in the AcceleratedOptimizer step.
+                    acc_opt.gradient_state.is_xla_gradients_synced = True
         self.unscale_gradients()
         return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 

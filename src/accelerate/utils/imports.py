@@ -116,7 +116,7 @@ def is_cuda_available():
 def is_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     warnings.warn(
-        "The `is_tpu_available` is deprecated and will be removed in v0.27.0. "
+        "`is_tpu_available` is deprecated and will be removed in v0.27.0. "
         "Please use the `is_torch_xla_available` instead.",
         FutureWarning,
     )

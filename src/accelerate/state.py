@@ -1015,6 +1015,10 @@ class GradientState:
             accumulation
         - **sync_with_dataloader** (`bool`) -- Whether the gradients should be synced at the end of the dataloader
             iteration and the number of total steps reset
+        - **is_xla_gradients_synced** (`bool`) -- Whether the XLA gradients have been synchronized. It is initialized as
+            False. Once gradients have been reduced before the optimizer step, this flag is set to True.
+            Subsequently, after each step, the flag is reset to False. FSDP will always synchronize the gradients,
+            hence is_xla_gradients_synced is always true.
     """
 
     _shared_state = SharedDict()
@@ -1028,6 +1032,7 @@ class GradientState:
             self.plugin_kwargs = (
                 gradient_accumulation_plugin.to_kwargs() if gradient_accumulation_plugin is not None else {}
             )
+            self._is_xla_gradients_synced = False
 
         # Plugin args are different and can be updated
         if gradient_accumulation_plugin is not None and self.plugin_kwargs != gradient_accumulation_plugin.to_kwargs():
@@ -1074,6 +1079,18 @@ class GradientState:
             f"Extra samples added: {self.remainder}\n"
             f"Gradient accumulation plugin: {self.plugin_kwargs}\n"
         )
+
+    @property
+    def is_xla_gradients_synced(self):
+        "Returns the value of is_xla_gradients_synced. FSDP will always synchronize the gradients, hence is_xla_gradients_synced is always true."
+        if parse_flag_from_env("ACCELERATE_USE_FSDP", default=False):
+            return True
+        return self._is_xla_gradients_synced
+
+    @is_xla_gradients_synced.setter
+    def is_xla_gradients_synced(self, is_synced):
+        "Set the _is_xla_gradients_synced attribute."
+        self._is_xla_gradients_synced = is_synced
 
     def _set_sync_gradients(self, sync_gradients):
         "Private function that sets whether gradients should be synchronized. Users should not have to call this."

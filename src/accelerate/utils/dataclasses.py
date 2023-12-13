@@ -282,13 +282,23 @@ class BaseEnum(enum.Enum, metaclass=EnumWithContains):
 
 
 class DeprecatedFieldDescriptor:
+    """
+    Descriptor for deprecated fields in an enum class.
+
+    Args:
+        field_name (`str`):
+            The name of the deprecated field.
+        replaced_with (`str`):
+            The name of the field that replaces the deprecated one.
+    """
+
     def __init__(self, field_name, replaced_with):
         self.field_name = field_name
         self.replaced_with = replaced_with
 
     def __get__(self, instance, owner):
         warnings.warn(
-            f"The `{self.field_name}` of `{owner}` is deprecated and will be removed in v0.27.0. "
+            f"The `{self.field_name}` of `{owner}` is deprecated and will be removed in v1.0.0. "
             f"Please use the `{self.replaced_with}` instead.",
             FutureWarning,
         )

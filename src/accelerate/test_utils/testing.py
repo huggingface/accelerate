@@ -116,9 +116,10 @@ def require_non_cpu(test_case):
 
 def require_cuda(test_case):
     """
-    Decorator marking a test that requires CUDA. These tests are skipped when there are no GPU available.
+    Decorator marking a test that requires CUDA. These tests are skipped when there are no GPU available or when
+    TorchXLA is available.
     """
-    return unittest.skipUnless(is_cuda_available(), "test requires a GPU")(test_case)
+    return unittest.skipUnless(is_cuda_available() and not is_torch_xla_available(), "test requires a GPU")(test_case)
 
 
 def require_xpu(test_case):
@@ -170,7 +171,15 @@ def require_tpu(test_case):
     """
     Decorator marking a test that requires TPUs. These tests are skipped when there are no TPUs available.
     """
-    return unittest.skipUnless(is_torch_xla_available(), "test requires TPU")(test_case)
+    return unittest.skipUnless(is_torch_xla_available(check_is_tpu=True), "test requires TPU")(test_case)
+
+
+def require_no_torch_xla(test_case):
+    """
+    Decorator marking a test as requiring an environment without TorchXLA. These tests are skipped when TorchXLA is
+    available.
+    """
+    return unittest.skipUnless(not is_torch_xla_available(), "test requires an env without TorchXLA")(test_case)
 
 
 def require_single_device(test_case):

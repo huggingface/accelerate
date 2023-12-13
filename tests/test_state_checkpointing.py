@@ -30,7 +30,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
 from accelerate.test_utils import device_count, execute_subprocess_async, require_non_cpu
-from accelerate.utils import ProjectConfiguration, set_seed
+from accelerate.utils import DistributedType, ProjectConfiguration, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,15 @@ def parameterized_custom_name_func(func, param_num, param):
 
 @parameterized_class(("use_safetensors",), [[True], [False]], class_name_func=parameterized_custom_name_func)
 class CheckpointTest(unittest.TestCase):
+    def check_adam_state(self, state1, state2, distributed_type):
+        # For DistributedType.XLA, the `accelerator.save_state` function calls `xm._maybe_convert_to_cpu` before saving.
+        # As a result, all tuple values are converted to lists. Therefore, we need to convert them back here.
+        # Remove this code once Torch XLA fixes this issue.
+        if distributed_type == DistributedType.XLA:
+            state1["param_groups"][0]["betas"] = tuple(state1["param_groups"][0]["betas"])
+            state2["param_groups"][0]["betas"] = tuple(state2["param_groups"][0]["betas"])
+        self.assertEqual(state1, state2)
+
     def test_with_save_limit(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
@@ -143,7 +152,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state2 = optimizer.state_dict()
             self.assertEqual(a, a2)
             self.assertEqual(b, b2)
-            self.assertEqual(opt_state, opt_state2)
+            self.check_adam_state(opt_state, opt_state2, accelerator.distributed_type)
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
@@ -157,7 +166,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state3 = optimizer.state_dict()
             self.assertEqual(a1, a3)
             self.assertEqual(b1, b3)
-            self.assertEqual(opt_state1, opt_state3)
+            self.check_adam_state(opt_state1, opt_state3, accelerator.distributed_type)
             self.assertEqual(ground_truth_rands, test_rands)
 
     def test_can_resume_training(self):
@@ -196,7 +205,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state2 = optimizer.state_dict()
             self.assertEqual(a, a2)
             self.assertEqual(b, b2)
-            self.assertEqual(opt_state, opt_state2)
+            self.check_adam_state(opt_state, opt_state2, accelerator.distributed_type)
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
@@ -209,7 +218,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state3 = optimizer.state_dict()
             self.assertEqual(a1, a3)
             self.assertEqual(b1, b3)
-            self.assertEqual(opt_state1, opt_state3)
+            self.check_adam_state(opt_state1, opt_state3, accelerator.distributed_type)
             self.assertEqual(ground_truth_rands, test_rands)
 
     def test_can_resume_training_checkpoints_relative_path(self):
@@ -261,7 +270,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state2 = optimizer.state_dict()
             self.assertEqual(a, a2)
             self.assertEqual(b, b2)
-            self.assertEqual(opt_state, opt_state2)
+            self.check_adam_state(opt_state, opt_state2, accelerator.distributed_type)
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
@@ -274,7 +283,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state3 = optimizer.state_dict()
             self.assertEqual(a1, a3)
             self.assertEqual(b1, b3)
-            self.assertEqual(opt_state1, opt_state3)
+            self.check_adam_state(opt_state1, opt_state3, accelerator.distributed_type)
             self.assertEqual(ground_truth_rands, test_rands)
 
     def test_invalid_registration(self):

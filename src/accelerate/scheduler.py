@@ -16,7 +16,7 @@
 
 import warnings
 
-from .state import AcceleratorState, GradientState
+from .state import AcceleratorState, DistributedType, GradientState
 
 
 warnings.filterwarnings("ignore", category=UserWarning, module="torch.optim.lr_scheduler")

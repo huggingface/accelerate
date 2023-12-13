@@ -12,7 +12,7 @@ from accelerate import DistributedType, infer_auto_device_map, init_empty_weight
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_device, require_non_cpu, slow, torch_device
-from accelerate.test_utils.testing import AccelerateTestCase
+from accelerate.test_utils.testing import AccelerateTestCase, require_no_torch_xla
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import load_checkpoint_in_model
 
@@ -63,6 +63,7 @@ class AcceleratorTester(AccelerateTestCase):
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
+
     def test_mutable_states(self):
         accelerator = Accelerator()
         state = GradientState()
@@ -104,6 +105,7 @@ class AcceleratorTester(AccelerateTestCase):
         self.assertTrue(len(accelerator._schedulers) == 0)
         self.assertTrue(len(accelerator._dataloaders) == 0)
 
+    @require_no_torch_xla
     def test_env_var_device(self):
         """Tests that setting the torch device with ACCELERATE_TORCH_DEVICE overrides default device."""
         PartialState._reset_state()
@@ -283,6 +285,7 @@ class AcceleratorTester(AccelerateTestCase):
             "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`",
         )
 
+    @require_no_torch_xla
     @slow
     @require_bnb
     def test_accelerator_bnb(self):
@@ -299,6 +302,7 @@ class AcceleratorTester(AccelerateTestCase):
         # This should work
         model = accelerator.prepare(model)
 
+    @require_no_torch_xla
     @slow
     @require_bnb
     def test_accelerator_bnb_cpu_error(self):
@@ -324,6 +328,7 @@ class AcceleratorTester(AccelerateTestCase):
         with self.assertRaises(ValueError):
             model = accelerator.prepare(model)
 
+    @require_no_torch_xla
     @slow
     @require_bnb
     @require_multi_device
@@ -359,6 +364,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         PartialState._reset_state()
 
+    @require_no_torch_xla
     @slow
     @require_bnb
     @require_multi_device

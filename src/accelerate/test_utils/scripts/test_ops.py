@@ -40,6 +40,9 @@ def test_gather(state):
 
 
 def test_gather_object(state):
+    # Gather objects in TorchXLA is not supported.
+    if state.distributed_type == DistributedType.XLA:
+        return
     obj = [state.process_index]
     gathered_obj = gather_object(obj)
     assert len(gathered_obj) == state.num_processes, f"{gathered_obj}, {len(gathered_obj)} != {state.num_processes}"
@@ -47,6 +50,9 @@ def test_gather_object(state):
 
 
 def test_gather_non_contigous(state):
+    # Skip this test because the 'is_contiguous' function of XLA tensor always returns True.
+    if state.distributed_type == DistributedType.XLA:
+        return
     # Create a non-contiguous tensor
     tensor = torch.arange(12).view(4, 3).t().to(state.device)
     assert not tensor.is_contiguous()
@@ -95,8 +101,8 @@ def test_reduce_mean(state):
 
 
 def test_op_checker(state):
-    # Must be in a distributed state
-    if state.distributed_type == DistributedType.NO:
+    # Must be in a distributed state, and gathering is currently not supported in TorchXLA.
+    if state.distributed_type in [DistributedType.NO, DistributedType.XLA]:
         return
     state.debug = True
     # `pad_across_processes`
