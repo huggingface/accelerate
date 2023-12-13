@@ -32,7 +32,14 @@ from accelerate.big_modeling import (
     load_checkpoint_and_dispatch,
 )
 from accelerate.hooks import remove_hook_from_submodules
-from accelerate.test_utils import require_bnb, require_cuda, require_mps, require_multi_gpu, require_no_torch_xla, slow
+from accelerate.test_utils import (
+    require_bnb,
+    require_cuda,
+    require_mps,
+    require_multi_gpu,
+    require_non_torch_xla,
+    slow,
+)
 from accelerate.utils import is_torch_version, offload_state_dict
 
 
@@ -951,7 +958,7 @@ class BigModelingTester(unittest.TestCase):
         hook2.offload()
         self.assertEqual(model2.weight.device, torch.device("cpu"))
 
-    @require_no_torch_xla
+    @require_non_torch_xla
     @slow
     @require_bnb
     @require_multi_gpu
@@ -983,7 +990,7 @@ class BigModelingTester(unittest.TestCase):
         self.assertTrue(model.h[-1].self_attention.query_key_value.weight.dtype == torch.int8)
         self.assertTrue(model.h[-1].self_attention.query_key_value.weight.device.index == 1)
 
-    @require_no_torch_xla
+    @require_non_torch_xla
     @slow
     @require_bnb
     def test_dispatch_model_int8_simple(self):
@@ -1046,7 +1053,7 @@ class BigModelingTester(unittest.TestCase):
         self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
         self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
 
-    @require_no_torch_xla
+    @require_non_torch_xla
     @slow
     @require_bnb
     def test_dipatch_model_fp4_simple(self):

@@ -24,7 +24,7 @@ import torch
 from torch import nn
 
 from accelerate.state import PartialState
-from accelerate.test_utils.testing import require_cuda, require_no_torch_xla, require_torch_min_version
+from accelerate.test_utils.testing import require_cuda, require_non_torch_xla, require_torch_min_version
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
     CannotPadNestedTensorWarning,
@@ -211,7 +211,7 @@ class UtilsTester(unittest.TestCase):
             self.assertIn("5.4.0", ctx.records[0].msg)
             self.assertIn("5.5.0", ctx.records[0].msg)
 
-    @require_no_torch_xla
+    @require_non_torch_xla
     def test_save_safetensor_shared_memory(self):
         class Model(nn.Module):
             def __init__(self):

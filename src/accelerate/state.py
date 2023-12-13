@@ -1015,10 +1015,10 @@ class GradientState:
             accumulation
         - **sync_with_dataloader** (`bool`) -- Whether the gradients should be synced at the end of the dataloader
             iteration and the number of total steps reset
-        - **is_xla_gradients_synced** (`bool`) -- Whether the XLA gradients have been synchronized. It is initialized as
-            False. Once gradients have been reduced before the optimizer step, this flag is set to True.
-            Subsequently, after each step, the flag is reset to False. FSDP will always synchronize the gradients,
-            hence is_xla_gradients_synced is always true.
+        - **is_xla_gradients_synced** (`bool`) -- Whether the XLA gradients have been synchronized. It is initialized
+          as false. Once gradients have been reduced before the optimizer step, this flag is set to true. Subsequently,
+            after each step, the flag is reset to false. FSDP will always synchronize the gradients, hence
+            is_xla_gradients_synced is always true.
     """
 
     _shared_state = SharedDict()

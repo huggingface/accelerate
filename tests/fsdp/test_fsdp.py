@@ -30,7 +30,7 @@ from accelerate.test_utils.testing import (
     execute_subprocess_async,
     require_fsdp,
     require_multi_device,
-    require_no_torch_xla
+    require_non_torch_xla,
     require_non_cpu,
     slow,
 )
@@ -179,7 +179,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
 
 # Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
-@require_no_torch_xla
+@require_non_torch_xla
 @require_fsdp
 @require_multi_device
 @slow

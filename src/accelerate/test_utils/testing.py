@@ -174,7 +174,7 @@ def require_tpu(test_case):
     return unittest.skipUnless(is_torch_xla_available(check_is_tpu=True), "test requires TPU")(test_case)
 
 
-def require_no_torch_xla(test_case):
+def require_non_torch_xla(test_case):
     """
     Decorator marking a test as requiring an environment without TorchXLA. These tests are skipped when TorchXLA is
     available.

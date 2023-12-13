@@ -122,7 +122,10 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                 self.optimizer.zero_grad()
 
     def step(self, closure=None):
-        if not self.gradient_state.is_xla_gradients_synced and self.accelerator_state.distributed_type == DistributedType.XLA:
+        if (
+            not self.gradient_state.is_xla_gradients_synced
+            and self.accelerator_state.distributed_type == DistributedType.XLA
+        ):
             gradients = xm._fetch_gradients(self.optimizer)
             xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
             self.gradient_state.is_xla_gradients_synced = True
