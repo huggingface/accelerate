@@ -252,8 +252,6 @@ def main():
     # TorchXLA does not support batch dispatching. 'put_on_device' is always False for
     # TorchXLA, which can cause a value error in 'prepare_data_loader' function.
     dispatch_batches_options = [False] if accelerator.state.distributed_type == DistributedType.XLA else [True, False]
-    # Temporarily close this test for TorchXLA due to the 'Cannot set version_counter for
-    # inference tensor' error in inference mode. Reopen it after TorchXLA fixes this bug.
     # These are a bit slower so they should only be ran on the GPU or TPU
     if accelerator.device.type != "cpu":
         if accelerator.is_local_main_process:

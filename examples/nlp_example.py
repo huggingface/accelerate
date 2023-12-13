@@ -78,7 +78,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
     tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
 
     def collate_fn(examples):
-        # On TPU it's best to pad everything to the same length or training will be very slow.
+        # For Torchxla, it's best to pad everything to the same length or training will be very slow.
         max_length = 128 if accelerator.distributed_type == DistributedType.XLA else None
         # When using mixed precision we want round multiples of 8/16
         if accelerator.mixed_precision == "fp8":
