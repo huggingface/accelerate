@@ -28,7 +28,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from accelerate import Accelerator, DistributedType
 from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.test_utils import RegressionDataset, RegressionModel, torch_device
-from accelerate.utils import set_seed
+from accelerate.utils import is_torch_xla_available, set_seed
 
 
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
@@ -252,8 +252,11 @@ def main():
     # TorchXLA does not support batch dispatching. 'put_on_device' is always False for
     # TorchXLA, which can cause a value error in 'prepare_data_loader' function.
     dispatch_batches_options = [False] if accelerator.state.distributed_type == DistributedType.XLA else [True, False]
+
+    # Temporarily close this test for TorchXLA due to the 'Cannot set version_counter for
+    # inference tensor' error in inference mode. Reopen it after TorchXLA fixes this bug.
     # These are a bit slower so they should only be ran on the GPU or TPU
-    if accelerator.device.type != "cpu":
+    if accelerator.device.type != "cpu" and not is_torch_xla_available():
         if accelerator.is_local_main_process:
             print("**Testing gather_for_metrics**")
         for split_batches in [True, False]:
