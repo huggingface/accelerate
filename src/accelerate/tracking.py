@@ -495,8 +495,9 @@ class AimTracker(GeneralTracker):
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
         self.run_name = run_name
 
-        from aim import Run
+        from aim import Image, Run
 
+        self.aim_image_callable = Image
         self.writer = Run(repo=logging_dir, **kwargs)
         self.writer.name = self.run_name
         logger.debug(f"Initialized Aim project {self.run_name}")
@@ -535,6 +536,31 @@ class AimTracker(GeneralTracker):
         # Note: replace this with the dictionary support when merged
         for key, value in values.items():
             self.writer.track(value, name=key, step=step, **kwargs)
+
+    @on_main_process
+    def log_images(
+        self, values: dict, step: Optional[int] = None, kwargs: Dict[str, dict] = {"aim_image": {}, "track": {}}
+    ):
+        """
+        Logs `images` to the current run.
+
+        Args:
+            values (`Dict[str, Union[np.ndarray, PIL.Image, Tuple[np.ndarray, str], Tuple[PIL.Image, str]]]`):
+                Values to be logged as key-value pairs. The values need to have type `np.ndarray` or PIL.Image. If a
+                tuple is provided, the first element should be the image and the second element should be the caption.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs (`Dict[str, dict]`):
+                Additional key word arguments passed along to the `Run.Image` and `Run.track` method specified by the
+                keys `aim_image` and `track`, respectively.
+        """
+        for key, value in values.items():
+            if isinstance(value, tuple):
+                img, caption = value
+            else:
+                img, caption = value, ""
+            aim_image = self.aim_image_callable(img, caption=caption, **kwargs["aim_image"])
+            self.writer.track(aim_image, name=key, step=step, **kwargs["track"])
 
     @on_main_process
     def finish(self):
