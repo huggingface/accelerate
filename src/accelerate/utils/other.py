@@ -321,11 +321,11 @@ def check_os_kernel():
         )
         logger.warning(msg, main_process_only=True)
 
+
 def check_device_same(first_device, second_device):
     """
-    Utility method to check if two `torch` devices are similar.
-    When dealing with CUDA devices, torch throws `False` for `torch.device("cuda") == torch.device("cuda:0")`
-    whereas they should be the same
+    Utility method to check if two `torch` devices are similar. When dealing with CUDA devices, torch throws `False`
+    for `torch.device("cuda") == torch.device("cuda:0")` whereas they should be the same
 
     Args:
         first_device (`torch.device`):
@@ -335,14 +335,14 @@ def check_device_same(first_device, second_device):
     """
     if first_device.type != second_device.type:
         return False
-    
+
     if first_device.type == "cuda" and first_device.index is None:
-        # In case the first_device is a cuda device and have 
+        # In case the first_device is a cuda device and have
         # the index attribute set to `None`, default it to `0`
         first_device = torch.device("cuda", index=0)
 
     if second_device.type == "cuda" and second_device.index is None:
-        # In case the second_device is a cuda device and have 
+        # In case the second_device is a cuda device and have
         # the index attribute set to `None`, default it to `0`
         second_device = torch.device("cuda", index=0)
 
