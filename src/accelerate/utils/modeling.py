@@ -32,7 +32,6 @@ from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import is_mps_available, is_npu_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
-from .other import check_device_same
 from .tqdm import is_tqdm_available, tqdm
 
 
@@ -46,6 +45,33 @@ from safetensors.torch import load_file as safe_load_file
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
 logger = logging.getLogger(__name__)
+
+
+def check_device_same(first_device, second_device):
+    """
+    Utility method to check if two `torch` devices are similar. When dealing with CUDA devices, torch throws `False`
+    for `torch.device("cuda") == torch.device("cuda:0")` whereas they should be the same
+
+    Args:
+        first_device (`torch.device`):
+            First device to check
+        second_device (`torch.device`):
+            Second device to check
+    """
+    if first_device.type != second_device.type:
+        return False
+
+    if first_device.type == "cuda" and first_device.index is None:
+        # In case the first_device is a cuda device and have
+        # the index attribute set to `None`, default it to `0`
+        first_device = torch.device("cuda", index=0)
+
+    if second_device.type == "cuda" and second_device.index is None:
+        # In case the second_device is a cuda device and have
+        # the index attribute set to `None`, default it to `0`
+        second_device = torch.device("cuda", index=0)
+
+    return first_device == second_device
 
 
 def convert_file_size_to_int(size: Union[int, str]):

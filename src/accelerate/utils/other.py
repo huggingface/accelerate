@@ -320,30 +320,3 @@ def check_os_kernel():
             "cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher."
         )
         logger.warning(msg, main_process_only=True)
-
-
-def check_device_same(first_device, second_device):
-    """
-    Utility method to check if two `torch` devices are similar. When dealing with CUDA devices, torch throws `False`
-    for `torch.device("cuda") == torch.device("cuda:0")` whereas they should be the same
-
-    Args:
-        first_device (`torch.device`):
-            First device to check
-        second_device (`torch.device`):
-            Second device to check
-    """
-    if first_device.type != second_device.type:
-        return False
-
-    if first_device.type == "cuda" and first_device.index is None:
-        # In case the first_device is a cuda device and have
-        # the index attribute set to `None`, default it to `0`
-        first_device = torch.device("cuda", index=0)
-
-    if second_device.type == "cuda" and second_device.index is None:
-        # In case the second_device is a cuda device and have
-        # the index attribute set to `None`, default it to `0`
-        second_device = torch.device("cuda", index=0)
-
-    return first_device == second_device
