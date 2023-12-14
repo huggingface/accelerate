@@ -967,6 +967,7 @@ class FullyShardedDataParallelPlugin:
                     return module_class
 
     def set_auto_wrap_policy(self, model):
+        from peft import PeftModel
         from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
         default_transformer_cls_names_to_wrap = (
@@ -986,11 +987,31 @@ class FullyShardedDataParallelPlugin:
                     else:
                         transformer_cls_to_wrap.add(transformer_cls)
 
-                self.auto_wrap_policy = functools.partial(
+                auto_wrap_policy = functools.partial(
                     transformer_auto_wrap_policy,
                     # Transformer layer class to wrap
                     transformer_layer_cls=transformer_cls_to_wrap,
                 )
+
+                # In an FSDP setting PEFT models require individually wrapping unfrozen parameters 
+                
+                if isinstance(model, PeftModel):
+                    print("PEFT wrapping")
+                    from torch.distributed.fsdp.wrap import _or_policy, lambda_auto_wrap_policy, transformer_auto_wrap_policy
+                    def lambda_policy_fn(module):
+                        if (
+                            len(list(module.named_children())) == 0
+                            and getattr(module, "weight", None) is not None
+                            and module.weight.requires_grad
+                        ):
+                            return True
+                        return False
+
+                    lambda_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=lambda_policy_fn)
+                    auto_wrap_policy = functools.partial(_or_policy, policies=[lambda_policy, auto_wrap_policy])
+                    
+                self.auto_wrap_policy = auto_wrap_policy
+                
             elif auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[1]:
                 min_num_params = int(os.environ.get("FSDP_MIN_NUM_PARAMS", 0))
                 if min_num_params > 0:

@@ -50,7 +50,7 @@ FP16 = "fp16"
 BF16 = "bf16"
 dtypes = [FP16, BF16]
 
-
+import logging
 @require_fsdp
 @require_cuda
 class FSDPPluginIntegration(AccelerateTestCase):
@@ -103,6 +103,31 @@ class FSDPPluginIntegration(AccelerateTestCase):
                     self.assertTrue(fsdp_plugin.state_dict_config.offload_to_cpu)
                     self.assertTrue(fsdp_plugin.state_dict_config.rank0_only)
 
+    def test_auto_wrap_policy_peft(self):
+        from peft import LoraConfig, get_peft_model, TaskType
+        from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+        peft_config = LoraConfig(
+            task_type=TaskType.SEQ_2_SEQ_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1
+        )
+        model = AutoModel.from_pretrained(BERT_BASE_CASED)
+        model = get_peft_model(model, peft_config)
+        
+        env = self.dist_env.copy()
+        env["FSDP_AUTO_WRAP_POLICY"] = "TRANSFORMER_BASED_WRAP"
+        env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = "BertLayer"
+        env["FSDP_USE_ORIG_PARAMS"] = "false"
+        env["RANK"] = "0"
+        with mockenv_context(**env):#
+            fsdp_plugin = FullyShardedDataParallelPlugin()
+            fsdp_plugin.set_auto_wrap_policy(model)
+            kwargs = {
+                "sharding_strategy": fsdp_plugin.sharding_strategy,
+                "auto_wrap_policy": fsdp_plugin.auto_wrap_policy,
+                "use_orig_params": fsdp_plugin.use_orig_params,
+            }
+            torch.distributed.init_process_group(backend="nccl")
+            model = FSDP(model, **kwargs)
+            
     def test_auto_wrap_policy(self):
         model = AutoModel.from_pretrained(BERT_BASE_CASED)
         for policy in FSDP_AUTO_WRAP_POLICY:
@@ -167,7 +192,6 @@ class FSDPPluginIntegration(AccelerateTestCase):
             with mockenv_context(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 self.assertEqual(fsdp_plugin.cpu_offload, CPUOffload(offload_params=flag))
-
 
 @require_fsdp
 @require_multi_gpu
