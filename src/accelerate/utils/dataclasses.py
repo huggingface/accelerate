@@ -968,7 +968,12 @@ class FullyShardedDataParallelPlugin:
 
     def set_auto_wrap_policy(self, model):
         from peft import PeftModel
-        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+        from torch.distributed.fsdp.wrap import (
+            _or_policy,
+            lambda_auto_wrap_policy,
+            size_based_auto_wrap_policy,
+            transformer_auto_wrap_policy,
+        )
 
         default_transformer_cls_names_to_wrap = (
             ",".join(model._no_split_modules) if getattr(model, "_no_split_modules", None) is not None else ""
@@ -996,18 +1001,10 @@ class FullyShardedDataParallelPlugin:
                 # In an FSDP setting PEFT models require individually wrapping unfrozen parameters
 
                 if isinstance(model, PeftModel):
-                    print("PEFT wrapping")
-                    from torch.distributed.fsdp.wrap import (
-                        _or_policy,
-                        lambda_auto_wrap_policy,
-                        transformer_auto_wrap_policy,
-                    )
 
                     def lambda_policy_fn(module):
-                        if (
-                            len(list(module.named_children())) == 0
-                            and getattr(module, "weight", None) is not None
-                            and module.weight.requires_grad
+                        if len(list(module.named_children())) == 0 and any(
+                            p.requires_grad for p in module.parameters()
                         ):
                             return True
                         return False
