@@ -50,7 +50,6 @@ FP16 = "fp16"
 BF16 = "bf16"
 dtypes = [FP16, BF16]
 
-import logging
 @require_fsdp
 @require_cuda
 class FSDPPluginIntegration(AccelerateTestCase):
