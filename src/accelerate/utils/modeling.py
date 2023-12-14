@@ -325,7 +325,7 @@ def set_module_tensor_to_device(
             device = device_quantization
         if is_buffer:
             module._buffers[tensor_name] = new_value
-        elif value is not None or check_device_same(torch.device(device), module._parameters[tensor_name].device):
+        elif value is not None or not check_device_same(torch.device(device), module._parameters[tensor_name].device):
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
             if param_cls.__name__ in ["Int8Params", "FP4Params"]:
