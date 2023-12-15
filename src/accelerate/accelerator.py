@@ -217,6 +217,9 @@ class Accelerator:
             If set to `True`, in cases where the total batch size across all processes does not exactly divide the
             dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
             all workers.
+        use_seedable_sampler (`bool`, *optional*`):
+            Whether or not use a fully seedable random sampler ([`~data_loader.SeedableRandomSampler`]). Comes at a
+            cost of potentially different performances due to different shuffling algorithms.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
@@ -262,6 +265,7 @@ class Accelerator:
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
         dispatch_batches: bool | None = None,
         even_batches: bool = True,
+        use_seedable_sampler: bool = False,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
@@ -417,6 +421,7 @@ class Accelerator:
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
         self.even_batches = even_batches
+        self.use_seedable_sampler = use_seedable_sampler
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
@@ -1785,7 +1790,10 @@ class Accelerator:
         return tuple(result)
 
     def prepare_data_loader(
-        self, data_loader: torch.utils.data.DataLoader, device_placement=None, slice_fn_for_dispatch=None
+        self,
+        data_loader: torch.utils.data.DataLoader,
+        device_placement=None,
+        slice_fn_for_dispatch=None,
     ):
         """
         Prepares a PyTorch DataLoader for training in any distributed setup. It is recommended to use
@@ -1801,6 +1809,7 @@ class Accelerator:
                 If passed, this function will be used to slice tensors across `num_processes`. Will default to
                 [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will
                 be ignored otherwise.
+
 
         Example:
 
@@ -1831,6 +1840,7 @@ class Accelerator:
             dispatch_batches=self.dispatch_batches,
             even_batches=self.even_batches,
             slice_fn_for_dispatch=slice_fn_for_dispatch,
+            use_seedable_sampler=self.use_seedable_sampler,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
