@@ -551,7 +551,7 @@ class AimTracker(GeneralTracker):
                 Additional key word arguments passed along to the `Run.Image` and `Run.track` method specified by the
                 keys `aim_image` and `track`, respectively.
         """
-        from aim import Image
+        import aim
 
         aim_image_kw = {}
         track_kw = {}
@@ -565,7 +565,7 @@ class AimTracker(GeneralTracker):
                 img, caption = value
             else:
                 img, caption = value, ""
-            aim_image = Image(img, caption=caption, **aim_image_kw)
+            aim_image = aim.Image(img, caption=caption, **aim_image_kw)
             self.writer.track(aim_image, name=key, step=step, **track_kw)
 
     @on_main_process
