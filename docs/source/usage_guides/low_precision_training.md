@@ -54,7 +54,7 @@ accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
 
 Of the two, `MS-AMP` is traditionally the easier one to configure as there is only a single argument: the optimization level. 
 
-Currently we support one of two different levels, `"O1"` and `"O2"` (using the letter 'o', not zero). 
+Currently two levels of optimization are supported in the 🤗 Accelerate integration, `"O1"` and `"O2"` (using the letter 'o', not zero). 
 
 * `"O1"` will cast the weight gradients and `all_reduce` communications to happen in 8-bit, while the rest are done in 16 bit. This reduces the general GPU memory usage and speeds up communication bandwidths.
 * `"O2"` will also cast first-order optimizer states into 8 bit, while the second order states are in FP16. (Currently just the `Adam` optimizer is supported). This tries it's best to minimize final accuracy degredation and will save the highest potential memory.

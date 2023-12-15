@@ -34,7 +34,7 @@ MS-AMP O3 | FP8 | FP8 | FP8 | FP16 | FP8 | FP8+FP16
 
 ## `TransformersEngine`
 
-`TranformersEngine` is the first solution to trying to train in 8-bit floating point. It operates by changing layers inside the model to ones that utilize 8-bit accelerated ones that should not degrade the final accuracy of the model upon convergence. 
+`TranformersEngine` is the first solution to trying to train in 8-bit floating point. It works by using drop-in replacement layers for certain ones in a model that utilize their FP8-engine to reduce the number of bits (such as 32 to 8) without degrading the final accuracy of the model. 
 
 Specifically, 🤗 Accelerate will find and replace the following layers with `TranformersEngine` versions:
 
@@ -46,7 +46,7 @@ As a result we wind up with a model that has most of its layers in BF16, while s
 Anecdotally, we have noticed that performance gains don't really start showing when using `TransformerEngine` until a large majority of the layers
 in the model are made up of those two layers to replace. As a result, only larger models have shown performance improvements when the number of parameters is around and upwards of a few billion. 
 
-There are many different arguments that can be passed to the `TransformerEngine` that customize how FP8 calculations are performed and what they do. A full list of the arguments is available below:
+The `TransformerEngine` can receive many different arguments that customize how it performs FP8 calculations and what they do. A full list of the arguments is available below:
 
 * `margin`: The margin to use for the gradient scaling.
 * `interval`: The interval to use for how often the scaling factor is recomputed.
@@ -55,7 +55,7 @@ There are many different arguments that can be passed to the `TransformerEngine`
 * `amax_compute_algo`: The algorithm to use for the scaling factor computation. Must be one of `max` or `most_recent`.
 * `override_linear_precision`: Whether or not to execute `fprop`, `dgrad`, and `wgrad` GEMMS in higher precision.
 
-Each of these can be customized as part of the [`utils.FP8RecipeKwargs`] and tweaked to help optimize performance of your models.
+You can customize each of these as part of [`utils.FP8RecipeKwargs`] to help optimize performance of your models.
 
 If we notice in the chart mentioned earlier, TE simply casts the computation layers into FP8, while everything else is in FP32. As a result this winds up utilizing the most memory but does so with the benefit of guaranteeing the least amount of loss in end accuracy during training. 
 
