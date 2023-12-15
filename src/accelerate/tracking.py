@@ -537,6 +537,38 @@ class AimTracker(GeneralTracker):
             self.writer.track(value, name=key, step=step, **kwargs)
 
     @on_main_process
+    def log_images(self, values: dict, step: Optional[int] = None, kwargs: Optional[Dict[str, dict]] = None):
+        """
+        Logs `images` to the current run.
+
+        Args:
+            values (`Dict[str, Union[np.ndarray, PIL.Image, Tuple[np.ndarray, str], Tuple[PIL.Image, str]]]`):
+                Values to be logged as key-value pairs. The values need to have type `np.ndarray` or PIL.Image. If a
+                tuple is provided, the first element should be the image and the second element should be the caption.
+            step (`int`, *optional*):
+                The run step. If included, the log will be affiliated with this step.
+            kwargs (`Dict[str, dict]`):
+                Additional key word arguments passed along to the `Run.Image` and `Run.track` method specified by the
+                keys `aim_image` and `track`, respectively.
+        """
+        import aim
+
+        aim_image_kw = {}
+        track_kw = {}
+
+        if kwargs is not None:
+            aim_image_kw = kwargs.get("aim_image", {})
+            track_kw = kwargs.get("track", {})
+
+        for key, value in values.items():
+            if isinstance(value, tuple):
+                img, caption = value
+            else:
+                img, caption = value, ""
+            aim_image = aim.Image(img, caption=caption, **aim_image_kw)
+            self.writer.track(aim_image, name=key, step=step, **track_kw)
+
+    @on_main_process
     def finish(self):
         """
         Closes `aim` writer
@@ -936,7 +968,8 @@ LOGGER_TYPE_TO_CLASS = {
 
 
 def filter_trackers(
-    log_with: List[Union[str, LoggerType, GeneralTracker]], logging_dir: Union[str, os.PathLike] = None
+    log_with: List[Union[str, LoggerType, GeneralTracker]],
+    logging_dir: Union[str, os.PathLike] = None,
 ):
     """
     Takes in a list of potential tracker types and checks that:
