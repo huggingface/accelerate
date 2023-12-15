@@ -74,7 +74,7 @@ TransformersEngine has much more available for customizing how and what FP8 calc
 
 🤗 Accelerate tries to set sensible defaults, but exploring and tweaking the various parameters yourself can lead to better performance potentially.
 
-To use it, specify `backend="msamp"` and modify any of the arguments you want as part of your kwarg handler:
+To use it, specify `backend="te"` and modify any of the arguments you want as part of your kwarg handler:
 
 ```{python}
 from accelerate import Accelerator

@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Low Precision Training Methods
 
-As new hardware has been released, new training paradigms to better utilize them ahve come out as a result. Currently this is in the form of training
+As new hardware has been released, new training paradigms to better utilize them have come out as a result. Currently this is in the form of training
 in 8-bit precision using packages such as [TranformersEngine](https://github.com/NVIDIA/TransformerEngine) (TE) or [MS-AMP](https://github.com/Azure/MS-AMP/tree/main).
 
 For an introduction to the topics discussed today, it's recommended to review the low precision usage documentation available [here](../usage_guides/low_precision_training.md) as this documentation will reference it regularly. 
@@ -43,7 +43,7 @@ Specifically, 🤗 Accelerate will find and replace the following layers with th
 
 As a result we wind up with a model that has most of its layers in BF16, while some layers are in FP8 reducing some of the memory. 
 
-Anecdotally, we have noticied that profmance gains don't really start showing when using `TransformerEngine` until a large majority of the layers
+Anecdotally, we have noticed that performance gains don't really start showing when using `TransformerEngine` until a large majority of the layers
 in the model are made up of those two layers to replace. As a result only larger models have been seen to show performance improvements when the number of parameters is around and upwards of a few billion. 
 
 There are many different arguments that can be passed to the `TransformerEngine` that customize how FP8 calculations are performed and what they do. A full list of the arguments is available below:
@@ -57,7 +57,7 @@ There are many different arguments that can be passed to the `TransformerEngine`
 
 Each of these can be customized as part of the [`utils.FP8RecipeKwargs`] and tweaked to help optimize performance of your models.
 
-If we notice in the chart mentioned earlier, TE simply casts the computation layers into FP8, while everything else is in FP32. As a result this winds up utilizing the most memory but does so with the benefit of guarenting the least amount of loss in end accuracy during training. 
+If we notice in the chart mentioned earlier, TE simply casts the computation layers into FP8, while everything else is in FP32. As a result this winds up utilizing the most memory but does so with the benefit of guaranteeing the least amount of loss in end accuracy during training. 
 
 ## `MS-AMP`
 
