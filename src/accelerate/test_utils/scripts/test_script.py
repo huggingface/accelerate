@@ -602,8 +602,7 @@ def test_trigger():
     assert accelerator.check_trigger() is False
 
     # set a breakpoint on the main process
-    if accelerator.is_main_process:
-        accelerator.set_trigger()
+    accelerator.set_trigger()
 
     # check it's been activated across all processes
     # calls `all_reduce` and triggers a sync
