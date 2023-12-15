@@ -495,9 +495,8 @@ class AimTracker(GeneralTracker):
     def __init__(self, run_name: str, logging_dir: Optional[Union[str, os.PathLike]] = ".", **kwargs):
         self.run_name = run_name
 
-        from aim import Image, Run
+        from aim import Run
 
-        self.aim_image_callable = Image
         self.writer = Run(repo=logging_dir, **kwargs)
         self.writer.name = self.run_name
         logger.debug(f"Initialized Aim project {self.run_name}")
@@ -552,6 +551,7 @@ class AimTracker(GeneralTracker):
                 Additional key word arguments passed along to the `Run.Image` and `Run.track` method specified by the
                 keys `aim_image` and `track`, respectively.
         """
+        from aim import Image
 
         aim_image_kw = {}
         track_kw = {}
@@ -565,7 +565,7 @@ class AimTracker(GeneralTracker):
                 img, caption = value
             else:
                 img, caption = value, ""
-            aim_image = self.aim_image_callable(img, caption=caption, **aim_image_kw)
+            aim_image = Image(img, caption=caption, **aim_image_kw)
             self.writer.track(aim_image, name=key, step=step, **track_kw)
 
     @on_main_process
