@@ -15,10 +15,10 @@ rendered properly in your Markdown viewer.
 
 # Low Precision Training Methods
 
-As new hardware has been released, new training paradigms to better utilize them have come out as a result. Currently this is in the form of training
+The release of new kinds of hardware led to the emergence of new training paradigms that better utilize them. Currently, this is in the form of training
 in 8-bit precision using packages such as [TranformersEngine](https://github.com/NVIDIA/TransformerEngine) (TE) or [MS-AMP](https://github.com/Azure/MS-AMP/tree/main).
 
-For an introduction to the topics discussed today, it's recommended to review the low precision usage documentation available [here](../usage_guides/low_precision_training.md) as this documentation will reference it regularly. 
+For an introduction to the topics discussed today, we recommend reviewing the [low-precision usage guide](../usage_guides/low_precision_training.md) as this documentation will reference it regularly. 
 
 ## A Quick Chart
 
@@ -36,7 +36,7 @@ MS-AMP O3 | FP8 | FP8 | FP8 | FP16 | FP8 | FP8+FP16
 
 `TranformersEngine` is the first solution to trying to train in 8-bit floating point. It operates by changing layers inside the model to ones that utilize 8-bit accelerated ones that should not degrade the final accuracy of the model upon convergence. 
 
-Specifically, 🤗 Accelerate will find and replace the following layers with their own versions:
+Specifically, 🤗 Accelerate will find and replace the following layers with `TranformersEngine` versions:
 
 * `nn.LayerNorm` for `te.LayerNorm`
 * `nn.Linear` for `te.Linear`
@@ -44,7 +44,7 @@ Specifically, 🤗 Accelerate will find and replace the following layers with th
 As a result we wind up with a model that has most of its layers in BF16, while some layers are in FP8 reducing some of the memory. 
 
 Anecdotally, we have noticed that performance gains don't really start showing when using `TransformerEngine` until a large majority of the layers
-in the model are made up of those two layers to replace. As a result only larger models have been seen to show performance improvements when the number of parameters is around and upwards of a few billion. 
+in the model are made up of those two layers to replace. As a result, only larger models have shown performance improvements when the number of parameters is around and upwards of a few billion. 
 
 There are many different arguments that can be passed to the `TransformerEngine` that customize how FP8 calculations are performed and what they do. A full list of the arguments is available below:
 
@@ -63,11 +63,11 @@ If we notice in the chart mentioned earlier, TE simply casts the computation lay
 
 MS-AMP takes a different approach to `TransformersEngine` by providing three different optimization levels to convert more operations in FP8 or FP16.
 
-* The base optimization level (`O1`), will also pass communications of the weights (such as in DDP) in FP8, stores the weights of the model in FP16, and leaves the optimizer states in FP32. The main benefit of this optimization level is we can reduce the communication bandwidth by essentially half and more GPU memory is saved due to 1/2 of everything being cast in FP8, and the weights are cast to FP16. Notably both the optimizer states remain in FP32.
+* The base optimization level (`O1`), passes communications of the weights (such as in DDP) in FP8, stores the weights of the model in FP16, and leaves the optimizer states in FP32. The main benefit of this optimization level is that we can reduce the communication bandwidth by essentially half. Additionally, more GPU memory is saved due to 1/2 of everything being cast in FP8, and the weights being cast to FP16. Notably, both the optimizer states remain in FP32.
 
 * The second optimization level (`O2`) improves upon this by also reducing the precision of the optimizer states. One is in FP8 while the other is in FP16. Generally it's been shown that this will only provide a net-gain of no degredated end accuracy, increased training speed, and reduced memory as now every state is either in FP16 or FP8. 
 
-* Finally, MS-AMP has a third optimization level (`O3`) which helps during DDP scenarios such as DeepSpeed. The weights of the model in memory is fully cast to FP8 and the master weights are now stored in FP16. This fully reduces memory by the highest factor as now not only is almost everything in FP8, only two states are left in FP16. Currently only DeepSpeed versions up through 0.9.2 are supported, so this capability is not included in the 🤗 Accelerate integration
+* Finally, MS-AMP has a third optimization level (`O3`) which helps during DDP scenarios such as DeepSpeed. The weights of the model in memory are fully cast to FP8, and the master weights are now stored in FP16. This fully reduces memory by the highest factor as now not only is almost everything in FP8, only two states are left in FP16. Currently, only DeepSpeed versions up through 0.9.2 are supported, so this capability is not included in the 🤗 Accelerate integration
 
 ## Combining the two
 

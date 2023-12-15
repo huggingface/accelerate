@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Low Precision Training Methods
 
-🤗 Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine` and `MS-AMP` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to do so, and what you can expect when training. 
+🤗 Accelerate provides integrations to train on lower precision methods using specified supported hardware through the `TransformersEngine` and `MS-AMP` packages. This documentation will help guide you through what hardware is supported, how to configure your [`Accelerator`] to leverage the low precision methods, and what you can expect when training. 
 
 ## What training on FP8 means
 
@@ -39,7 +39,7 @@ from accelerate import Accelerator
 accelerator = Accelerator(mixed_precision="fp8")
 ```
 
-By default if `MS-AMP` is available in your environment, 🤗 Accelerate will automatically utilize it as a backend. To specify it yourself however (and customize other parts of the FP8 mixed precision setup), you can utilize the [`utils.FP8RecipeKwargs`] to configure it:
+By default, if `MS-AMP` is available in your environment, 🤗 Accelerate will automatically utilize it as a backend. To specify it yourself (and customize other parts of the FP8 mixed precision setup), you can utilize the [`utils.FP8RecipeKwargs`]:
 
 ```{python}
 from accelerate import Accelerator
