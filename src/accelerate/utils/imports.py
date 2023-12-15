@@ -72,8 +72,24 @@ def get_ccl_version():
     return importlib.metadata.version("oneccl_bind_pt")
 
 
-def is_fp8_available():
+def is_msamp_available():
+    package_exists = importlib.util.find_spec("msamp") is not None
+    if package_exists:
+        try:
+            # MS-AMP has a different metadata name
+            _ = importlib.metadata.metadata("ms-amp")
+            return True
+        except importlib.metadata.PackageNotFoundError:
+            return False
+    return False
+
+
+def is_transformer_engine_available():
     return _is_package_available("transformer_engine")
+
+
+def is_fp8_available():
+    return is_msamp_available() or is_transformer_engine_available()
 
 
 def is_cuda_available():
