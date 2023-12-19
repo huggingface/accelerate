@@ -23,7 +23,7 @@ from pathlib import Path
 
 import torch
 from parameterized import parameterized
-from torch.utils.data import DataLoader
+from torch.utils.data import BatchSampler, DataLoader, RandomSampler, SequentialSampler
 from transformers import AutoModel, AutoModelForCausalLM, get_scheduler
 from transformers.testing_utils import mockenv_context
 from transformers.trainer_utils import set_seed
@@ -337,7 +337,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 with self.assertRaises(ValueError) as cm:
                     model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
                 self.assertTrue(
-                    "When using DeepSpeed `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
+                    "When using DeepSpeed, `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
+                    "with `batch_size` attribute returning an integer value "
                     "or alternatively set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                     in str(cm.exception)
@@ -505,6 +506,47 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                     model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                 )
+
+    def test_dataloader_with_batch_sampler(self):
+        deepspeed_plugin = DeepSpeedPlugin(
+            gradient_accumulation_steps=1,
+            gradient_clipping=1.0,
+            zero_stage=2,
+            offload_optimizer_device="cpu",
+            offload_param_device="cpu",
+            zero3_save_16bit_model=False,
+            zero3_init_flag=False,
+        )
+        with mockenv_context(**self.dist_env):
+            accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
+
+            train_set = RegressionDataset(length=80)
+            eval_set = RegressionDataset(length=20)
+            train_dataloader = DataLoader(
+                train_set, batch_sampler=BatchSampler(RandomSampler(train_set), batch_size=10, drop_last=False)
+            )
+            eval_dataloader = DataLoader(
+                eval_set, batch_sampler=BatchSampler(SequentialSampler(eval_set), batch_size=10, drop_last=False)
+            )
+            model = AutoModel.from_pretrained(GPT2_TINY)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
+            lr_scheduler = get_scheduler(
+                name="linear",
+                optimizer=optimizer,
+                num_warmup_steps=0,
+                num_training_steps=1000,
+            )
+
+            with self.assertRaises(ValueError) as cm:
+                model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+                    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+                )
+            self.assertTrue(
+                "At least one of the dataloaders passed to `accelerate.prepare()` has `None` as batch size. "
+                "Please set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
+                "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
+                in str(cm.exception)
+            )
 
     def test_save_checkpoints(self):
         deepspeed_plugin = DeepSpeedPlugin(
