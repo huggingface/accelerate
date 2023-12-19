@@ -507,7 +507,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                     model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                 )
 
-    def test_dataloader_with_batch_sample(self):
+    def test_dataloader_with_batch_sampler(self):
         deepspeed_plugin = DeepSpeedPlugin(
             gradient_accumulation_steps=1,
             gradient_clipping=1.0,
