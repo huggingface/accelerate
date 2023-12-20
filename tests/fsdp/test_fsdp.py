@@ -28,9 +28,9 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
-    require_cuda,
     require_fsdp,
-    require_multi_gpu,
+    require_multi_device,
+    require_non_cpu,
     slow,
 )
 from accelerate.utils.constants import (
@@ -52,7 +52,7 @@ dtypes = [FP16, BF16]
 
 
 @require_fsdp
-@require_cuda
+@require_non_cpu
 class FSDPPluginIntegration(AccelerateTestCase):
     def setUp(self):
         super().setUp()
@@ -170,7 +170,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
 
 
 @require_fsdp
-@require_multi_gpu
+@require_multi_device
 @slow
 class FSDPIntegrationTest(TempDirTestCase):
     def setUp(self):
