@@ -323,6 +323,16 @@ class PartialState:
                 if self.device is None:
                     self.device = torch.device("cpu") if cpu else self.default_device
 
+        # Verify that `timeout` can actually be set if using nccl
+        if self.backend == "nccl" and "timeout" in kwargs:
+            blocking = parse_flag_from_env("NCCL_BLOCKING_WAIT")
+            error_handling = parse_flag_from_env("NCCL_ASYNC_ERROR_HANDLING")
+            if not blocking and not error_handling:
+                raise ValueError(
+                    "Setting `timeout` while using NCCL requires setting either the `NCCL_BLOCKING_WAIT` or "
+                    "NCCL_ASYNC_ERROR_HANDLING` environment variables to `1`."
+                )
+
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
     def __repr__(self) -> str:
