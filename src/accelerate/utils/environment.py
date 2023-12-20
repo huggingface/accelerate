@@ -19,6 +19,8 @@ import sys
 from distutils import spawn
 from typing import Dict
 
+import torch
+
 
 def str_to_bool(value) -> int:
     """
@@ -59,7 +61,7 @@ def are_libraries_initialized(*library_names: str) -> Dict[str, bool]:
     """
     Checks if any of `library_names` are imported in the environment. Will return results as a `key:bool` pair.
     """
-    return [lib_name for lib_name in library_names if lib_name in sys.modules]
+    return [lib_name for lib_name in library_names if lib_name in sys.modules.keys()]
 
 
 def get_gpu_info():
@@ -108,3 +110,13 @@ def check_cuda_p2p_ib_support():
     except Exception:
         pass
     return True
+
+
+def check_fp8_capability():
+    """
+    Checks if all the current GPUs available support FP8.
+
+    Notably must initialize `torch.cuda` to check.
+    """
+    cuda_device_capacity = torch.cuda.get_device_capability()
+    return cuda_device_capacity >= (8, 9)

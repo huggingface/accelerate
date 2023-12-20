@@ -24,6 +24,7 @@ import accelerate
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
+    require_multi_gpu,
     require_timm,
     require_transformers,
     run_command,
@@ -40,6 +41,7 @@ class AccelerateLauncherTester(unittest.TestCase):
 
     mod_file = inspect.getfile(accelerate.test_utils)
     test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_cli.py"])
+    notebook_launcher_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_notebook.py"])
 
     base_cmd = ["accelerate", "launch"]
     config_folder = Path.home() / ".cache/huggingface/accelerate"
@@ -86,6 +88,16 @@ class AccelerateLauncherTester(unittest.TestCase):
 
     def test_accelerate_test(self):
         execute_subprocess_async(["accelerate", "test"], env=os.environ.copy())
+
+    @require_multi_gpu
+    def test_notebook_launcher(self):
+        """
+        This test checks a variety of situations and scenarios
+        with the `notebook_launcher`
+        """
+        cmd = ["python", self.notebook_launcher_path]
+        with patch_environment(omp_num_threads=1, accelerate_num_processes=2):
+            run_command(cmd, env=os.environ.copy())
 
 
 class TpuConfigTester(unittest.TestCase):

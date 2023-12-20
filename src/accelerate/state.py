@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import threading
@@ -29,6 +30,7 @@ from .utils import (
     DynamoBackend,
     GradientAccumulationPlugin,
     check_cuda_p2p_ib_support,
+    check_fp8_capability,
     get_ccl_version,
     get_int_from_env,
     is_ccl_available,
@@ -51,6 +53,8 @@ if is_tpu_available(check_device=False):
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 
 def is_initialized() -> bool:
@@ -765,8 +769,19 @@ class AcceleratorState:
                 if mixed_precision is None
                 else mixed_precision.lower()
             )
-            if mixed_precision == "fp8" and not is_fp8_available():
-                raise ValueError("Using `fp8` precision requires `transformer_engine` to be installed.")
+            if mixed_precision == "fp8":
+                if not is_fp8_available():
+                    raise ValueError(
+                        "Using `fp8` precision requires `transformer_engine` or `MS-AMP` to be installed."
+                    )
+                elif not check_fp8_capability():
+                    logger.warning(
+                        f"The current device has compute capability of {torch.cuda.get_device_capability()} which is "
+                        "insufficient for FP8 mixed precision training (requires a GPU Hopper/Ada Lovelace "
+                        "or higher, compute capability of 8.9 or higher). Will use FP16 instead."
+                    )
+                    mixed_precision = "fp16"
+
             self.dynamo_plugin = dynamo_plugin
             if not _from_accelerator:
                 raise ValueError(

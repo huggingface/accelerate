@@ -13,7 +13,7 @@ def basic_function():
     print(f"PartialState:\n{PartialState()}")
 
 
-NUM_PROCESSES = os.environ.get("ACCELERATE_NUM_PROCESSES", 1)
+NUM_PROCESSES = int(os.environ.get("ACCELERATE_NUM_PROCESSES", 1))
 
 
 def test_can_initialize():
@@ -22,7 +22,9 @@ def test_can_initialize():
 
 @require_bnb
 def test_problematic_imports():
-    with raises(AssertionError, match="Please keep these imports"):
+    with raises(RuntimeError, match="Please keep these imports"):
+        import bitsandbytes as bnb  # noqa: F401
+
         notebook_launcher(basic_function, (), num_processes=NUM_PROCESSES)
 
 
@@ -32,3 +34,7 @@ def main():
     if is_bnb_available():
         print("Test problematic imports (bnb)")
         test_problematic_imports()
+
+
+if __name__ == "__main__":
+    main()
