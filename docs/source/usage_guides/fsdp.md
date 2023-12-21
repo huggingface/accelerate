@@ -54,7 +54,6 @@ fsdp_config:
   fsdp_sync_module_states: true
   fsdp_transformer_layer_cls_to_wrap: BertLayer
   fsdp_use_orig_params: true
-  fsdp_min_num_params: 2000
 machine_rank: 0
 main_training_function: main
 mixed_precision: bf16
@@ -73,7 +72,6 @@ accelerate launch examples/nlp_example.py
 ```
 
 Currently, `Accelerate` supports the following config through the CLI:
-
 
 `fsdp_sharding_strategy`: [1] FULL_SHARD (shards optimizer states, gradients and parameters), [2] SHARD_GRAD_OP (shards optimizer states and gradients), [3] NO_SHARD (DDP), [4] HYBRID_SHARD (shards optimizer states, gradients and parameters within each node while each node has full copy), [5] HYBRID_SHARD_ZERO2 (shards optimizer states and gradients within each node while each node has full copy)
 
@@ -99,13 +97,11 @@ It will try to use `model._no_split_modules` when available.
 
 `fsdp_state_dict_type`: [1] FULL_STATE_DICT, [2] LOCAL_STATE_DICT, [3] SHARDED_STATE_DICT
 
-`fsdp_use_orig_params`: If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres.
-Useful in cases such as parameter-efficient fine-tuning.
-Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019). This also enables to have different optimizer param groups. This should be `True` when creating optimizer object before preparing/wrapping the model with FSDP.
+`fsdp_use_orig_params`: If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. This setting is useful in cases such as parameter-efficient fine-tuning as discussed in [this post](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019). This option also allows one to have multiple optimizer param groups. This should be `True` when creating an optimizer before preparing/wrapping the model with FSDP.
 
-`fsdp_cpu_ram_efficient_loading`: If True, only the first process loads the pretrained model checkpoint while all other processes have empty weights. Only applicable for 🤗 Transformers models. This should be set to False if you experience errors when loading the pretrained 🤗 Transformers model via `from_pretrained` method. When using this, `Sync Module States` needs to be True else all the processes expect the main process would have random empty weights leading to unexpected behaviour during training.
+`fsdp_cpu_ram_efficient_loading`: Only applicable for 🤗 Transformers models. If True, only the first process loads the pretrained model checkpoint while all other processes have empty weights. This should be set to False if you experience errors when loading the pretrained 🤗 Transformers model via `from_pretrained` method. When this setting is True `fsdp_sync_module_states` also must to be True, otherwise all the processes except the main process would have random weights leading to unexpected behaviour during training.
 
-`fsdp_sync_module_states`: If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0
+`fsdp_sync_module_states`: If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0.
 
 
 For additional and more nuanced control, you can specify other FSDP parameters via `FullyShardedDataParallelPlugin`.
