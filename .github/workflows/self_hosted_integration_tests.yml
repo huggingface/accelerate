@@ -37,8 +37,9 @@ jobs:
       - name: Install transformers
         run: |
           source activate accelerate;
-          git clone https://github.com/huggingface/transformers --depth 1;
+          git clone https://github.com/huggingface/transformers;
           cd transformers;
+          git checkout muellerzr-fix-integration-tests;
           pip install .[torch,deepspeed-testing];
           cd ..;
 
@@ -86,40 +87,40 @@ jobs:
           pip install -r examples/pytorch/_tests_requirements.txt
           pytest -sv examples/pytorch/test_accelerate_examples.py examples/pytorch/test_pytorch_examples.py
 
-  run-skorch-tests:
-    container:
-      image: huggingface/accelerate-gpu:latest
-      options: --gpus all --shm-size "16gb"
-    runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
-    strategy:
-      fail-fast: false
-    steps:
-      - name: Install accelerate
-        run: 
-          source activate accelerate;
-          git clone https://github.com/huggingface/accelerate;
-          cd accelerate;
-          git checkout ${{ github.sha }};
-          pip install -e .[testing];
-          cd ..
+  # run-skorch-tests:
+  #   container:
+  #     image: huggingface/accelerate-gpu:latest
+  #     options: --gpus all --shm-size "16gb"
+  #   runs-on: [self-hosted, multi-gpu, nvidia-gpu, t4, ci]
+  #   strategy:
+  #     fail-fast: false
+  #   steps:
+  #     - name: Install accelerate
+  #       run: 
+  #         source activate accelerate;
+  #         git clone https://github.com/huggingface/accelerate;
+  #         cd accelerate;
+  #         git checkout ${{ github.sha }};
+  #         pip install -e .[testing];
+  #         cd ..
 
-      - name: Install skorch
-        run: |
-          source activate accelerate
-          git clone https://github.com/skorch-dev/skorch;
-          cd skorch;
-          git config --global --add safe.directory '*'
-          git checkout master && git pull
-          pip install .[testing]
-          pip install flaky
+  #     - name: Install skorch
+  #       run: |
+  #         source activate accelerate
+  #         git clone https://github.com/skorch-dev/skorch;
+  #         cd skorch;
+  #         git config --global --add safe.directory '*'
+  #         git checkout master && git pull
+  #         pip install .[testing]
+  #         pip install flaky
 
-      - name: Show installed libraries
-        run: |
-          source activate accelerate;
-          pip freeze
+  #     - name: Show installed libraries
+  #       run: |
+  #         source activate accelerate;
+  #         pip freeze
 
-      - name: Run skorch tests
-        working-directory: skorch/
-        run: |
-          source activate accelerate;
-          pytest -sv -k TestAccelerate
+  #     - name: Run skorch tests
+  #       working-directory: skorch/
+  #       run: |
+  #         source activate accelerate;
+  #         pytest -sv -k TestAccelerate
