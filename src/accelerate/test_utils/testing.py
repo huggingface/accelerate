@@ -33,6 +33,7 @@ from ..utils import (
     is_bnb_available,
     is_clearml_available,
     is_comet_ml_available,
+    is_cuda_available,
     is_datasets_available,
     is_deepspeed_available,
     is_dvclive_available,
@@ -51,7 +52,7 @@ from ..utils import (
 
 
 def get_backend():
-    if torch.cuda.is_available():
+    if is_cuda_available():
         return "cuda", torch.cuda.device_count()
     elif is_mps_available():
         return "mps", 1
@@ -117,7 +118,7 @@ def require_cuda(test_case):
     """
     Decorator marking a test that requires CUDA. These tests are skipped when there are no GPU available.
     """
-    return unittest.skipUnless(torch.cuda.is_available(), "test requires a GPU")(test_case)
+    return unittest.skipUnless(is_cuda_available(), "test requires a GPU")(test_case)
 
 
 def require_xpu(test_case):

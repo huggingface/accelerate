@@ -41,6 +41,7 @@ from .environment import (
     are_libraries_initialized,
     check_cuda_p2p_ib_support,
     check_fp8_capability,
+    get_gpu_info,
     get_int_from_env,
     parse_choice_from_env,
     parse_flag_from_env,
