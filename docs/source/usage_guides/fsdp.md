@@ -36,7 +36,7 @@ default options when doing
 accelerate launch my_script.py --args_to_my_script
 ```
 
-For instance, here is how you would run the NLP example (from the root of the repo) with FSDP enabled:
+For instance, here is how you would run `examples/nlp_example.py` (from the root of the repo) with FSDP enabled:
 
 ```bash
 compute_environment: LOCAL_MACHINE
@@ -46,14 +46,15 @@ downcast_bf16: 'no'
 fsdp_config:
   fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
   fsdp_backward_prefetch_policy: BACKWARD_PRE
+  fsdp_forward_prefetch: true
   fsdp_cpu_ram_efficient_loading: true
-  fsdp_forward_prefetch: false
   fsdp_offload_params: false
   fsdp_sharding_strategy: 1
   fsdp_state_dict_type: SHARDED_STATE_DICT
   fsdp_sync_module_states: true
   fsdp_transformer_layer_cls_to_wrap: BertLayer
   fsdp_use_orig_params: true
+  fsdp_min_num_params: 2000
 machine_rank: 0
 main_training_function: main
 mixed_precision: bf16
@@ -74,41 +75,40 @@ accelerate launch examples/nlp_example.py
 Currently, `Accelerate` supports the following config through the CLI:
 
 
-`Sharding Strategy`: [1] FULL_SHARD (shards optimizer states, gradients and parameters), [2] SHARD_GRAD_OP (shards optimizer states and gradients), [3] NO_SHARD (DDP), [4] HYBRID_SHARD (shards optimizer states, gradients and parameters within each node while each node has full copy), [5] HYBRID_SHARD_ZERO2 (shards optimizer states and gradients within each node while each node has full copy)
+`fsdp_sharding_strategy`: [1] FULL_SHARD (shards optimizer states, gradients and parameters), [2] SHARD_GRAD_OP (shards optimizer states and gradients), [3] NO_SHARD (DDP), [4] HYBRID_SHARD (shards optimizer states, gradients and parameters within each node while each node has full copy), [5] HYBRID_SHARD_ZERO2 (shards optimizer states and gradients within each node while each node has full copy)
 
-`Offload Params`: Decides Whether to offload parameters and gradients to CPU
+`fsdp_offload_params` : Decides Whether to offload parameters and gradients to CPU
 
-`Auto Wrap Policy`: [1] TRANSFORMER_BASED_WRAP, [2] SIZE_BASED_WRAP, [3] NO_WRAP
+`fsdp_auto_wrap_policy`: [1] TRANSFORMER_BASED_WRAP, [2] SIZE_BASED_WRAP, [3] NO_WRAP
 
-`Transformer Layer Class to Wrap`: When using `TRANSFORMER_BASED_WRAP`, user specifies comma-separated string of transformer layer class names (case-sensitive) to wrap ,e.g, 
+`fsdp_transformer_layer_cls_to_wrap`: When using `TRANSFORMER_BASED_WRAP`, user specifies comma-separated string of transformer layer class names (case-sensitive) to wrap ,e.g,
 `BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput`...
 This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
-Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
+Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers.
 Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit.
 Therefore, use this for transformer based models.
-You can use the `model._no_split_modules` for 🤗 Transformer models by answering `yes` to 
-`Do you want to use the model's `_no_split_modules` to wrap. Only applicable for 🤗 Transformers`. 
-It will try to use `model._no_split_modules` when available.  
+You can use the `model._no_split_modules` for 🤗 Transformer models by answering `yes` to
+`Do you want to use the model's `_no_split_modules` to wrap. Only applicable for 🤗 Transformers`.
+It will try to use `model._no_split_modules` when available.
 
-`Min Num Params`: minimum number of parameters when using `SIZE_BASED_WRAP`
+`fsdp_min_num_params`: minimum number of parameters when using `fsdp_auto_wrap_policy=SIZE_BASED_WRAP`.
 
-`Backward Prefetch`: [1] BACKWARD_PRE, [2] BACKWARD_POST, [3] NO_PREFETCH
+`fsdp_backward_prefetch_policy`: [1] BACKWARD_PRE, [2] BACKWARD_POST, [3] NO_PREFETCH
 
-`State Dict Type`: [1] FULL_STATE_DICT, [2] LOCAL_STATE_DICT, [3] SHARDED_STATE_DICT 
+`fsdp_forward_prefetch`: if True, then FSDP explicitly prefetches the next upcoming all-gather while executing in the forward pass. Only use with Static graphs.
 
-`Forward Prefetch`: if True, then FSDP explicitly prefetches the next upcoming
-all-gather while executing in the forward pass. only use with Static graphs.
+`fsdp_state_dict_type`: [1] FULL_STATE_DICT, [2] LOCAL_STATE_DICT, [3] SHARDED_STATE_DICT
 
-`Use Orig Params`: If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. 
-Useful in cases such as parameter-efficient fine-tuning. 
+`fsdp_use_orig_params`: If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres.
+Useful in cases such as parameter-efficient fine-tuning.
 Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019). This also enables to have different optimizer param groups. This should be `True` when creating optimizer object before preparing/wrapping the model with FSDP.
 
-`CPU RAM Efficient Model loading`: If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. Only applicable for 🤗 Transformers models. This should be set to False if you experience errors when loading the pretrained 🤗 Transformers model via `from_pretrained` method. When using this, `Sync Module States` needs to be True else all the processes expect the main process would have random empty weights leading to unexpected behaviour during training.
+`fsdp_cpu_ram_efficient_loading`: If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. Only applicable for 🤗 Transformers models. This should be set to False if you experience errors when loading the pretrained 🤗 Transformers model via `from_pretrained` method. When using this, `Sync Module States` needs to be True else all the processes expect the main process would have random empty weights leading to unexpected behaviour during training.
 
-`Sync Module States`: If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0
+`fsdp_sync_module_states`: If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0
 
 
-For additional and more nuanced control, you can specify other FSDP parameters via `FullyShardedDataParallelPlugin`. 
+For additional and more nuanced control, you can specify other FSDP parameters via `FullyShardedDataParallelPlugin`.
 When creating `FullyShardedDataParallelPlugin` object, pass it the parameters that weren't part of the accelerate config or if you want to override them.
 The FSDP parameters will be picked based on the accelerate config file or launch command arguments and other parameters that you will pass directly through the `FullyShardedDataParallelPlugin` object will set/override that.
 
@@ -137,7 +137,7 @@ accelerator.save_state("ckpt")
 
 Inspect the ckeckpoint folder to see model and optimizer as shards per process:
 ```
-ls ckpt 
+ls ckpt
 # optimizer_0  pytorch_model_0  random_states_0.pkl  random_states_1.pkl  scheduler.bin
 
 cd ckpt
@@ -155,7 +155,7 @@ To load them back for resuming the training, use the `load_state` utility of acc
 accelerator.load_state("ckpt")
 ```
 
-When using transformers `save_pretrained`, pass `state_dict=accelerator.get_state_dict(model)` to save the model state dict. 
+When using transformers `save_pretrained`, pass `state_dict=accelerator.get_state_dict(model)` to save the model state dict.
   Below is an example:
 
 ```diff
