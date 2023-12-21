@@ -103,7 +103,7 @@ It will try to use `model._no_split_modules` when available.
 Useful in cases such as parameter-efficient fine-tuning.
 Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019). This also enables to have different optimizer param groups. This should be `True` when creating optimizer object before preparing/wrapping the model with FSDP.
 
-`fsdp_cpu_ram_efficient_loading`: If True, only the first process loads the pretrained model checkoint while all other processes have empty weights. Only applicable for 🤗 Transformers models. This should be set to False if you experience errors when loading the pretrained 🤗 Transformers model via `from_pretrained` method. When using this, `Sync Module States` needs to be True else all the processes expect the main process would have random empty weights leading to unexpected behaviour during training.
+`fsdp_cpu_ram_efficient_loading`: If True, only the first process loads the pretrained model checkpoint while all other processes have empty weights. Only applicable for 🤗 Transformers models. This should be set to False if you experience errors when loading the pretrained 🤗 Transformers model via `from_pretrained` method. When using this, `Sync Module States` needs to be True else all the processes expect the main process would have random empty weights leading to unexpected behaviour during training.
 
 `fsdp_sync_module_states`: If True, each individually wrapped FSDP unit will broadcast module parameters from rank 0
 
