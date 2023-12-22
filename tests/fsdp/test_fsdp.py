@@ -30,8 +30,8 @@ from accelerate.test_utils.testing import (
     execute_subprocess_async,
     require_fsdp,
     require_multi_device,
-    require_non_torch_xla,
     require_non_cpu,
+    require_non_torch_xla,
     slow,
 )
 from accelerate.utils.constants import (
