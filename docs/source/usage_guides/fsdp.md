@@ -79,15 +79,7 @@ Currently, `Accelerate` supports the following config through the CLI:
 
 `fsdp_auto_wrap_policy`: [1] TRANSFORMER_BASED_WRAP, [2] SIZE_BASED_WRAP, [3] NO_WRAP
 
-`fsdp_transformer_layer_cls_to_wrap`: When using `TRANSFORMER_BASED_WRAP`, user specifies comma-separated string of transformer layer class names (case-sensitive) to wrap ,e.g,
-`BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput`...
-This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
-Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers.
-Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit.
-Therefore, use this for transformer based models.
-You can use the `model._no_split_modules` for 🤗 Transformer models by answering `yes` to
-`Do you want to use the model's `_no_split_modules` to wrap. Only applicable for 🤗 Transformers`.
-It will try to use `model._no_split_modules` when available.
+`fsdp_transformer_layer_cls_to_wrap`: Only applicable for 🤗 Transformers`. When using `fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP`, a user may provide a comma-separated string of transformer layer class names (case-sensitive) to wrap, e.g., `BertLayer`, `GPTJBlock`, `T5Block`, `BertLayer,BertEmbeddings,BertSelfOutput`. This is important because submodules that share weights (e.g., embedding layers) should not end up in different FSDP wrapped units. Using this policy, wrapping happens for each block containing Multi-Head Attention followed by a couple of MLP layers. Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit. Therefore, use this for transformer-based models. You can use the `model._no_split_modules` for 🤗 Transformer models by answering `yes` to `Do you want to use the model's `_no_split_modules` to wrap. It will try to use `model._no_split_modules` when possible.
 
 `fsdp_min_num_params`: minimum number of parameters when using `fsdp_auto_wrap_policy=SIZE_BASED_WRAP`.
 
