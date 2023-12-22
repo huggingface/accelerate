@@ -25,7 +25,7 @@ extras["test_dev"] = [
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
 extras["rich"] = ["rich"]
 
-extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard", "dvclive"]
+extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]
 extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
 
 extras["sagemaker"] = [
