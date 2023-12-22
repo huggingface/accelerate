@@ -54,6 +54,7 @@ dtypes = [FP16, BF16]
 
 @require_fsdp
 @require_non_cpu
+@require_non_torch_xla
 class FSDPPluginIntegration(AccelerateTestCase):
     def setUp(self):
         super().setUp()
