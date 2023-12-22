@@ -947,6 +947,7 @@ class DVCLiveTracker(GeneralTracker):
                     "This invocation of DVCLive's Live.log_metric() "
                     "is incorrect so we dropped this attribute."
                 )
+        self.live.next_step()
 
     @on_main_process
     def finish(self):

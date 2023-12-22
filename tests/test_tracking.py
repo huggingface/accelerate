@@ -513,12 +513,18 @@ class DVCLiveTrackingTest(unittest.TestCase):
             init_kwargs = {"dvclive": {"dir": dirpath, "save_dvc_exp": False, "dvcyaml": None}}
             accelerator.init_trackers(project_name, init_kwargs=init_kwargs)
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
-            accelerator.log(values, step=0)
+            # Log step 0
+            accelerator.log(values)
+            # Log step 1
+            accelerator.log(values)
+            # Log step 3 (skip step 2)
+            accelerator.log(values, step=3)
             accelerator.end_training()
             live = accelerator.trackers[0].live
             logs, latest = parse_metrics(live)
-            assert latest == values
+            assert latest == values | {"step": 3}
             scalars = os.path.join(live.plots_dir, Metric.subfolder)
-            assert os.path.join(scalars, "total_loss.tsv") in logs
-            assert os.path.join(scalars, "iteration.tsv") in logs
-            assert os.path.join(scalars, "my_text.tsv") in logs
+            for val in values.keys():
+                val_path = os.path.join(scalars, f"{val}.tsv")
+                steps = [int(row["step"]) for row in logs[val_path]]
+                assert steps == [0, 1, 3]
