@@ -130,7 +130,7 @@ def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"
     if is_tpu_available():
         return not ignore_tpu
-    if torch.cuda.is_available():
+    if is_cuda_available():
         return torch.cuda.is_bf16_supported()
     return True
 
