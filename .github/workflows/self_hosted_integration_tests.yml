@@ -49,7 +49,7 @@ jobs:
           cd accelerate;
           git checkout ${{ github.sha }} ;
           pip install -e .[testing];
-          pip uninstall comet_ml wandb -y
+          pip uninstall comet_ml wandb dvclive -y
           cd ..;
       
       - name: Show installed libraries
