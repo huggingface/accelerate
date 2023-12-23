@@ -522,7 +522,8 @@ class DVCLiveTrackingTest(unittest.TestCase):
             accelerator.end_training()
             live = accelerator.trackers[0].live
             logs, latest = parse_metrics(live)
-            assert latest == values | {"step": 3}
+            assert latest.pop("step") == 3
+            assert latest == values
             scalars = os.path.join(live.plots_dir, Metric.subfolder)
             for val in values.keys():
                 val_path = os.path.join(scalars, f"{val}.tsv")
