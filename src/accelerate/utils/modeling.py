@@ -1415,8 +1415,8 @@ def load_checkpoint_in_model(
         logger.warn(
             "The model weights are not tied. Please use the `tie_weights` method before using the `infer_auto_device` function."
         )
-
-    check_tied_parameters_on_same_device(tied_params, device_map)
+    if device_map is not None:
+        check_tied_parameters_on_same_device(tied_params, device_map)
 
     if offload_folder is None and device_map is not None and "disk" in device_map.values():
         raise ValueError(
