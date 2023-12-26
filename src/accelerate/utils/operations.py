@@ -562,7 +562,7 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
                 CannotPadNestedTensorWarning,
             )
             return tensor
-        if dim >= len(tensor.shape):
+        if dim >= len(tensor.shape) or dim < -1 * len(tensor.shape):
             return tensor
 
         # Gather all sizes
@@ -577,14 +577,12 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
         new_size = list(old_size)
         new_size[dim] = max_size
         new_tensor = tensor.new_zeros(tuple(new_size)) + pad_index
-        if dim < 0:
-            dim = len(new_size) - dim
         if pad_first:
             indices = tuple(
-                slice(max_size - old_size[dim], max_size) if i == dim else slice(None) for i in range(len(new_size))
+                slice(max_size - old_size[dim], max_size) if (i == dim or i == len(new_size) - dim) else slice(None) for i in range(len(new_size))
             )
         else:
-            indices = tuple(slice(0, old_size[dim]) if i == dim else slice(None) for i in range(len(new_size)))
+            indices = tuple(slice(0, old_size[dim]) if (i == dim or i == len(new_size) - dim) else slice(None) for i in range(len(new_size)))
         new_tensor[indices] = tensor
         return new_tensor
 
