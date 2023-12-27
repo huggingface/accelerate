@@ -503,7 +503,7 @@ def launch_command_parser(subparsers=None):
         "--fsdp_backward_prefetch_policy",
         default=None,
         type=str,
-        help="This argument is deprecated. Use `fsdp_backward_prefetch` instead.",
+        help="This argument is deprecated and will be removed in version 0.27.0 of 🤗 Accelerate. Use `fsdp_backward_prefetch` instead.",
     )
     fsdp_args.add_argument(
         "--fsdp_backward_prefetch",

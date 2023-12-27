@@ -190,7 +190,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.fsdp_transformer_layer_cls_to_wrap)
         if args.fsdp_backward_prefetch_policy is not None:
             warnings.warn(
-                "`fsdp_backward_prefetch_policy` is deprecated and will be removed in version 0.26.0 of 🤗 Accelerate. Use"
+                "`fsdp_backward_prefetch_policy` is deprecated and will be removed in version 0.27.0 of 🤗 Accelerate. Use"
                 " `fsdp_backward_prefetch` instead",
                 FutureWarning,
             )
