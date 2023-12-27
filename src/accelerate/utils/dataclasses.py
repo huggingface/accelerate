@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
 
 import torch
 
-from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_STATE_DICT_TYPE
+from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
 from .imports import is_cuda_available, is_npu_available, is_xpu_available
 from .versions import compare_versions
@@ -439,6 +439,7 @@ class CustomDtype(enum.Enum):
     r"""
     An enum that contains multiple custom dtypes that can be used for `infer_auto_device_map`.
     """
+
     FP8 = "fp8"
     INT4 = "int4"
 
@@ -918,7 +919,7 @@ class FullyShardedDataParallelPlugin:
         },
     )
     limit_all_gathers: bool = field(
-        default=False,
+        default=True,
         metadata={
             "help": "If False, then FSDP allows the CPU thread to schedule all-gathers "
             "without any extra synchronization. If True, then FSDP explicitly synchronizes the CPU thread to prevent "
@@ -929,9 +930,10 @@ class FullyShardedDataParallelPlugin:
     use_orig_params: bool = field(
         default=True,
         metadata={
-            "help": "If True, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. "
+            "help": "If `True`, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. "
             "Useful in cases such as parameter-efficient fine-tuning. "
-            "Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019)"
+            "Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019). "
+            "This also enables to have different optimizer param groups. This should be `True` when creating optimizer object before preparing/wrapping the model with FSDP."
         },
     )
     param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
@@ -969,7 +971,13 @@ class FullyShardedDataParallelPlugin:
 
         prefix = "FSDP_"
         if self.sharding_strategy is None:
-            self.sharding_strategy = ShardingStrategy(int(os.environ.get(prefix + "SHARDING_STRATEGY", 1)))
+            sharding_strategy = os.environ.get(prefix + "SHARDING_STRATEGY", "FULL_SHARD")
+            sharding_strategy = (
+                FSDP_SHARDING_STRATEGY.index(sharding_strategy) + 1
+                if not sharding_strategy.isdigit()
+                else int(sharding_strategy)
+            )
+            self.sharding_strategy = ShardingStrategy(sharding_strategy)
 
         if self.cpu_offload is None:
             if str_to_bool(os.environ.get(prefix + "OFFLOAD_PARAMS", "False")) == 1:
