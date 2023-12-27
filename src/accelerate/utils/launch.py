@@ -17,6 +17,7 @@ import os
 import sys
 from ast import literal_eval
 from typing import Any, Dict, List, Tuple
+import warnings
 
 import torch
 
@@ -188,7 +189,14 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
         if args.fsdp_transformer_layer_cls_to_wrap is not None:
             current_env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = str(args.fsdp_transformer_layer_cls_to_wrap)
         if args.fsdp_backward_prefetch_policy is not None:
-            current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch_policy)
+            warnings.warn(
+                "`fsdp_backward_prefetch_policy` is deprecated and will be removed in version 0.26.0 of 🤗 Accelerate. Use"
+                " `fsdp_backward_prefetch` instead",
+                FutureWarning,
+            )
+            args.fsdp_backward_prefetch = args.fsdp_backward_prefetch_policy
+        if args.fsdp_backward_prefetch is not None:
+            current_env["FSDP_BACKWARD_PREFETCH"] = str(args.fsdp_backward_prefetch)
         if args.fsdp_state_dict_type is not None:
             current_env["FSDP_STATE_DICT_TYPE"] = str(args.fsdp_state_dict_type)
         current_env["FSDP_FORWARD_PREFETCH"] = str(args.fsdp_forward_prefetch).lower()
