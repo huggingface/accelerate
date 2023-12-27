@@ -482,7 +482,7 @@ def launch_command_parser(subparsers=None):
     )
     fsdp_args.add_argument(
         "--fsdp_sharding_strategy",
-        type=(str, int),
+        type=str,
         default="FULL_SHARD",
         help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
     )
