@@ -46,10 +46,10 @@ downcast_bf16: 'no'
 fsdp_config:
   fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
   fsdp_backward_prefetch_policy: BACKWARD_PRE
-  fsdp_forward_prefetch: true
+  fsdp_forward_prefetch: false
   fsdp_cpu_ram_efficient_loading: true
   fsdp_offload_params: false
-  fsdp_sharding_strategy: 1
+  fsdp_sharding_strategy: FULL_SHARD
   fsdp_state_dict_type: SHARDED_STATE_DICT
   fsdp_sync_module_states: true
   fsdp_transformer_layer_cls_to_wrap: BertLayer
