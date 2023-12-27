@@ -422,6 +422,13 @@ We will look at the changes needed in the code when using these.
 based on model, dataloaders, dummy optimizer and dummy schedulers provided to `prepare` method. 
 Only the `auto` fields specified in above examples are handled by `prepare` method and the rest have to be explicitly specified by the user.
 
+The `auto` values are calculated as:
+
+- `reduce_bucket_size`: `hidden_size*hidden_size`
+- `stage3_prefetch_bucket_size`: `0.9 * hidden_size * hidden_size`
+- `stage3_param_persistence_threshold`: `10 * hidden_size`
+
+
 **Things to note when using DeepSpeed Config File**
 
 Below is a sample script using `deepspeed_config_file` in different scenarios.
