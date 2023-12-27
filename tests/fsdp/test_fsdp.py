@@ -69,10 +69,18 @@ class FSDPPluginIntegration(AccelerateTestCase):
     def test_sharding_strategy(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
 
+        # check that giving enums works fine
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             env = self.dist_env.copy()
             env["FSDP_SHARDING_STRATEGY"] = f"{i + 1}"
-            env["FSDP_SHARDING_STRATEGY_NAME"] = strategy
+            with mockenv_context(**env):
+                fsdp_plugin = FullyShardedDataParallelPlugin()
+                self.assertEqual(fsdp_plugin.sharding_strategy, ShardingStrategy(i + 1))
+
+        # check that giving names works fine
+        for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
+            env = self.dist_env.copy()
+            env["FSDP_SHARDING_STRATEGY"] = strategy
             with mockenv_context(**env):
                 fsdp_plugin = FullyShardedDataParallelPlugin()
                 self.assertEqual(fsdp_plugin.sharding_strategy, ShardingStrategy(i + 1))
@@ -201,7 +209,7 @@ class FSDPIntegrationTest(TempDirTestCase):
             cmd_config = cmd.copy()
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
                 if strategy.lower() in config:
-                    cmd_config.append(f"--fsdp_sharding_strategy={i+1}")
+                    cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
                     break
 
             if "fp32" in config:
@@ -247,7 +255,7 @@ class FSDPIntegrationTest(TempDirTestCase):
 
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             cmd_config = cmd.copy()
-            cmd_config.append(f"--fsdp_sharding_strategy={i+1}")
+            cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
             if strategy != "FULL_SHARD":
                 continue
             state_dict_config_index = len(cmd_config)
@@ -301,7 +309,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                 cmd_config.extend(["--use_fsdp"])
                 for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
                     if strategy.lower() in spec:
-                        cmd_config.append(f"--fsdp_sharding_strategy={i+1}")
+                        cmd_config.append(f"--fsdp_sharding_strategy={strategy}")
                         break
 
                 if "cpu_offload" in spec:
