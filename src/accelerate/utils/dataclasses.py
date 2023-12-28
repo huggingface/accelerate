@@ -930,10 +930,10 @@ class FullyShardedDataParallelPlugin:
     use_orig_params: bool = field(
         default=True,
         metadata={
-            "help": "If `True`, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres. "
+            "help": "If `True`, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable parameters. "
             "Useful in cases such as parameter-efficient fine-tuning. "
             "Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019). "
-            "This also enables to have different optimizer param groups. This should be `True` when creating optimizer object before preparing/wrapping the model with FSDP."
+            "This also enables multiple optimizer param groups. This should be `True` when creating an optimizer object before preparing/wrapping the model with FSDP."
         },
     )
     param_init_fn: Optional[Callable[[torch.nn.Module], None]] = field(
