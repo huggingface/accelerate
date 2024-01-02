@@ -621,6 +621,7 @@ def reduce(tensor, reduction="mean", scale=1.0):
             # the same on all processes.
             xm.mark_step()
             xm.all_reduce(xm.REDUCE_SUM, [cloned_tensor], scale)
+            xm.mark_step()
         elif state.distributed_type.value in TORCH_DISTRIBUTED_OPERATION_TYPES:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
         if reduction == "mean":
