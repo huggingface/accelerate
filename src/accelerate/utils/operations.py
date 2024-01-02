@@ -615,7 +615,8 @@ def reduce(tensor, reduction="mean", scale=1.0):
         if state.distributed_type == DistributedType.NO:
             return cloned_tensor
         if state.distributed_type == DistributedType.TPU:
-            cloned_tensor = xm.all_reduce("sum", cloned_tensor, scale)
+            xm.mark_step()
+            xm.all_reduce(xm.REDUCE_SUM, [cloned_tensor], scale)
         elif state.distributed_type.value in TORCH_DISTRIBUTED_OPERATION_TYPES:
             torch.distributed.all_reduce(cloned_tensor, ReduceOp.SUM)
         if reduction == "mean":
