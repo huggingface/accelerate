@@ -327,8 +327,7 @@ def get_cluster_input():
             fsdp_config["fsdp_sharding_strategy"] = _ask_options(
                 sharding_strategy_query,
                 FSDP_SHARDING_STRATEGY,
-                lambda x: int(x) + 1,
-                default=1,
+                lambda x: FSDP_SHARDING_STRATEGY[int(x)],
             )
             fsdp_config["fsdp_offload_params"] = _ask_field(
                 "Do you want to offload parameters and gradients to CPU? [yes/NO]: ",
@@ -362,7 +361,7 @@ def get_cluster_input():
                     default=100000000,
                 )
             fsdp_backward_prefetch_query = "What should be your FSDP's backward prefetch policy?"
-            fsdp_config["fsdp_backward_prefetch_policy"] = _ask_options(
+            fsdp_config["fsdp_backward_prefetch"] = _ask_options(
                 fsdp_backward_prefetch_query,
                 FSDP_BACKWARD_PREFETCH,
                 lambda x: FSDP_BACKWARD_PREFETCH[int(x)],

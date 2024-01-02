@@ -482,8 +482,8 @@ def launch_command_parser(subparsers=None):
     )
     fsdp_args.add_argument(
         "--fsdp_sharding_strategy",
-        type=int,
-        default=1,
+        type=str,
+        default="FULL_SHARD",
         help="FSDP's Sharding Strategy. (useful only when `use_fsdp` flag is passed).",
     )
     fsdp_args.add_argument(
@@ -501,6 +501,12 @@ def launch_command_parser(subparsers=None):
     )
     fsdp_args.add_argument(
         "--fsdp_backward_prefetch_policy",
+        default=None,
+        type=str,
+        help="This argument is deprecated and will be removed in version 0.27.0 of 🤗 Accelerate. Use `fsdp_backward_prefetch` instead.",
+    )
+    fsdp_args.add_argument(
+        "--fsdp_backward_prefetch",
         default=None,
         type=str,
         help="FSDP's backward prefetch policy. (useful only when `use_fsdp` flag is passed).",
