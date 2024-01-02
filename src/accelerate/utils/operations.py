@@ -615,6 +615,10 @@ def reduce(tensor, reduction="mean", scale=1.0):
         if state.distributed_type == DistributedType.NO:
             return cloned_tensor
         if state.distributed_type == DistributedType.TPU:
+            # Some processes may have different HLO graphs than other
+            # processes, for example in the breakpoint API
+            # accelerator.set_trigger(). Use mark_step to make HLOs
+            # the same on all processes.
             xm.mark_step()
             xm.all_reduce(xm.REDUCE_SUM, [cloned_tensor], scale)
         elif state.distributed_type.value in TORCH_DISTRIBUTED_OPERATION_TYPES:
