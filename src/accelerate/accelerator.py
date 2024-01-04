@@ -1572,10 +1572,7 @@ class Accelerator:
                         optimizer = DeepSpeedCPUAdam(optimizer.param_groups, **defaults)
                     kwargs["optimizer"] = optimizer
                     if scheduler is not None:
-                        if (
-                            isinstance(scheduler, LRScheduler)
-                            or type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
-                        ):
+                        if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
                             kwargs["lr_scheduler"] = scheduler
 
             engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
