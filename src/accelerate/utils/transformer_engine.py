@@ -36,15 +36,15 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
             te_module = te.Linear(
                 module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
             )
-            module.weight.copy_(te_module.weight)
+            te_module.weight.copy_(module.weight)
             if has_bias:
-                module.bias.copy_(te_module.bias)
+                te_module.bias.copy_(module.bias)
 
             setattr(model, name, te_module)
         elif isinstance(module, nn.LayerNorm) and to_transformer_engine and _convert_ln:
             te_module = te.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
-            module.weight.copy_(te_module.weight)
-            module.bias.copy_(te_module.bias)
+            te_module.weight.copy_(module.weight)
+            te_module.bias.copy_(module.bias)
 
             setattr(model, name, te_module)
         elif isinstance(module, te.Linear) and not to_transformer_engine and _convert_linear:
@@ -52,15 +52,15 @@ def convert_model(model, to_transformer_engine=True, _convert_linear=True, _conv
             new_module = nn.Linear(
                 module.in_features, module.out_features, bias=has_bias, params_dtype=module.weight.dtype
             )
-            module.weight.copy_(new_module.weight)
+            new_module.weight.copy_(module.weight)
             if has_bias:
-                module.bias.copy_(new_module.bias)
+                new_module.bias.copy_(module.bias)
 
             setattr(model, name, new_module)
         elif isinstance(module, te.LayerNorm) and not to_transformer_engine and _convert_ln:
             new_module = nn.LayerNorm(module.normalized_shape[0], eps=module.eps, params_dtype=module.weight.dtype)
-            module.weight.copy_(new_module.weight)
-            module.bias.copy_(new_module.bias)
+            new_module.weight.copy_(module.weight)
+            new_module.bias.copy_(module.bias)
 
             setattr(model, name, new_module)
         else:
@@ -79,6 +79,6 @@ def has_transformer_engine_layers(model):
     if not is_fp8_available():
         raise ImportError("Using `has_transformer_engine_layers` requires transformer_engine to be installed.")
     for m in model.modules():
-        if isinstance(m, (te.LayerNorm, te.Linear)):
+        if isinstance(m, (te.LayerNorm, te.Linear, te.TransformerLayer)):
             return True
     return False
