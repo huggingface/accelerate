@@ -824,7 +824,8 @@ def prepare_data_loader(
         process_index = state.process_index
 
     # Sanity check
-    if split_batches and dataloader.batch_size > 1 and dataloader.batch_size % num_processes != 0:
+    batch_size = dataloader.batch_size if dataloader.batch_size is not None else dataloader.batch_sampler.batch_size
+    if split_batches and batch_size > 1 and batch_size % num_processes != 0:
         raise ValueError(
             f"To use a `DataLoader` in `split_batches` mode, the batch size ({dataloader.batch_size}) "
             f"needs to be a round multiple of the number of processes ({num_processes})."
