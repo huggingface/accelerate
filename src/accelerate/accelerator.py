@@ -1419,7 +1419,7 @@ class Accelerator:
             for obj in args
         ]
 
-        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto":
+        if deepspeed_plugin.is_auto("train_micro_batch_size_per_gpu"):
             if is_dataloader_present:
                 batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
                 if any(bs is None for bs in batch_sizes):
@@ -1445,7 +1445,7 @@ class Accelerator:
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                 )
         else:
-            batch_size_per_device = deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"]
+            batch_size_per_device = deepspeed_plugin.get_value("train_micro_batch_size_per_gpu")
 
         # handle `gradient_accumulation_steps` when the value is `auto`
         deepspeed_plugin.fill_match(
@@ -1457,7 +1457,7 @@ class Accelerator:
         config_kwargs = {
             "train_micro_batch_size_per_gpu": batch_size_per_device,
             "train_batch_size": batch_size_per_device
-            * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
+            * deepspeed_plugin.get_value("gradient_accumulation_steps")
             * self.num_processes,
             "gradient_clipping": 1.0,
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
@@ -1516,21 +1516,39 @@ class Accelerator:
                 )
 
         if model is not None:
-            if hasattr(model, "config"):
-                hidden_size = (
-                    max(model.config.hidden_sizes)
-                    if getattr(model.config, "hidden_sizes", None)
-                    else getattr(model.config, "hidden_size", None)
+            # deal with config keys that use `auto` value and rely on model's hidden_size
+            hidden_size_based_keys = [
+                "zero_optimization.reduce_bucket_size",
+                "zero_optimization.stage3_prefetch_bucket_size",
+                "zero_optimization.stage3_param_persistence_threshold",
+            ]
+            hidden_size_auto_keys = [x for x in hidden_size_based_keys if deepspeed_plugin.is_auto(x)]
+            if len(hidden_size_auto_keys) > 0:
+                reasoning = (
+                    "therefore it's not possible to automatically fill out the following `auto` entries "
+                    + f"in the DeepSpeed config file: {hidden_size_auto_keys}. You can fix that by replacing "
+                    + "`auto` values for these keys with an integer value of your choice."
                 )
-                if hidden_size is not None:
-                    config_kwargs.update(
-                        {
-                            "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
-                            "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
-                            "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
-                        }
+                if not hasattr(model, "config"):
+                    raise ValueError("Can't find `model.config` entry, " + reasoning)
+
+                if hasattr(model.config, "hidden_size"):
+                    hidden_size = model.config.hidden_size
+                elif hasattr(model.config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.hidden_sizes)
+                else:
+                    raise ValueError(
+                        "Can't find neither `model.config.hidden_size` nor `model.config.hidden_sizes`, " + reasoning
                     )
 
+                config_kwargs.update(
+                    {
+                        "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
+                        "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
+                        "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
+                    }
+                )
             if isinstance(optimizer, (DummyOptim)):
                 config_kwargs.update(
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
