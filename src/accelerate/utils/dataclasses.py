@@ -730,7 +730,7 @@ class DeepSpeedPlugin:
             else:
                 raise ValueError(
                     f"`{ds_key_long}` not found in kwargs. "
-                    f"Please specify `{ds_key_long}` without `auto`(set to correct value) in the DeepSpeed config file or "
+                    f"Please specify `{ds_key_long}` without `auto` (set to correct value) in the DeepSpeed config file or "
                     "pass it in kwargs."
                 )
 
