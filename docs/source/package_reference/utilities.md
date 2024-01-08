@@ -134,7 +134,7 @@ These include data operations that mimic the same `torch` ops but can be used on
 
 [[autodoc]] utils.send_to_device
 
-[[autodoc]] utils.slice_tensor
+[[autodoc]] utils.slice_tensors
 
 ## Environment Checks
 
