@@ -821,7 +821,7 @@ class AcceleratorState:
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
                 if is_ipex_available():
                     "check if user disables it explicitly"
-                    self.use_ipex = parse_flag_from_env("ACCELERATE_USE_IPEX", default=True)
+                    self.use_ipex = parse_flag_from_env("ACCELERATE_USE_IPEX", default=False)
                 else:
                     self.use_ipex = False
                 if self.distributed_type == DistributedType.MULTI_XPU:
