@@ -217,6 +217,11 @@ class Accelerator:
             If set to `True`, in cases where the total batch size across all processes does not exactly divide the
             dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
             all workers.
+        use_seedable_sampler (`bool`, *optional*, defaults to `False`):
+            Whether or not use a fully seedable random sampler ([`~data_loader.SeedableRandomSampler`]). Ensures
+            training results are fully reproducable using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+            also be ran with [`~utils.set_seed`] for the best results.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
@@ -262,6 +267,7 @@ class Accelerator:
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
         dispatch_batches: bool | None = None,
         even_batches: bool = True,
+        use_seedable_sampler: bool = False,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
@@ -417,6 +423,7 @@ class Accelerator:
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
         self.even_batches = even_batches
+        self.use_seedable_sampler = use_seedable_sampler
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
@@ -1847,6 +1854,7 @@ class Accelerator:
             dispatch_batches=self.dispatch_batches,
             even_batches=self.even_batches,
             slice_fn_for_dispatch=slice_fn_for_dispatch,
+            use_seedable_sampler=self.use_seedable_sampler,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
