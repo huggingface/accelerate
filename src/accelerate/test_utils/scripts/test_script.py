@@ -335,19 +335,22 @@ def custom_sampler_check():
         ), "Custom sampler was changed after calling `prepare_data_loader`"
 
 
-def mock_training(length, batch_size, generator):
+def mock_training(length, batch_size, generator, use_seedable_sampler=False):
     set_seed(42)
     generator.manual_seed(42)
     train_set = RegressionDataset(length=length, seed=42)
 
-    # The SeedableRandomSampler is needed during distributed setups
-    # for full reproducability across processes with the `DataLoader`
-    sampler = SeedableRandomSampler(
-        generator=generator,
-        data_source=train_set,
-        num_samples=len(train_set),
-    )
-    train_dl = DataLoader(train_set, batch_size=batch_size, sampler=sampler)
+    if use_seedable_sampler:
+        # The SeedableRandomSampler is needed during distributed setups
+        # for full reproducability across processes with the `DataLoader`
+        sampler = SeedableRandomSampler(
+            generator=generator,
+            data_source=train_set,
+            num_samples=len(train_set),
+        )
+        train_dl = DataLoader(train_set, batch_size=batch_size, sampler=sampler)
+    else:
+        train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
     for epoch in range(3):
@@ -367,6 +370,10 @@ def training_check():
     length = batch_size * 4 * state.num_processes
 
     train_set, old_model = mock_training(length, batch_size * state.num_processes, generator)
+    assert are_the_same_tensors(old_model.a), "Did not obtain the same model on both processes."
+    assert are_the_same_tensors(old_model.b), "Did not obtain the same model on both processes."
+
+    train_set, old_model = mock_training(length, batch_size * state.num_processes, generator, True)
     assert are_the_same_tensors(old_model.a), "Did not obtain the same model on both processes."
     assert are_the_same_tensors(old_model.b), "Did not obtain the same model on both processes."
 
