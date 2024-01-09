@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
+from accelerate.utils.deepspeed import DeepSpeedSchedulerWrapper, DummyOptim, DummyScheduler
 
 
 MAX_GPU_BATCH_SIZE = 16
@@ -102,13 +102,7 @@ def training_function(config, args):
     )
     optimizer = optimizer_cls(params=model.parameters(), lr=lr)
 
-    if accelerator.state.deepspeed_plugin is not None:
-        gradient_accumulation_steps = accelerator.state.deepspeed_plugin.deepspeed_config[
-            "gradient_accumulation_steps"
-        ]
-    else:
-        gradient_accumulation_steps = 1
-    max_training_steps = (len(train_dataloader) * num_epochs) // gradient_accumulation_steps
+    max_training_steps = len(train_dataloader) * num_epochs
 
     # Instantiate scheduler
     if (
@@ -130,8 +124,6 @@ def training_function(config, args):
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
-    # We need to keep track of how many total steps we have iterated over
-    overall_step = 0
     # We also need to keep track of the stating epoch so files are named properly
     starting_epoch = 0
 
@@ -139,19 +131,31 @@ def training_function(config, args):
     metric = evaluate.load("glue", "mrpc")
     best_performance = 0
     performance_metric = {}
+    expected_lr_after_first_optim_step = lr * (
+        1 - 1 / (max_training_steps / accelerator.num_processes / accelerator.gradient_accumulation_steps)
+    )
+    lr_scheduler_check_completed = False
     for epoch in range(starting_epoch, num_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss = loss / gradient_accumulation_steps
-            accelerator.backward(loss)
-            if step % gradient_accumulation_steps == 0:
+            with accelerator.accumulate(model):
+                outputs = model(**batch)
+                loss = outputs.loss
+                accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
-            overall_step += 1
+                # assert the learning rate after first optimizer step
+                if (
+                    accelerator.sync_gradients
+                    and not lr_scheduler_check_completed
+                    and not isinstance(lr_scheduler, DeepSpeedSchedulerWrapper)
+                ):
+                    assert (
+                        lr_scheduler.get_last_lr()[0] == expected_lr_after_first_optim_step
+                    ), f"Wrong lr found at second step, expected {expected_lr_after_first_optim_step}, got {lr_scheduler.get_last_lr()[0]}"
+                    lr_scheduler_check_completed = True
 
         model.eval()
         samples_seen = 0
@@ -183,6 +187,12 @@ def training_function(config, args):
 
         if best_performance < eval_metric["accuracy"]:
             best_performance = eval_metric["accuracy"]
+
+    # check that the LR is 0
+    if not isinstance(lr_scheduler, DeepSpeedSchedulerWrapper):
+        assert (
+            lr_scheduler.get_last_lr()[0] == 0
+        ), f"Wrong lr found at last step, expected 0, got {lr_scheduler.get_last_lr()[0]}"
 
     if args.performance_lower_bound is not None:
         assert (
