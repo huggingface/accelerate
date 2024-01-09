@@ -31,21 +31,26 @@ if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_availab
 
 logger = get_logger(__name__)
 
+
 def _is_peft_model(model):
     if is_peft_available():
         from peft import PeftModel
     return is_peft_available() and isinstance(model.module, PeftModel)
 
+
 def _get_model_state_dict(model, adapter_only=False):
     if adapter_only and _is_peft_model(model):
         from peft import get_peft_model_state_dict
+
         return get_peft_model_state_dict(model, adapter_name=model.active_adapter, unwrap_compiled=True)
     else:
         return model.state_dict()
 
+
 def _set_model_state_dict(model, state_dict, adapter_only=False):
     if adapter_only and _is_peft_model(model):
         from peft import set_peft_model_state_dict
+
         return set_peft_model_state_dict(model, state_dict, adapter_name=model.active_adapter)
     else:
         return model.load_state_dict(state_dict)
