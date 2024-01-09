@@ -217,7 +217,7 @@ class Accelerator:
             If set to `True`, in cases where the total batch size across all processes does not exactly divide the
             dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
             all workers.
-        use_seedable_sampler (`bool`, *optional*`):
+        use_seedable_sampler (`bool`, *optional*, defaults to `False`):
             Whether or not use a fully seedable random sampler ([`~data_loader.SeedableRandomSampler`]). Comes at a
             cost of potentially different performances due to different shuffling algorithms.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
