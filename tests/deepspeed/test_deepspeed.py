@@ -661,14 +661,11 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
     @parameterized.expand(model_types, name_func=parameterized_custom_name_func)
     def test_autofill_comm_buffers_dsconfig(self, model_type):
         deepspeed_plugin = DeepSpeedPlugin(
-            gradient_accumulation_steps=1,
-            gradient_clipping=1.0,
-            zero_stage=2,
-            offload_optimizer_device="cpu",
-            offload_param_device="cpu",
-            zero3_save_16bit_model=False,
-            zero3_init_flag=False,
+            hf_ds_config=self.ds_config_file[ZERO3],
+            zero3_init_flag=True,
         )
+        del deepspeed_plugin.deepspeed_config["bf16"]
+        del deepspeed_plugin.deepspeed_config["fp16"]
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
 
