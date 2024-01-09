@@ -35,14 +35,15 @@ logger = get_logger(__name__)
 def _is_peft_model(model):
     if is_peft_available():
         from peft import PeftModel
-    return is_peft_available() and isinstance(model.module, PeftModel)
+    unwrapped_model = getattr(model.module, "_orig_mod", model.module)
+    return is_peft_available() and isinstance(unwrapped_model, PeftModel)
 
 
 def _get_model_state_dict(model, adapter_only=False):
     if adapter_only and _is_peft_model(model):
         from peft import get_peft_model_state_dict
 
-        return get_peft_model_state_dict(model, adapter_name=model.active_adapter, unwrap_compiled=True)
+        return get_peft_model_state_dict(model, adapter_name=model.active_adapter)
     else:
         return model.state_dict()
 
