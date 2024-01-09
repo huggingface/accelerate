@@ -219,7 +219,8 @@ class Accelerator:
             all workers.
         use_seedable_sampler (`bool`, *optional*`):
             Whether or not use a fully seedable random sampler ([`~data_loader.SeedableRandomSampler`]). Comes at a
-            cost of potentially different performances due to different shuffling algorithms.
+            cost of potentially different performances due to different shuffling algorithms, but will ensure the
+            training results are fully reproducible.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
