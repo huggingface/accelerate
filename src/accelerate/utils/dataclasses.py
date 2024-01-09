@@ -742,6 +742,16 @@ class DeepSpeedPlugin:
             if ds_val != kwargs[ds_key_long]:
                 mismatches.append(f"- ds {ds_key_long}={ds_val} vs arg {ds_key_long}={kwargs[ds_key_long]}")
 
+    def is_auto(self, ds_key_long):
+        val = self.hf_ds_config.get_value(ds_key_long)
+        if val is None:
+            return False
+        else:
+            return val == "auto"
+
+    def get_value(self, ds_key_long, default=None):
+        return self.hf_ds_config.get_value(ds_key_long, default)
+
     def deepspeed_config_process(self, prefix="", mismatches=None, config=None, must_match=True, **kwargs):
         """Process the DeepSpeed config with the values from the kwargs."""
         mismatches = [] if mismatches is None else mismatches

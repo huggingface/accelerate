@@ -24,7 +24,7 @@ from pathlib import Path
 import torch
 from parameterized import parameterized
 from torch.utils.data import BatchSampler, DataLoader, RandomSampler, SequentialSampler
-from transformers import AutoModel, AutoModelForCausalLM, get_scheduler
+from transformers import AutoConfig, AutoModel, AutoModelForCausalLM, get_scheduler
 from transformers.testing_utils import mockenv_context
 from transformers.trainer_utils import set_seed
 from transformers.utils import is_torch_bf16_available
@@ -41,7 +41,7 @@ from accelerate.test_utils.testing import (
     require_non_cpu,
     slow,
 )
-from accelerate.test_utils.training import RegressionDataset
+from accelerate.test_utils.training import RegressionDataset, RegressionModel
 from accelerate.utils.dataclasses import DeepSpeedPlugin
 from accelerate.utils.deepspeed import (
     DeepSpeedEngineWrapper,
@@ -56,6 +56,7 @@ from accelerate.utils.other import patch_environment
 set_seed(42)
 
 GPT2_TINY = "sshleifer/tiny-gpt2"
+MOBILEVIT = "apple/mobilevit-xx-small"
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
@@ -68,9 +69,15 @@ CUSTOM_SCHEDULER = "custom_scheduler"
 DS_OPTIMIZER = "deepspeed_optimizer"
 DS_SCHEDULER = "deepspeed_scheduler"
 
+NO_CONFIG = "no_config"
+CONFIG_WITH_NO_HIDDEN_SIZE = "config_with_no_hidden_size"
+CONFIG_WITH_HIDDEN_SIZE = "config_with_hidden_size"
+CONFIG_WITH_HIDDEN_SIZES = "config_with_hidden_sizes"
+
 stages = [ZERO2, ZERO3]
 optims = [CUSTOM_OPTIMIZER, DS_OPTIMIZER]
 schedulers = [CUSTOM_SCHEDULER, DS_SCHEDULER]
+model_types = [NO_CONFIG, CONFIG_WITH_NO_HIDDEN_SIZE, CONFIG_WITH_HIDDEN_SIZE, CONFIG_WITH_HIDDEN_SIZES]
 if is_torch_bf16_available():
     dtypes = [FP16, BF16]
 else:
@@ -87,6 +94,11 @@ def parameterized_custom_name_func(func, param_num, param):
 # Cartesian-product of zero stages with models to test
 params = list(itertools.product(stages, dtypes))
 optim_scheduler_params = list(itertools.product(optims, schedulers))
+
+
+class DummyConfig:
+    def __init__(self):
+        self._name_or_path = "dummy"
 
 
 @require_deepspeed
@@ -645,6 +657,70 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             self.assertFalse(
                 accelerator.deepspeed_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
             )
+
+    @parameterized.expand(model_types, name_func=parameterized_custom_name_func)
+    def test_autofill_comm_buffers_dsconfig(self, model_type):
+        deepspeed_plugin = DeepSpeedPlugin(
+            hf_ds_config=self.ds_config_file[ZERO3],
+            zero3_init_flag=True,
+        )
+        del deepspeed_plugin.deepspeed_config["bf16"]
+        del deepspeed_plugin.deepspeed_config["fp16"]
+        del deepspeed_plugin.deepspeed_config["optimizer"]
+        del deepspeed_plugin.deepspeed_config["scheduler"]
+        with mockenv_context(**self.dist_env):
+            accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
+
+            train_set = RegressionDataset(length=80)
+            eval_set = RegressionDataset(length=20)
+            train_dataloader = DataLoader(train_set, batch_size=16, shuffle=True)
+            eval_dataloader = DataLoader(eval_set, batch_size=32, shuffle=False)
+            model = RegressionModel()
+            if model_type == CONFIG_WITH_NO_HIDDEN_SIZE:
+                model.config = DummyConfig()
+            elif model_type == CONFIG_WITH_HIDDEN_SIZE:
+                model.config = AutoConfig.from_pretrained(GPT2_TINY)
+                hidden_size = model.config.hidden_size
+            elif model_type == CONFIG_WITH_HIDDEN_SIZES:
+                model.config = AutoConfig.from_pretrained(MOBILEVIT)
+                hidden_size = max(model.config.hidden_sizes)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
+            lr_scheduler = get_scheduler(
+                name="linear",
+                optimizer=optimizer,
+                num_warmup_steps=0,
+                num_training_steps=1000,
+            )
+
+            if model_type == NO_CONFIG:
+                with self.assertRaises(ValueError) as cm:
+                    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+                        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+                    )
+                msg = "Can't find `model.config` entry"
+                self.assertTrue(msg in str(cm.exception))
+            elif model_type == CONFIG_WITH_NO_HIDDEN_SIZE:
+                with self.assertRaises(ValueError) as cm:
+                    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+                        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+                    )
+                msg = "Can find neither `model.config.hidden_size` nor `model.config.hidden_sizes`"
+                self.assertTrue(msg in str(cm.exception))
+            else:
+                model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+                    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+                )
+                self.assertEqual(
+                    accelerator.deepspeed_config["zero_optimization"]["reduce_bucket_size"], hidden_size * hidden_size
+                )
+                self.assertEqual(
+                    accelerator.deepspeed_config["zero_optimization"]["stage3_prefetch_bucket_size"],
+                    0.9 * hidden_size * hidden_size,
+                )
+                self.assertEqual(
+                    accelerator.deepspeed_config["zero_optimization"]["stage3_param_persistence_threshold"],
+                    10 * hidden_size,
+                )
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
     def test_autofill_dsconfig_from_ds_plugin(self, dtype):

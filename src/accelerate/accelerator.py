@@ -1419,7 +1419,7 @@ class Accelerator:
             for obj in args
         ]
 
-        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto":
+        if deepspeed_plugin.is_auto("train_micro_batch_size_per_gpu"):
             if is_dataloader_present:
                 batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
                 if any(bs is None for bs in batch_sizes):
@@ -1445,7 +1445,7 @@ class Accelerator:
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                 )
         else:
-            batch_size_per_device = deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"]
+            batch_size_per_device = deepspeed_plugin.get_value("train_micro_batch_size_per_gpu")
 
         # handle `gradient_accumulation_steps` when the value is `auto`
         deepspeed_plugin.fill_match(
@@ -1457,7 +1457,7 @@ class Accelerator:
         config_kwargs = {
             "train_micro_batch_size_per_gpu": batch_size_per_device,
             "train_batch_size": batch_size_per_device
-            * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
+            * deepspeed_plugin.get_value("gradient_accumulation_steps")
             * self.num_processes,
             "gradient_clipping": 1.0,
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
@@ -1516,20 +1516,13 @@ class Accelerator:
                 )
 
         if model is not None:
-            ds_config = deepspeed_plugin.deepspeed_config
             # deal with config keys that use `auto` value and rely on model's hidden_size
             hidden_size_based_keys = [
                 "zero_optimization.reduce_bucket_size",
                 "zero_optimization.stage3_prefetch_bucket_size",
                 "zero_optimization.stage3_param_persistence_threshold",
             ]
-
-            def is_auto(ds_config, ds_key_long):
-                nodes = ds_key_long.split(".")
-                val = ds_config.get(nodes[0], {}).get(nodes[1], None)
-                return False if None else val == "auto"
-
-            hidden_size_auto_keys = [x for x in hidden_size_based_keys if is_auto(ds_config, x)]
+            hidden_size_auto_keys = [x for x in hidden_size_based_keys if deepspeed_plugin.is_auto(x)]
             if len(hidden_size_auto_keys) > 0:
                 reasoning = (
                     "therefore it's not possible to automatically fill out the following `auto` entries "
@@ -1546,7 +1539,7 @@ class Accelerator:
                     hidden_size = max(model.config.hidden_sizes)
                 else:
                     raise ValueError(
-                        "Can't find neither `model.config.hidden_size` nor `model.config.hidden_sizes`, " + reasoning
+                        "Can find neither `model.config.hidden_size` nor `model.config.hidden_sizes`, " + reasoning
                     )
 
                 config_kwargs.update(
