@@ -1539,7 +1539,7 @@ class Accelerator:
                     hidden_size = max(model.config.hidden_sizes)
                 else:
                     raise ValueError(
-                        "Can't find neither `model.config.hidden_size` nor `model.config.hidden_sizes`, " + reasoning
+                        "Can find neither `model.config.hidden_size` nor `model.config.hidden_sizes`, " + reasoning
                     )
 
                 config_kwargs.update(
@@ -1549,7 +1549,7 @@ class Accelerator:
                         "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
                     }
                 )
-                
+
             if isinstance(optimizer, (DummyOptim)):
                 config_kwargs.update(
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
