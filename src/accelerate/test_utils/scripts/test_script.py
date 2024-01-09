@@ -363,22 +363,28 @@ def mock_training(length, batch_size, generator, use_seedable_sampler=False):
     return train_set, model
 
 
-def training_check():
+def training_check(use_seedable_sampler=False):
     state = AcceleratorState()
     generator = torch.Generator()
     batch_size = 8
     length = batch_size * 4 * state.num_processes
 
-    train_set, old_model = mock_training(length, batch_size * state.num_processes, generator)
-    assert are_the_same_tensors(old_model.a), "Did not obtain the same model on both processes."
-    assert are_the_same_tensors(old_model.b), "Did not obtain the same model on both processes."
-
-    train_set, old_model = mock_training(length, batch_size * state.num_processes, generator, True)
+    train_set, old_model = mock_training(length, batch_size * state.num_processes, generator, use_seedable_sampler)
     assert are_the_same_tensors(old_model.a), "Did not obtain the same model on both processes."
     assert are_the_same_tensors(old_model.b), "Did not obtain the same model on both processes."
 
     accelerator = Accelerator()
-    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
+    if use_seedable_sampler:
+        # The SeedableRandomSampler is needed during distributed setups
+        # for full reproducability across processes with the `DataLoader`
+        sampler = SeedableRandomSampler(
+            generator=generator,
+            data_source=train_set,
+            num_samples=len(train_set),
+        )
+        train_dl = DataLoader(train_set, batch_size=batch_size, sampler=sampler)
+    else:
+        train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
@@ -399,7 +405,7 @@ def training_check():
 
     accelerator.print("Training yielded the same results on one CPU or distributed setup with no batch split.")
 
-    accelerator = Accelerator(split_batches=True)
+    accelerator = Accelerator(split_batches=True, use_seedable_sampler=use_seedable_sampler)
     train_dl = DataLoader(train_set, batch_size=batch_size * state.num_processes, shuffle=True, generator=generator)
     model = RegressionModel()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -425,7 +431,7 @@ def training_check():
         # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
         print("FP16 training check.")
         AcceleratorState._reset_state()
-        accelerator = Accelerator(mixed_precision="fp16")
+        accelerator = Accelerator(mixed_precision="fp16", use_seedable_sampler=use_seedable_sampler)
         train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -465,7 +471,7 @@ def training_check():
         # Mostly a test that BF16 doesn't crash as the operation inside the model is not converted to BF16
         print("BF16 training check.")
         AcceleratorState._reset_state()
-        accelerator = Accelerator(mixed_precision="bf16")
+        accelerator = Accelerator(mixed_precision="bf16", use_seedable_sampler=use_seedable_sampler)
         train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -489,7 +495,7 @@ def training_check():
     if is_ipex_available():
         print("ipex BF16 training check.")
         AcceleratorState._reset_state()
-        accelerator = Accelerator(mixed_precision="bf16", cpu=True)
+        accelerator = Accelerator(mixed_precision="bf16", cpu=True, use_seedable_sampler=use_seedable_sampler)
         train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -513,7 +519,7 @@ def training_check():
     if is_xpu_available():
         print("xpu BF16 training check.")
         AcceleratorState._reset_state()
-        accelerator = Accelerator(mixed_precision="bf16", cpu=False)
+        accelerator = Accelerator(mixed_precision="bf16", cpu=False, use_seedable_sampler=use_seedable_sampler)
         train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -668,7 +674,8 @@ def main():
 
     if state.local_process_index == 0:
         print("\n**Training integration test**")
-    training_check()
+    training_check(use_seedable_sampler=False)
+    training_check(use_seedable_sampler=True)
 
     if state.local_process_index == 0:
         print("\n**Breakpoint trigger test**")
