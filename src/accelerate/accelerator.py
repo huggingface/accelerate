@@ -1549,6 +1549,7 @@ class Accelerator:
                         "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
                     }
                 )
+                
             if isinstance(optimizer, (DummyOptim)):
                 config_kwargs.update(
                     {"optimizer.params.lr": optimizer.lr, "optimizer.params.weight_decay": optimizer.weight_decay}
