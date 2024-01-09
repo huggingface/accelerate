@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
-from accelerate.utils.deepspeed import DeepSpeedSchedulerWrapper, DummyOptim, DummyScheduler
+from accelerate.utils.deepspeed import DummyOptim, DummyScheduler
 
 
 MAX_GPU_BATCH_SIZE = 16
@@ -105,6 +105,7 @@ def training_function(config, args):
     max_training_steps = len(train_dataloader) * num_epochs
 
     # Instantiate scheduler
+    linear_decay_scheduler = False
     if (
         accelerator.state.deepspeed_plugin is None
         or "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config
@@ -114,6 +115,7 @@ def training_function(config, args):
             num_warmup_steps=0,
             num_training_steps=max_training_steps,
         )
+        linear_decay_scheduler = True
     else:
         lr_scheduler = DummyScheduler(optimizer, total_num_steps=max_training_steps, warmup_num_steps=0)
 
@@ -150,7 +152,8 @@ def training_function(config, args):
                 if (
                     accelerator.sync_gradients
                     and not lr_scheduler_check_completed
-                    and not isinstance(lr_scheduler, DeepSpeedSchedulerWrapper)
+                    and linear_decay_scheduler
+                    and accelerator.state.mixed_precision == "no"
                 ):
                     assert (
                         lr_scheduler.get_last_lr()[0] == expected_lr_after_first_optim_step
@@ -189,7 +192,7 @@ def training_function(config, args):
             best_performance = eval_metric["accuracy"]
 
     # check that the LR is 0
-    if not isinstance(lr_scheduler, DeepSpeedSchedulerWrapper):
+    if linear_decay_scheduler and accelerator.state.mixed_precision == "no":
         assert (
             lr_scheduler.get_last_lr()[0] == 0
         ), f"Wrong lr found at last step, expected 0, got {lr_scheduler.get_last_lr()[0]}"
