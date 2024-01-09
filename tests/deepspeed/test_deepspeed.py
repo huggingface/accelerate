@@ -31,6 +31,7 @@ from transformers.utils import is_torch_bf16_available
 
 import accelerate
 from accelerate.accelerator import Accelerator
+from accelerate.scheduler import AcceleratedScheduler
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
@@ -363,7 +364,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 self.assertTrue(accelerator.deepspeed_config["train_batch_size"], 16)
                 self.assertEqual(type(model), DeepSpeedEngine)
                 self.assertEqual(type(optimizer), DeepSpeedOptimizerWrapper)
-                self.assertEqual(type(lr_scheduler), DeepSpeedSchedulerWrapper)
+                self.assertEqual(type(lr_scheduler), AcceleratedScheduler)
                 self.assertEqual(type(accelerator.deepspeed_engine_wrapped), DeepSpeedEngineWrapper)
 
         elif optim_type == DS_OPTIMIZER and scheduler_type == DS_SCHEDULER:
