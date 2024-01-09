@@ -1061,3 +1061,27 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             )
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
+
+    def test_lr_scheduler(self):
+        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
+        cmd = [
+            "accelerate",
+            "launch",
+            "--num_processes=2",
+            "--num_machines=1",
+            "--machine_rank=0",
+            "--mixed_precision=no",
+            "--use_deepspeed",
+            "--gradient_accumulation_steps=1",
+            "--gradient_clipping=1",
+            "--zero3_init_flag=True",
+            "--zero3_save_16bit_model=True",
+            "--zero_stage=3",
+            "--offload_optimizer_device=none",
+            "--offload_param_device=none",
+            self.test_file_path,
+            f"--output_dir={self.tmpdir}",
+            f"--performance_lower_bound={self.performance_lower_bound}",
+        ]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd, env=os.environ.copy())
