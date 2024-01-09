@@ -666,6 +666,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
         del deepspeed_plugin.deepspeed_config["bf16"]
         del deepspeed_plugin.deepspeed_config["fp16"]
+        del deepspeed_plugin.deepspeed_config["optimizer"]
+        del deepspeed_plugin.deepspeed_config["scheduler"]
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
 
