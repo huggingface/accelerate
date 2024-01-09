@@ -373,6 +373,10 @@ def training_check():
     assert are_the_same_tensors(old_model.a), "Did not obtain the same model on both processes."
     assert are_the_same_tensors(old_model.b), "Did not obtain the same model on both processes."
 
+    train_set, old_model = mock_training(length, batch_size * state.num_processes, generator, True)
+    assert are_the_same_tensors(old_model.a), "Did not obtain the same model on both processes."
+    assert are_the_same_tensors(old_model.b), "Did not obtain the same model on both processes."
+
     accelerator = Accelerator()
     train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, generator=generator)
     model = RegressionModel()
