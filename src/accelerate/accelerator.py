@@ -221,7 +221,7 @@ class Accelerator:
             Whether or not use a fully seedable random sampler ([`~data_loader.SeedableRandomSampler`]). Ensures
             training results are fully reproducable using a different sampling technique. While seed-to-seed
             results may differ, on average the differences are neglible when using multiple different seeds to 
-            compare. 
+            compare. Should also be ran with [`~utils.set_seed`] for the best results.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
