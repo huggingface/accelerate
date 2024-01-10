@@ -545,6 +545,36 @@ class ModelingUtilsTester(unittest.TestCase):
         expected = {"linear1": 0, "linear2": 1, "linear3": 0, "linear4": 1}
         self.assertDictEqual(device_map, expected)
 
+        # With tied weights sharing a same prefix name (`compute.weight` vs `compute.weight_submodule.parameter`)
+        class SubModule(torch.nn.Module):
+            def __init__(self, ref_to_parameter):
+                super().__init__()
+                self.parameter = ref_to_parameter
+
+            def forward(self, x):
+                return self.x + torch.max(self.parameter)
+
+        class LinearModuleAndSubModule(torch.nn.Linear):
+            def __init__(self, in_features, out_features):
+                super().__init__(in_features, out_features)
+                self.weight_submodule = SubModule(self.weight)
+
+            def forward(self, x):
+                return torch.nn.functional.linear(self.weight_submodule(x), self.weight)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.compute = LinearModuleAndSubModule(3, 8)
+
+            def forward(self, x):
+                return self.compute(x)
+
+        model = Model()
+
+        device_memory = {0: 4, "cpu": 96000}  # Low memory device, just to force splitting and trigger the error
+        infer_auto_device_map(model, device_memory)
+
     @require_huggingface_suite
     def test_infer_auto_device_map_on_t0pp(self):
         from transformers import AutoConfig, AutoModelForSeq2SeqLM
