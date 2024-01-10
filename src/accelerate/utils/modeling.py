@@ -1061,8 +1061,8 @@ def infer_auto_device_map(
 
         # We keep relevant tied parameters only: one of the tied parameters in the group is inside the current module
         # and the other is not.
-        # Note: If are currently processing the name `compute.weight`, an other parameter named e.g. `compute.weight_submodule.parameter`
-        # needs to outside the current module, hence the check with additional dots.
+        # Note: If we are currently processing the name `compute.weight`, an other parameter named e.g. `compute.weight_submodule.parameter`
+        # needs to be considered outside the current module, hence the check with additional dots.
         tied_param_goups = [
             tied_group
             for tied_group in tied_parameters
