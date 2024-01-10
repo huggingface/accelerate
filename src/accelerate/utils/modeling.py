@@ -1061,15 +1061,22 @@ def infer_auto_device_map(
 
         # We keep relevant tied parameters only: one of the tied parameters in the group is inside the current module
         # and the other is not.
+        # Note: If we are currently processing the name `compute.weight`, an other parameter named e.g. `compute.weight_submodule.parameter`
+        # needs to be considered outside the current module, hence the check with additional dots.
         tied_param_goups = [
             tied_group
             for tied_group in tied_parameters
-            if any(name in k for k in tied_group) and not all(name in k for k in tied_group)
+            if any(name + "." in k + "." for k in tied_group) and not all(name + "." in k + "." for k in tied_group)
         ]
+
         if verbose and len(tied_param_goups) > 0:
             print(f"  Found the relevant tied param groups {tied_param_goups}")
+
         # Then we keep track of all the parameters that are tied to the current module, but not in the current module
-        tied_params = sum([[p for p in tied_group if name not in p] for tied_group in tied_param_goups], [])
+        tied_params = sum(
+            [[p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_goups], []
+        )
+
         if verbose and len(tied_params) > 0:
             print(f"  So those parameters need to be taken into account {tied_params}")
 
