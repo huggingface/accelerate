@@ -18,6 +18,7 @@ import torch
 from ..logging import get_logger
 from .constants import FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME
 from .imports import is_torch_distributed_available, is_peft_available
+from .other import extract_model_from_parallel
 from .versions import is_torch_version
 
 
@@ -35,8 +36,7 @@ logger = get_logger(__name__)
 def _is_peft_model(model):
     if is_peft_available():
         from peft import PeftModel
-    unwrapped_model = getattr(model.module, "_orig_mod", model.module)
-    return is_peft_available() and isinstance(unwrapped_model, PeftModel)
+    return is_peft_available() and isinstance(extract_model_from_parallel(model), PeftModel)
 
 
 def _get_model_state_dict(model, adapter_only=False):
