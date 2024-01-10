@@ -610,7 +610,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
                         batch = concatenate(batches, dim=0)
                     except RuntimeError:
                         raise RuntimeError(
-                            "You can't use batches of different sizes with `dispatch_batches=True` or when using an `IterableDataset`."
+                            "You can't use batches of different size with `dispatch_batches=True` or when using an `IterableDataset`."
                             "As an alternative, you can either: 1) Have batches of same size 2) Set `dispatch_batches=False`. "
                             "This way, each process will get fetch their own batch. "
                             "3) Set `split_batches=True`. By doing so, the main process will fetch a full batch and "
