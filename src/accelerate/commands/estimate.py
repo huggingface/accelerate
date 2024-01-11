@@ -107,7 +107,7 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
         print(f"Loading pretrained config for `{model_name}` from `transformers`...")
 
         auto_map = model_info.config.get("auto_map", False)
-        config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code)
+        config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code, token=access_token)
 
         with init_empty_weights():
             # remote code could specify a specific `AutoModel` class in the `auto_map`
@@ -120,7 +120,7 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
                         break
                 if value is not None:
                     constructor = getattr(transformers, value)
-            model = constructor.from_config(config, trust_remote_code=trust_remote_code)
+            model = constructor.from_config(config, trust_remote_code=trust_remote_code, token=access_token)
     elif library_name == "timm":
         if not is_timm_available():
             raise ImportError(
