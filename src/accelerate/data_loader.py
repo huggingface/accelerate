@@ -608,7 +608,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
                         batches.append(next(iterator))
                     try:
                         batch = concatenate(batches, dim=0)
-                    except RuntimeError as e:
+                    except RuntimeError:
                         raise RuntimeError(
                             "You can't use batches of different size with `dispatch_batches=True` or when using an `IterableDataset`."
                             "either pass `dispatch_batches=False` and have each process fetch its own batch "
