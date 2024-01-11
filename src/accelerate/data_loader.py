@@ -608,13 +608,13 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
                         batches.append(next(iterator))
                     try:
                         batch = concatenate(batches, dim=0)
-                    except RuntimeError:
+                    except RuntimeError as e:
                         raise RuntimeError(
                             "You can't use batches of different size with `dispatch_batches=True` or when using an `IterableDataset`."
                             "either pass `dispatch_batches=False` and have each process fetch its own batch "
                             " or pass `split_batches=True`. By doing so, the main process will fetch a full batch and "
                             "slice it into `num_processes` batches for each process."
-                        )
+                        ) from e
                 # In both cases, we need to get the structure of the batch that we will broadcast on other
                 # processes to initialize the tensors with the right shape.
                 # data_structure, stop_iteration
