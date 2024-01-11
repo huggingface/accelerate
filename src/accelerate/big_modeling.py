@@ -447,7 +447,8 @@ def dispatch_model(
             raise ValueError(
                 "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
             )
-    model.hf_device_map = device_map
+    # Convert OrderedDict back to dict for easier usage
+    model.hf_device_map = dict(device_map)
     return model
 
 
