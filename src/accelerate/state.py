@@ -205,7 +205,7 @@ class PartialState:
                 if self.device.type == "cuda" and not check_cuda_p2p_ib_support():
                     if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
                         raise NotImplementedError(
-                            "Using RTX 3090 or 4000 series doesn't support faster communication broadband via P2P or IB. "
+                            "Using RTX 4000 series doesn't support faster communication broadband via P2P or IB. "
                             'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
                             "will do this automatically."
                         )
@@ -221,7 +221,7 @@ class PartialState:
                 if not check_cuda_p2p_ib_support():
                     if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
                         raise NotImplementedError(
-                            "Using RTX 3090 or 4000 series doesn't support faster communication broadband via P2P or IB. "
+                            "Using RTX 4000 series doesn't support faster communication broadband via P2P or IB. "
                             'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
                             "will do this automatically."
                         )
