@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 4. Custom mixed precision training handling
 5. A range of fast CUDA-extension-based optimizers
 6. ZeRO-Offload to CPU and Disk/NVMe
-7. Heirarchical partitioning of model parameters (ZeRO++)
+7. Hierarchical partitioning of model parameters (ZeRO++)
 
 ZeRO-Offload has its own dedicated paper: [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840). And NVMe-support is described in the paper [ZeRO-Infinity: Breaking the GPU
 Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857).
@@ -61,7 +61,7 @@ Below is a short description of Data Parallelism using ZeRO - Zero Redundancy Op
 
  e. **Param Offload**: Offloads the model parameters to CPU/Disk building on top of ZERO Stage 3
 
- f. **Heirarchical Paritioning**: Enables efficient multi-node training with data-parallel training across nodes and ZeRO-3 sharding within a node, built on top of ZeRO Stage 3.
+ f. **Hierarchical Partitioning**: Enables efficient multi-node training with data-parallel training across nodes and ZeRO-3 sharding within a node, built on top of ZeRO Stage 3.
 
 <u>Note</u>: With respect to Disk Offload, the disk should be an NVME for decent speed but it technically works on any Disk
 
@@ -371,7 +371,7 @@ You can use the the features of ZeRO++ by using the appropriate config parameter
 }
 ```
 
-For heirarchical partitioning, the partition size `zero_hpz_partition_size` should ideally be set to the number of GPUs per node. (For example, the above config file assumes 8 GPUs per node)
+For hierarchical partitioning, the partition size `zero_hpz_partition_size` should ideally be set to the number of GPUs per node. (For example, the above config file assumes 8 GPUs per node)
 
 **Important code changes when using DeepSpeed Config File**
 
@@ -383,7 +383,7 @@ We will look at the changes needed in the code when using these.
    In this situation, those will be used and the user has to use `accelerate.utils.DummyOptim` and `accelerate.utils.DummyScheduler` to replace the PyTorch/Custom optimizers and schedulers in their code.
    Below is the snippet from `examples/by_feature/deepspeed_with_config_support.py` showing this:
    ```python
-    # Creates Dummy Optimizer if `optimizer` was spcified in the config file else creates Adam Optimizer
+    # Creates Dummy Optimizer if `optimizer` was specified in the config file else creates Adam Optimizer
     optimizer_cls = (
         torch.optim.AdamW
         if accelerator.state.deepspeed_plugin is None
@@ -392,7 +392,7 @@ We will look at the changes needed in the code when using these.
     )
     optimizer = optimizer_cls(optimizer_grouped_parameters, lr=args.learning_rate)
 
-    # Creates Dummy Scheduler if `scheduler` was spcified in the config file else creates `args.lr_scheduler_type` Scheduler
+    # Creates Dummy Scheduler if `scheduler` was specified in the config file else creates `args.lr_scheduler_type` Scheduler
     if (
         accelerator.state.deepspeed_plugin is None
         or "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config

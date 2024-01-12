@@ -60,7 +60,7 @@ These are standalone dataclasses used for checks, such as the type of distribute
 
 ### Kwargs
 
-These are configurable arguemnts for specific interactions throughout the PyTorch ecosystem that Accelerate handles under the hood.
+These are configurable arguments for specific interactions throughout the PyTorch ecosystem that Accelerate handles under the hood.
 
 
 [[autodoc]] utils.AutocastKwargs
@@ -77,7 +77,7 @@ These are configurable arguemnts for specific interactions throughout the PyTorc
 ## Plugins
 
 These are plugins that can be passed to the [`Accelerator`] object. While they are defined elsewhere in the documentation, 
-for convience all of them are available to see here:
+for convenience all of them are available to see here:
 
 [[autodoc]] utils.DeepSpeedPlugin
 
