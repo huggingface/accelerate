@@ -377,12 +377,7 @@ def set_module_tensor_to_device(
                 else:
                     new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
-                #print("new_value data_ptr here", new_value.data_ptr())
-                #print("old_value data_ptr", old_value.data_ptr())
-
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
-
-                #print("new_value data_ptr", new_value.data_ptr())
 
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
@@ -747,7 +742,6 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
         else:
             max_memory["cpu"] = psutil.virtual_memory().available
 
-        print("max_memory", max_memory)
         return max_memory
 
     for key in max_memory:
@@ -777,8 +771,6 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 f"Device {k} is not recognized, available devices are integers(for GPU/XPU), 'mps', 'cpu' and 'disk'"
             )
     max_memory = {k: max_memory[k] for k in all_devices}
-
-    print("max_memory", max_memory)
 
     return max_memory
 
@@ -857,7 +849,7 @@ def get_balanced_memory(
         model (`torch.nn.Module`):
             The model to analyze.
         max_memory (`Dict`, *optional*):
-            A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
+            A dictionary device identifier to maximum memory (in bytes). Will default to the maximum memory available if unset.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
@@ -1014,7 +1006,7 @@ def infer_auto_device_map(
         model (`torch.nn.Module`):
             The model to analyze.
         max_memory (`Dict`, *optional*):
-            A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
+            A dictionary device identifier to maximum memory (in bytes). Will default to the maximum memory available if unset.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).

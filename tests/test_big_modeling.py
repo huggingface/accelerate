@@ -400,8 +400,13 @@ class BigModelingTester(unittest.TestCase):
         foo = torch.rand(n_vals, device="cuda:0")
 
         # If this does OOM: there is an issue in somewhere in dispatch_model, memory of tied weights is duplicated.
-        dispatch_model(model, device_map)
-
+        try:
+            dispatch_model(model, device_map)
+        except torch.cuda.OutOfMemoryError as e:
+            raise torch.cuda.OutOfMemoryError(f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory. {e}")
+        except Exception as e:
+            raise e
+        
         with torch.no_grad():
             output = model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))

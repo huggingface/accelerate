@@ -157,17 +157,11 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False,
         old_forward = module.forward
         module._old_forward = old_forward
 
-    #if isinstance(module, nn.Linear):
-    #    print("module weight data ptr bef init hook", module.weight.data_ptr())
-
     if init_hook_kwargs is None:
         init_hook_kwargs = {}
 
     module = hook.init_hook(module, **init_hook_kwargs)
     module._hf_hook = hook
-
-    #if isinstance(module, nn.Linear):
-    #    print("module weight data ptr after init hook", module.weight.data_ptr())
 
     def new_forward(module, *args, **kwargs):
         args, kwargs = module._hf_hook.pre_forward(module, *args, **kwargs)
@@ -376,11 +370,8 @@ def attach_execution_device_hook(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
-    #print("before add_hook", module.weight.data_ptr())
     if not hasattr(module, "_hf_hook") and len(module.state_dict()) > 0:
         add_align_hook_to_module(module, AlignDevicesHook(execution_device, skip_keys=skip_keys))
-
-    #print("after add_hook", module.weight.data_ptr())
 
     # Break the recursion if we get to a preload module.
     if preload_module_classes is not None and module.__class__.__name__ in preload_module_classes:
@@ -530,7 +521,6 @@ def attach_align_device_hook_on_blocks(
                 data_ptr = recursive_getattr(module, param_name).data_ptr()
                 tied_params_map[data_ptr] = {}
 
-    #print("tied_params_map", tied_params_map)
     # If one device and one offload, we've got one hook.
     if not isinstance(execution_device, Mapping) and not isinstance(offload, dict):
         if not offload:
@@ -563,10 +553,7 @@ def attach_align_device_hook_on_blocks(
             place_submodules=True,
             skip_keys=skip_keys,
         )
-        #print("bef add_hook_to_module data ptr:", module.weight.data_ptr())
-        #print("bef add_hook_to_module data ptr 2:", module[2].weight.data_ptr())
         add_align_hook_to_module(module, hook, tied_params_map=tied_params_map)
-        #print("GO HERE", module_name)
         attach_execution_device_hook(module, execution_device[module_name])
     elif module_name in execution_device and module_name in offload:
         attach_align_device_hook(
@@ -597,9 +584,6 @@ def attach_align_device_hook_on_blocks(
     for child_name, child in module.named_children():
         child_name = f"{module_name}.{child_name}" if len(module_name) > 0 else child_name
 
-        #print("child_name", child_name)
-        #print("child.weight data_ptr", child.weight.data_ptr())
-        print("------ call attach_align_device_hook_on_blocks")
         attach_align_device_hook_on_blocks(
             child,
             execution_device=execution_device,
