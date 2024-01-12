@@ -308,7 +308,11 @@ def set_module_tensor_to_device(
 
     # Treat the case where old_value belongs to a tied group, and one of the weight in the tied group has already been dispatched to the device,
     # by avoiding reallocating memory on the device and just copying the pointer.
-    if tied_params_map is not None and old_value.data_ptr() in tied_params_map and device in tied_params_map[old_value.data_ptr()]:
+    if (
+        tied_params_map is not None
+        and old_value.data_ptr() in tied_params_map
+        and device in tied_params_map[old_value.data_ptr()]
+    ):
         module._parameters[tensor_name] = tied_params_map[old_value.data_ptr()][device]
         return
 
@@ -411,7 +415,11 @@ def set_module_tensor_to_device(
 
     # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
     # order to avoid duplicating memory, see above.
-    if tied_params_map is not None and old_value.data_ptr() in tied_params_map and device not in tied_params_map[old_value.data_ptr()]:
+    if (
+        tied_params_map is not None
+        and old_value.data_ptr() in tied_params_map
+        and device not in tied_params_map[old_value.data_ptr()]
+    ):
         tied_params_map[old_value.data_ptr()][device] = new_value
 
 

@@ -188,10 +188,10 @@ from .other import (
     is_port_in_use,
     merge_dicts,
     patch_environment,
+    recursive_getattr,
     save,
     wait_for_everyone,
     write_basic_config,
-    recursive_getattr,
 )
 from .random import set_seed, synchronize_rng_state, synchronize_rng_states
 from .torch_xla import install_xla

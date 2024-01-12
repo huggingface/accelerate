@@ -14,8 +14,8 @@
 import copy
 import os
 import unittest
-from tempfile import TemporaryDirectory
 from collections import OrderedDict
+from tempfile import TemporaryDirectory
 
 import torch
 import torch.nn as nn
@@ -390,23 +390,26 @@ class BigModelingTester(unittest.TestCase):
         # We should need only 5000 * 5000 * 32 // 8 * 1e-6 = 100 MB on the device 0 for the three linear weights.
         device_map = {"linear0": 0, "linear1": 1, "linear2": 0, "linear3": 0, "linear4": 0}
 
-        a = torch.rand(5).to("cuda:0")  # Just to intialize CUDA context.
-        free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]
+        # Just to intialize CUDA context.
+        a = torch.rand(5).to("cuda:0")  # noqa: F841
 
+        free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]
         required_memory_bytes = 5000 * 5000 * (32 // 8)
 
         # Leaving 50 MB of free memory for possible buffers, etc.
         n_vals = (free_memory_bytes - required_memory_bytes - int(50e6)) // (32 // 8)
-        foo = torch.rand(n_vals, device="cuda:0")
+        foo = torch.rand(n_vals, device="cuda:0")  # noqa: F841
 
         # If this does OOM: there is an issue in somewhere in dispatch_model, memory of tied weights is duplicated.
         try:
             dispatch_model(model, device_map)
         except torch.cuda.OutOfMemoryError as e:
-            raise torch.cuda.OutOfMemoryError(f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory. {e}")
+            raise torch.cuda.OutOfMemoryError(
+                f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory. {e}"
+            )
         except Exception as e:
             raise e
-        
+
         with torch.no_grad():
             output = model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))

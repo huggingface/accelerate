@@ -22,13 +22,13 @@ from .state import PartialState
 from .utils import (
     PrefixedDataset,
     find_device,
+    find_tied_parameters,
     named_module_tensors,
     send_to_device,
     set_module_tensor_to_device,
-    find_tied_parameters,
 )
-from .utils.other import recursive_getattr
 from .utils.modeling import get_non_persistent_buffers
+from .utils.other import recursive_getattr
 
 
 class ModelHook:
@@ -118,7 +118,9 @@ class SequentialHook(ModelHook):
         return module
 
 
-def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False, init_hook_kwargs: Optional[Dict] = None):
+def add_hook_to_module(
+    module: nn.Module, hook: ModelHook, append: bool = False, init_hook_kwargs: Optional[Dict] = None
+):
     """
     Adds a hook to a given module. This will rewrite the `forward` method of the module to include the hook, to remove
     this behavior and restore the original `forward` method, use `remove_hook_from_module`.
@@ -332,7 +334,12 @@ class AlignDevicesHook(ModelHook):
         return module
 
 
-def add_align_hook_to_module(module: nn.Module, hook: AlignDevicesHook, append: bool = False, tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None):
+def add_align_hook_to_module(
+    module: nn.Module,
+    hook: AlignDevicesHook,
+    append: bool = False,
+    tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
+):
     """
     Adds a AlignDevicesHook hook to a given module, supporting the `tied_params_map` argument. Please refer to the `add_hook_to_module` function documentation as well.
 
@@ -342,9 +349,13 @@ def add_align_hook_to_module(module: nn.Module, hook: AlignDevicesHook, append: 
             to reuse the first available pointer of a shared weight for all others, instead of duplicating memory.
     """
     if not isinstance(hook, AlignDevicesHook):
-        raise ValueError(f"The hook passed to add_align_hook_to_module should be a AlignDevicesHook, found a {hook.__class__.__name__}.")
+        raise ValueError(
+            f"The hook passed to add_align_hook_to_module should be a AlignDevicesHook, found a {hook.__class__.__name__}."
+        )
 
-    return add_hook_to_module(module=module, hook=hook, append=append, init_hook_kwargs={"tied_params_map": tied_params_map})
+    return add_hook_to_module(
+        module=module, hook=hook, append=append, init_hook_kwargs={"tied_params_map": tied_params_map}
+    )
 
 
 def attach_execution_device_hook(

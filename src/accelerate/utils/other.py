@@ -321,6 +321,7 @@ def check_os_kernel():
         )
         logger.warning(msg, main_process_only=True)
 
+
 def recursive_getattr(obj, attr: str):
     """
     Recursive `getattr`.
