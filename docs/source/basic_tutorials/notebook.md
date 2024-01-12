@@ -186,7 +186,7 @@ Here is a basic training loop for the animal classification problem:
 
 <Tip>
 
-    The code has been split up to allow for explainations on each section. A full version that can be copy and pasted will be available at the end
+    The code has been split up to allow for explanations on each section. A full version that can be copy and pasted will be available at the end
 
 </Tip>
 
@@ -344,7 +344,7 @@ def training_loop(mixed_precision="fp16", seed: int = 42, batch_size: int = 64):
     mean = mean.to(accelerator.device)
     std = std.to(accelerator.device)
 
-    # Intantiate the optimizer
+    # Instantiate the optimizer
     optimizer = torch.optim.Adam(params=model.parameters(), lr=3e-2 / 25)
 
     # Instantiate the learning rate scheduler

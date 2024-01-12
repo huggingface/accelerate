@@ -218,7 +218,7 @@ The following arguments are only useful when `use_megatron_lm` is passed or Mega
 * `--megatron_lm_num_micro_batches` (``) -- Megatron-LM's number of micro batches when PP degree > 1.
 * `--megatron_lm_sequence_parallelism` (``) -- Decides Whether (true|false) to enable Sequence Parallelism when TP degree > 1.
 * `--megatron_lm_recompute_activations` (``) -- Decides Whether (true|false) to enable Selective Activation Recomputation.
-* `--megatron_lm_use_distributed_optimizer` (``) -- Decides Whether (true|false) to use distributed optimizer which shards optimizer state and gradients across Data Pralellel (DP) ranks.
+* `--megatron_lm_use_distributed_optimizer` (``) -- Decides Whether (true|false) to use distributed optimizer which shards optimizer state and gradients across Data Parallel (DP) ranks.
 * `--megatron_lm_gradient_clipping` (``) -- Megatron-LM's gradient clipping value based on global L2 Norm (0 to disable).
 
 **AWS SageMaker Arguments**:

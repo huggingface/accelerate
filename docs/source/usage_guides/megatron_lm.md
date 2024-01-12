@@ -113,7 +113,7 @@ pip install git+https://github.com/huggingface/Megatron-LM.git
 ## Accelerate Megatron-LM Plugin
 
 Important features are directly supported via the `accelerate config` command. 
-An example of thr corresponding questions for using Megatron-LM features is shown below:
+An example of the corresponding questions for using Megatron-LM features is shown below:
 
 ```bash
 :~$ accelerate config --config_file "megatron_gpt_config.yaml"
