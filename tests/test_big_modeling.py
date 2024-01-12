@@ -15,6 +15,7 @@ import copy
 import os
 import unittest
 from tempfile import TemporaryDirectory
+from collections import OrderedDict
 
 import torch
 import torch.nn as nn
@@ -525,10 +526,6 @@ class BigModelingTester(unittest.TestCase):
         dispatch_model(model, device_map, force_hooks=True)
         output = model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
-
-    #@require_cuda
-    #def test_dispatch_model_tied_weights(self):
-        ## Test that we do not duplicate
 
     @require_cuda
     def test_load_checkpoint_and_dispatch(self):
