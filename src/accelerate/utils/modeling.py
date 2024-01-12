@@ -267,6 +267,7 @@ def set_module_tensor_to_device(
     value: Optional[torch.Tensor] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     fp16_statistics: Optional[torch.HalfTensor] = None,
+    tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
 ):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
@@ -286,6 +287,9 @@ def set_module_tensor_to_device(
             the dtype of the existing parameter in the model.
         fp16_statistics (`torch.HalfTensor`, *optional*):
             The list of fp16 statistics to set on the module, used for 8 bit model serialization.
+        tied_params_map (Dict[int, Dict[torch.device, torch.Tensor]], *optional*, defaults to `None`):
+            A map of current data pointers to dictionaries of devices to already dispatched tied weights. For a given execution device,
+            this parameter is useful to reuse the first available pointer of a shared weight on the device for all others, instead of duplicating memory.
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -302,39 +306,21 @@ def set_module_tensor_to_device(
     is_buffer = tensor_name in module._buffers
     old_value = getattr(module, tensor_name)
 
+    # Treat the case where old_value belongs to a tied group, and one of the weight in the tied group has already been dispatched to the device,
+    # by avoiding reallocating memory on the device and just copying the pointer.
+    if tied_params_map is not None and old_value.data_ptr() in tied_params_map and device in tied_params_map[old_value.data_ptr()]:
+        module._parameters[tensor_name] = tied_params_map[old_value.data_ptr()][device]
+        return
+
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
-    if value is not None:
-        if old_value.shape != value.shape:
-            raise ValueError(
-                f'Trying to set a tensor of shape {value.shape} in "{tensor_name}" (which has shape {old_value.shape}), this look incorrect.'
-            )
-
-        if dtype is None:
-            # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
-            value = value.to(old_value.dtype)
-        elif not str(value.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
-            value = value.to(dtype)
-
+    print("value", value)
     param = module._parameters[tensor_name] if tensor_name in module._parameters else None
     param_cls = type(param)
 
     device_quantization = None
     with torch.no_grad():
-        # leave it on cpu first before moving them to cuda
-        # # fix the case where the device is meta, we don't want to put it on cpu because there is no data =0
-        if (
-            param is not None
-            and param.device.type != "cuda"
-            and torch.device(device).type == "cuda"
-            and param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]
-        ):
-            device_quantization = device
-            device = "cpu"
-        # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if is_npu_available() and isinstance(device, int):
-            device = f"npu:{device}"
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
@@ -343,59 +329,34 @@ def set_module_tensor_to_device(
 
                 if not is_buffer:
                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
-        elif isinstance(value, torch.Tensor):
-            new_value = value.to(device)
-        else:
-            new_value = torch.tensor(value, device=device)
+
         if device_quantization is not None:
             device = device_quantization
+
         if is_buffer:
             module._buffers[tensor_name] = new_value
         elif value is not None or not check_device_same(torch.device(device), module._parameters[tensor_name].device):
             param_cls = type(module._parameters[tensor_name])
             kwargs = module._parameters[tensor_name].__dict__
-            if param_cls.__name__ in ["Int8Params", "FP4Params"]:
-                if param_cls.__name__ == "Int8Params" and new_value.dtype == torch.float32:
-                    # downcast to fp16 if any - needed for 8bit serialization
-                    new_value = new_value.to(torch.float16)
-                # quantize module that are going to stay on the cpu so that we offload quantized weights
-                if device == "cpu" and param_cls.__name__ == "Int8Params":
-                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(0).to("cpu")
-                    new_value.CB = new_value.CB.to("cpu")
-                    new_value.SCB = new_value.SCB.to("cpu")
-                else:
-                    new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
-            else:
-                new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
+            #print("new_value data_ptr here", new_value.data_ptr())
+            #print("old_value data_ptr", old_value.data_ptr())
+            new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
+
+            #print("new_value data_ptr", new_value.data_ptr())
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
                 setattr(module._parameters[tensor_name], "SCB", fp16_statistics.to(device))
                 del fp16_statistics
-            # as we put the weight to meta, it doesn't have SCB attr anymore. make sure that it is not a meta weight
-            if (
-                module.__class__.__name__ == "Linear8bitLt"
-                and getattr(module.weight, "SCB", None) is None
-                and str(module.weight.device) != "meta"
-            ):
-                # quantize only if necessary
-                device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
-                if not getattr(module.weight, "SCB", None) and device_index is not None:
-                    if module.bias is not None and module.bias.device.type != "meta":
-                        # if a bias exists, we need to wait until the bias is set on the correct device
-                        module = module.cuda(device_index)
-                    elif module.bias is None:
-                        # if no bias exists, we can quantize right away
-                        module = module.cuda(device_index)
-            elif module.__class__.__name__ == "Linear4bit" and getattr(module.weight, "quant_state", None) is None:
-                # quantize only if necessary
-                device_index = torch.device(device).index if torch.device(device).type == "cuda" else None
-                if not getattr(module.weight, "quant_state", None) and device_index is not None:
-                    module.weight = module.weight.cuda(device_index)
     # clean pre and post foward hook
     if is_npu_available():
         torch.npu.empty_cache()
     else:
         torch.cuda.empty_cache()
+
+    # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
+    # order to avoid duplicating memory, see above.
+    if tied_params_map is not None and old_value.data_ptr() in tied_params_map and device not in tied_params_map[old_value.data_ptr()]:
+        tied_params_map[old_value.data_ptr()][device] = new_value
 
 
 def named_module_tensors(
@@ -724,6 +685,8 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
             max_memory["mps"] = psutil.virtual_memory().available
         else:
             max_memory["cpu"] = psutil.virtual_memory().available
+
+        print("max_memory", max_memory)
         return max_memory
 
     for key in max_memory:
@@ -753,6 +716,8 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 f"Device {k} is not recognized, available devices are integers(for GPU/XPU), 'mps', 'cpu' and 'disk'"
             )
     max_memory = {k: max_memory[k] for k in all_devices}
+
+    print("max_memory", max_memory)
 
     return max_memory
 

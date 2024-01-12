@@ -350,6 +350,9 @@ def dispatch_model(
         getattr(model, "is_quantized", False) or getattr(model, "is_loaded_in_8bit", False)
     ) and getattr(model, "quantization_method", "bitsandbytes") == "bitsandbytes"
 
+    #print("data ptr 0 before hook:", model[0].weight.data_ptr())
+    #print("data ptr 2 before hook:", model[2].weight.data_ptr())
+
     # We attach hooks if the device_map has at least 2 different devices or if
     # force_hooks is set to `True`. Otherwise, the model in already loaded
     # in the unique device and the user can decide where to dispatch the model.
@@ -395,7 +398,14 @@ def dispatch_model(
         else:
             weights_map = None
 
+        #print("data ptr 0:", model[0].weight.data_ptr())
+        #print("data ptr 1:", model[1].weight.data_ptr())
+        #print("data ptr 2:", model[2].weight.data_ptr())
+        #print("data ptr 3:", model[3].weight.data_ptr())
+        #print("execution_device", execution_device)
+
         tied_params = find_tied_parameters(model)
+
         attach_align_device_hook_on_blocks(
             model,
             execution_device=execution_device,
@@ -406,6 +416,9 @@ def dispatch_model(
             preload_module_classes=preload_module_classes,
         )
 
+        #print("data ptr 0 after attach:", model[0].weight.data_ptr())
+        #print("data ptr 2 after attach:", model[2].weight.data_ptr())
+
         # warn if there is any params on the meta device
         offloaded_devices_str = " and ".join(
             [device for device in set(device_map.values()) if device in ("cpu", "disk")]
@@ -415,8 +428,15 @@ def dispatch_model(
                 f"Some parameters are on the meta device device because they were offloaded to the {offloaded_devices_str}."
             )
 
+        #print("model here", model)
+        #print("data ptr 0:", model[0].weight.data_ptr())
+        #print("data ptr 2:", model[2].weight.data_ptr())
+
         # Attaching the hook may break tied weights, so we retie them
         retie_parameters(model, tied_params)
+
+        #print("data ptr after retie:", model[0].weight.data_ptr())
+        #print("data ptr after retie:", model[2].weight.data_ptr())
 
         # add warning to cuda and to method
         def add_warning(fn, model):

@@ -25,7 +25,9 @@ from .utils import (
     named_module_tensors,
     send_to_device,
     set_module_tensor_to_device,
+    find_tied_parameters,
 )
+from .utils.other import recursive_getattr
 from .utils.modeling import get_non_persistent_buffers
 
 
@@ -116,7 +118,7 @@ class SequentialHook(ModelHook):
         return module
 
 
-def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False):
+def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False, init_hook_kwargs: Optional[Dict] = None):
     """
     Adds a hook to a given module. This will rewrite the `forward` method of the module to include the hook, to remove
     this behavior and restore the original `forward` method, use `remove_hook_from_module`.
@@ -135,6 +137,8 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
             The hook to attach.
         append (`bool`, *optional*, defaults to `False`):
             Whether the hook should be chained with an existing one (if module already contains a hook) or not.
+        init_hook_kwargs (Optional[Dict], *optional*, defaults to `None`):
+            Optional arguments to pass to the hook initialization.
 
     Returns:
         `torch.nn.Module`: The same module, with the hook attached (the module is modified in place, so the result can
@@ -153,8 +157,17 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
         old_forward = module.forward
         module._old_forward = old_forward
 
-    module = hook.init_hook(module)
+    #if isinstance(module, nn.Linear):
+    #    print("module weight data ptr bef init hook", module.weight.data_ptr())
+
+    if init_hook_kwargs is None:
+        init_hook_kwargs = {}
+
+    module = hook.init_hook(module, **init_hook_kwargs)
     module._hf_hook = hook
+
+    #if isinstance(module, nn.Linear):
+    #    print("module weight data ptr after init hook", module.weight.data_ptr())
 
     def new_forward(module, *args, **kwargs):
         args, kwargs = module._hf_hook.pre_forward(module, *args, **kwargs)
@@ -248,11 +261,12 @@ class AlignDevicesHook(ModelHook):
             f"place_submodules={self.place_submodules}, skip_keys={repr(self.skip_keys)})"
         )
 
-    def init_hook(self, module):
+    def init_hook(self, module, tied_params_map):
         if not self.offload and self.execution_device is not None:
             for name, _ in named_module_tensors(module, recurse=self.place_submodules):
-                set_module_tensor_to_device(module, name, self.execution_device)
+                set_module_tensor_to_device(module, name, self.execution_device, tied_params_map=tied_params_map)
         elif self.offload:
+            # TODO: validate that this tied param fix works correctly with offloading
             self.original_devices = {
                 name: param.device for name, param in named_module_tensors(module, recurse=self.place_submodules)
             }
@@ -266,13 +280,13 @@ class AlignDevicesHook(ModelHook):
             for name, _ in named_module_tensors(
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules, remove_non_persistent=True
             ):
-                set_module_tensor_to_device(module, name, "meta")
+                set_module_tensor_to_device(module, name, "meta", tied_params_map=tied_params_map)
             if not self.offload_buffers and self.execution_device is not None:
                 for name, _ in module.named_buffers(recurse=self.place_submodules):
-                    set_module_tensor_to_device(module, name, self.execution_device)
+                    set_module_tensor_to_device(module, name, self.execution_device, tied_params_map=tied_params_map)
             elif self.offload_buffers and self.execution_device is not None:
                 for name in get_non_persistent_buffers(module, recurse=self.place_submodules):
-                    set_module_tensor_to_device(module, name, self.execution_device)
+                    set_module_tensor_to_device(module, name, self.execution_device, tied_params_map=tied_params_map)
 
         return module
 
@@ -324,6 +338,21 @@ class AlignDevicesHook(ModelHook):
         return module
 
 
+def add_align_hook_to_module(module: nn.Module, hook: AlignDevicesHook, append: bool = False, tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None):
+    """
+    Adds a AlignDevicesHook hook to a given module, supporting the `tied_params_map` argument. Please refer to the `add_hook_to_module` function documentation as well.
+
+    Args:
+        tied_params_map (Optional[Dict[int, Dict[torch.device, torch.Tensor]]], *optional*, defaults to `None`):
+            A map of data pointers to dictionaries of devices to already dispatched tied weights. For a given execution device, this parameter is useful
+            to reuse the first available pointer of a shared weight for all others, instead of duplicating memory.
+    """
+    if not isinstance(hook, AlignDevicesHook):
+        raise ValueError(f"The hook passed to add_align_hook_to_module should be a AlignDevicesHook, found a {hook.__class__.__name__}.")
+
+    return add_hook_to_module(module=module, hook=hook, append=append, init_hook_kwargs={"tied_params_map": tied_params_map})
+
+
 def attach_execution_device_hook(
     module: torch.nn.Module,
     execution_device: Union[int, str, torch.device],
@@ -347,8 +376,11 @@ def attach_execution_device_hook(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
+    #print("before add_hook", module.weight.data_ptr())
     if not hasattr(module, "_hf_hook") and len(module.state_dict()) > 0:
-        add_hook_to_module(module, AlignDevicesHook(execution_device, skip_keys=skip_keys))
+        add_align_hook_to_module(module, AlignDevicesHook(execution_device, skip_keys=skip_keys))
+
+    #print("after add_hook", module.weight.data_ptr())
 
     # Break the recursion if we get to a preload module.
     if preload_module_classes is not None and module.__class__.__name__ in preload_module_classes:
@@ -413,7 +445,7 @@ def attach_align_device_hook(
             place_submodules=full_offload,
             skip_keys=skip_keys,
         )
-        add_hook_to_module(module, hook, append=True)
+        add_align_hook_to_module(module, hook, append=True)
 
     # We stop the recursion in case we hit the full offload.
     if full_offload:
@@ -455,6 +487,7 @@ def attach_align_device_hook_on_blocks(
     module_name: str = "",
     skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
+    tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
 ):
     """
     Attaches `AlignDevicesHook` to all blocks of a given model as needed.
@@ -481,14 +514,30 @@ def attach_align_device_hook_on_blocks(
             of the forward. This should only be used for classes that have submodules which are registered but not
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
+        tied_params_map (Optional[Dict[int, Dict[torch.device, torch.Tensor]]], *optional*, defaults to `None`):
+            A map of data pointers to dictionaries of devices to already dispatched tied weights. For a given execution device, this parameter is useful
+            to reuse the first available pointer of a shared weight for all others, instead of duplicating memory.
     """
+    # When dispatching the model's parameters to the devices specified in device_map, we want to avoid allocating memory several times for the
+    # tied parameters. The dictionary tied_params_map keeps track of the already allocated data for a given tied parameter (represented by its
+    # original pointer) on each devices.
+    if tied_params_map is None:
+        tied_params = find_tied_parameters(module)
+
+        tied_params_map = {}
+        for group in tied_params:
+            for param_name in group:
+                data_ptr = recursive_getattr(module, param_name).data_ptr()
+                tied_params_map[data_ptr] = {}
+
+    #print("tied_params_map", tied_params_map)
     # If one device and one offload, we've got one hook.
     if not isinstance(execution_device, Mapping) and not isinstance(offload, dict):
         if not offload:
             hook = AlignDevicesHook(
                 execution_device=execution_device, io_same_device=True, skip_keys=skip_keys, place_submodules=True
             )
-            add_hook_to_module(module, hook)
+            add_align_hook_to_module(module, hook, tied_params_map=tied_params_map)
         else:
             attach_align_device_hook(
                 module,
@@ -514,7 +563,10 @@ def attach_align_device_hook_on_blocks(
             place_submodules=True,
             skip_keys=skip_keys,
         )
-        add_hook_to_module(module, hook)
+        #print("bef add_hook_to_module data ptr:", module.weight.data_ptr())
+        #print("bef add_hook_to_module data ptr 2:", module[2].weight.data_ptr())
+        add_align_hook_to_module(module, hook, tied_params_map=tied_params_map)
+        #print("GO HERE", module_name)
         attach_execution_device_hook(module, execution_device[module_name])
     elif module_name in execution_device and module_name in offload:
         attach_align_device_hook(
@@ -531,7 +583,7 @@ def attach_align_device_hook_on_blocks(
             hook = AlignDevicesHook(
                 execution_device=execution_device[module_name], io_same_device=(module_name == ""), skip_keys=skip_keys
             )
-            add_hook_to_module(module, hook)
+            add_align_hook_to_module(module, hook, tied_params_map=tied_params_map)
         attach_execution_device_hook(
             module,
             execution_device[module_name],
@@ -540,10 +592,14 @@ def attach_align_device_hook_on_blocks(
         )
     elif module_name == "":
         hook = AlignDevicesHook(execution_device=execution_device.get(""), io_same_device=True, skip_keys=skip_keys)
-        add_hook_to_module(module, hook)
+        add_align_hook_to_module(module, hook, tied_params_map=tied_params_map)
 
     for child_name, child in module.named_children():
         child_name = f"{module_name}.{child_name}" if len(module_name) > 0 else child_name
+
+        #print("child_name", child_name)
+        #print("child.weight data_ptr", child.weight.data_ptr())
+        print("------ call attach_align_device_hook_on_blocks")
         attach_align_device_hook_on_blocks(
             child,
             execution_device=execution_device,
@@ -553,6 +609,7 @@ def attach_align_device_hook_on_blocks(
             module_name=child_name,
             preload_module_classes=preload_module_classes,
             skip_keys=skip_keys,
+            tied_params_map=tied_params_map,
         )
 
 

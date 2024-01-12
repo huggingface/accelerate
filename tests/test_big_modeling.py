@@ -526,6 +526,10 @@ class BigModelingTester(unittest.TestCase):
         output = model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
+    #@require_cuda
+    #def test_dispatch_model_tied_weights(self):
+        ## Test that we do not duplicate
+
     @require_cuda
     def test_load_checkpoint_and_dispatch(self):
         model = ModelForTest()
