@@ -396,7 +396,6 @@ def dispatch_model(
             weights_map = None
 
         tied_params = find_tied_parameters(model)
-
         attach_align_device_hook_on_blocks(
             model,
             execution_device=execution_device,

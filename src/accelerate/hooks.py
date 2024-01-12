@@ -257,7 +257,7 @@ class AlignDevicesHook(ModelHook):
             f"place_submodules={self.place_submodules}, skip_keys={repr(self.skip_keys)})"
         )
 
-    def init_hook(self, module, tied_params_map):
+    def init_hook(self, module, tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None):
         if not self.offload and self.execution_device is not None:
             for name, _ in named_module_tensors(module, recurse=self.place_submodules):
                 set_module_tensor_to_device(module, name, self.execution_device, tied_params_map=tied_params_map)
@@ -341,12 +341,14 @@ def add_align_hook_to_module(
     tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
 ):
     """
-    Adds a AlignDevicesHook hook to a given module, supporting the `tied_params_map` argument. Please refer to the `add_hook_to_module` function documentation as well.
+    Adds a AlignDevicesHook hook to a given module, supporting the `tied_params_map` argument. Please refer to the
+    `add_hook_to_module` function documentation as well.
 
     Args:
         tied_params_map (Optional[Dict[int, Dict[torch.device, torch.Tensor]]], *optional*, defaults to `None`):
-            A map of data pointers to dictionaries of devices to already dispatched tied weights. For a given execution device, this parameter is useful
-            to reuse the first available pointer of a shared weight for all others, instead of duplicating memory.
+            A map of data pointers to dictionaries of devices to already dispatched tied weights. For a given execution
+            device, this parameter is useful to reuse the first available pointer of a shared weight for all others,
+            instead of duplicating memory.
     """
     if not isinstance(hook, AlignDevicesHook):
         raise ValueError(
@@ -517,8 +519,9 @@ def attach_align_device_hook_on_blocks(
             called directly during the forward, for instance if a `dense` linear layer is registered, but at forward,
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
         tied_params_map (Optional[Dict[int, Dict[torch.device, torch.Tensor]]], *optional*, defaults to `None`):
-            A map of data pointers to dictionaries of devices to already dispatched tied weights. For a given execution device, this parameter is useful
-            to reuse the first available pointer of a shared weight for all others, instead of duplicating memory.
+            A map of data pointers to dictionaries of devices to already dispatched tied weights. For a given execution
+            device, this parameter is useful to reuse the first available pointer of a shared weight for all others,
+            instead of duplicating memory.
     """
     # When dispatching the model's parameters to the devices specified in device_map, we want to avoid allocating memory several times for the
     # tied parameters. The dictionary tied_params_map keeps track of the already allocated data for a given tied parameter (represented by its

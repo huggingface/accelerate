@@ -288,8 +288,9 @@ def set_module_tensor_to_device(
         fp16_statistics (`torch.HalfTensor`, *optional*):
             The list of fp16 statistics to set on the module, used for 8 bit model serialization.
         tied_params_map (Dict[int, Dict[torch.device, torch.Tensor]], *optional*, defaults to `None`):
-            A map of current data pointers to dictionaries of devices to already dispatched tied weights. For a given execution device,
-            this parameter is useful to reuse the first available pointer of a shared weight on the device for all others, instead of duplicating memory.
+            A map of current data pointers to dictionaries of devices to already dispatched tied weights. For a given
+            execution device, this parameter is useful to reuse the first available pointer of a shared weight on the
+            device for all others, instead of duplicating memory.
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -363,7 +364,6 @@ def set_module_tensor_to_device(
             new_value = torch.tensor(value, device=device)
         if device_quantization is not None:
             device = device_quantization
-
         if is_buffer:
             module._buffers[tensor_name] = new_value
         elif value is not None or not check_device_same(torch.device(device), module._parameters[tensor_name].device):
@@ -382,7 +382,6 @@ def set_module_tensor_to_device(
                     new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
-
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
                 setattr(module._parameters[tensor_name], "SCB", fp16_statistics.to(device))
@@ -749,7 +748,6 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
             max_memory["mps"] = psutil.virtual_memory().available
         else:
             max_memory["cpu"] = psutil.virtual_memory().available
-
         return max_memory
 
     for key in max_memory:
@@ -857,7 +855,8 @@ def get_balanced_memory(
         model (`torch.nn.Module`):
             The model to analyze.
         max_memory (`Dict`, *optional*):
-            A dictionary device identifier to maximum memory (in bytes). Will default to the maximum memory available if unset.
+            A dictionary device identifier to maximum memory (in bytes). Will default to the maximum memory available
+            if unset.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
@@ -1014,7 +1013,8 @@ def infer_auto_device_map(
         model (`torch.nn.Module`):
             The model to analyze.
         max_memory (`Dict`, *optional*):
-            A dictionary device identifier to maximum memory (in bytes). Will default to the maximum memory available if unset.
+            A dictionary device identifier to maximum memory (in bytes). Will default to the maximum memory available
+            if unset.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
