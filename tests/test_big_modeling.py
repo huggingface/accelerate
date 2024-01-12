@@ -365,6 +365,48 @@ class BigModelingTester(unittest.TestCase):
         self.assertIs(model.linear2.weight, model.linear1.weight)
 
     @require_multi_gpu
+    def test_dispatch_model_tied_weights_memory(self):
+        # Test that we do not duplicate tied weights at any point during dispatch_model call.
+
+        model = nn.Sequential(
+            OrderedDict(
+                [
+                    ("linear0", nn.Linear(5000, 5000, bias=False)),
+                    ("linear1", nn.Linear(5000, 5000, bias=False)),
+                    ("linear2", nn.Linear(5000, 5000, bias=False)),
+                    ("linear3", nn.Linear(5000, 5000, bias=False)),
+                    ("linear4", nn.Linear(5000, 5000, bias=False)),
+                ]
+            )
+        )
+        model.linear2.weight = model.linear0.weight
+        model.linear3.weight = model.linear0.weight
+        model.linear4.weight = model.linear0.weight
+
+        x = torch.randn(5, 5000)
+        with torch.no_grad():
+            expected = model(x)
+
+        # We should need only 5000 * 5000 * 32 // 8 * 1e-6 = 100 MB on the device 0 for the three linear weights.
+        device_map = {"linear0": 0, "linear1": 1, "linear2": 0, "linear3": 0, "linear4": 0}
+
+        a = torch.rand(5).to("cuda:0")  # Just to intialize CUDA context.
+        free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]
+
+        required_memory_bytes = 5000 * 5000 * (32 // 8)
+
+        # Leaving 50 MB of free memory for possible buffers, etc.
+        n_vals = (free_memory_bytes - required_memory_bytes - int(50e6)) // (32 // 8)
+        foo = torch.rand(n_vals, device="cuda:0")
+
+        # If this does OOM: there is an issue in somewhere in dispatch_model, memory of tied weights is duplicated.
+        dispatch_model(model, device_map)
+
+        with torch.no_grad():
+            output = model(x)
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_multi_gpu
     def test_dispatch_model_multi_gpu(self):
         model = BiggerModelForTest()
         device_map = {"linear1": "cpu", "linear2": "disk", "batchnorm": "cpu", "linear3": 0, "linear4": 1}
