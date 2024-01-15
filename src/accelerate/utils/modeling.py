@@ -307,9 +307,17 @@ def set_module_tensor_to_device(
     is_buffer = tensor_name in module._buffers
     old_value = getattr(module, tensor_name)
 
-    # Treat the case where old_value belongs to a tied group, and one of the weight in the tied group has already been dispatched to the device,
-    # by avoiding reallocating memory on the device and just copying the pointer.
+    # Treat the case where old_value (or a custom `value`, typically offloaded to RAM/disk) belongs to a tied group, and one of the weight
+    # in the tied group has already been dispatched to the device, by avoiding reallocating memory on the device and just copying the pointer.
     if (
+        value is not None
+        and tied_params_map is not None
+        and value.data_ptr() in tied_params_map
+        and device in tied_params_map[value.data_ptr()]
+    ):
+        module._parameters[tensor_name] = tied_params_map[value.data_ptr()][device]
+        return
+    elif (
         tied_params_map is not None
         and old_value.data_ptr() in tied_params_map
         and device in tied_params_map[old_value.data_ptr()]
@@ -420,6 +428,13 @@ def set_module_tensor_to_device(
         and device not in tied_params_map[old_value.data_ptr()]
     ):
         tied_params_map[old_value.data_ptr()][device] = new_value
+    elif (
+        value is not None
+        and tied_params_map is not None
+        and value.data_ptr() in tied_params_map
+        and device not in tied_params_map[value.data_ptr()]
+    ):
+        tied_params_map[value.data_ptr()][device] = new_value
 
 
 def named_module_tensors(
@@ -855,8 +870,8 @@ def get_balanced_memory(
         model (`torch.nn.Module`):
             The model to analyze.
         max_memory (`Dict`, *optional*):
-            A dictionary device identifier to maximum memory (in bytes). Will default to the maximum memory available
-            if unset.
+            A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
+            Example: `max_memory={0: "1GB"}`.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
@@ -1013,8 +1028,8 @@ def infer_auto_device_map(
         model (`torch.nn.Module`):
             The model to analyze.
         max_memory (`Dict`, *optional*):
-            A dictionary device identifier to maximum memory (in bytes). Will default to the maximum memory available
-            if unset.
+            A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
+            Example: `max_memory={0: "1GB"}`.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
