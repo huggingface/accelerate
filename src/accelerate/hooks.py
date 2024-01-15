@@ -208,6 +208,8 @@ class AlignDevicesHook(ModelHook):
             The device on which inputs and model weights should be placed before the forward pass.
         offload (`bool`, *optional*, defaults to `False`):
             Whether or not the weights should be offloaded after the forward pass.
+        cpu_offload (`bool`, *optional*, defaults to `False`):
+            Whether the weights offloaded on the cpu should be kept in the module or not.
         io_same_device (`bool`, *optional*, defaults to `False`):
             Whether or not the output should be placed on the same device as the input was.
         weights_map (`Mapping[str, torch.Tensor]`, *optional*):
@@ -222,6 +224,7 @@ class AlignDevicesHook(ModelHook):
         self,
         execution_device: Optional[Union[int, str, torch.device]] = None,
         offload: bool = False,
+        cpu_offload: bool = False,
         io_same_device: bool = False,
         weights_map: Optional[Mapping] = None,
         offload_buffers: bool = False,
@@ -230,12 +233,12 @@ class AlignDevicesHook(ModelHook):
     ):
         self.execution_device = execution_device
         self.offload = offload
+        self.cpu_offload = cpu_offload
         self.io_same_device = io_same_device
         self.weights_map = weights_map
         self.offload_buffers = offload_buffers
         self.place_submodules = place_submodules
         self.skip_keys = skip_keys
-
         # Will contain the input device when `io_same_device=True`.
         self.input_device = None
         self.param_original_devices = {}
@@ -249,7 +252,7 @@ class AlignDevicesHook(ModelHook):
         )
 
     def init_hook(self, module):
-        if not self.offload and self.execution_device is not None:
+        if not self.offload and self.execution_device is not None and not self.cpu_offload:
             for name, _ in named_module_tensors(module, recurse=self.place_submodules):
                 set_module_tensor_to_device(module, name, self.execution_device)
         elif self.offload:
@@ -273,7 +276,9 @@ class AlignDevicesHook(ModelHook):
             elif self.offload_buffers and self.execution_device is not None:
                 for name in get_non_persistent_buffers(module, recurse=self.place_submodules):
                     set_module_tensor_to_device(module, name, self.execution_device)
-
+        elif self.cpu_offload:
+            for name, _ in named_module_tensors(module, recurse=self.place_submodules):
+                set_module_tensor_to_device(module, name, "cpu")
         return module
 
     def pre_forward(self, module, *args, **kwargs):
@@ -293,7 +298,9 @@ class AlignDevicesHook(ModelHook):
                 set_module_tensor_to_device(
                     module, name, self.execution_device, value=self.weights_map[name], fp16_statistics=fp16_statistics
                 )
-
+        elif self.cpu_offload:
+            for name, _ in named_module_tensors(module, recurse=self.place_submodules):
+                set_module_tensor_to_device(module, name, self.execution_device)
         return send_to_device(args, self.execution_device), send_to_device(
             kwargs, self.execution_device, skip_keys=self.skip_keys
         )
@@ -310,7 +317,9 @@ class AlignDevicesHook(ModelHook):
                 if type(module).__name__ == "Linear8bitLt":
                     module.state.SCB = None
                     module.state.CxB = None
-
+        elif self.cpu_offload:
+            for name, _ in named_module_tensors(module, recurse=self.place_submodules):
+                set_module_tensor_to_device(module, name, "cpu")
         if self.io_same_device and self.input_device is not None:
             output = send_to_device(output, self.input_device, skip_keys=self.skip_keys)
 
@@ -450,6 +459,7 @@ def attach_align_device_hook_on_blocks(
     module: nn.Module,
     execution_device: Optional[Union[torch.device, Dict[str, torch.device]]] = None,
     offload: Union[bool, Dict[str, bool]] = False,
+    cpu_offload: Union[bool, Dict[str, bool]] = False,
     weights_map: Mapping = None,
     offload_buffers: bool = False,
     module_name: str = "",
@@ -468,6 +478,8 @@ def attach_align_device_hook_on_blocks(
         offload (`bool`, *optional*, defaults to `False`):
             Whether or not the weights should be offloaded after the forward pass. It can be one boolean for the whole
             module, or a dictionary mapping module name to boolean.
+        cpu_offload (`Union[bool, Dict[str, bool]]`, *optional*, defaults to `False`):
+            Whether the weights offloaded on the cpu should be kept in the module or not.
         weights_map (`Mapping[str, torch.Tensor]`, *optional*):
             When the model weights are offloaded, a (potentially lazy) map from param names to the tensor values.
         offload_buffers (`bool`, *optional*, defaults to `False`):
@@ -505,10 +517,16 @@ def attach_align_device_hook_on_blocks(
         execution_device = {key: execution_device for key in offload.keys()}
     if not isinstance(offload, Mapping):
         offload = {key: offload for key in execution_device.keys()}
-
-    if module_name in execution_device and module_name in offload and not offload[module_name]:
+    if not isinstance(cpu_offload, Mapping):
+        cpu_offload = {key: cpu_offload for key in execution_device.keys()}
+    if (
+        module_name in execution_device
+        and module_name in offload
+        and (not offload[module_name] or cpu_offload[module_name])
+    ):
         hook = AlignDevicesHook(
             execution_device=execution_device[module_name],
+            cpu_offload=cpu_offload[module_name],
             offload_buffers=offload_buffers,
             io_same_device=(module_name == ""),
             place_submodules=True,
@@ -548,6 +566,7 @@ def attach_align_device_hook_on_blocks(
             child,
             execution_device=execution_device,
             offload=offload,
+            cpu_offload=cpu_offload,
             weights_map=weights_map,
             offload_buffers=offload_buffers,
             module_name=child_name,

@@ -305,6 +305,7 @@ def dispatch_model(
     offload_dir: Optional[Union[str, os.PathLike]] = None,
     offload_index: Optional[Dict[str, str]] = None,
     offload_buffers: bool = False,
+    cpu_offload: bool = False,
     skip_keys: Optional[Union[str, List[str]]] = None,
     preload_module_classes: Optional[List[str]] = None,
     force_hooks: bool = False,
@@ -324,6 +325,8 @@ def dispatch_model(
             `"disk"`.
         state_dict (`Dict[str, torch.Tensor]`, *optional*):
             The state dict of the part of the model that will be kept on CPU.
+        cpu_offload (`bool`, *optional*, defaults to `False`):
+            Whether the weights offloaded on the cpu should be kept in the module or not.
         offload_dir (`str` or `os.PathLike`):
             The folder in which to offload the model weights (or where the model weights are already offloaded).
         offload_index (`Dict`, *optional*):
@@ -361,7 +364,7 @@ def dispatch_model(
             else:
                 main_device = [d for d in device_map.values() if d not in ["cpu", "disk"]][0]
 
-        if main_device != "cpu":
+        if main_device != "cpu" and not cpu_offload:
             cpu_modules = [name for name, device in device_map.items() if device == "cpu"]
             if state_dict is None and len(cpu_modules) > 0:
                 state_dict = extract_submodules_state_dict(model.state_dict(), cpu_modules)
@@ -384,8 +387,12 @@ def dispatch_model(
             name: main_device if device in ["cpu", "disk"] else device for name, device in device_map.items()
         }
         execution_device[""] = main_device
-        offloaded_devices = ["disk"] if main_device == "cpu" or main_device == "mps" else ["cpu", "disk"]
+        offloaded_devices = (
+            ["disk"] if cpu_offload or main_device == "cpu" or main_device == "mps" else ["cpu", "disk"]
+        )
         offload = {name: device in offloaded_devices for name, device in device_map.items()}
+        if cpu_offload:
+            cpu_offload = {name: device == "cpu" for name, device in device_map.items()}
         save_folder = offload_dir if len(disk_modules) > 0 else None
         if state_dict is not None or save_folder is not None or offload_index is not None:
             device = main_device if offload_index is not None else None
@@ -400,6 +407,7 @@ def dispatch_model(
             model,
             execution_device=execution_device,
             offload=offload,
+            cpu_offload=cpu_offload,
             offload_buffers=offload_buffers,
             weights_map=weights_map,
             skip_keys=skip_keys,
@@ -408,7 +416,7 @@ def dispatch_model(
 
         # warn if there is any params on the meta device
         offloaded_devices_str = " and ".join(
-            [device for device in set(device_map.values()) if device in ("cpu", "disk")]
+            [device for device in set(device_map.values()) if device in offloaded_devices]
         )
         if len(offloaded_devices_str) > 0:
             logging.warning(
@@ -460,6 +468,7 @@ def load_checkpoint_and_dispatch(
     no_split_module_classes: Optional[List[str]] = None,
     offload_folder: Optional[Union[str, os.PathLike]] = None,
     offload_buffers: bool = False,
+    cpu_offload: bool = False,
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: Optional[bool] = None,
     skip_keys: Optional[Union[str, List[str]]] = None,
@@ -495,6 +504,8 @@ def load_checkpoint_and_dispatch(
         offload_buffers (`bool`, *optional*, defaults to `False`):
             In the layers that are offloaded on the CPU or the hard drive, whether or not to offload the buffers as
             well as the parameters.
+        cpu_offload (`bool`, *optional*, defaults to `False`):
+            Whether the weights offloaded on the cpu should be kept in the module or not.
         dtype (`str` or `torch.dtype`, *optional*):
             If provided, the weights will be converted to that type when loaded.
         offload_state_dict (`bool`, *optional*):
@@ -569,6 +580,7 @@ def load_checkpoint_and_dispatch(
         device_map=device_map,
         offload_dir=offload_folder,
         offload_buffers=offload_buffers,
+        cpu_offload=cpu_offload,
         skip_keys=skip_keys,
         preload_module_classes=preload_module_classes,
         force_hooks=force_hooks,
