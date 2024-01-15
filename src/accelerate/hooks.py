@@ -266,7 +266,6 @@ class AlignDevicesHook(ModelHook):
             for name, _ in named_module_tensors(module, recurse=self.place_submodules):
                 set_module_tensor_to_device(module, name, self.execution_device, tied_params_map=tied_params_map)
         elif self.offload:
-            # TODO: validate that this tied param fix works correctly with offloading
             self.original_devices = {
                 name: param.device for name, param in named_module_tensors(module, recurse=self.place_submodules)
             }
@@ -281,7 +280,6 @@ class AlignDevicesHook(ModelHook):
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules, remove_non_persistent=True
             ):
                 set_module_tensor_to_device(module, name, "meta")
-
             if not self.offload_buffers and self.execution_device is not None:
                 for name, _ in module.named_buffers(recurse=self.place_submodules):
                     set_module_tensor_to_device(module, name, self.execution_device, tied_params_map=tied_params_map)
@@ -317,8 +315,7 @@ class AlignDevicesHook(ModelHook):
                 # self.tied_params_map in order to allow to free memory.
                 value = self.weights_map[name]
                 if (
-                    len(self.tied_params_map) > 0
-                    and value is not None
+                    value is not None
                     and self.tied_params_map is not None
                     and value.data_ptr() in self.tied_params_map
                     and self.execution_device not in self.tied_params_map[value.data_ptr()]

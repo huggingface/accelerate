@@ -469,7 +469,7 @@ class BigModelingTester(unittest.TestCase):
             output = model(x)
         self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
 
-    @require_multi_gpu
+    @require_cuda
     def test_dispatch_model_tied_weights_memory_with_nested_offload(self):
         # Test that we do not duplicate tied weights at any point during dispatch_model call.
 
