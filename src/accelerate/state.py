@@ -275,6 +275,10 @@ class PartialState:
                 os.environ["RANK"] = str(rank)
                 os.environ["WORLD_SIZE"] = str(size)
                 os.environ["LOCAL_RANK"] = str(local_rank)
+                if backend == "ccl" and self.distributed_type == DistributedType.MULTI_XPU:
+                    os.environ['CCL_PROCESS_LAUNCHER'] = 'none'
+                    os.environ['CCL_LOCAL_SIZE'] = str(size)
+                    os.environ['CCL_LOCAL_RANK'] = str(local_rank)
                 if not os.environ.get("MASTER_PORT", None):
                     os.environ["MASTER_PORT"] = "29500"
                 if not os.environ.get("MASTER_ADDR", None):
