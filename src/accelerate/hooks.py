@@ -361,8 +361,6 @@ class AlignDevicesHook(ModelHook):
 
             # We may have loaded tied weights into self.tied_params_map (avoiding to load them several times in e.g. submodules): remove them from
             # this dictionary to allow the garbage collector to do its job.
-            # This is useful only for RAM offloading, as for disk offloading safetensors natively
-            # handles tied weights, and tied_params_map is not populated.
             for value_pointer, device in self.tied_pointers_to_remove:
                 del self.tied_params_map[value_pointer][device]
             self.tied_pointers_to_remove = None
