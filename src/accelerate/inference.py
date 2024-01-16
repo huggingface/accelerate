@@ -3,6 +3,7 @@ from types import MethodType
 from typing import Literal
 from functools import update_wrapper
 import pickle
+import torch
 
 from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
 from pippy.PipelineStage import PipelineStage
@@ -44,7 +45,7 @@ def generate_device_map(model, num_processes:int=1):
     )
     return device_map
 
-def build_pipeline(model, device_map, *args, **kwargs) -> PipelineStage:
+def build_pipeline(model, device_map, args, kwargs) -> PipelineStage:
     """
     Attaches the split points to the model based on `self.device_map`
     and generates a `PipelineStage`. Requires passing in needed
@@ -62,12 +63,13 @@ def build_pipeline(model, device_map, *args, **kwargs) -> PipelineStage:
             for split_point in split_points
         }
     )
-    pipe = Pipe.from_tracing(
-        model,
-        num_chunks=state.num_processes,
-        example_args=args,
-        example_kwargs=kwargs
-    )
+    with torch.no_grad():
+        pipe = Pipe.from_tracing(
+            model,
+            num_chunks=state.num_processes,
+            example_args=args,
+            example_kwargs=kwargs
+        )
     stage = PipelineStage(
         pipe,
         state.local_process_index,
@@ -85,9 +87,9 @@ def prepare_pippy(model, device_map="auto", example_args=(), example_kwargs={}):
     example_kwargs = send_to_device(example_kwargs, "cpu")
     if device_map == "auto":
         device_map = generate_device_map(model, PartialState().num_processes)
-    stage = build_pipeline(model, device_map, *example_args, **example_kwargs)
+    stage = build_pipeline(model, device_map, example_args, example_kwargs)
     model._original_forward = model.forward
     model._original_call = model.__call__
     model.pippy_stage = stage
     model.forward = model.pippy_stage.forward
-    return model
+    return stage
