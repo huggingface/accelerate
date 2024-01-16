@@ -541,7 +541,7 @@ class BigModelingTester(unittest.TestCase):
                 output = model(x)
             except torch.cuda.OutOfMemoryError as e:
                 raise torch.cuda.OutOfMemoryError(
-                    f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory. {e}"
+                    f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory_with_nested_offload. {e}"
                 )
             except Exception as e:
                 raise e
