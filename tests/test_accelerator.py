@@ -11,8 +11,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
-from accelerate.test_utils import require_bnb, require_multi_gpu, slow
-from accelerate.test_utils.testing import AccelerateTestCase, require_cuda
+from accelerate.test_utils import require_bnb, require_multi_device, require_non_cpu, slow, torch_device
+from accelerate.test_utils.testing import AccelerateTestCase
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import load_checkpoint_in_model
 
@@ -55,11 +55,11 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
-    @require_cuda
+    @require_non_cpu
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
         assert PartialState._shared_state["_cpu"] is False
-        assert PartialState._shared_state["device"].type == "cuda"
+        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu"]
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
@@ -326,12 +326,17 @@ class AcceleratorTester(AccelerateTestCase):
 
     @slow
     @require_bnb
-    @require_multi_gpu
-    def test_accelerator_bnb_multi_gpu(self):
+    @require_multi_device
+    def test_accelerator_bnb_multi_device(self):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
 
-        PartialState._shared_state = {"distributed_type": DistributedType.MULTI_GPU}
+        if torch_device == "cuda":
+            PartialState._shared_state = {"distributed_type": DistributedType.MULTI_GPU}
+        elif torch_device == "npu":
+            PartialState._shared_state = {"distributed_type": DistributedType.MULTI_NPU}
+        else:
+            raise ValueError(f"{torch_device} is not supported in test_accelerator_bnb_multi_device.")
 
         with init_empty_weights():
             model = AutoModelForCausalLM.from_pretrained(
@@ -356,8 +361,8 @@ class AcceleratorTester(AccelerateTestCase):
 
     @slow
     @require_bnb
-    @require_multi_gpu
-    def test_accelerator_bnb_multi_gpu_no_distributed(self):
+    @require_multi_device
+    def test_accelerator_bnb_multi_device_no_distributed(self):
         """Tests that the accelerator can be used with the BNB library."""
         from transformers import AutoModelForCausalLM
 
@@ -378,21 +383,21 @@ class AcceleratorTester(AccelerateTestCase):
         # This should work
         _ = accelerator.prepare(model)
 
-    @require_cuda
+    @require_non_cpu
     def test_accelerator_cpu_flag_prepare(self):
         model = torch.nn.Linear(10, 10)
         sgd = torch.optim.SGD(model.parameters(), lr=0.01)
         accelerator = Accelerator(cpu=True)
         _ = accelerator.prepare(sgd)
 
-    @require_cuda
+    @require_non_cpu
     def test_can_unwrap_model_fp16(self):
         # test for a regression introduced in #872
         # before the fix, after unwrapping with keep_fp32_wrapper=False, there would be the following error:
         # Linear.forward() missing 1 required positional argument: 'input'
         model = create_components()[0]
         accelerator = Accelerator(mixed_precision="fp16")
-        inputs = torch.randn(10, 2).cuda()
+        inputs = torch.randn(10, 2).to(torch_device)
         model = accelerator.prepare(model)
         model(inputs)  # sanity check that this works
 
