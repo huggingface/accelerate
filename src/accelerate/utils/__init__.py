@@ -73,6 +73,7 @@ from .imports import (
     is_sagemaker_available,
     is_tensorboard_available,
     is_timm_available,
+    is_pippy_available,
     is_tpu_available,
     is_transformer_engine_available,
     is_transformers_available,
