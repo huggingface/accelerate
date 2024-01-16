@@ -22,7 +22,6 @@ from .state import PartialState
 from .utils import (
     PrefixedDataset,
     find_device,
-    find_tied_parameters,
     named_module_tensors,
     send_to_device,
     set_module_tensor_to_device,
@@ -249,6 +248,7 @@ class AlignDevicesHook(ModelHook):
         self.input_device = None
         self.param_original_devices = {}
         self.buffer_original_devices = {}
+        self.tied_params_names = set()
 
     def __repr__(self):
         return (
@@ -279,7 +279,15 @@ class AlignDevicesHook(ModelHook):
             for name, _ in named_module_tensors(
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules, remove_non_persistent=True
             ):
+                # When using disk offloading, we can not rely on `weights_map[name].data_ptr()` as the reference pointer,
+                # as we have no guarantee that safetensors' `file.get_tensor()` will always give the same pointer.
+                # As we have no reliable way to track the shared data pointer of tied weights in this case, we use tied_params_names: List[str]
+                # to add on the fly pointers to `tied_params_map` in the pre_forward call.
+                if tied_params_map is not None and recursive_getattr(module, name).data_ptr() in tied_params_map:
+                    self.tied_params_names.add(name)
+
                 set_module_tensor_to_device(module, name, "meta")
+
             if not self.offload_buffers and self.execution_device is not None:
                 for name, _ in module.named_buffers(recurse=self.place_submodules):
                     set_module_tensor_to_device(module, name, self.execution_device, tied_params_map=tied_params_map)
@@ -306,14 +314,17 @@ class AlignDevicesHook(ModelHook):
                 remove_non_persistent=True,
             ):
                 fp16_statistics = None
+                value = self.weights_map[name]
                 if "weight" in name and name.replace("weight", "SCB") in self.weights_map.keys():
-                    if self.weights_map[name].dtype == torch.int8:
+                    if value.dtype == torch.int8:
                         fp16_statistics = self.weights_map[name.replace("weight", "SCB")]
 
                 # In case we are using offloading with tied weights, we need to keep track of the offloaded weights
                 # that are loaded on device at this point, as we will need to remove them as well from the dictionary
                 # self.tied_params_map in order to allow to free memory.
-                value = self.weights_map[name]
+                if name in self.tied_params_names and value.data_ptr() not in self.tied_params_map:
+                    self.tied_params_map[value.data_ptr()] = {}
+
                 if (
                     value is not None
                     and self.tied_params_map is not None
@@ -326,7 +337,7 @@ class AlignDevicesHook(ModelHook):
                     module,
                     name,
                     self.execution_device,
-                    value=self.weights_map[name],
+                    value=value,
                     fp16_statistics=fp16_statistics,
                     tied_params_map=self.tied_params_map,
                 )
@@ -350,6 +361,8 @@ class AlignDevicesHook(ModelHook):
 
             # We may have loaded tied weights into self.tied_params_map (avoiding to load them several times in e.g. submodules): remove them from
             # this dictionary to allow the garbage collector to do its job.
+            # This is useful only for RAM offloading, as for disk offloading safetensors natively
+            # handles tied weights, and tied_params_map is not populated.
             for value_pointer, device in self.tied_pointers_to_remove:
                 del self.tied_params_map[value_pointer][device]
             self.tied_pointers_to_remove = None
@@ -545,20 +558,6 @@ def attach_align_device_hook_on_blocks(
             device, this parameter is useful to reuse the first available pointer of a shared weight for all others,
             instead of duplicating memory.
     """
-    # When dispatching the model's parameters to the devices specified in device_map, we want to avoid allocating memory several times for the
-    # tied parameters. The dictionary tied_params_map keeps track of the already allocated data for a given tied parameter (represented by its
-    # original pointer) on each devices.
-    if tied_params_map is None:
-        tied_params = find_tied_parameters(module)
-
-        tied_params_map = {}
-        for group in tied_params:
-            for param_name in group:
-                # data_ptr() is enough here, as `find_tied_parameters` finds tied params simply by comparing `param1 is param2`, so we don't need
-                # to care about views of tensors through storage_offset.
-                data_ptr = recursive_getattr(module, param_name).data_ptr()
-                tied_params_map[data_ptr] = {}
-
     # If one device and one offload, we've got one hook.
     if not isinstance(execution_device, Mapping) and not isinstance(offload, dict):
         if not offload:

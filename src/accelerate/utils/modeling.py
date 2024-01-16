@@ -390,6 +390,7 @@ def set_module_tensor_to_device(
                     new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
+
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
                 setattr(module._parameters[tensor_name], "SCB", fp16_statistics.to(device))
