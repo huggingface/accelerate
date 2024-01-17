@@ -1,4 +1,5 @@
 import math
+from types import MethodType
 from functools import partial
 from typing import Literal
 
@@ -85,12 +86,13 @@ def prepare_pippy(model, device_map="auto", example_args=(), example_kwargs={}):
     model._original_call = model.__call__
     model.pippy_stage = stage
 
-    model_forward = partial(pippy_forward, forward=model.pippy_stage.forward)
 
     def forward(*args, **kwargs):
-        return model_forward(*args, **kwargs)
+        return pippy_forward(stage.forward, *args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
+    model_forward = MethodType(forward, model)
     forward.__wrapped__ = model_forward
     model.forward = forward
-    return stage
+    return model
+
