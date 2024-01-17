@@ -24,7 +24,7 @@ from transformers import (
 
 from accelerate import PartialState
 from accelerate.inference import prepare_pippy
-from accelerate.utils import DistributedType, set_seed
+from accelerate.utils import DistributedType, send_to_device, set_seed
 
 
 model_to_config = {
@@ -48,22 +48,7 @@ def get_model_and_data(model_name, device, num_processes: int = 2):
     )
 
 
-def test_gpt2_gpu_trace():
-    set_seed(42)
-    state = PartialState()
-    model, inputs = get_model_and_data("gpt2", "cuda:0", state.num_processes)
-    model.to("cuda:0")
-    model = prepare_pippy(model, example_args=(inputs,))
-    with torch.no_grad():
-        output = model(inputs)
-    # Zach: Check that we just grab the real outputs we need at the end
-    if not state.is_last_process:
-        assert output is None, "Output was not generated on just the last process!"
-    else:
-        assert output is not None, "Output was not generated in the last process!"
-
-
-def test_gpt2_cpu_trace():
+def test_gpt2():
     set_seed(42)
     state = PartialState()
     model, inputs = get_model_and_data("gpt2", "cpu", state.num_processes)
@@ -79,12 +64,30 @@ def test_gpt2_cpu_trace():
         assert output is not None, "Output was not generated in the last process!"
 
 
+def test_t5():
+    set_seed(42)
+    state = PartialState()
+    model, inputs = get_model_and_data("t5", "cpu", state.num_processes)
+    example_inputs = {"input_ids": inputs, "decoder_input_ids": inputs}
+    model = prepare_pippy(model, example_kwargs=example_inputs)
+    # For inference args need to be a tuple
+    inputs = send_to_device(example_inputs, "cuda:0")
+    with torch.no_grad():
+        output = model(*inputs.values())
+    # Zach: Check that we just grab the real outputs we need at the end
+    if not state.is_last_process:
+        assert output is None, "Output was not generated on just the last process!"
+    else:
+        assert output is not None, "Output was not generated in the last process!"
+
+
 if __name__ == "__main__":
     state = PartialState()
     state.print("Testing pippy integration...")
     if state.distributed_type == DistributedType.MULTI_GPU:
-        state.print("Testing GPT2")
-        #    test_gpt2_gpu_trace()
-        test_gpt2_cpu_trace()
+        state.print("Testing GPT2...")
+        test_gpt2()
+        state.print("Testing T5...")
+        test_t5()
     else:
         print("Less than two GPUs found, not running tests!")
