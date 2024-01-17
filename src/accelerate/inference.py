@@ -84,6 +84,7 @@ def prepare_pippy(model, split_points="auto", no_split_module_classes=[], exampl
     model._original_forward = model.forward
     model._original_call = model.__call__
     model.pippy_stage = stage
+    model.hf_split_points = split_points
 
     def forward(*args, **kwargs):
         return pippy_forward(stage.forward, *args, **kwargs)
