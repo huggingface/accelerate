@@ -180,6 +180,9 @@ class PartialState:
                     if is_xpu_available and is_ccl_available():
                         # Set DeepSpeed backend to ccl for xpu
                         self.backend = "ccl"
+                        os.environ['CCL_PROCESS_LAUNCHER'] = 'none'
+                        os.environ['CCL_LOCAL_SIZE'] = os.environ.get("LOCAL_WORLD_SIZE", "1")
+                        os.environ['CCL_LOCAL_RANK'] = os.environ.get("LOCAL_RANK", "0")
                     elif is_npu_available():
                         self.backend = "hccl"
                     else:
