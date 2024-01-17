@@ -17,11 +17,10 @@ from .utils import (
 ParallelMode = Literal["sequential", "pipeline_parallel"]
 
 
-def generate_device_map(model, num_processes: int = 1):
+def generate_device_map(model, num_processes: int = 1, no_split_module_classes=None):
     """
     Calculates the device map for `model` with an offset for PiPPy
     """
-    no_split_module_classes = getattr(model, "_no_split_modules", [])
     if num_processes == 1:
         return infer_auto_device_map(model, no_split_module_classes=no_split_module_classes, clean_result=False)
     model_size, shared = calculate_maximum_sizes(model)
@@ -72,14 +71,16 @@ def pippy_forward(forward, *args, **kwargs):
     return output
 
 
-def prepare_pippy(model, device_map="auto", example_args=(), example_kwargs={}):
+def prepare_pippy(model, device_map="auto", no_split_module_classes=[], example_args=(), example_kwargs={}):
     """
     Wraps `model` for PipelineParallelism
     """
     example_args = send_to_device(example_args, "cpu")
     example_kwargs = send_to_device(example_kwargs, "cpu")
     if device_map == "auto":
-        device_map = generate_device_map(model, PartialState().num_processes)
+        device_map = generate_device_map(
+            model, PartialState().num_processes, no_split_module_classes=no_split_module_classes
+        )
     stage = build_pipeline(model, device_map, example_args, example_kwargs)
     model._original_forward = model.forward
     model._original_call = model.__call__

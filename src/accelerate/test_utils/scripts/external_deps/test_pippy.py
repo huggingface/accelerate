@@ -52,7 +52,7 @@ def test_gpt2():
     set_seed(42)
     state = PartialState()
     model, inputs = get_model_and_data("gpt2", "cpu", state.num_processes)
-    model = prepare_pippy(model, example_args=(inputs,))
+    model = prepare_pippy(model, example_args=(inputs,), no_split_module_classes=model._no_split_modules)
     # For inference args need to be a tuple
     inputs = inputs.to("cuda")
     with torch.no_grad():
@@ -69,7 +69,11 @@ def test_t5():
     state = PartialState()
     model, inputs = get_model_and_data("t5", "cpu", state.num_processes)
     example_inputs = {"input_ids": inputs, "decoder_input_ids": inputs}
-    model = prepare_pippy(model, example_kwargs=example_inputs)
+    model = prepare_pippy(
+        model,
+        no_split_module_classes=model._no_split_modules,
+        example_kwargs=example_inputs,
+    )
     # For inference args need to be a tuple
     inputs = send_to_device(example_inputs, "cuda:0")
     with torch.no_grad():
