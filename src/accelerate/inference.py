@@ -59,7 +59,9 @@ def build_pipeline(model, split_points, args, kwargs) -> PipelineStage:
 def pippy_forward(forward, *args, **kwargs):
     state = PartialState()
     output = None
-    if state.is_local_main_process:
+    if state.num_processes == 1:
+        output = forward(*args, **kwargs)
+    elif state.is_local_main_process:
         forward(*args, **kwargs)
     elif state.is_last_process:
         output = forward()
