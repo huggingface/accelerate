@@ -18,7 +18,7 @@ import platform
 import re
 import socket
 from contextlib import contextmanager
-from functools import partial
+from functools import partial, reduce
 from types import MethodType
 from typing import OrderedDict
 
@@ -320,3 +320,20 @@ def check_os_kernel():
             "cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher."
         )
         logger.warning(msg, main_process_only=True)
+
+
+def recursive_getattr(obj, attr: str):
+    """
+    Recursive `getattr`.
+
+    Args:
+        obj:
+            A class instance holding the attribute.
+        attr (`str`):
+            The attribute that is to be retrieved, e.g. 'attribute1.attribute2'.
+    """
+
+    def _getattr(obj, attr):
+        return getattr(obj, attr)
+
+    return reduce(_getattr, [obj] + attr.split("."))

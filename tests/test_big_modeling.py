@@ -14,6 +14,7 @@
 import copy
 import os
 import unittest
+from collections import OrderedDict
 from tempfile import TemporaryDirectory
 
 import torch
@@ -362,6 +363,235 @@ class BigModelingTester(unittest.TestCase):
 
         dispatch_model(model, device_map)
         self.assertIs(model.linear2.weight, model.linear1.weight)
+
+    @require_multi_gpu
+    def test_dispatch_model_tied_weights_memory(self):
+        # Test that we do not duplicate tied weights at any point during dispatch_model call.
+
+        torch.cuda.empty_cache()  # Needed in case we run several tests in a row.
+
+        model = nn.Sequential(
+            OrderedDict(
+                [
+                    ("linear0", nn.Linear(5000, 5000, bias=False)),
+                    ("linear1", nn.Linear(5000, 5000, bias=False)),
+                    ("linear2", nn.Linear(5000, 5000, bias=False)),
+                    ("linear3", nn.Linear(5000, 5000, bias=False)),
+                    ("linear4", nn.Linear(5000, 5000, bias=False)),
+                ]
+            )
+        )
+        model.linear2.weight = model.linear0.weight
+        model.linear3.weight = model.linear0.weight
+        model.linear4.weight = model.linear0.weight
+
+        x = torch.randn(5, 5000)
+        with torch.no_grad():
+            expected = model(x)
+
+        # We should need only 5000 * 5000 * 32 // 8 * 1e-6 = 100 MB on the device 0 for the four linear weights.
+        device_map = {"linear0": 0, "linear1": 1, "linear2": 0, "linear3": 0, "linear4": 0}
+
+        # Just to intialize CUDA context.
+        a = torch.rand(5).to("cuda:0")  # noqa: F841
+
+        free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]
+        required_memory_bytes = 5000 * 5000 * (32 // 8)
+
+        # Leaving 50 MB of free memory for possible buffers, etc.
+        n_vals = (free_memory_bytes - required_memory_bytes - int(50e6)) // (32 // 8)
+        foo = torch.rand(n_vals, device="cuda:0")  # noqa: F841
+
+        # If this does OOM: there is an issue in somewhere in dispatch_model, memory of tied weights is duplicated.
+        try:
+            dispatch_model(model, device_map)
+        except torch.cuda.OutOfMemoryError as e:
+            raise torch.cuda.OutOfMemoryError(
+                f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory. {e}"
+            )
+        except Exception as e:
+            raise e
+
+        with torch.no_grad():
+            output = model(x)
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+    @require_cuda
+    def test_dispatch_model_tied_weights_memory_with_nested_offload_cpu(self):
+        # Test that we do not duplicate tied weights at any point during dispatch_model call.
+
+        torch.cuda.empty_cache()  # Needed in case we run several tests in a row.
+
+        class SubModule(torch.nn.Module):
+            def __init__(self, ref_to_parameter):
+                super().__init__()
+                self.parameter = ref_to_parameter
+
+            def forward(self, x):
+                return x + torch.max(self.parameter)
+
+        class LinearModuleAndSubModule(torch.nn.Linear):
+            def __init__(self, in_features, out_features):
+                super().__init__(in_features, out_features, bias=False)
+                self.weight_submodule = SubModule(self.weight)
+                self.weight_submodule2 = SubModule(self.weight)
+                self.weight_submodule3 = SubModule(self.weight)
+                self.weight_submodule4 = SubModule(self.weight)
+
+            def forward(self, x):
+                a = torch.nn.functional.linear(self.weight_submodule(x), self.weight)
+                b = torch.nn.functional.linear(self.weight_submodule2(x), self.weight)
+                c = torch.nn.functional.linear(self.weight_submodule3(x), self.weight)
+                d = torch.nn.functional.linear(self.weight_submodule4(x), self.weight)
+                return a + b + c + d
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.compute = LinearModuleAndSubModule(5000, 5000)
+                self.compute1 = LinearModuleAndSubModule(5000, 5000)
+
+            def forward(self, x):
+                a = self.compute(x)
+                b = self.compute1(x)
+                return a + b
+
+        # We should need only 2 * 5000 * 5000 * 32 // 8 * 1e-6 = 200 MB on the device 0 for the whole model forward, and not 600 MB.
+        device_map = {"compute": 0, "compute1": "cpu"}
+
+        model = Model()
+
+        x = torch.randn(1, 5000)
+        with torch.no_grad():
+            expected = model(x)
+
+        # Just to intialize CUDA context.
+        a = torch.rand(5).to("cuda:0")  # noqa: F841
+
+        free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]
+        required_memory_bytes = 2 * 5000 * 5000 * (32 // 8)  # 200 MB
+
+        # Leaving 150 MB of free memory for possible buffers, etc.
+        n_vals = (free_memory_bytes - required_memory_bytes - int(150e6)) // (32 // 8)
+        foo = torch.rand(n_vals, device="cuda:0")  # noqa: F841
+
+        free_memory_bytes_before_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
+        dispatch_model(model, device_map)
+        free_memory_bytes_after_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
+
+        self.assertTrue((free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130)
+
+        original_pointer = model.compute1._hf_hook.weights_map["weight"].data_ptr()
+
+        with torch.no_grad():
+            try:
+                output = model(x)
+            except torch.cuda.OutOfMemoryError as e:
+                raise torch.cuda.OutOfMemoryError(
+                    f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory_with_nested_offload_cpu. {e}"
+                )
+            except Exception as e:
+                raise e
+
+        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+        torch.cuda.empty_cache()
+
+        free_memory_bytes_after_infer = torch.cuda.mem_get_info("cuda:0")[0]
+
+        # Check that we have no more references on GPU for the offloaded tied weight.
+        self.assertTrue(len(model.compute1.weight_submodule._hf_hook.tied_params_map[original_pointer]) == 0)
+        self.assertTrue(len(model.compute1._hf_hook.tied_params_map[original_pointer]) == 0)
+        self.assertTrue((free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130)
+
+    @require_cuda
+    def test_dispatch_model_tied_weights_memory_with_nested_offload_disk(self):
+        # Test that we do not duplicate tied weights at any point during dispatch_model call.
+
+        torch.cuda.empty_cache()  # Needed in case we run several tests in a row.
+
+        class SubModule(torch.nn.Module):
+            def __init__(self, ref_to_parameter):
+                super().__init__()
+                self.parameter = ref_to_parameter
+
+            def forward(self, x):
+                return x + torch.max(self.parameter)
+
+        class LinearModuleAndSubModule(torch.nn.Linear):
+            def __init__(self, in_features, out_features):
+                super().__init__(in_features, out_features, bias=False)
+                self.weight_submodule = SubModule(self.weight)
+                self.weight_submodule2 = SubModule(self.weight)
+                self.weight_submodule3 = SubModule(self.weight)
+                self.weight_submodule4 = SubModule(self.weight)
+
+            def forward(self, x):
+                a = torch.nn.functional.linear(self.weight_submodule(x), self.weight)
+                b = torch.nn.functional.linear(self.weight_submodule2(x), self.weight)
+                c = torch.nn.functional.linear(self.weight_submodule3(x), self.weight)
+                d = torch.nn.functional.linear(self.weight_submodule4(x), self.weight)
+                return a + b + c + d
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.compute = LinearModuleAndSubModule(5000, 5000)
+                self.compute1 = LinearModuleAndSubModule(5000, 5000)
+
+            def forward(self, x):
+                a = self.compute(x)
+                b = self.compute1(x)
+                return a + b
+
+        # We should need only 2 * 5000 * 5000 * 32 // 8 * 1e-6 = 200 MB on the device 0 for the whole model forward, and not 600 MB.
+        device_map = {"compute": 0, "compute1": "disk"}
+
+        model = Model()
+
+        x = torch.randn(1, 5000)
+        with torch.no_grad():
+            expected = model(x)
+
+        # Just to intialize CUDA context.
+        a = torch.rand(5).to("cuda:0")  # noqa: F841
+
+        free_memory_bytes = torch.cuda.mem_get_info("cuda:0")[0]
+        required_memory_bytes = 2 * 5000 * 5000 * (32 // 8)  # 200 MB
+
+        # Leaving 150 MB of free memory for possible buffers, etc.
+        n_vals = (free_memory_bytes - required_memory_bytes - int(200e6)) // (32 // 8)
+        foo = torch.rand(n_vals, device="cuda:0")  # noqa: F841
+
+        free_memory_bytes_before_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
+        with TemporaryDirectory() as tmp_dir:
+            dispatch_model(model, device_map, offload_dir=tmp_dir)
+            free_memory_bytes_after_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
+
+            self.assertTrue((free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130)
+
+            original_pointer = model.compute1._hf_hook.weights_map["weight"].data_ptr()
+
+            with torch.no_grad():
+                try:
+                    output = model(x)
+                except torch.cuda.OutOfMemoryError as e:
+                    raise torch.cuda.OutOfMemoryError(
+                        f"OOM error in dispatch_model. This is a bug and should not happen, see test_dispatch_model_tied_weights_memory_with_nested_offload_disk. {e}"
+                    )
+                except Exception as e:
+                    raise e
+
+            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+
+            torch.cuda.empty_cache()
+
+            free_memory_bytes_after_infer = torch.cuda.mem_get_info("cuda:0")[0]
+
+            # Check that we have no more references on GPU for the offloaded tied weight.
+            self.assertTrue(len(model.compute1.weight_submodule._hf_hook.tied_params_map[original_pointer]) == 0)
+            self.assertTrue(len(model.compute1._hf_hook.tied_params_map[original_pointer]) == 0)
+            self.assertTrue((free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130)
 
     @require_multi_gpu
     def test_dispatch_model_multi_gpu(self):
