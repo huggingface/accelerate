@@ -1,6 +1,5 @@
 import math
 from types import MethodType
-from functools import partial
 from typing import Literal
 
 from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
@@ -86,7 +85,6 @@ def prepare_pippy(model, device_map="auto", example_args=(), example_kwargs={}):
     model._original_call = model.__call__
     model.pippy_stage = stage
 
-
     def forward(*args, **kwargs):
         return pippy_forward(stage.forward, *args, **kwargs)
 
@@ -95,4 +93,3 @@ def prepare_pippy(model, device_map="auto", example_args=(), example_kwargs={}):
     forward.__wrapped__ = model_forward
     model.forward = forward
     return model
-
