@@ -269,15 +269,17 @@ class PartialState:
                     ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"], 0
                 )
                 local_size = get_int_from_env(
-                    ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
+                    ["LOCAL_WORLD_SIZE", "MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
                 )
                 self.local_process_index = local_rank
                 os.environ["RANK"] = str(rank)
                 os.environ["WORLD_SIZE"] = str(size)
                 os.environ["LOCAL_RANK"] = str(local_rank)
+                os.environ["LOCAL_WORLD_SIZE"]=str(local_size)
+                
                 if backend == "ccl" and self.distributed_type == DistributedType.MULTI_XPU:
                     os.environ['CCL_PROCESS_LAUNCHER'] = 'none'
-                    os.environ['CCL_LOCAL_SIZE'] = str(size)
+                    os.environ['CCL_LOCAL_SIZE'] = str(local_size)
                     os.environ['CCL_LOCAL_RANK'] = str(local_rank)
                 if not os.environ.get("MASTER_PORT", None):
                     os.environ["MASTER_PORT"] = "29500"
