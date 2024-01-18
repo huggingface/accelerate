@@ -63,7 +63,7 @@ def pippy_forward(forward, *args, **kwargs):
     state = PartialState()
     output = None
 
-    def _find_batch_size(args):
+    def _find_batch_size(arg):
         try:
             return find_batch_size(arg)
         except (ValueError, TypeError):
