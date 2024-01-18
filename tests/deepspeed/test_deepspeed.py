@@ -1082,7 +1082,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             "--offload_param_device=none",
             self.test_file_path,
             f"--output_dir={self.tmpdir}",
-            f"--performance_lower_bound={self.performance_lower_bound}",
+            f"--performance_lower_bound={0.75}",
         ]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
