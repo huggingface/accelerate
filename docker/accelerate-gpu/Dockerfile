@@ -1,4 +1,4 @@
-# Builds GPU docker image of PyTorch specifically for deepspeed
+# Builds GPU docker image of PyTorch specifically
 # Uses multi-staged approach to reduce size
 # Stage 1
 # Use base conda image to reduce time
