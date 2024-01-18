@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import gc
 import os
 import unittest
 from collections import OrderedDict
@@ -445,7 +446,7 @@ class BigModelingTester(unittest.TestCase):
                 d = torch.nn.functional.linear(self.weight_submodule4(x), self.weight)
                 return a + b + c + d
 
-        class Model(torch.nn.Module):
+        class ModelWithSubmodules(torch.nn.Module):
             def __init__(self):
                 super().__init__()
                 self.compute = LinearModuleAndSubModule(5000, 5000)
@@ -459,7 +460,7 @@ class BigModelingTester(unittest.TestCase):
         # We should need only 2 * 5000 * 5000 * 32 // 8 * 1e-6 = 200 MB on the device 0 for the whole model forward, and not 600 MB.
         device_map = {"compute": 0, "compute1": "cpu"}
 
-        model = Model()
+        model = ModelWithSubmodules()
 
         x = torch.randn(1, 5000)
         with torch.no_grad():
@@ -504,6 +505,10 @@ class BigModelingTester(unittest.TestCase):
         self.assertTrue(len(model.compute1._hf_hook.tied_params_map[original_pointer]) == 0)
         self.assertTrue((free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130)
 
+        # Test is flacky otherwise.
+        del model
+        gc.collect()
+
     @require_cuda
     def test_dispatch_model_tied_weights_memory_with_nested_offload_disk(self):
         # Test that we do not duplicate tied weights at any point during dispatch_model call.
@@ -533,7 +538,7 @@ class BigModelingTester(unittest.TestCase):
                 d = torch.nn.functional.linear(self.weight_submodule4(x), self.weight)
                 return a + b + c + d
 
-        class Model(torch.nn.Module):
+        class ModelWithSubmodules(torch.nn.Module):
             def __init__(self):
                 super().__init__()
                 self.compute = LinearModuleAndSubModule(5000, 5000)
@@ -547,7 +552,7 @@ class BigModelingTester(unittest.TestCase):
         # We should need only 2 * 5000 * 5000 * 32 // 8 * 1e-6 = 200 MB on the device 0 for the whole model forward, and not 600 MB.
         device_map = {"compute": 0, "compute1": "disk"}
 
-        model = Model()
+        model = ModelWithSubmodules()
 
         x = torch.randn(1, 5000)
         with torch.no_grad():
@@ -570,8 +575,6 @@ class BigModelingTester(unittest.TestCase):
 
             self.assertTrue((free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130)
 
-            original_pointer = model.compute1._hf_hook.weights_map["weight"].data_ptr()
-
             with torch.no_grad():
                 try:
                     output = model(x)
@@ -589,8 +592,18 @@ class BigModelingTester(unittest.TestCase):
             free_memory_bytes_after_infer = torch.cuda.mem_get_info("cuda:0")[0]
 
             # Check that we have no more references on GPU for the offloaded tied weight.
-            self.assertTrue(len(model.compute1.weight_submodule._hf_hook.tied_params_map[original_pointer]) == 0)
-            self.assertTrue(len(model.compute1._hf_hook.tied_params_map[original_pointer]) == 0)
+            n_non_empty = 0
+            for pointer, pointer_dict in model.compute1.weight_submodule._hf_hook.tied_params_map.items():
+                if len(pointer_dict) > 0:
+                    n_non_empty += 1
+            self.assertTrue(n_non_empty == 1)  # `compute` layer one.
+
+            n_non_empty = 0
+            for pointer, pointer_dict in model.compute1._hf_hook.tied_params_map.items():
+                if len(pointer_dict) > 0:
+                    n_non_empty += 1
+            self.assertTrue(n_non_empty == 1)  # `compute` layer one.
+
             self.assertTrue((free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130)
 
     @require_multi_gpu
