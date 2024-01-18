@@ -71,16 +71,13 @@ def pippy_forward(forward, *args, **kwargs):
         return None
 
     def _pad_inputs(args):
-        core = slice_tensors(args, slice(0, state.num_processes), process_index=0, num_processes=state.num_processes)
-        # Do args first
+        # Slice and copy the last input
         extra = slice_tensors(
             args,
             slice(state.num_processes, state.num_processes + 1),
-            process_index=0,
-            num_processes=state.num_processes,
         )
-        extra = concatenate([extra] * ((found_batch_size % state.num_processes) + 1))
-        args = concatenate([core, extra])
+        # Concat it to `args`
+        args = concatenate([args, extra])
         return args
 
     if state.num_processes == 1:
