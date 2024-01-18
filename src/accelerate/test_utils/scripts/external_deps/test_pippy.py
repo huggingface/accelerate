@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
+from torchvision.models import resnet34
 from transformers import (
     BertConfig,
     BertForMaskedLM,
@@ -34,7 +35,7 @@ model_to_config = {
 }
 
 
-def get_model_and_data(model_name, device, num_processes: int = 2):
+def get_model_and_data_for_text(model_name, device, num_processes: int = 2):
     initializer, config, seq_len = model_to_config[model_name]
     config_args = {}
     # Eventually needed for batch inference tests on gpt-2 when bs != 1
@@ -55,7 +56,7 @@ def get_model_and_data(model_name, device, num_processes: int = 2):
 def test_gpt2(batch_size: int = 2):
     set_seed(42)
     state = PartialState()
-    model, inputs = get_model_and_data("gpt2", "cpu", batch_size)
+    model, inputs = get_model_and_data_for_text("gpt2", "cpu", batch_size)
     model = prepare_pippy(model, example_args=(inputs,), no_split_module_classes=model._no_split_modules)
     # For inference args need to be a tuple
     inputs = inputs.to("cuda")
@@ -71,7 +72,7 @@ def test_gpt2(batch_size: int = 2):
 def test_t5(batch_size: int = 2):
     set_seed(42)
     state = PartialState()
-    model, inputs = get_model_and_data("t5", "cpu", batch_size)
+    model, inputs = get_model_and_data_for_text("t5", "cpu", batch_size)
     example_inputs = {"input_ids": inputs, "decoder_input_ids": inputs}
     model = prepare_pippy(
         model,
@@ -82,6 +83,25 @@ def test_t5(batch_size: int = 2):
     inputs = send_to_device(example_inputs, "cuda:0")
     with torch.no_grad():
         output = model(*inputs.values())
+    # Zach: Check that we just grab the real outputs we need at the end
+    if not state.is_last_process:
+        assert output is None, "Output was not generated on just the last process!"
+    else:
+        assert output is not None, "Output was not generated in the last process!"
+
+
+def test_resnet(batch_size: int = 2):
+    set_seed(42)
+    state = PartialState()
+    model = resnet34()
+    input_tensor = torch.rand(batch_size, 3, 224, 224)
+    model = prepare_pippy(
+        model,
+        example_args=(input_tensor,),
+    )
+    inputs = send_to_device(input_tensor, "cuda:0")
+    with torch.no_grad():
+        output = model(inputs)
     # Zach: Check that we just grab the real outputs we need at the end
     if not state.is_last_process:
         assert output is None, "Output was not generated on just the last process!"
@@ -102,5 +122,8 @@ if __name__ == "__main__":
         state.print("Testing T5...")
         test_t5()
         test_t5(3)
+        state.print("Testing CV model...")
+        test_resnet()
+        test_resnet(3)
     else:
         print("Less than two GPUs found, not running tests!")
