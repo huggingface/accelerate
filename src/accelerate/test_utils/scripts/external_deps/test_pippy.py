@@ -36,11 +36,14 @@ model_to_config = {
 
 def get_model_and_data(model_name, device, num_processes: int = 2):
     initializer, config, seq_len = model_to_config[model_name]
-    config = config()
-    model = initializer(config)
+    config_args = {}
+    if model_name == "gpt2":
+        config_args["pad_token_id"] = 0
+    model_config = config(**config_args)
+    model = initializer(model_config)
     return model, torch.randint(
         low=0,
-        high=config.vocab_size,
+        high=model_config.vocab_size,
         size=(num_processes, seq_len),
         device=device,
         dtype=torch.int64,
@@ -48,10 +51,10 @@ def get_model_and_data(model_name, device, num_processes: int = 2):
     )
 
 
-def test_gpt2():
+def test_gpt2(batch_size: int = 2):
     set_seed(42)
     state = PartialState()
-    model, inputs = get_model_and_data("gpt2", "cpu", state.num_processes)
+    model, inputs = get_model_and_data("gpt2", "cpu", batch_size)
     model = prepare_pippy(model, example_args=(inputs,), no_split_module_classes=model._no_split_modules)
     # For inference args need to be a tuple
     inputs = inputs.to("cuda")
@@ -64,10 +67,10 @@ def test_gpt2():
         assert output is not None, "Output was not generated in the last process!"
 
 
-def test_t5():
+def test_t5(batch_size: int = 2):
     set_seed(42)
     state = PartialState()
-    model, inputs = get_model_and_data("t5", "cpu", state.num_processes)
+    model, inputs = get_model_and_data("t5", "cpu", batch_size)
     example_inputs = {"input_ids": inputs, "decoder_input_ids": inputs}
     model = prepare_pippy(
         model,
@@ -91,7 +94,12 @@ if __name__ == "__main__":
     if state.distributed_type == DistributedType.MULTI_GPU:
         state.print("Testing GPT2...")
         test_gpt2()
+        # Issue: When modifying the tokenizer for batch GPT2 inference, there's an issue
+        # due to references
+        # NameError: cannot access free variable 'chunk_args_list' where it is not associated with a value in enclosing scope
+        # test_gpt2(3)
         state.print("Testing T5...")
         test_t5()
+        test_t5(3)
     else:
         print("Less than two GPUs found, not running tests!")
