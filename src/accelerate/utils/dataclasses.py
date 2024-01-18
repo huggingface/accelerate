@@ -243,7 +243,7 @@ class FP8RecipeKwargs(KwargsHandler):
     override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
 
     def __post_init__(self):
-        self.backend = self.backend.upper()
+        self.backend = self.backend.lower()
         if self.backend not in get_args(Backend):
             raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
         # Check TE args
