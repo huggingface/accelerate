@@ -20,7 +20,8 @@ ENV PATH /opt/conda/envs/accelerate/bin:$PATH
 RUN chsh -s /bin/bash
 SHELL ["/bin/bash", "-c"]
 # Activate the conda env, install mpy4pi, and install torch + accelerate
-RUN source activate accelerate && \ conda install -c conda-forge mpi4py && \
+RUN source activate accelerate && conda install -c conda-forge mpi4py
+RUN source activate accelerate && \
     python3 -m pip install --no-cache-dir \
     git+https://github.com/huggingface/accelerate#egg=accelerate[testing,test_trackers] \
     --extra-index-url https://download.pytorch.org/whl/cu117
