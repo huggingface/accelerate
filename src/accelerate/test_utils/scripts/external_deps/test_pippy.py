@@ -37,8 +37,9 @@ model_to_config = {
 def get_model_and_data(model_name, device, num_processes: int = 2):
     initializer, config, seq_len = model_to_config[model_name]
     config_args = {}
-    if model_name == "gpt2":
-        config_args["pad_token_id"] = 0
+    # Eventually needed for batch inference tests on gpt-2 when bs != 1
+    # if model_name == "gpt2":
+    #     config_args["pad_token_id"] = 0
     model_config = config(**config_args)
     model = initializer(model_config)
     return model, torch.randint(
