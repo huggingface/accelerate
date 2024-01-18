@@ -1,4 +1,4 @@
-# Builds GPU docker image of PyTorch
+# Builds GPU docker image of PyTorch specifically for deepspeed
 # Uses multi-staged approach to reduce size
 # Stage 1
 # Use base conda image to reduce time
@@ -19,8 +19,8 @@ ENV PATH /opt/conda/envs/accelerate/bin:$PATH
 # Activate our bash shell
 RUN chsh -s /bin/bash
 SHELL ["/bin/bash", "-c"]
-# Activate the conda env and install torch + accelerate
-RUN source activate accelerate && \
+# Activate the conda env, install mpy4pi, and install torch + accelerate
+RUN source activate accelerate && \ conda install -c conda-forge mpi4py && \
     python3 -m pip install --no-cache-dir \
     git+https://github.com/huggingface/accelerate#egg=accelerate[testing,test_trackers] \
     --extra-index-url https://download.pytorch.org/whl/cu117
