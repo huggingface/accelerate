@@ -89,9 +89,12 @@ def pippy_forward(forward, *args, **kwargs):
         found_batch_size = None
         for arg in args:
             found_batch_size = _find_batch_size(arg)
-        if found_batch_size is None:
-            for kwarg in kwargs.values():
-                found_batch_size = _find_batch_size(kwarg)
+            if found_batch_size is not None:
+                break
+        for kwarg in kwargs.values():
+            found_batch_size = _find_batch_size(kwarg)
+            if found_batch_size is not None:
+                break
         if found_batch_size is None:
             raise ValueError("Could not find batch size from args or kwargs")
         else:
