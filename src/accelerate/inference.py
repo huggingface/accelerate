@@ -72,15 +72,10 @@ def pippy_forward(forward, *args, **kwargs):
 
     def _pad_inputs(args):
         # We keep at least `num_processes` elements of the first batch to add to the end
-        first_batch = slice_tensors(
-            args,
-            slice(0, state.num_processes)
-        )
+        first_batch = slice_tensors(args, slice(0, found_batch_size % state.num_processes))
         # Concat it to `args`
         args = concatenate([args, first_batch])
-        # Then slice it
-        data = slice(state.num_processes, state.num_processes + found_batch_size)
-        return data
+        return args
 
     if state.num_processes == 1:
         output = forward(*args, **kwargs)
