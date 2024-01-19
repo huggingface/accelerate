@@ -8,12 +8,11 @@ from pippy.PipelineStage import PipelineStage
 from .state import PartialState
 from .utils import (
     calculate_maximum_sizes,
-    concatenate,
     convert_bytes,
-    find_batch_size,
+    ignorant_find_batch_size,
     infer_auto_device_map,
     send_to_device,
-    slice_tensors,
+    slice_and_concatenate,
 )
 
 
@@ -63,38 +62,25 @@ def pippy_forward(forward, *args, **kwargs):
     state = PartialState()
     output = None
 
-    def _find_batch_size(arg):
-        try:
-            return find_batch_size(arg)
-        except (ValueError, TypeError):
-            pass
-        return None
-
-    def _pad_inputs(args):
-        # We keep at least `num_processes` elements of the first batch to add to the end
-        first_batch = slice_tensors(args, slice(0, found_batch_size % state.num_processes))
-        # Concat it to `args`
-        args = concatenate([args, first_batch])
-        return args
-
     if state.num_processes == 1:
         output = forward(*args, **kwargs)
     elif state.is_local_main_process:
         found_batch_size = None
         for arg in args:
-            found_batch_size = _find_batch_size(arg)
+            found_batch_size = ignorant_find_batch_size(arg)
             if found_batch_size is not None:
                 break
         for kwarg in kwargs.values():
-            found_batch_size = _find_batch_size(kwarg)
+            found_batch_size = ignorant_find_batch_size(kwarg)
             if found_batch_size is not None:
                 break
         if found_batch_size is None:
             raise ValueError("Could not find batch size from args or kwargs")
         else:
             if (found_batch_size % state.num_processes) != 0:
-                args = _pad_inputs(args)
-                kwargs = _pad_inputs(kwargs)
+                slice_to_cut = slice(0, found_batch_size % state.num_processes)
+                args = slice_and_concatenate(args, slice_to_cut)
+                kwargs = slice_and_concatenate(kwargs, slice_to_cut)
         forward(*args, **kwargs)
     elif state.is_last_process:
         output = forward()

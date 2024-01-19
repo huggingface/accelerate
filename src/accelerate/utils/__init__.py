@@ -125,6 +125,7 @@ from .operations import (
     gather_object,
     get_data_structure,
     honor_type,
+    ignorant_find_batch_size,
     initialize_tensors,
     is_namedtuple,
     is_tensor_information,
@@ -134,6 +135,7 @@ from .operations import (
     recursively_apply,
     reduce,
     send_to_device,
+    slice_and_concatenate,
     slice_tensors,
 )
 from .versions import compare_versions, is_torch_version

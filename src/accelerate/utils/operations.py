@@ -248,6 +248,23 @@ def find_batch_size(data):
     return data.shape[0]
 
 
+def ignorant_find_batch_size(data):
+    """
+    Same as [`utils.operations.find_batch_size`] except will ignore if `ValueError` and `TypeErrors` are raised
+
+    Args:
+        data (nested list/tuple/dictionary of `torch.Tensor`): The data from which to find the batch size.
+
+    Returns:
+        `int`: The batch size.
+    """
+    try:
+        return find_batch_size(data)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 def listify(data):
     """
     Recursively finds tensors in a nested list/tuple/dictionary and converts them to a list of numbers.
@@ -589,6 +606,14 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
     return recursively_apply(
         _pad_across_processes, tensor, error_on_other_type=True, dim=dim, pad_index=pad_index, pad_first=pad_first
     )
+
+
+def slice_and_concatenate(tensor, tensor_slice, dim=0):
+    """
+    Slices `tensor` based on `tensor_slice` and then returns a concatenated version of `tensor` and `tensor_slice`
+    """
+    chunk = slice_tensors(tensor, tensor_slice)
+    return concatenate([tensor, chunk], dim=dim)
 
 
 @verify_operation
