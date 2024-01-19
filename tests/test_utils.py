@@ -240,6 +240,7 @@ class UtilsTester(unittest.TestCase):
         self.assertIs(nt, nt2)
 
     def test_slice_and_concatenate(self):
+        # Should be equivalent to the slice func used in `pippy_forward`
         def get_slice(batch_size, num_processes):
             if num_processes > batch_size:
                 batch_size += (num_processes - batch_size) + 1
