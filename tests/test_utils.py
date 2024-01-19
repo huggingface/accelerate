@@ -242,9 +242,15 @@ class UtilsTester(unittest.TestCase):
     def test_slice_and_concatenate(self):
         # Should be equivalent to the slice func used in `pippy_forward`
         def get_slice(batch_size, num_processes):
-            if num_processes > batch_size:
-                batch_size += (num_processes - batch_size) + 1
-            return slice((batch_size % num_processes) + 1, batch_size)
+            # First special case: bs == 1, we just duplicate
+            if batch_size == 1:
+                slice_to_cut = slice(0, batch_size % num_processes)
+            else:
+                # Second special case: bs < num_processes, we add a buffer to the batch size to bring it to num_processes
+                if num_processes > batch_size:
+                    batch_size += (num_processes - batch_size) + 1
+                slice_to_cut = slice((batch_size % num_processes) + 1, batch_size)
+            return slice_to_cut
 
         # First base case: 2 processes, batch size of 3
         num_processes = 2
