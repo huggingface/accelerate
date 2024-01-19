@@ -268,7 +268,6 @@ class UtilsTester(unittest.TestCase):
         num_processes = 4
         batch_size = 3
         batch = torch.rand(batch_size, 4, 4)
-        # batch_size = 5
         slice_to_cut = get_slice(batch_size, num_processes)
         result = slice_and_concatenate(batch, slice_to_cut)
         # We should expect there to be 4 items now
@@ -278,7 +277,6 @@ class UtilsTester(unittest.TestCase):
         num_processes = 6
         batch_size = 4
         batch = torch.rand(batch_size, 4, 4)
-        # batch_size = 7
         slice_to_cut = get_slice(batch_size, num_processes)
         result = slice_and_concatenate(batch, slice_to_cut)
         # We should expect there to be 6 items now
