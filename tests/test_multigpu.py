@@ -21,7 +21,13 @@ import torch
 import accelerate
 from accelerate import Accelerator
 from accelerate.big_modeling import dispatch_model
-from accelerate.test_utils import assert_exception, device_count, execute_subprocess_async, require_multi_device, require_non_torch_xla
+from accelerate.test_utils import (
+    assert_exception,
+    device_count,
+    execute_subprocess_async,
+    require_multi_device,
+    require_non_torch_xla,
+)
 from accelerate.utils import patch_environment
 
 

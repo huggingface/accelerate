@@ -52,7 +52,9 @@ from ..utils import (
 
 
 def get_backend():
-    if is_cuda_available():
+    if is_torch_xla_available():
+        return "xla", torch.cuda.device_count()
+    elif is_cuda_available():
         return "cuda", torch.cuda.device_count()
     elif is_mps_available():
         return "mps", 1

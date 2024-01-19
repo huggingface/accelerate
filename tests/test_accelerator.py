@@ -59,7 +59,7 @@ class AcceleratorTester(AccelerateTestCase):
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
         assert PartialState._shared_state["_cpu"] is False
-        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu"]
+        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla"]
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
