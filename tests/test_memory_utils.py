@@ -17,7 +17,7 @@ import unittest
 import torch
 from torch import nn
 
-from accelerate.test_utils import require_cuda
+from accelerate.test_utils import memory_allocated_func, require_non_cpu, torch_device
 from accelerate.utils.memory import find_executable_batch_size, release_memory
 
 
@@ -105,11 +105,11 @@ class MemoryTest(unittest.TestCase):
             mock_training_loop_function()
             self.assertIn("Oops, we had an error!", cm.exception.args[0])
 
-    @require_cuda
+    @require_non_cpu
     def test_release_memory(self):
-        starting_memory = torch.cuda.memory_allocated()
+        starting_memory = memory_allocated_func()
         model = ModelForTest()
-        model.cuda()
-        self.assertGreater(torch.cuda.memory_allocated(), starting_memory)
+        model.to(torch_device)
+        self.assertGreater(memory_allocated_func(), starting_memory)
         model = release_memory(model)
-        self.assertEqual(torch.cuda.memory_allocated(), starting_memory)
+        self.assertEqual(memory_allocated_func(), starting_memory)
