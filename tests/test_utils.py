@@ -252,7 +252,16 @@ class UtilsTester(unittest.TestCase):
                 slice_to_cut = slice((batch_size % num_processes) + 1, batch_size)
             return slice_to_cut
 
-        # First base case: 2 processes, batch size of 3
+        # First base case: 2 processes, batch size of 1
+        num_processes = 2
+        batch_size = 1
+        batch = torch.rand(batch_size, 4)
+        slice_to_cut = get_slice(batch_size, num_processes)
+        result = slice_and_concatenate(batch, slice_to_cut)
+        # We should expect there to be 2 items now
+        assert result.shape == torch.Size([2, 4])
+
+        # Second base case: 2 processes, batch size of 3
         num_processes = 2
         batch_size = 3
         batch = torch.rand(batch_size, 4)
@@ -261,7 +270,7 @@ class UtilsTester(unittest.TestCase):
         # We should expect there to be 4 items now
         assert result.shape == torch.Size([4, 4])
 
-        # Second base case: 3 processes, batch size of 4
+        # Third base case: 3 processes, batch size of 4
         num_processes = 3
         batch_size = 4
         batch = torch.rand(batch_size, 4, 4)
@@ -270,7 +279,7 @@ class UtilsTester(unittest.TestCase):
         # We should expect there to be 6 items now
         assert result.shape == torch.Size([6, 4, 4])
 
-        # Third base case: 4 processes, batch size of 3
+        # Fourth base case: 4 processes, batch size of 3
         num_processes = 4
         batch_size = 3
         batch = torch.rand(batch_size, 4, 4)
@@ -279,7 +288,7 @@ class UtilsTester(unittest.TestCase):
         # We should expect there to be 4 items now
         assert result.shape == torch.Size([4, 4, 4])
 
-        # Fourth base case: 6 processes, batch size of 4
+        # Fifth base case: 6 processes, batch size of 4
         num_processes = 6
         batch_size = 4
         batch = torch.rand(batch_size, 4, 4)
