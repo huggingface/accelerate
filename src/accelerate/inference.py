@@ -78,7 +78,7 @@ def pippy_forward(forward, *args, **kwargs):
             raise ValueError("Could not find batch size from args or kwargs")
         else:
             if (found_batch_size % state.num_processes) != 0:
-                slice_to_cut = slice(0, found_batch_size % state.num_processes)
+                slice_to_cut = slice(0, found_batch_size - (found_batch_size % state.num_processes))
                 args = slice_and_concatenate(args, slice_to_cut)
                 kwargs = slice_and_concatenate(kwargs, slice_to_cut)
         forward(*args, **kwargs)
