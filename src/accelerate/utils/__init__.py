@@ -188,6 +188,7 @@ from .other import (
     is_port_in_use,
     merge_dicts,
     patch_environment,
+    recursive_getattr,
     save,
     wait_for_everyone,
     write_basic_config,

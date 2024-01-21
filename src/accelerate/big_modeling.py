@@ -43,6 +43,7 @@ from .utils import (
     parse_flag_from_env,
     retie_parameters,
 )
+from .utils.other import recursive_getattr
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,8 @@ def init_empty_weights(include_buffers: bool = None):
 
     Any model created under this context manager has no weights. As such you can't do something like
     `model.to(some_device)` with it. To load weights inside your empty model, see [`load_checkpoint_and_dispatch`].
+    Make sure to overwrite the default device_map param for [`load_checkpoint_and_dispatch`], otherwise dispatch is not
+    called.
 
     </Tip>
     """
@@ -393,7 +396,22 @@ def dispatch_model(
         else:
             weights_map = None
 
+        # When dispatching the model's parameters to the devices specified in device_map, we want to avoid allocating memory several times for the
+        # tied parameters. The dictionary tied_params_map keeps track of the already allocated data for a given tied parameter (represented by its
+        # original pointer) on each devices.
         tied_params = find_tied_parameters(model)
+
+        tied_params_map = {}
+        for group in tied_params:
+            for param_name in group:
+                # data_ptr() is enough here, as `find_tied_parameters` finds tied params simply by comparing `param1 is param2`, so we don't need
+                # to care about views of tensors through storage_offset.
+                data_ptr = recursive_getattr(model, param_name).data_ptr()
+                tied_params_map[data_ptr] = {}
+
+                # Note: To handle the disk offloading case, we can not simply use weights_map[param_name].data_ptr() as the reference pointer,
+                # as we have no guarantee that safetensors' `file.get_tensor()` will always give the same pointer.
+
         attach_align_device_hook_on_blocks(
             model,
             execution_device=execution_device,
@@ -402,6 +420,7 @@ def dispatch_model(
             weights_map=weights_map,
             skip_keys=skip_keys,
             preload_module_classes=preload_module_classes,
+            tied_params_map=tied_params_map,
         )
 
         # warn if there is any params on the meta device
@@ -445,7 +464,8 @@ def dispatch_model(
             raise ValueError(
                 "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
             )
-    model.hf_device_map = device_map
+    # Convert OrderedDict back to dict for easier usage
+    model.hf_device_map = dict(device_map)
     return model
 
 
@@ -479,7 +499,8 @@ def load_checkpoint_and_dispatch(
             name, once a given module name is inside, every submodule of it will be sent to the same device.
 
             To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`. For more
-            information about each option see [here](big_modeling#designing-a-device-map).
+            information about each option see [here](../concept_guides/big_model_inference#designing-a-device-map).
+            Defaults to None, which means [`dispatch_model`] will not be called.
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available for each GPU
             and the available CPU RAM if unset.

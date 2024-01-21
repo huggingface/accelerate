@@ -217,6 +217,11 @@ class Accelerator:
             If set to `True`, in cases where the total batch size across all processes does not exactly divide the
             dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
             all workers.
+        use_seedable_sampler (`bool`, *optional*, defaults to `False`):
+            Whether or not use a fully seedable random sampler ([`~data_loader.SeedableRandomSampler`]). Ensures
+            training results are fully reproducable using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
+            also be ran with [`~utils.set_seed`] for the best results.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
@@ -262,6 +267,7 @@ class Accelerator:
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
         dispatch_batches: bool | None = None,
         even_batches: bool = True,
+        use_seedable_sampler: bool = False,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
@@ -417,6 +423,7 @@ class Accelerator:
         self.split_batches = split_batches
         self.dispatch_batches = dispatch_batches
         self.even_batches = even_batches
+        self.use_seedable_sampler = use_seedable_sampler
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
@@ -1419,7 +1426,7 @@ class Accelerator:
             for obj in args
         ]
 
-        if deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] == "auto":
+        if deepspeed_plugin.is_auto("train_micro_batch_size_per_gpu"):
             if is_dataloader_present:
                 batch_sizes = [obj.batch_size for obj in args if hasattr(obj, "batch_size")]
                 if any(bs is None for bs in batch_sizes):
@@ -1445,7 +1452,7 @@ class Accelerator:
                     "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
                 )
         else:
-            batch_size_per_device = deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"]
+            batch_size_per_device = deepspeed_plugin.get_value("train_micro_batch_size_per_gpu")
 
         # handle `gradient_accumulation_steps` when the value is `auto`
         deepspeed_plugin.fill_match(
@@ -1457,7 +1464,7 @@ class Accelerator:
         config_kwargs = {
             "train_micro_batch_size_per_gpu": batch_size_per_device,
             "train_batch_size": batch_size_per_device
-            * deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"]
+            * deepspeed_plugin.get_value("gradient_accumulation_steps")
             * self.num_processes,
             "gradient_clipping": 1.0,
             "zero_optimization.stage3_gather_16bit_weights_on_model_save": False,
@@ -1516,20 +1523,39 @@ class Accelerator:
                 )
 
         if model is not None:
-            if hasattr(model, "config"):
-                hidden_size = (
-                    max(model.config.hidden_sizes)
-                    if getattr(model.config, "hidden_sizes", None)
-                    else getattr(model.config, "hidden_size", None)
+            # deal with config keys that use `auto` value and rely on model's hidden_size
+            hidden_size_based_keys = [
+                "zero_optimization.reduce_bucket_size",
+                "zero_optimization.stage3_prefetch_bucket_size",
+                "zero_optimization.stage3_param_persistence_threshold",
+            ]
+            hidden_size_auto_keys = [x for x in hidden_size_based_keys if deepspeed_plugin.is_auto(x)]
+            if len(hidden_size_auto_keys) > 0:
+                reasoning = (
+                    "therefore it's not possible to automatically fill out the following `auto` entries "
+                    + f"in the DeepSpeed config file: {hidden_size_auto_keys}. You can fix that by replacing "
+                    + "`auto` values for these keys with an integer value of your choice."
                 )
-                if hidden_size is not None:
-                    config_kwargs.update(
-                        {
-                            "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
-                            "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
-                            "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
-                        }
+                if not hasattr(model, "config"):
+                    raise ValueError("Can't find `model.config` entry, " + reasoning)
+
+                if hasattr(model.config, "hidden_size"):
+                    hidden_size = model.config.hidden_size
+                elif hasattr(model.config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.hidden_sizes)
+                else:
+                    raise ValueError(
+                        "Can find neither `model.config.hidden_size` nor `model.config.hidden_sizes`, " + reasoning
                     )
+
+                config_kwargs.update(
+                    {
+                        "zero_optimization.reduce_bucket_size": hidden_size * hidden_size,
+                        "zero_optimization.stage3_prefetch_bucket_size": 0.9 * hidden_size * hidden_size,
+                        "zero_optimization.stage3_param_persistence_threshold": 10 * hidden_size,
+                    }
+                )
 
             if isinstance(optimizer, (DummyOptim)):
                 config_kwargs.update(
@@ -1572,10 +1598,7 @@ class Accelerator:
                         optimizer = DeepSpeedCPUAdam(optimizer.param_groups, **defaults)
                     kwargs["optimizer"] = optimizer
                     if scheduler is not None:
-                        if (
-                            isinstance(scheduler, LRScheduler)
-                            or type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES
-                        ):
+                        if type(scheduler).__name__ in deepspeed.runtime.lr_schedules.VALID_LR_SCHEDULES:
                             kwargs["lr_scheduler"] = scheduler
 
             engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
@@ -1831,6 +1854,7 @@ class Accelerator:
             dispatch_batches=self.dispatch_batches,
             even_batches=self.even_batches,
             slice_fn_for_dispatch=slice_fn_for_dispatch,
+            use_seedable_sampler=self.use_seedable_sampler,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader

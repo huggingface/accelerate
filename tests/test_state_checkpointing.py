@@ -29,7 +29,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.test_utils import execute_subprocess_async, require_cuda
+from accelerate.test_utils import device_count, execute_subprocess_async, require_non_cpu
 from accelerate.utils import ProjectConfiguration, set_seed
 
 
@@ -358,9 +358,9 @@ class CheckpointTest(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10")))
 
-    @require_cuda
+    @require_non_cpu
     def test_map_location(self):
-        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
+        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
         env = os.environ.copy()
         env["USE_SAFETENSORS"] = str(self.use_safetensors)
         env["OMP_NUM_THREADS"] = "1"

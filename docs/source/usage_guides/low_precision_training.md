@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## What training on FP8 means
 
-To explore more of the nitty-gritty in traninig in FP8 with PyTorch and 🤗 Accelerate, check out the [concept_guide](../concept_guides/low_precision_training.md) on why this can be difficult. But essentially rather than training in BF16, some (or all) aspects of training a model can be performed using 8 bits instead of 16. The challenge is doing so without degrading final performance. 
+To explore more of the nitty-gritty in training in FP8 with PyTorch and 🤗 Accelerate, check out the [concept_guide](../concept_guides/low_precision_training.md) on why this can be difficult. But essentially rather than training in BF16, some (or all) aspects of training a model can be performed using 8 bits instead of 16. The challenge is doing so without degrading final performance. 
 
 This is only enabled on specific NVIDIA hardware, namely:
 
@@ -57,7 +57,7 @@ Of the two, `MS-AMP` is traditionally the easier one to configure as there is on
 Currently two levels of optimization are supported in the 🤗 Accelerate integration, `"O1"` and `"O2"` (using the letter 'o', not zero). 
 
 * `"O1"` will cast the weight gradients and `all_reduce` communications to happen in 8-bit, while the rest are done in 16 bit. This reduces the general GPU memory usage and speeds up communication bandwidths.
-* `"O2"` will also cast first-order optimizer states into 8 bit, while the second order states are in FP16. (Currently just the `Adam` optimizer is supported). This tries it's best to minimize final accuracy degredation and will save the highest potential memory.
+* `"O2"` will also cast first-order optimizer states into 8 bit, while the second order states are in FP16. (Currently just the `Adam` optimizer is supported). This tries it's best to minimize final accuracy degradation and will save the highest potential memory.
 
 To specify an optimization level, pass it to the `FP8KwargsHandler` by setting the `optimization_level` argument:
 

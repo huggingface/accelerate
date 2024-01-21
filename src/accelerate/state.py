@@ -180,6 +180,9 @@ class PartialState:
                     if is_xpu_available and is_ccl_available():
                         # Set DeepSpeed backend to ccl for xpu
                         self.backend = "ccl"
+                        os.environ["CCL_PROCESS_LAUNCHER"] = "none"
+                        os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
+                        os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
                     elif is_npu_available():
                         self.backend = "hccl"
                     else:
@@ -205,7 +208,7 @@ class PartialState:
                 if self.device.type == "cuda" and not check_cuda_p2p_ib_support():
                     if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
                         raise NotImplementedError(
-                            "Using RTX 3090 or 4000 series doesn't support faster communication broadband via P2P or IB. "
+                            "Using RTX 4000 series doesn't support faster communication broadband via P2P or IB. "
                             'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
                             "will do this automatically."
                         )
@@ -221,7 +224,7 @@ class PartialState:
                 if not check_cuda_p2p_ib_support():
                     if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
                         raise NotImplementedError(
-                            "Using RTX 3090 or 4000 series doesn't support faster communication broadband via P2P or IB. "
+                            "Using RTX 4000 series doesn't support faster communication broadband via P2P or IB. "
                             'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
                             "will do this automatically."
                         )
@@ -269,12 +272,19 @@ class PartialState:
                     ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"], 0
                 )
                 local_size = get_int_from_env(
-                    ["MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"], 1
+                    ["LOCAL_WORLD_SIZE", "MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"],
+                    1,
                 )
                 self.local_process_index = local_rank
                 os.environ["RANK"] = str(rank)
                 os.environ["WORLD_SIZE"] = str(size)
                 os.environ["LOCAL_RANK"] = str(local_rank)
+                os.environ["LOCAL_WORLD_SIZE"] = str(local_size)
+
+                if backend == "ccl" and self.distributed_type == DistributedType.MULTI_XPU:
+                    os.environ["CCL_PROCESS_LAUNCHER"] = "none"
+                    os.environ["CCL_LOCAL_SIZE"] = str(local_size)
+                    os.environ["CCL_LOCAL_RANK"] = str(local_rank)
                 if not os.environ.get("MASTER_PORT", None):
                     os.environ["MASTER_PORT"] = "29500"
                 if not os.environ.get("MASTER_ADDR", None):

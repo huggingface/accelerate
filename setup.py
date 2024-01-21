@@ -25,7 +25,7 @@ extras["test_dev"] = [
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
 extras["rich"] = ["rich"]
 
-extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard"]
+extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard", "dvclive"]
 extras["dev"] = extras["quality"] + extras["testing"] + extras["rich"]
 
 extras["sagemaker"] = [
@@ -34,7 +34,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.25.0.dev0",
+    version="0.27.0.dev0",
     description="Accelerate",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",

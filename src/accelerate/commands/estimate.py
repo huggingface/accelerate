@@ -107,7 +107,7 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
         print(f"Loading pretrained config for `{model_name}` from `transformers`...")
 
         auto_map = model_info.config.get("auto_map", False)
-        config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code)
+        config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code, token=access_token)
 
         with init_empty_weights():
             # remote code could specify a specific `AutoModel` class in the `auto_map`

@@ -267,6 +267,7 @@ def set_module_tensor_to_device(
     value: Optional[torch.Tensor] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     fp16_statistics: Optional[torch.HalfTensor] = None,
+    tied_params_map: Optional[Dict[int, Dict[torch.device, torch.Tensor]]] = None,
 ):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
@@ -286,6 +287,10 @@ def set_module_tensor_to_device(
             the dtype of the existing parameter in the model.
         fp16_statistics (`torch.HalfTensor`, *optional*):
             The list of fp16 statistics to set on the module, used for 8 bit model serialization.
+        tied_params_map (Dict[int, Dict[torch.device, torch.Tensor]], *optional*, defaults to `None`):
+            A map of current data pointers to dictionaries of devices to already dispatched tied weights. For a given
+            execution device, this parameter is useful to reuse the first available pointer of a shared weight on the
+            device for all others, instead of duplicating memory.
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -301,6 +306,24 @@ def set_module_tensor_to_device(
         raise ValueError(f"{module} does not have a parameter or a buffer named {tensor_name}.")
     is_buffer = tensor_name in module._buffers
     old_value = getattr(module, tensor_name)
+
+    # Treat the case where old_value (or a custom `value`, typically offloaded to RAM/disk) belongs to a tied group, and one of the weight
+    # in the tied group has already been dispatched to the device, by avoiding reallocating memory on the device and just copying the pointer.
+    if (
+        value is not None
+        and tied_params_map is not None
+        and value.data_ptr() in tied_params_map
+        and device in tied_params_map[value.data_ptr()]
+    ):
+        module._parameters[tensor_name] = tied_params_map[value.data_ptr()][device]
+        return
+    elif (
+        tied_params_map is not None
+        and old_value.data_ptr() in tied_params_map
+        and device in tied_params_map[old_value.data_ptr()]
+    ):
+        module._parameters[tensor_name] = tied_params_map[old_value.data_ptr()][device]
+        return
 
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
@@ -328,7 +351,7 @@ def set_module_tensor_to_device(
             param is not None
             and param.device.type != "cuda"
             and torch.device(device).type == "cuda"
-            and param_cls.__name__ in ["Int8Params", "FP4Params"]
+            and param_cls.__name__ in ["Int8Params", "FP4Params", "Params4bit"]
         ):
             device_quantization = device
             device = "cpu"
@@ -367,6 +390,7 @@ def set_module_tensor_to_device(
                     new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
+
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
                 setattr(module._parameters[tensor_name], "SCB", fp16_statistics.to(device))
@@ -396,6 +420,22 @@ def set_module_tensor_to_device(
         torch.npu.empty_cache()
     else:
         torch.cuda.empty_cache()
+
+    # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
+    # order to avoid duplicating memory, see above.
+    if (
+        tied_params_map is not None
+        and old_value.data_ptr() in tied_params_map
+        and device not in tied_params_map[old_value.data_ptr()]
+    ):
+        tied_params_map[old_value.data_ptr()][device] = new_value
+    elif (
+        value is not None
+        and tied_params_map is not None
+        and value.data_ptr() in tied_params_map
+        and device not in tied_params_map[value.data_ptr()]
+    ):
+        tied_params_map[value.data_ptr()][device] = new_value
 
 
 def named_module_tensors(
@@ -832,6 +872,7 @@ def get_balanced_memory(
             The model to analyze.
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
+            Example: `max_memory={0: "1GB"}`.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
@@ -989,6 +1030,7 @@ def infer_auto_device_map(
             The model to analyze.
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
+            Example: `max_memory={0: "1GB"}`.
         no_split_module_classes (`List[str]`, *optional*):
             A list of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
@@ -1061,15 +1103,22 @@ def infer_auto_device_map(
 
         # We keep relevant tied parameters only: one of the tied parameters in the group is inside the current module
         # and the other is not.
+        # Note: If we are currently processing the name `compute.weight`, an other parameter named e.g. `compute.weight_submodule.parameter`
+        # needs to be considered outside the current module, hence the check with additional dots.
         tied_param_goups = [
             tied_group
             for tied_group in tied_parameters
-            if any(name in k for k in tied_group) and not all(name in k for k in tied_group)
+            if any(name + "." in k + "." for k in tied_group) and not all(name + "." in k + "." for k in tied_group)
         ]
+
         if verbose and len(tied_param_goups) > 0:
             print(f"  Found the relevant tied param groups {tied_param_goups}")
+
         # Then we keep track of all the parameters that are tied to the current module, but not in the current module
-        tied_params = sum([[p for p in tied_group if name not in p] for tied_group in tied_param_goups], [])
+        tied_params = sum(
+            [[p for p in tied_group if name + "." not in p + "."] for tied_group in tied_param_goups], []
+        )
+
         if verbose and len(tied_params) > 0:
             print(f"  So those parameters need to be taken into account {tied_params}")
 

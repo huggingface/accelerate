@@ -99,7 +99,8 @@ def check_cuda_p2p_ib_support():
     """
     try:
         device_names, device_count = get_gpu_info()
-        unsupported_devices = {"RTX 3090", "RTX 40"}
+        # As new consumer GPUs get released, add them to `unsupported_devices``
+        unsupported_devices = {"RTX 40"}
         if device_count > 1:
             if any(
                 unsupported_device in device_name

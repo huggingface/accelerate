@@ -650,7 +650,7 @@ def multi_gpu_launcher(args):
 
     current_env = prepare_multi_gpu_env(args)
     if not check_cuda_p2p_ib_support():
-        message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
+        message = "Using RTX 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
         warn = False
         if "NCCL_P2P_DISABLE" not in current_env:
             current_env["NCCL_P2P_DISABLE"] = "1"
@@ -687,7 +687,7 @@ def deepspeed_launcher(args):
 
     cmd, current_env = prepare_deepspeed_cmd_env(args)
     if not check_cuda_p2p_ib_support():
-        message = "Using RTX 3090 or 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
+        message = "Using RTX 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
         warn = False
         if "NCCL_P2P_DISABLE" not in current_env:
             current_env["NCCL_P2P_DISABLE"] = "1"

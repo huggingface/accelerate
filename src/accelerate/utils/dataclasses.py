@@ -243,9 +243,10 @@ class FP8RecipeKwargs(KwargsHandler):
     override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
 
     def __post_init__(self):
-        self.backend = self.backend.upper()
         if self.backend not in get_args(Backend):
             raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
+
+        self.backend = self.backend.upper()
         # Check TE args
         if self.backend == "TE":
             self.fp8_format = self.fp8_format.upper()
@@ -730,7 +731,7 @@ class DeepSpeedPlugin:
             else:
                 raise ValueError(
                     f"`{ds_key_long}` not found in kwargs. "
-                    f"Please specify `{ds_key_long}` without `auto`(set to correct value) in the DeepSpeed config file or "
+                    f"Please specify `{ds_key_long}` without `auto` (set to correct value) in the DeepSpeed config file or "
                     "pass it in kwargs."
                 )
 
@@ -741,6 +742,16 @@ class DeepSpeedPlugin:
         if ds_val is not None and ds_key_long in kwargs:
             if ds_val != kwargs[ds_key_long]:
                 mismatches.append(f"- ds {ds_key_long}={ds_val} vs arg {ds_key_long}={kwargs[ds_key_long]}")
+
+    def is_auto(self, ds_key_long):
+        val = self.hf_ds_config.get_value(ds_key_long)
+        if val is None:
+            return False
+        else:
+            return val == "auto"
+
+    def get_value(self, ds_key_long, default=None):
+        return self.hf_ds_config.get_value(ds_key_long, default)
 
     def deepspeed_config_process(self, prefix="", mismatches=None, config=None, must_match=True, **kwargs):
         """Process the DeepSpeed config with the values from the kwargs."""

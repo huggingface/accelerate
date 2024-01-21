@@ -606,7 +606,15 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
                     batches = []
                     for _ in range(self.state.num_processes):
                         batches.append(next(iterator))
-                    batch = concatenate(batches, dim=0)
+                    try:
+                        batch = concatenate(batches, dim=0)
+                    except RuntimeError as e:
+                        raise RuntimeError(
+                            "You can't use batches of different size with `dispatch_batches=True` or when using an `IterableDataset`."
+                            "either pass `dispatch_batches=False` and have each process fetch its own batch "
+                            " or pass `split_batches=True`. By doing so, the main process will fetch a full batch and "
+                            "slice it into `num_processes` batches for each process."
+                        ) from e
                 # In both cases, we need to get the structure of the batch that we will broadcast on other
                 # processes to initialize the tensors with the right shape.
                 # data_structure, stop_iteration
@@ -744,6 +752,7 @@ def prepare_data_loader(
     dispatch_batches: Optional[bool] = None,
     even_batches: bool = True,
     slice_fn_for_dispatch: Optional[Callable] = None,
+    use_seedable_sampler: bool = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -797,6 +806,10 @@ def prepare_data_loader(
             If passed, this function will be used to slice tensors across `num_processes`. Will default to
             [`~utils.slice_tensors`]. This argument is used only when `dispatch_batches` is set to `True` and will be
             ignored otherwise.
+        use_seedable_sampler (`bool`, *optional*, defaults to `False`):
+            Whether to use the [`~data_loader.SeedableRandomSampler`] instead of a `RandomSampler` for better
+            reproducability. Comes at a cost of potentially different performances due to different shuffling
+            algorithms but ensures results will be the *exact* same.
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -824,7 +837,8 @@ def prepare_data_loader(
         process_index = state.process_index
 
     # Sanity check
-    if split_batches and dataloader.batch_size > 1 and dataloader.batch_size % num_processes != 0:
+    batch_size = dataloader.batch_size if dataloader.batch_size is not None else dataloader.batch_sampler.batch_size
+    if split_batches and batch_size > 1 and batch_size % num_processes != 0:
         raise ValueError(
             f"To use a `DataLoader` in `split_batches` mode, the batch size ({dataloader.batch_size}) "
             f"needs to be a round multiple of the number of processes ({num_processes})."
@@ -840,7 +854,7 @@ def prepare_data_loader(
         sampler = getattr(dataloader.sampler, "sampler", None)
     else:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
-    if isinstance(sampler, RandomSampler):
+    if isinstance(sampler, RandomSampler) and use_seedable_sampler:
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
         # samples in the same order if a seed is set. This requires a tweak
@@ -899,7 +913,7 @@ def prepare_data_loader(
         kwargs["batch_size"] = (
             dataloader.batch_size // num_processes if split_batches and not dispatch_batches else dataloader.batch_size
         )
-    if isinstance(sampler, SeedableRandomSampler):
+    if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
         if sampler_is_batch_sampler:
             dataloader.sampler.sampler = sampler
         else:

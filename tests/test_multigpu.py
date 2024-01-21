@@ -21,11 +21,11 @@ import torch
 import accelerate
 from accelerate import Accelerator
 from accelerate.big_modeling import dispatch_model
-from accelerate.test_utils import assert_exception, execute_subprocess_async, require_multi_gpu
+from accelerate.test_utils import assert_exception, device_count, execute_subprocess_async, require_multi_device
 from accelerate.utils import patch_environment
 
 
-class MultiGPUTester(unittest.TestCase):
+class MultiDeviceTester(unittest.TestCase):
     def setUp(self):
         mod_file = inspect.getfile(accelerate.test_utils)
         self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_script.py"])
@@ -34,35 +34,35 @@ class MultiGPUTester(unittest.TestCase):
         )
         self.operation_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_ops.py"])
 
-    @require_multi_gpu
-    def test_multi_gpu(self):
-        print(f"Found {torch.cuda.device_count()} devices.")
-        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.test_file_path]
+    @require_multi_device
+    def test_multi_device(self):
+        print(f"Found {device_count} devices.")
+        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
-    @require_multi_gpu
-    def test_multi_gpu_ops(self):
-        print(f"Found {torch.cuda.device_count()} devices.")
-        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.operation_file_path]
+    @require_multi_device
+    def test_multi_device_ops(self):
+        print(f"Found {device_count} devices.")
+        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.operation_file_path]
         print(f"Command: {cmd}")
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
-    @require_multi_gpu
+    @require_multi_device
     def test_pad_across_processes(self):
-        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
+        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
-    @require_multi_gpu
+    @require_multi_device
     def test_distributed_data_loop(self):
         """
         This TestCase checks the behaviour that occurs during distributed training or evaluation,
         when the batch size does not evenly divide the dataset size.
         """
-        print(f"Found {torch.cuda.device_count()} devices, using 2 devices only")
-        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", self.data_loop_file_path]
+        print(f"Found {device_count} devices, using 2 devices only")
+        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.data_loop_file_path]
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
