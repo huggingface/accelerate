@@ -845,12 +845,10 @@ def prepare_data_loader(
             if hasattr(dataloader.batch_sampler, "batch_size"):
                 batch_size_for_check = dataloader.batch_sampler.batch_size
             else:
-                logger.warning(
-                    f"Make sure that you are using a correct batch size for `split_batches`. "
-                    f"We can not check it since dataloader.batch_size is None and your batch_sampler "
-                    f"{type(dataloader.batch_sampler)} does not have `batch_size` attribute."
+                raise ValueError(
+                    "Can not check batch_size for `split_batches` mode since dataloader.batch_size is None and "
+                    f"your batch_sampler {type(dataloader.batch_sampler)} does not have `batch_size` attribute."
                 )
-                batch_size_for_check = 0
 
         if batch_size_for_check > 1 and batch_size_for_check % num_processes != 0:
             raise ValueError(
