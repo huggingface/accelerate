@@ -92,7 +92,7 @@ def prepare_pippy(model, split_points="auto", no_split_module_classes=[], exampl
         return pippy_forward(stage.forward, *args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
-    model_forward = MethodType(forward, model)
-    forward.__wrapped__ = model_forward
+    # model_forward = MethodType(forward, model)
+    # forward.__wrapped__ = model_forward
     model.forward = forward
     return model
