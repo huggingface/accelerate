@@ -366,11 +366,14 @@ class HooksModelTester(unittest.TestCase):
             add_hook_to_module(graph_model, test_hook)
             remove_hook_from_module(graph_model, recurse=True)
 
+            # We want to make sure that `add_hook_to_module` and `remove_hook_from_module` yields back an fx.GraphModule
+            # that behaves correctly (for example that is not frozen, see https://github.com/huggingface/accelerate/pull/2369).
+            # For that, we add a sigmoid node to the FX graph and make sure that the new output (output3 below) is different than
+            # the original model's output.
             linear2_node = None
             for node in graph_model.graph.nodes:
                 if node.name == "linear2":
                     linear2_node = node
-
             self.assertTrue(linear2_node is not None)
 
             graph_model.graph.inserting_after(linear2_node)
