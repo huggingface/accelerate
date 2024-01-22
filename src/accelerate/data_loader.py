@@ -846,8 +846,7 @@ def prepare_data_loader(
                 batch_size_for_check = dataloader.batch_sampler.batch_size
             else:
                 raise ValueError(
-                    "Can not check batch_size for `split_batches` mode since dataloader.batch_size is None and "
-                    f"your batch_sampler {type(dataloader.batch_sampler)} does not have `batch_size` attribute."
+                    "In order to use `split_batches==True` you must have a `batch_size` attribute either in the passed `dataloader` or `dataloader.batch_sampler` objects, and it has to return a natural number. Your batch sampler `{type(dataloader.batch_sampler)}` does not have the `batch_size` attribute set."
                 )
 
         if batch_size_for_check > 1 and batch_size_for_check % num_processes != 0:
