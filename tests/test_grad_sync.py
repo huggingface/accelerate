@@ -16,13 +16,11 @@ import inspect
 import os
 import unittest
 
-import torch
-
 import accelerate
 from accelerate import debug_launcher
 from accelerate.test_utils import (
-    execute_subprocess_async,
     device_count,
+    execute_subprocess_async,
     require_cpu,
     require_multi_device,
     require_non_cpu,

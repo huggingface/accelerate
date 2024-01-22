@@ -14,7 +14,6 @@
 
 import unittest
 
-import torch
 from torch import nn
 
 from accelerate.test_utils import memory_allocated_func, require_non_cpu, torch_device
