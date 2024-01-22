@@ -166,7 +166,12 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
             output = module._old_forward(*args, **kwargs)
         return module._hf_hook.post_forward(module, output)
 
-    module.forward = functools.update_wrapper(functools.partial(new_forward, module), old_forward)
+    # Overriding a GraphModuleImpl forward freezes the forward call and later modifications on the graph will fail.
+    # Reference: https://pytorch.slack.com/archives/C3PDTEV8E/p1705929610405409
+    if "GraphModuleImpl" in str(type(module)):
+        module.__class__.forward = functools.update_wrapper(functools.partial(new_forward, module), old_forward)
+    else:
+        module.forward = functools.update_wrapper(functools.partial(new_forward, module), old_forward)
 
     return module
 
@@ -189,7 +194,12 @@ def remove_hook_from_module(module: nn.Module, recurse=False):
         delattr(module, "_hf_hook")
 
     if hasattr(module, "_old_forward"):
-        module.forward = module._old_forward
+        # Overriding a GraphModuleImpl forward freezes the forward call and later modifications on the graph will fail.
+        # Reference: https://pytorch.slack.com/archives/C3PDTEV8E/p1705929610405409
+        if "GraphModuleImpl" in str(type(module)):
+            module.__class__.forward = module._old_forward
+        else:
+            module.forward = module._old_forward
         delattr(module, "_old_forward")
 
     if recurse:

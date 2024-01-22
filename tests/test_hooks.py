@@ -17,6 +17,7 @@ import unittest
 
 import torch
 import torch.nn as nn
+from torch.fx import symbolic_trace
 
 from accelerate.hooks import (
     AlignDevicesHook,
@@ -347,3 +348,48 @@ class HooksModelTester(unittest.TestCase):
         self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
         self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
         self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+
+    def test_add_remove_hook_fx_graph_module(self):
+        with torch.no_grad():
+            test_model = ModelForTest()
+            test_hook = ModelHook()
+
+            x = torch.randn(2, 3)
+            output1 = test_model(x)
+
+            graph_model = symbolic_trace(test_model)
+
+            output2 = graph_model(x)
+
+            self.assertTrue(torch.allclose(output1, output2))
+
+            add_hook_to_module(graph_model, test_hook)
+            remove_hook_from_module(graph_model, recurse=True)
+
+            linear2_node = None
+            for node in graph_model.graph.nodes:
+                if node.name == "linear2":
+                    linear2_node = node
+
+            self.assertTrue(linear2_node is not None)
+
+            graph_model.graph.inserting_after(linear2_node)
+            new_node = graph_model.graph.create_node(
+                op="call_function", target=torch.sigmoid, args=(linear2_node,), name="relu"
+            )
+
+            output_node = None
+            for node in graph_model.graph.nodes:
+                if node.name == "output":
+                    output_node = node
+            self.assertTrue(output_node is not None)
+
+            output_node.replace_input_with(linear2_node, new_node)
+
+            graph_model.graph.lint()
+            graph_model.recompile()
+
+            output3 = graph_model(x)
+
+            # Now the output is expected to be different since we modified the graph.
+            self.assertFalse(torch.allclose(output1, output3))
