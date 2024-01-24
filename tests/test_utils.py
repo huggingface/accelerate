@@ -296,3 +296,30 @@ class UtilsTester(unittest.TestCase):
         result = slice_and_concatenate(batch, slice_to_cut)
         # We should expect there to be 6 items now
         assert result.shape == torch.Size([6, 4, 4])
+
+        # Sixth base case: 6 processes, batch size of 1
+        num_processes = 6
+        batch_size = 1
+        batch = torch.rand(batch_size, 4, 4)
+        slice_to_cut = get_slice(batch_size, num_processes)
+        result = slice_and_concatenate(batch, slice_to_cut)
+        # We should expect there to be 6 items now
+        assert result.shape == torch.Size([6, 4, 4])
+
+        # Seventh base case: 6 processes, batch size of 2
+        num_processes = 6
+        batch_size = 2
+        batch = torch.rand(batch_size, 4, 4)
+        slice_to_cut = get_slice(batch_size, num_processes)
+        result = slice_and_concatenate(batch, slice_to_cut)
+        # We should expect there to be 6 items now
+        assert result.shape == torch.Size([6, 4, 4])
+
+        # Eighth base case: 6 processes, batch size of 61
+        num_processes = 6
+        batch_size = 61
+        batch = torch.rand(batch_size, 4, 4)
+        slice_to_cut = get_slice(batch_size, num_processes)
+        result = slice_and_concatenate(batch, slice_to_cut)
+        # We should expect there to be 6 items now
+        assert result.shape == torch.Size([66, 4, 4])
