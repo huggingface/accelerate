@@ -55,20 +55,25 @@ def find_pippy_batch_size(args, kwargs):
     return found_batch_size
 
 
-def build_pipeline(model, split_points, args, kwargs) -> PipelineStage:
+def build_pipeline(model, split_points, args, kwargs, num_chunks: int = None) -> PipelineStage:
     """
     Attaches the split points to the model based on `self.device_map` and generates a `PipelineStage`. Requires passing
     in needed `args` and `kwargs` as the model needs on the CPU.
+
+    Users can pass in custom `num_chunks` as an optional hyper-parameter. By default will use
+    `AcceleratorState.num_processes`
     """
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
+    if num_chunks is None:
+        num_chunks = state.num_processes
     annotate_split_points(model, {split_point: PipeSplitWrapper.SplitPoint.BEGINNING for split_point in split_points})
     found_batch_size = find_pippy_batch_size(args, kwargs)
-    if found_batch_size != state.num_processes:
-        args = pad_input_tensors(args, found_batch_size, state.num_processes)
-        kwargs = pad_input_tensors(kwargs, found_batch_size, state.num_processes)
-    pipe = Pipe.from_tracing(model, num_chunks=state.num_processes, example_args=args, example_kwargs=kwargs)
-    stage = PipelineStage(pipe, state.local_process_index, device=state.device)
+    if found_batch_size != num_chunks:
+        args = pad_input_tensors(args, found_batch_size, num_chunks)
+        kwargs = pad_input_tensors(kwargs, found_batch_size, num_chunks)
+    pipe = Pipe.from_tracing(model, num_chunks=num_chunks, example_args=args, example_kwargs=kwargs)
+    stage = PipelineStage(pipe, num_chunks, device=state.device)
 
     return stage
 
@@ -95,9 +100,29 @@ def pippy_forward(forward, *args, **kwargs):
     return output
 
 
-def prepare_pippy(model, split_points="auto", no_split_module_classes=[], example_args=(), example_kwargs={}):
+def prepare_pippy(
+    model, split_points="auto", no_split_module_classes=[], example_args=(), example_kwargs={}, num_chunks=None
+):
     """
     Wraps `model` for PipelineParallelism
+
+    Args:
+        model (`torch.nn.Module`):
+            A model we want to split for pipeline-parallel inference
+        split_points (`str`, defaults to 'auto'):
+            How to generate the split points and chunk the model across each GPU. 'auto' will find the best balanced
+            split given any model.
+        no_split_module_classes (`List[str]`):
+            A list of class names for layers we don't want to be split.
+        example_args (tuple of `torch.Tensor`):
+            The expected inputs for the model that uses order-based inputs. Recommended to use this method if possible.
+        example_kwargs (dict of `torch.Tensor`)
+            The expected inputs for the model that uses dictionary-based inputs. This is a *highly* limiting structure
+            that requires the same keys be present at *all* inference calls. Not recommended unless the prior condition
+            is true for all cases.
+        num_chunks (`int`):
+            The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
+            this can be tuned and played with. In general one should have num_chunks > num_gpus.
     """
     state = PartialState()
     example_args = send_to_device(example_args, "cpu")
@@ -107,7 +132,7 @@ def prepare_pippy(model, split_points="auto", no_split_module_classes=[], exampl
         split_points = []
         for i in range(1, state.num_processes):
             split_points.append(next(k for k, v in device_map.items() if v == i))
-    stage = build_pipeline(model, split_points, example_args, example_kwargs)
+    stage = build_pipeline(model, split_points, example_args, example_kwargs, num_chunks)
     model._original_forward = model.forward
     model._original_call = model.__call__
     model.pippy_stage = stage
