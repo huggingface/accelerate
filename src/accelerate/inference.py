@@ -44,6 +44,18 @@ def generate_device_map(model, num_processes: int = 1, no_split_module_classes=N
     return device_map
 
 
+def find_pippy_batch_size(args, kwargs):
+    for arg in args:
+        found_batch_size = ignorant_find_batch_size(arg)
+        if found_batch_size is not None:
+            break
+    for kwarg in kwargs.values():
+        found_batch_size = ignorant_find_batch_size(kwarg)
+        if found_batch_size is not None:
+            break
+    return found_batch_size
+
+
 def build_pipeline(model, split_points, args, kwargs) -> PipelineStage:
     """
     Attaches the split points to the model based on `self.device_map` and generates a `PipelineStage`. Requires passing
@@ -77,8 +89,9 @@ def pippy_forward(forward, *args, **kwargs):
         if found_batch_size is None:
             raise ValueError("Could not find batch size from args or kwargs")
         else:
-            args = pad_input_tensors(args, found_batch_size, state.num_processes)
-            kwargs = pad_input_tensors(kwargs, found_batch_size, state.num_processes)
+            if found_batch_size != state.num_processes:
+                args = pad_input_tensors(args, found_batch_size, state.num_processes)
+                kwargs = pad_input_tensors(kwargs, found_batch_size, state.num_processes)
         forward(*args, **kwargs)
     elif state.is_last_process:
         output = forward()
