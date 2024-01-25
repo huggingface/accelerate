@@ -9,7 +9,9 @@ from .state import PartialState
 from .utils import (
     calculate_maximum_sizes,
     convert_bytes,
+    ignorant_find_batch_size,
     infer_auto_device_map,
+    pad_input_tensors,
     send_to_device,
 )
 
@@ -42,6 +44,19 @@ def generate_device_map(model, num_processes: int = 1, no_split_module_classes=N
     return device_map
 
 
+def find_pippy_batch_size(args, kwargs):
+    found_batch_size = None
+    for arg in args:
+        found_batch_size = ignorant_find_batch_size(arg)
+        if found_batch_size is not None:
+            break
+    for kwarg in kwargs.values():
+        found_batch_size = ignorant_find_batch_size(kwarg)
+        if found_batch_size is not None:
+            break
+    return found_batch_size
+
+
 def build_pipeline(model, split_points, args, kwargs) -> PipelineStage:
     """
     Attaches the split points to the model based on `self.device_map` and generates a `PipelineStage`. Requires passing
@@ -50,6 +65,10 @@ def build_pipeline(model, split_points, args, kwargs) -> PipelineStage:
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
     annotate_split_points(model, {split_point: PipeSplitWrapper.SplitPoint.BEGINNING for split_point in split_points})
+    found_batch_size = find_pippy_batch_size(args, kwargs)
+    if found_batch_size != state.num_processes:
+        args = pad_input_tensors(args, found_batch_size, state.num_processes)
+        kwargs = pad_input_tensors(kwargs, found_batch_size, state.num_processes)
     pipe = Pipe.from_tracing(model, num_chunks=state.num_processes, example_args=args, example_kwargs=kwargs)
     stage = PipelineStage(pipe, state.local_process_index, device=state.device)
 
@@ -59,9 +78,17 @@ def build_pipeline(model, split_points, args, kwargs) -> PipelineStage:
 def pippy_forward(forward, *args, **kwargs):
     state = PartialState()
     output = None
+
     if state.num_processes == 1:
         output = forward(*args, **kwargs)
     elif state.is_local_main_process:
+        found_batch_size = find_pippy_batch_size(args, kwargs)
+        if found_batch_size is None:
+            raise ValueError("Could not find batch size from args or kwargs")
+        else:
+            if found_batch_size != state.num_processes:
+                args = pad_input_tensors(args, found_batch_size, state.num_processes)
+                kwargs = pad_input_tensors(kwargs, found_batch_size, state.num_processes)
         forward(*args, **kwargs)
     elif state.is_last_process:
         output = forward()
