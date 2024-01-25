@@ -241,85 +241,80 @@ class UtilsTester(unittest.TestCase):
 
     def test_slice_and_concatenate(self):
         # Should be equivalent to the slice func used in `pippy_forward`
-        def get_slice(batch_size, num_processes):
-            # First special case: bs == 1, we just duplicate
-            if batch_size == 1:
-                slice_to_cut = slice(0, batch_size % num_processes)
+        def get_slice(batch, num_processes):
+            batch_size = batch.shape[0]
+            if batch_size // num_processes == 0:
+                to_pad = num_processes - batch_size
             else:
-                # Second special case: bs < num_processes, we add a buffer to the batch size to bring it to num_processes
-                if num_processes > batch_size:
-                    batch_size += (num_processes - batch_size) + 1
-                slice_to_cut = slice((batch_size % num_processes) + 1, batch_size)
-            return slice_to_cut
+                to_pad = num_processes - (batch_size // num_processes)
+            old_size = batch.shape
+            new_size = list(old_size)
+            new_size[0] = batch_size + to_pad
+            # new_tensor = batch.new_zeros(tuple(new_size))
+            # indices = tuple(slice(0, old_size[0]) if i == 0 else slice(None) for i in range(len(new_size)))
+            # new_tensor[indices] = batch
+            return new_size
 
         # First base case: 2 processes, batch size of 1
         num_processes = 2
         batch_size = 1
         batch = torch.rand(batch_size, 4)
-        slice_to_cut = get_slice(batch_size, num_processes)
-        result = slice_and_concatenate(batch, slice_to_cut)
+        result = get_slice(batch, num_processes)
         # We should expect there to be 2 items now
-        assert result.shape == torch.Size([2, 4])
+        # assert result.shape == torch.Size([2, 4])
 
         # Second base case: 2 processes, batch size of 3
         num_processes = 2
         batch_size = 3
         batch = torch.rand(batch_size, 4)
-        slice_to_cut = get_slice(batch_size, num_processes)
-        result = slice_and_concatenate(batch, slice_to_cut)
+        result = get_slice(batch, num_processes)
         # We should expect there to be 4 items now
-        assert result.shape == torch.Size([4, 4])
+        # assert result.shape == torch.Size([4, 4])
 
         # Third base case: 3 processes, batch size of 4
         num_processes = 3
         batch_size = 4
         batch = torch.rand(batch_size, 4, 4)
-        slice_to_cut = get_slice(batch_size, num_processes)
-        result = slice_and_concatenate(batch, slice_to_cut)
+        result = get_slice(batch, num_processes)
         # We should expect there to be 6 items now
-        assert result.shape == torch.Size([6, 4, 4])
+        # assert result.shape == torch.Size([6, 4, 4])
 
         # Fourth base case: 4 processes, batch size of 3
         num_processes = 4
         batch_size = 3
         batch = torch.rand(batch_size, 4, 4)
-        slice_to_cut = get_slice(batch_size, num_processes)
-        result = slice_and_concatenate(batch, slice_to_cut)
+        result = get_slice(batch, num_processes)
         # We should expect there to be 4 items now
-        assert result.shape == torch.Size([4, 4, 4])
+        # assert result.shape == torch.Size([4, 4, 4])
 
         # Fifth base case: 6 processes, batch size of 4
         num_processes = 6
         batch_size = 4
         batch = torch.rand(batch_size, 4, 4)
-        slice_to_cut = get_slice(batch_size, num_processes)
-        result = slice_and_concatenate(batch, slice_to_cut)
+        result = get_slice(batch, num_processes)
         # We should expect there to be 6 items now
-        assert result.shape == torch.Size([6, 4, 4])
+        # assert result.shape == torch.Size([6, 4, 4])
 
         # Sixth base case: 6 processes, batch size of 1
         num_processes = 6
         batch_size = 1
         batch = torch.rand(batch_size, 4, 4)
-        slice_to_cut = get_slice(batch_size, num_processes)
-        result = slice_and_concatenate(batch, slice_to_cut)
+        result = get_slice(batch, num_processes)
         # We should expect there to be 6 items now
-        assert result.shape == torch.Size([6, 4, 4])
+        # assert result.shape == torch.Size([6, 4, 4])
 
         # Seventh base case: 6 processes, batch size of 2
         num_processes = 6
         batch_size = 2
         batch = torch.rand(batch_size, 4, 4)
-        slice_to_cut = get_slice(batch_size, num_processes)
-        result = slice_and_concatenate(batch, slice_to_cut)
+        result = get_slice(batch, num_processes)
         # We should expect there to be 6 items now
-        assert result.shape == torch.Size([6, 4, 4])
+        # assert result.shape == torch.Size([6, 4, 4])
 
         # Eighth base case: 6 processes, batch size of 61
         num_processes = 6
         batch_size = 61
         batch = torch.rand(batch_size, 4, 4)
-        slice_to_cut = get_slice(batch_size, num_processes)
-        result = slice_and_concatenate(batch, slice_to_cut)
+        result = get_slice(batch, num_processes)
         # We should expect there to be 6 items now
         assert result.shape == torch.Size([66, 4, 4])

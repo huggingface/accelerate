@@ -80,7 +80,7 @@ def pippy_forward(forward, *args, **kwargs):
             if (found_batch_size % state.num_processes) != 0:
                 # First special case: bs == 1, we just duplicate
                 if found_batch_size == 1:
-                    slice_to_cut = slice(0, found_batch_size % state.num_processes)
+                    slice_to_cut = slice(0, found_batch_size - state.num_processes)
                 else:
                     # Second special case: bs < num_processes, we add a buffer to the batch size to bring it to num_processes
                     if state.num_processes > found_batch_size:
