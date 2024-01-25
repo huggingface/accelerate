@@ -121,6 +121,7 @@ if __name__ == "__main__":
         # test_gpt2(3)
         state.print("Testing T5...")
         test_t5()
+        test_t5(1)
         test_t5(3)
         state.print("Testing CV model...")
         test_resnet()
