@@ -33,6 +33,7 @@ from accelerate.utils import (
     find_device,
     listify,
     pad_across_processes,
+    pad_input_tensors,
     patch_environment,
     recursively_apply,
     save,
@@ -238,32 +239,11 @@ class UtilsTester(unittest.TestCase):
         self.assertIs(nt, nt2)
 
     def test_slice_and_concatenate(self):
-        # Should be equivalent to the slice func used in `pippy_forward`
-        def get_slice(batch, num_processes):
-            batch_size = batch.shape[0]
-            remainder = batch_size // num_processes
-            last_inputs = batch_size - (remainder * num_processes)
-            if batch_size // num_processes == 0:
-                to_pad = num_processes - batch_size
-            else:
-                to_pad = num_processes - (batch_size // num_processes)
-            # In the rare case that `to_pad` is negative,
-            # we need to pad the last_inputs - the found to_pad
-            if last_inputs > to_pad & to_pad < 1:
-                to_pad = last_inputs - to_pad
-            old_size = batch.shape
-            new_size = list(old_size)
-            new_size[0] = batch_size + to_pad
-            new_tensor = batch.new_zeros(tuple(new_size))
-            indices = tuple(slice(0, old_size[0]) if i == 0 else slice(None) for i in range(len(new_size)))
-            new_tensor[indices] = batch
-            return new_tensor
-
         # First base case: 2 processes, batch size of 1
         num_processes = 2
         batch_size = 1
         batch = torch.rand(batch_size, 4)
-        result = get_slice(batch, num_processes)
+        result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 2 items now
         assert result.shape == torch.Size([2, 4])
 
@@ -271,7 +251,7 @@ class UtilsTester(unittest.TestCase):
         num_processes = 2
         batch_size = 3
         batch = torch.rand(batch_size, 4)
-        result = get_slice(batch, num_processes)
+        result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 4 items now
         assert result.shape == torch.Size([4, 4])
 
@@ -279,7 +259,7 @@ class UtilsTester(unittest.TestCase):
         num_processes = 3
         batch_size = 4
         batch = torch.rand(batch_size, 4, 4)
-        result = get_slice(batch, num_processes)
+        result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 6 items now
         assert result.shape == torch.Size([6, 4, 4])
 
@@ -287,7 +267,7 @@ class UtilsTester(unittest.TestCase):
         num_processes = 4
         batch_size = 3
         batch = torch.rand(batch_size, 4, 4)
-        result = get_slice(batch, num_processes)
+        result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 4 items now
         assert result.shape == torch.Size([4, 4, 4])
 
@@ -295,7 +275,7 @@ class UtilsTester(unittest.TestCase):
         num_processes = 6
         batch_size = 4
         batch = torch.rand(batch_size, 4, 4)
-        result = get_slice(batch, num_processes)
+        result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 6 items now
         assert result.shape == torch.Size([6, 4, 4])
 
@@ -303,7 +283,7 @@ class UtilsTester(unittest.TestCase):
         num_processes = 6
         batch_size = 1
         batch = torch.rand(batch_size, 4, 4)
-        result = get_slice(batch, num_processes)
+        result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 6 items now
         assert result.shape == torch.Size([6, 4, 4])
 
@@ -311,7 +291,7 @@ class UtilsTester(unittest.TestCase):
         num_processes = 6
         batch_size = 2
         batch = torch.rand(batch_size, 4, 4)
-        result = get_slice(batch, num_processes)
+        result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 6 items now
         assert result.shape == torch.Size([6, 4, 4])
 
@@ -319,6 +299,6 @@ class UtilsTester(unittest.TestCase):
         num_processes = 6
         batch_size = 61
         batch = torch.rand(batch_size, 4, 4)
-        result = get_slice(batch, num_processes)
+        result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 6 items now
         assert result.shape == torch.Size([66, 4, 4])

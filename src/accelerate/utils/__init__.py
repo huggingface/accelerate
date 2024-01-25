@@ -132,10 +132,10 @@ from .operations import (
     is_torch_tensor,
     listify,
     pad_across_processes,
+    pad_input_tensors,
     recursively_apply,
     reduce,
     send_to_device,
-    slice_and_concatenate,
     slice_tensors,
 )
 from .versions import compare_versions, is_torch_version

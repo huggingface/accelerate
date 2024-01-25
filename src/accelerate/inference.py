@@ -11,8 +11,8 @@ from .utils import (
     convert_bytes,
     ignorant_find_batch_size,
     infer_auto_device_map,
+    pad_input_tensors,
     send_to_device,
-    slice_and_concatenate,
 )
 
 
@@ -77,17 +77,8 @@ def pippy_forward(forward, *args, **kwargs):
         if found_batch_size is None:
             raise ValueError("Could not find batch size from args or kwargs")
         else:
-            if (found_batch_size % state.num_processes) != 0:
-                # First special case: bs == 1, we just duplicate
-                if found_batch_size == 1:
-                    slice_to_cut = slice(0, found_batch_size - state.num_processes)
-                else:
-                    # Second special case: bs < num_processes, we add a buffer to the batch size to bring it to num_processes
-                    if state.num_processes > found_batch_size:
-                        found_batch_size += (state.num_processes - found_batch_size) + 1
-                    slice_to_cut = slice((found_batch_size % state.num_processes) + 1, found_batch_size)
-                args = slice_and_concatenate(args, slice_to_cut)
-                kwargs = slice_and_concatenate(kwargs, slice_to_cut)
+            args = pad_input_tensors(args, found_batch_size, state.num_processes)
+            kwargs = pad_input_tensors(kwargs, found_batch_size, state.num_processes)
         forward(*args, **kwargs)
     elif state.is_last_process:
         output = forward()
