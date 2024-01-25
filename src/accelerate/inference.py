@@ -1,6 +1,5 @@
 import math
 from types import MethodType
-from typing import Literal
 
 from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
 from pippy.PipelineStage import PipelineStage
@@ -14,9 +13,6 @@ from .utils import (
     pad_input_tensors,
     send_to_device,
 )
-
-
-ParallelMode = Literal["sequential", "pipeline_parallel"]
 
 
 def generate_device_map(model, num_processes: int = 1, no_split_module_classes=None):
