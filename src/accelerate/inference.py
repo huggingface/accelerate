@@ -100,7 +100,7 @@ def pippy_forward(forward, *args, **kwargs):
 
 
 def prepare_pippy(
-    model, split_points="auto", no_split_module_classes=[], example_args=(), example_kwargs={}, num_chunks=None
+    model, split_points="auto", no_split_module_classes=None, example_args=(), example_kwargs={}, num_chunks=None
 ):
     """
     Wraps `model` for PipelineParallelism
