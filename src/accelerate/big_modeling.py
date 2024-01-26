@@ -43,6 +43,7 @@ from .utils import (
     parse_flag_from_env,
     retie_parameters,
 )
+from .utils.other import recursive_getattr
 
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,7 @@ def init_on_device(device: torch.device, include_buffers: bool = None):
         if param is not None:
             param_cls = type(module._parameters[name])
             kwargs = module._parameters[name].__dict__
+            kwargs["requires_grad"] = param.requires_grad
             module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
 
     def register_empty_buffer(module, name, buffer, persistent=True):
@@ -395,7 +397,22 @@ def dispatch_model(
         else:
             weights_map = None
 
+        # When dispatching the model's parameters to the devices specified in device_map, we want to avoid allocating memory several times for the
+        # tied parameters. The dictionary tied_params_map keeps track of the already allocated data for a given tied parameter (represented by its
+        # original pointer) on each devices.
         tied_params = find_tied_parameters(model)
+
+        tied_params_map = {}
+        for group in tied_params:
+            for param_name in group:
+                # data_ptr() is enough here, as `find_tied_parameters` finds tied params simply by comparing `param1 is param2`, so we don't need
+                # to care about views of tensors through storage_offset.
+                data_ptr = recursive_getattr(model, param_name).data_ptr()
+                tied_params_map[data_ptr] = {}
+
+                # Note: To handle the disk offloading case, we can not simply use weights_map[param_name].data_ptr() as the reference pointer,
+                # as we have no guarantee that safetensors' `file.get_tensor()` will always give the same pointer.
+
         attach_align_device_hook_on_blocks(
             model,
             execution_device=execution_device,
@@ -404,6 +421,7 @@ def dispatch_model(
             weights_map=weights_map,
             skip_keys=skip_keys,
             preload_module_classes=preload_module_classes,
+            tied_params_map=tied_params_map,
         )
 
         # warn if there is any params on the meta device

@@ -3,6 +3,7 @@ from .testing import (
     assert_exception,
     device_count,
     execute_subprocess_async,
+    memory_allocated_func,
     require_bnb,
     require_cpu,
     require_cuda,
