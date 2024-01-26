@@ -10,6 +10,7 @@ from .utils import (
     convert_bytes,
     ignorant_find_batch_size,
     infer_auto_device_map,
+    is_pippy_available,
     pad_input_tensors,
     send_to_device,
 )
@@ -124,6 +125,11 @@ def prepare_pippy(
             The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
             this can be tuned and played with. In general one should have num_chunks > num_gpus.
     """
+    if not is_pippy_available():
+        raise ImportError(
+            "`pippy` was not found to be installed on your system. Please "
+            "install using `pip install git+https://github.com/pytorch/PiPPy"
+        )
     state = PartialState()
     example_args = send_to_device(example_args, "cpu")
     example_kwargs = send_to_device(example_kwargs, "cpu")

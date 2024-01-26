@@ -38,12 +38,13 @@ except ImportError:
 _torch_distributed_available = torch.distributed.is_available()
 
 
-def _is_package_available(pkg_name):
+def _is_package_available(pkg_name, metadata_name=None):
     # Check we're not importing a "pkg_name" directory somewhere but the actual library by trying to grab the version
     package_exists = importlib.util.find_spec(pkg_name) is not None
     if package_exists:
         try:
-            _ = importlib.metadata.metadata(pkg_name)
+            # Some libraries have different names in the metadata
+            _ = importlib.metadata.metadata(pkg_name if metadata_name is None else metadata_name)
             return True
         except importlib.metadata.PackageNotFoundError:
             return False
@@ -73,15 +74,7 @@ def get_ccl_version():
 
 
 def is_msamp_available():
-    package_exists = importlib.util.find_spec("msamp") is not None
-    if package_exists:
-        try:
-            # MS-AMP has a different metadata name
-            _ = importlib.metadata.metadata("ms-amp")
-            return True
-        except importlib.metadata.PackageNotFoundError:
-            return False
-    return False
+    return _is_package_available("msamp", "ms-amp")
 
 
 def is_transformer_engine_available():
@@ -127,7 +120,11 @@ def is_deepspeed_available():
 
 
 def is_pippy_available():
-    return _is_package_available("torchpippy")
+    package_exists = _is_package_available("pippy", "torchpippy")
+    if package_exists:
+        pippy_version = version.parse(importlib.metadata.version("torchpippy"))
+        return compare_versions(pippy_version, ">", "0.1.1")
+    return False
 
 
 def is_bf16_available(ignore_tpu=False):
