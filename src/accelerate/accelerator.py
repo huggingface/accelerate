@@ -64,7 +64,6 @@ from .utils import (
     RNGType,
     TorchDynamoPlugin,
     check_os_kernel,
-    clean_state_dict_for_safetensors,
     compare_versions,
     convert_model,
     convert_outputs_to_fp32,
@@ -2567,8 +2566,6 @@ class Accelerator:
                 raise RuntimeError("You can't save the model since some parameters are on the meta device.")
             state_dict = self.get_state_dict(model)
 
-        if safe_serialization:
-            state_dict = clean_state_dict_for_safetensors(state_dict)
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
 
         # Shard the model if it is too big.
