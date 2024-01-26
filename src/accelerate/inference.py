@@ -56,7 +56,7 @@ def find_pippy_batch_size(args, kwargs):
     return found_batch_size
 
 
-def build_pipeline(model, split_points, args, kwargs, num_chunks: int = None) -> PipelineStage:
+def build_pipeline(model, split_points, args, kwargs, num_chunks) -> PipelineStage:
     """
     Attaches the split points to the model based on `self.device_map` and generates a `PipelineStage`. Requires passing
     in needed `args` and `kwargs` as the model needs on the CPU.
@@ -66,15 +66,13 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks: int = None) ->
     """
     # We need to annotate the split points in the model for PiPPy
     state = PartialState()
-    if num_chunks is None:
-        num_chunks = state.num_processes
     annotate_split_points(model, {split_point: PipeSplitWrapper.SplitPoint.BEGINNING for split_point in split_points})
     found_batch_size = find_pippy_batch_size(args, kwargs)
     if found_batch_size != num_chunks:
         args = pad_input_tensors(args, found_batch_size, num_chunks)
         kwargs = pad_input_tensors(kwargs, found_batch_size, num_chunks)
     pipe = Pipe.from_tracing(model, num_chunks=num_chunks, example_args=args, example_kwargs=kwargs)
-    stage = PipelineStage(pipe, num_chunks, device=state.device)
+    stage = PipelineStage(pipe, state.local_process_index, device=state.device)
 
     return stage
 
@@ -133,10 +131,12 @@ def prepare_pippy(
     state = PartialState()
     example_args = send_to_device(example_args, "cpu")
     example_kwargs = send_to_device(example_kwargs, "cpu")
+    if num_chunks is None:
+        num_chunks = state.num_processes
     if split_points == "auto":
-        device_map = generate_device_map(model, state.num_processes, no_split_module_classes=no_split_module_classes)
+        device_map = generate_device_map(model, num_chunks, no_split_module_classes=no_split_module_classes)
         split_points = []
-        for i in range(1, state.num_processes):
+        for i in range(1, num_chunks):
             split_points.append(next(k for k, v in device_map.items() if v == i))
     stage = build_pipeline(model, split_points, example_args, example_kwargs, num_chunks)
     model._original_forward = model.forward
