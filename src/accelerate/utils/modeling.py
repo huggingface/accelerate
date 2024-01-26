@@ -30,7 +30,7 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
-from .imports import is_mps_available, is_npu_available, is_xpu_available
+from .imports import is_mps_available, is_npu_available, is_peft_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 
@@ -45,6 +45,15 @@ from safetensors.torch import load_file as safe_load_file
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 
 logger = logging.getLogger(__name__)
+
+
+def is_peft_model(model):
+    from .other import extract_model_from_parallel
+
+    if is_peft_available():
+        from peft import PeftModel
+
+    return is_peft_available() and isinstance(extract_model_from_parallel(model), PeftModel)
 
 
 def check_device_same(first_device, second_device):
