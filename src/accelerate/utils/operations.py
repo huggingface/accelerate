@@ -164,9 +164,13 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             }
         )
     elif hasattr(tensor, "to"):
-        # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if is_npu_available() and isinstance(device, int):
-            device = f"npu:{device}"
+        if is_npu_available():
+            # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
+            if isinstance(device, int):
+                device = f"npu:{device}"
+            # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
+            elif device == torch.device("npu"):
+                device = "npu:0"
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
