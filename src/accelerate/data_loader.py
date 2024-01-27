@@ -837,12 +837,26 @@ def prepare_data_loader(
         process_index = state.process_index
 
     # Sanity check
-    batch_size = dataloader.batch_size if dataloader.batch_size is not None else dataloader.batch_sampler.batch_size
-    if split_batches and batch_size > 1 and batch_size % num_processes != 0:
-        raise ValueError(
-            f"To use a `DataLoader` in `split_batches` mode, the batch size ({dataloader.batch_size}) "
-            f"needs to be a round multiple of the number of processes ({num_processes})."
-        )
+    if split_batches:
+        if dataloader.batch_size is not None:
+            batch_size_for_check = dataloader.batch_size
+        else:
+            # For custom batch_sampler
+            if hasattr(dataloader.batch_sampler, "batch_size"):
+                batch_size_for_check = dataloader.batch_sampler.batch_size
+            else:
+                raise ValueError(
+                    "In order to use `split_batches==True` you must have a `batch_size` attribute either in the passed "
+                    "`dataloader` or `dataloader.batch_sampler` objects, and it has to return a natural number. "
+                    "Your `dataloader.batch_size` is None and `dataloader.batch_sampler` "
+                    f"(`{type(dataloader.batch_sampler)}`) does not have the `batch_size` attribute set."
+                )
+
+        if batch_size_for_check > 1 and batch_size_for_check % num_processes != 0:
+            raise ValueError(
+                f"To use a `DataLoader` in `split_batches` mode, the batch size ({dataloader.batch_size}) "
+                f"needs to be a round multiple of the number of processes ({num_processes})."
+            )
 
     new_dataset = dataloader.dataset
     # Iterable dataset doesn't like batch_sampler, but data_loader creates a default one for it
