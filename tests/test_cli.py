@@ -24,7 +24,7 @@ import accelerate
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
-    require_multi_gpu,
+    require_multi_device,
     require_timm,
     require_transformers,
     run_command,
@@ -89,7 +89,7 @@ class AccelerateLauncherTester(unittest.TestCase):
     def test_accelerate_test(self):
         execute_subprocess_async(["accelerate", "test"], env=os.environ.copy())
 
-    @require_multi_gpu
+    @require_multi_device
     def test_notebook_launcher(self):
         """
         This test checks a variety of situations and scenarios
