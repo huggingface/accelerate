@@ -26,7 +26,13 @@ import torch
 from ..state import PartialState
 from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
-from .imports import is_npu_available, is_torch_distributed_available, is_torch_version, is_tpu_available
+from .imports import (
+    is_npu_available,
+    is_torch_distributed_available,
+    is_torch_version,
+    is_tpu_available,
+    is_xpu_available,
+)
 
 
 if is_tpu_available(check_device=False):
@@ -171,6 +177,11 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
             elif device == torch.device("npu"):
                 device = "npu:0"
+        elif is_xpu_available():
+            if isinstance(device, int):
+                device = f"xpu:{device}"
+            elif device == torch.device("xpu"):
+                device = "xpu:0"
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
