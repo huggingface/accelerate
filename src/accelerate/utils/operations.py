@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
@@ -34,10 +33,8 @@ from .imports import (
     is_xpu_available,
 )
 
-
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
-
 
 if is_torch_distributed_available():
     from torch.distributed import ReduceOp
@@ -90,7 +87,12 @@ def honor_type(obj, generator):
         return type(obj)(generator)
 
 
-def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_other_type=False, **kwargs):
+def recursively_apply(func,
+                      data,
+                      *args,
+                      test_type=is_torch_tensor,
+                      error_on_other_type=False,
+                      **kwargs):
     """
     Recursively apply a function on a data structure that is a nested list/tuple/dictionary of a given base type.
 
@@ -115,22 +117,23 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
     if isinstance(data, (tuple, list)):
         return honor_type(
             data,
-            (
-                recursively_apply(
-                    func, o, *args, test_type=test_type, error_on_other_type=error_on_other_type, **kwargs
-                )
-                for o in data
-            ),
+            (recursively_apply(func,
+                               o,
+                               *args,
+                               test_type=test_type,
+                               error_on_other_type=error_on_other_type,
+                               **kwargs) for o in data),
         )
     elif isinstance(data, Mapping):
-        return type(data)(
-            {
-                k: recursively_apply(
-                    func, v, *args, test_type=test_type, error_on_other_type=error_on_other_type, **kwargs
-                )
-                for k, v in data.items()
-            }
-        )
+        return type(data)({
+            k:
+                recursively_apply(func,
+                                  v,
+                                  *args,
+                                  test_type=test_type,
+                                  error_on_other_type=error_on_other_type,
+                                  **kwargs) for k, v in data.items()
+        })
     elif test_type(data):
         return func(data, *args, **kwargs)
     elif error_on_other_type:
@@ -155,33 +158,42 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
     if isinstance(tensor, (tuple, list)):
-        return honor_type(
-            tensor, (send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys) for t in tensor)
-        )
+        return honor_type(tensor, (send_to_device(
+            t, device, non_blocking=non_blocking, skip_keys=skip_keys)
+                                   for t in tensor))
     elif isinstance(tensor, Mapping):
         if isinstance(skip_keys, str):
             skip_keys = [skip_keys]
         elif skip_keys is None:
             skip_keys = []
-        return type(tensor)(
-            {
-                k: t if k in skip_keys else send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys)
-                for k, t in tensor.items()
-            }
-        )
-    elif hasattr(tensor, "to"):
-        if is_npu_available():
+        return type(tensor)({
+            k:
+                t if k in skip_keys else send_to_device(
+                    t, device, non_blocking=non_blocking, skip_keys=skip_keys)
+            for k, t in tensor.items()
+        })
+    elif is_torch_tensor(tensor) or hasattr(tensor, "to"):
+        # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
+        if device == torch.device("npu"):
+            device = "npu:0"
+        if device == "xpu":
+            device = "xpu:0"
+        try:
+            return tensor.to(device, non_blocking=non_blocking)
+        except TypeError:  # .to() doesn't accept non_blocking as kwarg
+            return tensor.to(device)
+        except AssertionError as error:
             # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-            if isinstance(device, int):
-                device = f"npu:{device}"
-            # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
-            elif device == torch.device("npu"):
-                device = "npu:0"
-        elif is_xpu_available():
-            if isinstance(device, int):
-                device = f"xpu:{device}"
-            elif device == torch.device("xpu"):
-                device = "xpu:0"
+            # This call is inside the try-block since is_npu_available is not supported by torch.compile.
+            if is_npu_available():
+                if isinstance(device, int):
+                    device = f"npu:{device}"
+        except Exception as error:
+            if is_xpu_available():
+                if isinstance(device, int):
+                    device = f"xpu:{device}"
+            else:
+                raise error
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
@@ -237,7 +249,9 @@ def initialize_tensors(data_structure):
     def _initialize_tensor(tensor_info):
         return torch.empty(*tensor_info.shape, dtype=tensor_info.dtype)
 
-    return recursively_apply(_initialize_tensor, data_structure, test_type=is_tensor_information)
+    return recursively_apply(_initialize_tensor,
+                             data_structure,
+                             test_type=is_tensor_information)
 
 
 def find_batch_size(data):
@@ -259,7 +273,8 @@ def find_batch_size(data):
         for k in data.keys():
             return find_batch_size(data[k])
     elif not isinstance(data, torch.Tensor):
-        raise TypeError(f"Can only find the batch size of tensors but got {type(data)}.")
+        raise TypeError(
+            f"Can only find the batch size of tensors but got {type(data)}.")
     return data.shape[0]
 
 
@@ -304,6 +319,7 @@ def listify(data):
 
 
 def _tpu_gather(tensor):
+
     def _tpu_gather_one(tensor):
         if tensor.ndim == 0:
             tensor = tensor.clone()[None]
@@ -349,7 +365,9 @@ def _gpu_gather(tensor):
             # a backend of `None` is always CPU
             # also gloo does not support `all_gather_into_tensor`,
             # which will result in a larger memory overhead for the op
-            output_tensors = [torch.empty_like(tensor) for _ in range(state.num_processes)]
+            output_tensors = [
+                torch.empty_like(tensor) for _ in range(state.num_processes)
+            ]
             torch.distributed.all_gather(output_tensors, tensor)
             return torch.cat(output_tensors, dim=0)
 
@@ -372,7 +390,8 @@ def verify_operation(function):
 
     @wraps(function)
     def wrapper(*args, **kwargs):
-        if PartialState().distributed_type == DistributedType.NO or not PartialState().debug:
+        if PartialState(
+        ).distributed_type == DistributedType.NO or not PartialState().debug:
             return function(*args, **kwargs)
         operation = f"{function.__module__}.{function.__name__}"
         if "tensor" in kwargs:
@@ -389,7 +408,8 @@ def verify_operation(function):
         if output[0] is not None:
             are_same = output.count(output[0]) == len(output)
             if not are_same:
-                process_shape_str = "\n  - ".join([f"Process {i}: {shape}" for i, shape in enumerate(output)])
+                process_shape_str = "\n  - ".join(
+                    [f"Process {i}: {shape}" for i, shape in enumerate(output)])
                 raise DistributedOperationException(
                     f"Cannot apply desired operation due to shape mismatches. "
                     "All shapes across devices must be valid."
@@ -466,18 +486,25 @@ def gather_object(object: Any):
 
 
 def _gpu_broadcast(data, src=0):
+
     def _gpu_broadcast_one(tensor, src=0):
         torch.distributed.broadcast(tensor, src=src)
         return tensor
 
-    return recursively_apply(_gpu_broadcast_one, data, error_on_other_type=True, src=src)
+    return recursively_apply(_gpu_broadcast_one,
+                             data,
+                             error_on_other_type=True,
+                             src=src)
 
 
 def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
     if isinstance(tensor, (list, tuple)):
-        return honor_type(tensor, (_tpu_broadcast(t, name=f"{name}_{i}") for i, t in enumerate(tensor)))
+        return honor_type(tensor, (_tpu_broadcast(t, name=f"{name}_{i}")
+                                   for i, t in enumerate(tensor)))
     elif isinstance(tensor, Mapping):
-        return type(tensor)({k: _tpu_broadcast(v, name=f"{name}_{k}") for k, v in tensor.items()})
+        return type(tensor)({
+            k: _tpu_broadcast(v, name=f"{name}_{k}") for k, v in tensor.items()
+        })
     return xm.mesh_reduce(name, tensor, lambda x: x[src])
 
 
@@ -554,7 +581,9 @@ def broadcast(tensor, from_process: int = 0):
         The same data structure as `tensor` with all tensors broadcasted to the proper device.
     """
     if PartialState().distributed_type == DistributedType.TPU:
-        return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
+        return _tpu_broadcast(tensor,
+                              src=from_process,
+                              name="accelerate.utils.broadcast")
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_broadcast(tensor, src=from_process)
     else:
@@ -576,7 +605,9 @@ def broadcast_object_list(object_list, from_process: int = 0):
     """
     if PartialState().distributed_type == DistributedType.TPU:
         for i, obj in enumerate(object_list):
-            object_list[i] = xm.mesh_reduce("accelerate.utils.broadcast_object_list", obj, lambda x: x[from_process])
+            object_list[i] = xm.mesh_reduce(
+                "accelerate.utils.broadcast_object_list", obj,
+                lambda x: x[from_process])
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         torch.distributed.broadcast_object_list(object_list, src=from_process)
     return object_list
@@ -616,9 +647,14 @@ def concatenate(data, dim=0):
         The same data structure as `data` with all the tensors concatenated.
     """
     if isinstance(data[0], (tuple, list)):
-        return honor_type(data[0], (concatenate([d[i] for d in data], dim=dim) for i in range(len(data[0]))))
+        return honor_type(data[0], (concatenate([d[i]
+                                                 for d in data], dim=dim)
+                                    for i in range(len(data[0]))))
     elif isinstance(data[0], Mapping):
-        return type(data[0])({k: concatenate([d[k] for d in data], dim=dim) for k in data[0].keys()})
+        return type(data[0])({
+            k: concatenate([d[k] for d in data], dim=dim)
+            for k in data[0].keys()
+        })
     elif not isinstance(data[0], torch.Tensor):
         raise TypeError(f"Can only concatenate tensors but got {type(data[0])}")
     return torch.cat(data, dim=dim)
@@ -669,16 +705,22 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
         new_tensor = tensor.new_zeros(tuple(new_size)) + pad_index
         if pad_first:
             indices = tuple(
-                slice(max_size - old_size[dim], max_size) if i == dim else slice(None) for i in range(len(new_size))
-            )
+                slice(max_size -
+                      old_size[dim], max_size) if i == dim else slice(None)
+                for i in range(len(new_size)))
         else:
-            indices = tuple(slice(0, old_size[dim]) if i == dim else slice(None) for i in range(len(new_size)))
+            indices = tuple(
+                slice(0, old_size[dim]) if i == dim else slice(None)
+                for i in range(len(new_size)))
         new_tensor[indices] = tensor
         return new_tensor
 
-    return recursively_apply(
-        _pad_across_processes, tensor, error_on_other_type=True, dim=dim, pad_index=pad_index, pad_first=pad_first
-    )
+    return recursively_apply(_pad_across_processes,
+                             tensor,
+                             error_on_other_type=True,
+                             dim=dim,
+                             pad_index=pad_index,
+                             pad_first=pad_first)
 
 
 def pad_input_tensors(tensor, batch_size, num_processes, dim=0):
@@ -707,7 +749,9 @@ def pad_input_tensors(tensor, batch_size, num_processes, dim=0):
         new_size = list(old_size)
         new_size[0] = batch_size + to_pad
         new_tensor = tensor.new_zeros(tuple(new_size))
-        indices = tuple(slice(0, old_size[dim]) if i == dim else slice(None) for i in range(len(new_size)))
+        indices = tuple(
+            slice(0, old_size[dim]) if i == dim else slice(None)
+            for i in range(len(new_size)))
         new_tensor[indices] = tensor
         return new_tensor
 
@@ -758,9 +802,11 @@ def reduce(tensor, reduction="mean", scale=1.0):
             cloned_tensor /= state.num_processes
         return cloned_tensor
 
-    return recursively_apply(
-        _reduce_across_processes, tensor, error_on_other_type=True, reduction=reduction, scale=scale
-    )
+    return recursively_apply(_reduce_across_processes,
+                             tensor,
+                             error_on_other_type=True,
+                             reduction=reduction,
+                             scale=scale)
 
 
 def convert_to_fp32(tensor):
@@ -779,9 +825,15 @@ def convert_to_fp32(tensor):
         return tensor.float()
 
     def _is_fp16_bf16_tensor(tensor):
-        return hasattr(tensor, "dtype") and tensor.dtype in (torch.float16, torch.bfloat16)
+        return (is_torch_tensor(tensor) or
+                hasattr(tensor, "dtype")) and tensor.dtype in (
+                    torch.float16,
+                    torch.bfloat16,
+                )
 
-    return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
+    return recursively_apply(_convert_to_fp32,
+                             tensor,
+                             test_type=_is_fp16_bf16_tensor)
 
 
 class ConvertOutputsToFp32:
