@@ -52,6 +52,22 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     cmd = []
     if args.no_python and args.module:
         raise ValueError("--module and --no_python cannot be used together")
+    
+    mpirun_hostfile = getattr(args, "mpirun_hostfile", None)
+
+    if mpirun_hostfile:
+         mpirun_ccl = getattr(args, "mpirun_ccl", None)
+         num_machines = getattr(args, "num_machines")
+         num_processes = getattr(args, "num_processes", None)
+         nproc_per_node = str(num_processes // num_machines) if num_processes and num_machines else '1'
+         cmd.append('mpirun')
+         cmd.append('-f')
+         cmd.append(args.mpirun_hostfile)
+         if num_processes:
+             cmd.append('-n')
+             cmd.append(str(num_processes))
+         cmd.append('-ppn')
+         cmd.append(nproc_per_node)
     if not args.no_python:
         cmd.append(sys.executable)
         if args.module:
@@ -73,6 +89,10 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if args.num_machines > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
+
+        if mpirun_ccl:
+            current_env["CCL_WORKER_COUNT"] = mpirun_ccl
+            current_env["CCL_ATL_TRANSPORT"] = "mpi"
     elif args.num_processes > 1:
         current_env["MASTER_ADDR"] = args.main_process_ip if args.main_process_ip is not None else "127.0.0.1"
         current_env["MASTER_PORT"] = str(args.main_process_port) if args.main_process_port is not None else "29500"

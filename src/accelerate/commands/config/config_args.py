@@ -187,6 +187,8 @@ class ClusterConfig(BaseConfig):
     megatron_lm_config: dict = None
     # args for ipex
     ipex_config: dict = None
+    # args for mpirun
+    mpirun_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
 
@@ -212,6 +214,8 @@ class ClusterConfig(BaseConfig):
             self.megatron_lm_config = {}
         if self.ipex_config is None:
             self.ipex_config = {}
+        if self.mpirun_config is None:
+            self.mpirun_config = {}
         return super().__post_init__()
 
 

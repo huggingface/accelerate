@@ -906,6 +906,8 @@ def _validate_launch_command(args):
                         setattr(args, k, defaults.dynamo_config[k])
                     for k in defaults.ipex_config:
                         setattr(args, k, defaults.ipex_config[k])
+                    for k in defaults.mpirun_config:
+                        setattr(args, k, defaults.mpirun_config[k])
                     continue
 
                 # Those args are handled separately

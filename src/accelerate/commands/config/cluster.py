@@ -116,6 +116,7 @@ def get_cluster_input():
         use_cpu = False
 
     ipex_config = {}
+    mpirun_config = {}
     if use_cpu:
         ipex_config["ipex"] = _ask_field(
             "Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU? [yes/NO]:",
@@ -123,6 +124,24 @@ def get_cluster_input():
             default=False,
             error_message="Please enter yes or no.",
         )
+        if distributed_type == DistributedType.MULTI_CPU:
+             use_mpirun = _ask_field(
+                 "Do you want accelerate to launch mpirun? [yes/NO]: ", 
+                 _convert_yes_no_to_bool,
+                 default=False,
+                 error_message="Please enter yes or no.",
+             )
+             if use_mpirun:
+                 mpirun_hostfile = _ask_field(
+                     "Please enter the path to the hostfile to use with mpirun [~/hostfile]: ",
+                     str,
+                     default="~/hostfile"
+                 )
+                 mpirun_config["mpirun_hostfile"] = os.path.expanduser(mpirun_hostfile)
+                 mpirun_config["mpirun_ccl"] = _ask_field(
+                     "Enter the number of oneCCL worker threads [1]: ",
+                     default=1
+                 )
     if (
         not use_cpu
         and is_xpu_available()
@@ -486,6 +505,8 @@ def get_cluster_input():
         machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
         if machine_type == "TPU":
             machine_type += " cores"
+        elif machine_type == "CPU":
+            machine_type = "processes"
         else:
             machine_type += "(s)"
         num_processes = _ask_field(
@@ -641,6 +662,7 @@ def get_cluster_input():
         fsdp_config=fsdp_config,
         megatron_lm_config=megatron_lm_config,
         ipex_config=ipex_config,
+        mpirun_config=mpirun_config,
         use_cpu=use_cpu,
         rdzv_backend=rdzv_backend,
         same_network=same_network,
