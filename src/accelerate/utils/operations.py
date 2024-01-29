@@ -174,7 +174,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
         })
     elif is_torch_tensor(tensor) or hasattr(tensor, "to"):
         # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
-        if device == torch.device("npu"):
+        if device == "npu":
             device = "npu:0"
         if device == "xpu":
             device = "xpu:0"
