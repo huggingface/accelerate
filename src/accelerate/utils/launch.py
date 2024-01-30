@@ -90,7 +90,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
         current_env["MASTER_ADDR"] = args.main_process_ip
         current_env["MASTER_PORT"] = str(args.main_process_port)
 
-        if mpirun_ccl:
+        if mpirun_hostfile:
             current_env["CCL_WORKER_COUNT"] = mpirun_ccl
             current_env["CCL_ATL_TRANSPORT"] = "mpi"
     elif args.num_processes > 1:
