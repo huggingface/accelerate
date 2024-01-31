@@ -387,7 +387,7 @@ class Accelerator:
         )
 
         if self.fp8_recipe_handler is None and self.state.mixed_precision == "fp8":
-            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP")
+            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP" if is_msamp_available() else "TE")
 
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
