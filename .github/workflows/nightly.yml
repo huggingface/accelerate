@@ -33,6 +33,10 @@ jobs:
           pip install -e . --no-deps
           pip install pytest-reportlog tabulate
 
+      - name: Print env
+        run: | 
+          pip freeze
+
       - name: Run test on GPUs
         working-directory: accelerate
         run: |
@@ -73,6 +77,10 @@ jobs:
           git checkout ${{ github.sha }};
           pip install -e . --no-deps
           pip install pytest-reportlog tabulate
+
+      - name: Print env
+        run: | 
+            pip freeze
 
       - name: Run core and big modeling tests on GPUs
         working-directory: accelerate
