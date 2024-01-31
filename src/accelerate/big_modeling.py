@@ -567,7 +567,8 @@ def load_checkpoint_and_dispatch(
                 low_zero=(device_map == "balanced_low_0"),
             )
         device_map = infer_auto_device_map(
-            model, max_memory=max_memory, no_split_module_classes=no_split_module_classes, dtype=dtype
+            model, max_memory=max_memory, no_split_module_classes=no_split_module_classes, dtype=dtype, 
+            exclude_buffers=not offload_buffers
         )
     if offload_state_dict is None and device_map is not None and "disk" in device_map.values():
         offload_state_dict = True

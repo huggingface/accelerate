@@ -697,12 +697,39 @@ def compute_module_sizes(
         elif dtype is None:
             size = tensor.numel() * dtype_byte_size(tensor.dtype)
         else:
-            size = tensor.numel() * min(dtype_size, dtype_byte_size(tensor.dtype))
+            size = tensor.numel() * max(dtype_size, dtype_byte_size(tensor.dtype))
         name_parts = name.split(".")
         for idx in range(len(name_parts) + 1):
             module_sizes[".".join(name_parts[:idx])] += size
 
     return module_sizes
+
+
+def compute_module_total_buffer_size(
+    model: nn.Module,
+    dtype: Optional[Union[str, torch.device]] = None,
+    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
+):
+    """
+    Compute the total size of buffers in each submodule of a given model.
+    """
+    if dtype is not None:
+        dtype = _get_proper_dtype(dtype)
+        dtype_size = dtype_byte_size(dtype)
+    if special_dtypes is not None:
+        special_dtypes = {key: _get_proper_dtype(dtyp) for key, dtyp in special_dtypes.items()}
+        special_dtypes_size = {key: dtype_byte_size(dtyp) for key, dtyp in special_dtypes.items()}
+    total_size = 0
+    for name, tensor in model.named_buffers(recurse=True):
+        if special_dtypes is not None and name in special_dtypes:
+            size = tensor.numel() * special_dtypes_size[name]
+        elif dtype is None:
+            size = tensor.numel() * dtype_byte_size(tensor.dtype)
+        else:
+            size = tensor.numel() * max(dtype_size, dtype_byte_size(tensor.dtype))
+        total_size += size
+
+    return total_size
 
 
 def get_max_layer_size(
@@ -1016,6 +1043,7 @@ def infer_auto_device_map(
     special_dtypes: Optional[Dict[str, Union[str, torch.dtype]]] = None,
     verbose: bool = False,
     clean_result: bool = True,
+    exclude_buffers: bool = True
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
@@ -1052,6 +1080,9 @@ def infer_auto_device_map(
             Whether or not to provide debugging statements as the function builds the device_map.
         clean_result (`bool`, *optional*, defaults to `True`):
             Clean the resulting device_map by grouping all submodules that go on the same device together.
+        exclude_buffers (`bool`, *optional*, defualts to `True`):
+            Whether or not to exclude buffer size when computing available memory. If you are using `offload_buffers`, 
+            this should be `False`.
     """
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
@@ -1084,6 +1115,13 @@ def infer_auto_device_map(
     device_map = OrderedDict()
     current_device = 0
     current_memory_used = 0
+    total_buffer_size = 0
+
+    if exclude_buffers:
+        total_buffer_size = compute_module_total_buffer_size(model, dtype=dtype, special_dtypes=special_dtypes)
+
+        if verbose:
+            print(f"Total buffer size: {total_buffer_size}")
 
     # Direct submodules and parameters
     modules_to_treat = (
@@ -1133,9 +1171,18 @@ def infer_auto_device_map(
 
         device = devices[current_device]
         current_max_size = max_memory[device] if device != "disk" else None
+
+        if current_max_size < total_buffer_size:
+            logger.warning(f"Total buffer size {total_buffer_size} is too large for this device, please consider using offload_buffers!")
+
         # Reduce max size available by the largest layer.
         if devices[current_device] in main_devices:
             current_max_size = current_max_size - max_layer_size
+            
+            # We need to exclude all the buffers from available memory, because they can stay on device forever if 
+            # not using offload_buffers
+            current_max_size = current_max_size - total_buffer_size
+
         # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
