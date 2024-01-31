@@ -342,7 +342,3 @@ class UtilsTester(unittest.TestCase):
         compiled_convert_to_fp32 = torch.compile(operations.convert_to_fp32,
                                                  fullgraph=True)
         compiled_convert_to_fp32(torch.zeros([1], dtype=torch.bfloat16))
-
-
-if __name__ == "__main__":
-    unittest.main()
