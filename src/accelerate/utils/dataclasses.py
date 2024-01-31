@@ -170,7 +170,7 @@ class InitProcessGroupKwargs(KwargsHandler):
 
 
 # Literals
-Backend = Literal["msamp", "te"]
+Backend = Literal["MSAMP", "TE"]
 OptLevel = Literal["O1", "O2"]
 FP8Format = Literal["E4M3", "HYBRID"]
 AmaxComputeAlgorithm = Literal["max", "most_recent"]
@@ -233,7 +233,7 @@ class FP8RecipeKwargs(KwargsHandler):
                     available currently).
     """
 
-    backend: Backend = "msamp"
+    backend: Backend = "MSAMP"
     opt_level: OptLevel = "O2"
     margin: int = 0
     interval: int = 1
@@ -243,7 +243,7 @@ class FP8RecipeKwargs(KwargsHandler):
     override_linear_precision: Tuple[bool, bool, bool] = (False, False, False)
 
     def __post_init__(self):
-        if self.backend not in get_args(Backend):
+        if self.backend.upper() not in get_args(Backend):
             raise ValueError("`backend` must be 'MSAMP' or 'TE' (TransformerEngine).")
 
         self.backend = self.backend.upper()
