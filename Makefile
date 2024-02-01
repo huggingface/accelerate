@@ -44,6 +44,7 @@ test_fsdp:
 test:
 	$(MAKE) test_core
 	$(MAKE) test_cli
+	$(MAKE) test_big_modeling
 	$(MAKE) test_deepspeed
 	$(MAKE) test_fsdp
 
