@@ -38,11 +38,11 @@ jobs:
           source activate accelerate
           pip freeze
 
-  #     - name: Run test on GPUs
-  #       working-directory: accelerate
-  #       run: |
-  #         source activate accelerate
-  #         make test
+      - name: Run test on GPUs
+        working-directory: accelerate
+        run: |
+          source activate accelerate
+          make test
           
   #     # - name: Run examples on GPUs
   #     #   working-directory: accelerate
