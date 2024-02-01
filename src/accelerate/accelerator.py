@@ -1210,11 +1210,9 @@ class Accelerator:
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
 
-        if self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
-            if self.device.type == "cpu" and self.state.use_ipex:
-                args = self._prepare_ipex(*args)
-            elif self.device.type == "xpu" and is_xpu_available():
-                args = self._prepare_ipex(*args)
+        if self.state.use_ipex and self.device.type in ["cpu", "xpu"]:
+            args = self._prepare_ipex(*args)
+
         if self.distributed_type == DistributedType.DEEPSPEED:
             result = self._prepare_deepspeed(*args)
         elif self.distributed_type == DistributedType.MEGATRON_LM:
