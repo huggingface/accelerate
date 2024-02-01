@@ -23,9 +23,6 @@ style:
 	doc-builder style src/accelerate docs/source --max_len 119
 	
 # Run tests for the library
-test:
-	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_all.log",)
-
 test_big_modeling:
 	python -m pytest -s -v ./tests/test_big_modeling.py ./tests/test_modeling_utils.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_big_modeling.log",)
 
@@ -41,6 +38,14 @@ test_deepspeed:
 
 test_fsdp:
 	python -m pytest -s -v ./tests/fsdp $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_fsdp.log",)
+
+# Since the new version of pytest will *change* how things are collected, we need `deepspeed` to 
+# run after test_core and test_cli
+test:
+	$(MAKE) test_core
+	$(MAKE) test_cli
+	$(MAKE) test_deepspeed
+	$(MAKE) test_fsdp
 
 test_examples:
 	python -m pytest -s -v ./tests/test_examples.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_examples.log",)
