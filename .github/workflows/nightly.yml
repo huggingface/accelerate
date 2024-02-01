@@ -12,30 +12,31 @@ env:
 
 
 jobs:
-  # run_all_tests_single_gpu:
-  #   runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
-  #   env:
-  #     CUDA_VISIBLE_DEVICES: "0"
-  #     TEST_TYPE: "single_gpu"
-  #   container:
-  #     image: huggingface/accelerate-gpu:latest
-  #     options: --gpus all --shm-size "16gb"
-  #   defaults:
-  #     run:
-  #       shell: bash
-  #   steps:
-  #     - name: Update clone & pip install
-  #       run: |
-  #         source activate accelerate
-  #         git clone https://github.com/huggingface/accelerate;
-  #         cd accelerate;
-  #         git checkout ${{ github.sha }};
-  #         pip install -e . --no-deps
-  #         pip install pytest-reportlog tabulate
+  run_all_tests_single_gpu:
+    runs-on: [self-hosted, single-gpu, nvidia-gpu, t4, ci]
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+      TEST_TYPE: "single_gpu"
+    container:
+      image: huggingface/accelerate-gpu:latest
+      options: --gpus all --shm-size "16gb"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Update clone & pip install
+        run: |
+          source activate accelerate
+          git clone https://github.com/huggingface/accelerate;
+          cd accelerate;
+          git checkout ${{ github.sha }};
+          pip install -e . --no-deps
+          pip install pytest-reportlog tabulate
 
-  #     - name: Print env
-  #       run: | 
-  #         pip freeze
+      - name: Print env
+        run: | 
+          source activate accelerate
+          pip freeze
 
   #     - name: Run test on GPUs
   #       working-directory: accelerate
