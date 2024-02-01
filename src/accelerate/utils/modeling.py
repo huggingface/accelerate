@@ -367,6 +367,8 @@ def set_module_tensor_to_device(
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
         if is_npu_available() and isinstance(device, int):
             device = f"npu:{device}"
+        if is_xpu_available() and isinstance(device, int):
+            device = f"xpu:{device}"
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
@@ -427,6 +429,8 @@ def set_module_tensor_to_device(
     # clean pre and post foward hook
     if is_npu_available():
         torch.npu.empty_cache()
+    elif is_xpu_available():
+        torch.xpu.empty_cache()
     else:
         torch.cuda.empty_cache()
 
