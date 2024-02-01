@@ -207,6 +207,22 @@ In [/slurm/submit_multigpu.sh](./slurm/submit_multigpu.sh) the only parameter in
 
 In [/slurm/submit_multinode.sh](./slurm/submit_multinode.sh) we must specify the number of nodes that will be part of the training (`--num_machines`), how many GPUs we will use in total (`--num_processes`), the [`backend`](https://pytorch.org/docs/stable/elastic/run.html#note-on-rendezvous-backend), `--main_process_ip` which will be the address the master node and the `--main_process_port`.
 
+In both scripts, we run `activateEnviroment.sh` at the beginning. This script should contain the necessary instructions to initialize the environment for execution. Below, we show an example that loads the necessary libraries ([Environment modules](https://github.com/cea-hpc/modules)), activates the Python environment, and sets up various environment variables, most of them to run the scripts in offline mode in case we don't have internet connection from the cluster.
+
+```bash
+# activateEnvironment.sh 
+module purge
+module load anaconda3/2020.02 cuda/10.2 cudnn/8.0.5 nccl/2.9.9 arrow/7.0.0 openmpi
+source activate /home/nct01/nct01328/pytorch_antoni_local
+
+export HF_HOME=/gpfs/projects/nct01/nct01328/
+export HF_LOCAL_HOME=/gpfs/projects/nct01/nct01328/HF_LOCAL
+export HF_DATASETS_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export PYTHONPATH=/home/nct01/nct01328/transformers-in-supercomputers:$PYTHONPATH 
+export GPUS_PER_NODE=4
+```
+
 ## Finer Examples
 
 While the first two scripts are extremely barebones when it comes to what you can do with accelerate, more advanced features are documented in two other locations.
