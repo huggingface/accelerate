@@ -703,6 +703,10 @@ def compute_module_sizes(
             size = tensor.numel() * special_dtypes_size[name]
         elif dtype is None:
             size = tensor.numel() * dtype_byte_size(tensor.dtype)
+        elif str(tensor.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
+            # According to the code in set_module_tensor_to_device, these types won't be converted
+            # so use their original size here
+            size = tensor.numel() * dtype_byte_size(tensor.dtype)
         else:
             size = tensor.numel() * min(dtype_size, dtype_byte_size(tensor.dtype))
         name_parts = name.split(".")
