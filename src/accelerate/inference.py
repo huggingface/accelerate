@@ -1,9 +1,6 @@
 import math
 from types import MethodType
 
-from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
-from pippy.PipelineStage import PipelineStage
-
 from .state import PartialState
 from .utils import (
     calculate_maximum_sizes,
@@ -14,6 +11,10 @@ from .utils import (
     pad_input_tensors,
     send_to_device,
 )
+
+if is_pippy_available():
+    from pippy.IR import Pipe, PipeSplitWrapper, annotate_split_points
+    from pippy.PipelineStage import PipelineStage
 
 
 def generate_device_map(model, num_processes: int = 1, no_split_module_classes=None, max_memory: dict = None):
