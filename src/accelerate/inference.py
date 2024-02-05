@@ -1,5 +1,6 @@
 import math
 from types import MethodType
+from typing import Any, Dict, Optional
 
 from .state import PartialState
 from .utils import (
@@ -79,7 +80,7 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     return stage
 
 
-def pippy_forward(forward, *args, **kwargs):
+def pippy_forward(forward, num_chunks, *args, **kwargs):
     state = PartialState()
     output = None
 
@@ -90,7 +91,7 @@ def pippy_forward(forward, *args, **kwargs):
         if found_batch_size is None:
             raise ValueError("Could not find batch size from args or kwargs")
         else:
-            if found_batch_size != state.num_processes:
+            if found_batch_size != num_chunks:
                 args = pad_input_tensors(args, found_batch_size, state.num_processes)
                 kwargs = pad_input_tensors(kwargs, found_batch_size, state.num_processes)
         forward(*args, **kwargs)
@@ -102,7 +103,12 @@ def pippy_forward(forward, *args, **kwargs):
 
 
 def prepare_pippy(
-    model, split_points="auto", no_split_module_classes=None, example_args=(), example_kwargs={}, num_chunks=None
+    model,
+    split_points="auto",
+    no_split_module_classes=None,
+    example_args=(),
+    example_kwargs: Optional[Dict[str, Any]] = None,
+    num_chunks=None,
 ):
     """
     Wraps `model` for PipelineParallelism
@@ -123,12 +129,12 @@ def prepare_pippy(
             is true for all cases.
         num_chunks (`int`):
             The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
-            this can be tuned and played with. In general one should have num_chunks > num_gpus.
+            this can be tuned and played with. In general one should have num_chunks >= num_gpus.
     """
     if not is_pippy_available():
         raise ImportError(
             "`pippy` was not found to be installed on your system. Please "
-            "install using `pip install git+https://github.com/pytorch/PiPPy"
+            "install using `pip install torchpippy` or ensure you have at least version 0.2.0"
         )
     state = PartialState()
     example_args = send_to_device(example_args, "cpu")
@@ -147,7 +153,7 @@ def prepare_pippy(
     model.hf_split_points = split_points
 
     def forward(*args, **kwargs):
-        return pippy_forward(stage.forward, *args, **kwargs)
+        return pippy_forward(stage.forward, num_chunks, *args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
     # Note: creates an infinite recursion loop with `generate`
