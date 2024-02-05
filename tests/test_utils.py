@@ -300,5 +300,5 @@ class UtilsTester(unittest.TestCase):
         batch_size = 61
         batch = torch.rand(batch_size, 4, 4)
         result = pad_input_tensors(batch, batch_size, num_processes)
-        # We should expect there to be 6 items now
+        # We should expect there to be 66 items now
         assert result.shape == torch.Size([66, 4, 4])
