@@ -92,8 +92,8 @@ def pippy_forward(forward, num_chunks, *args, **kwargs):
             raise ValueError("Could not find batch size from args or kwargs")
         else:
             if found_batch_size != num_chunks:
-                args = pad_input_tensors(args, found_batch_size, state.num_processes)
-                kwargs = pad_input_tensors(kwargs, found_batch_size, state.num_processes)
+                args = pad_input_tensors(args, found_batch_size, num_chunks)
+                kwargs = pad_input_tensors(kwargs, found_batch_size, num_chunks)
         forward(*args, **kwargs)
     elif state.is_last_process:
         output = forward()
