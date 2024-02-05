@@ -89,6 +89,8 @@
     title: Logging
   - local: package_reference/big_modeling
     title: Working with large models
+  - local: package_references/inference
+    title: Distributed inference with big models
   - local: package_reference/kwargs
     title: Kwargs handlers
   - local: package_reference/utilities
