@@ -19,7 +19,7 @@ These docs refer to the [PiPPy](https://github.com/PyTorch/PiPPy) integration.
 
 [[autodoc]] inference.prepare_pippy
 
-Parts of the lower-level API are below, it is recommended to look at the source code for [`inference.prepare_pippy`] to learn more about how it is used:
+Parts of the lower-level API are below, it is recommended to look at the source code for prepare_pippy to learn more about how it is used:
 
 [[autodoc]] inference.build_pipeline
 [[autodoc]] inference.generate_pipeline
