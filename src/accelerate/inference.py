@@ -58,7 +58,7 @@ def find_pippy_batch_size(args, kwargs):
     return found_batch_size
 
 
-def build_pipeline(model, split_points, args, kwargs, num_chunks) -> PipelineStage:
+def build_pipeline(model, split_points, args, kwargs, num_chunks):
     """
     Attaches the split points to the model based on `self.device_map` and generates a `PipelineStage`. Requires passing
     in needed `args` and `kwargs` as the model needs on the CPU.
