@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 Distributed inference can fall into three brackets:
 
-1. Loading an entire model onto each GPU and sending chunks of a batch through each model at a time
+1. Loading an entire model onto each GPU and sending chunks of a batch through each GPU's model copy at a time
 2. Loading parts of a model onto each GPU and processing a single input at one time
 3. Loading parts of a model onto each GPU and using what is called scheduled Pipeline Parallelism to combine the two prior techniques. 
 
