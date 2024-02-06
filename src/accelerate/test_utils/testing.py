@@ -40,6 +40,7 @@ from ..utils import (
     is_mps_available,
     is_npu_available,
     is_pandas_available,
+    is_pippy_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_version,
@@ -288,6 +289,13 @@ def require_pandas(test_case):
     Decorator marking a test that requires pandas installed. These tests are skipped when pandas isn't installed
     """
     return unittest.skipUnless(is_pandas_available(), "test requires pandas")(test_case)
+
+
+def require_pippy(test_case):
+    """
+    Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed
+    """
+    return unittest.skipUnless(is_pippy_available(), "test requires pippy")(test_case)
 
 
 _atleast_one_tracker_available = (

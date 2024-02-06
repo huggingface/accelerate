@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import os
 import pickle
 import tempfile
@@ -34,6 +33,7 @@ from accelerate.utils import (
     find_device,
     listify,
     pad_across_processes,
+    pad_input_tensors,
     patch_environment,
     recursively_apply,
     save,
@@ -237,3 +237,68 @@ class UtilsTester(unittest.TestCase):
         with self.assertWarns(CannotPadNestedTensorWarning):
             nt2 = pad_across_processes(nt)
         self.assertIs(nt, nt2)
+
+    def test_slice_and_concatenate(self):
+        # First base case: 2 processes, batch size of 1
+        num_processes = 2
+        batch_size = 1
+        batch = torch.rand(batch_size, 4)
+        result = pad_input_tensors(batch, batch_size, num_processes)
+        # We should expect there to be 2 items now
+        assert result.shape == torch.Size([2, 4])
+
+        # Second base case: 2 processes, batch size of 3
+        num_processes = 2
+        batch_size = 3
+        batch = torch.rand(batch_size, 4)
+        result = pad_input_tensors(batch, batch_size, num_processes)
+        # We should expect there to be 4 items now
+        assert result.shape == torch.Size([4, 4])
+
+        # Third base case: 3 processes, batch size of 4
+        num_processes = 3
+        batch_size = 4
+        batch = torch.rand(batch_size, 4, 4)
+        result = pad_input_tensors(batch, batch_size, num_processes)
+        # We should expect there to be 6 items now
+        assert result.shape == torch.Size([6, 4, 4])
+
+        # Fourth base case: 4 processes, batch size of 3
+        num_processes = 4
+        batch_size = 3
+        batch = torch.rand(batch_size, 4, 4)
+        result = pad_input_tensors(batch, batch_size, num_processes)
+        # We should expect there to be 4 items now
+        assert result.shape == torch.Size([4, 4, 4])
+
+        # Fifth base case: 6 processes, batch size of 4
+        num_processes = 6
+        batch_size = 4
+        batch = torch.rand(batch_size, 4, 4)
+        result = pad_input_tensors(batch, batch_size, num_processes)
+        # We should expect there to be 6 items now
+        assert result.shape == torch.Size([6, 4, 4])
+
+        # Sixth base case: 6 processes, batch size of 1
+        num_processes = 6
+        batch_size = 1
+        batch = torch.rand(batch_size, 4, 4)
+        result = pad_input_tensors(batch, batch_size, num_processes)
+        # We should expect there to be 6 items now
+        assert result.shape == torch.Size([6, 4, 4])
+
+        # Seventh base case: 6 processes, batch size of 2
+        num_processes = 6
+        batch_size = 2
+        batch = torch.rand(batch_size, 4, 4)
+        result = pad_input_tensors(batch, batch_size, num_processes)
+        # We should expect there to be 6 items now
+        assert result.shape == torch.Size([6, 4, 4])
+
+        # Eighth base case: 6 processes, batch size of 61
+        num_processes = 6
+        batch_size = 61
+        batch = torch.rand(batch_size, 4, 4)
+        result = pad_input_tensors(batch, batch_size, num_processes)
+        # We should expect there to be 66 items now
+        assert result.shape == torch.Size([66, 4, 4])

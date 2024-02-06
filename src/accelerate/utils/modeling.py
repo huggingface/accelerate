@@ -14,6 +14,7 @@
 
 import contextlib
 import gc
+import importlib
 import inspect
 import json
 import logging
@@ -24,6 +25,7 @@ import tempfile
 from collections import OrderedDict, defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
+import packaging
 import torch
 import torch.nn as nn
 
@@ -33,6 +35,7 @@ from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
 from .imports import is_mps_available, is_npu_available, is_peft_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
+from .versions import compare_versions
 
 
 if is_npu_available(check_device=False):
@@ -367,6 +370,8 @@ def set_module_tensor_to_device(
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
         if is_npu_available() and isinstance(device, int):
             device = f"npu:{device}"
+        if is_xpu_available() and isinstance(device, int):
+            device = f"xpu:{device}"
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
@@ -427,6 +432,8 @@ def set_module_tensor_to_device(
     # clean pre and post foward hook
     if is_npu_available():
         torch.npu.empty_cache()
+    elif is_xpu_available():
+        torch.xpu.empty_cache()
     else:
         torch.cuda.empty_cache()
 
@@ -695,6 +702,10 @@ def compute_module_sizes(
         if special_dtypes is not None and name in special_dtypes:
             size = tensor.numel() * special_dtypes_size[name]
         elif dtype is None:
+            size = tensor.numel() * dtype_byte_size(tensor.dtype)
+        elif str(tensor.dtype).startswith(("torch.uint", "torch.int", "torch.bool")):
+            # According to the code in set_module_tensor_to_device, these types won't be converted
+            # so use their original size here
             size = tensor.numel() * dtype_byte_size(tensor.dtype)
         else:
             size = tensor.numel() * min(dtype_size, dtype_byte_size(tensor.dtype))
@@ -1351,7 +1362,20 @@ def load_state_dict(checkpoint_file, device_map=None):
             else:
                 progress_bar = None
             for device in devices:
-                with safe_open(checkpoint_file, framework="pt", device=device) as f:
+                target_device = device
+
+                if is_xpu_available():
+                    current_safetensors_version = packaging.version.parse(importlib.metadata.version("safetensors"))
+
+                    if compare_versions(current_safetensors_version, "<", "0.4.2"):
+                        raise ModuleNotFoundError(
+                            f"You need at least safetensors 0.4.2 for Intel GPU, while you have {current_safetensors_version}"
+                        )
+
+                    if isinstance(device, int):
+                        target_device = f"xpu:{device}"
+
+                with safe_open(checkpoint_file, framework="pt", device=target_device) as f:
                     for key in device_weights[device]:
                         if progress_bar is not None:
                             progress_bar.set_postfix(dev=device, refresh=False)

@@ -846,9 +846,7 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
             if args.rank == 0:
                 print(
                     "WARNING: overriding default arguments for {key}:{v} \
-                        with {key}:{v2}".format(
-                        key=key, v=getattr(args, key), v2=value
-                    ),
+                        with {key}:{v2}".format(key=key, v=getattr(args, key), v2=value),
                     flush=True,
                 )
         setattr(args, key, value)

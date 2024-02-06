@@ -16,7 +16,7 @@ import os
 import platform
 import subprocess
 import sys
-from distutils import spawn
+from shutil import which
 from typing import Dict
 
 import torch
@@ -72,8 +72,8 @@ def get_gpu_info():
     """
     if platform.system() == "Windows":
         # If platform is Windows and nvidia-smi can't be found in path
-        # try from systemd rive with default installation path
-        command = spawn.find_executable("nvidia-smi")
+        # try from systemd drive with default installation path
+        command = which("nvidia-smi")
         if command is None:
             command = "%s\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe" % os.environ["systemdrive"]
     else:
