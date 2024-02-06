@@ -196,7 +196,7 @@ model = prepare_pippy(model, example_args=(input,))
 <Tip>
 
     There are a variety of parameters you can pass through to `prepare_pippy`:
-    * `split_points` will let you determine where to split the model at. By default we use wherever `device_map="auto" declares
+    * `split_points` lets you determine what layers to split the model at. By default we use wherever `device_map="auto" declares, such as `fc` or `conv1`. 
     * `num_chunks` determines how the batch will be split and sent to the model itself (so `num_chunks=1` with four split points/four GPUs will have a naive MP where a single input gets passed between the four layer split points)
 </Tip>
 
