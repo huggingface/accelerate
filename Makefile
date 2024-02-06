@@ -1,6 +1,6 @@
 .PHONY: quality style test docs utils
 
-check_dirs := tests src examples benchmarks utils
+check_dirs := .
 
 # Check that source code meets quality standards
 
@@ -12,14 +12,14 @@ extra_quality_checks:
 
 # this target runs checks on all files
 quality:
-	black --required-version 23 --check $(check_dirs)
 	ruff $(check_dirs)
+	ruff format --check $(check_dirs)
 	doc-builder style src/accelerate docs/source --max_len 119 --check_only
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 style:
-	black --required-version 23 $(check_dirs)
 	ruff $(check_dirs) --fix
+	ruff format $(check_dirs)
 	doc-builder style src/accelerate docs/source --max_len 119
 	
 # Run tests for the library

@@ -407,6 +407,7 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
 
 class MyCustomTracker(GeneralTracker):
     "Basic tracker that writes to a csv for testing"
+
     _col_names = [
         "total_loss",
         "iteration",
