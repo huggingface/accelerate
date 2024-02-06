@@ -146,6 +146,7 @@ def prepare_pippy(
         split_points = []
         for i in range(1, num_chunks):
             split_points.append(next(k for k, v in device_map.items() if v == i))
+    model.hf_split_points = split_points
     stage = build_pipeline(model, split_points, example_args, example_kwargs, num_chunks)
     model._original_forward = model.forward
     model._original_call = model.__call__
