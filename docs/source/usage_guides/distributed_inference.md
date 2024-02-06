@@ -140,7 +140,7 @@ with distributed_state.split_between_processes(["a dog", "a cat", "a chicken"], 
 On the first GPU, the prompts will be `["a dog", "a cat"]`, and on the second GPU it will be `["a chicken", "a chicken"]`.
 Make sure to drop the final sample, as it will be a duplicate of the previous one.
 
-## A more memory-efficient version (experimental)
+## Memory-efficient pipeline parallelism (experimental)
 
 This next part will discuss using *pipeline parallelism*. This is an **experimental** API utilizing the [PiPPy library by PyTorch](https://github.com/pytorch/PiPPy/) as a native solution. 
 
