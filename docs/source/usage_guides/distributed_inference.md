@@ -172,7 +172,7 @@ Next you'll need to create some example inputs to use. These help PiPPy trace th
 
 <Tip warning={true}>
     However you make this example will determine the relative batch size that will be used/passed
-    through the model at a given time, so make sure to remember them!
+    through the model at a given time, so make sure to remember how many items there are!
 </Tip>
 
 ```{python}
