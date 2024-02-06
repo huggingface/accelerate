@@ -21,7 +21,14 @@ import torch
 import accelerate
 from accelerate import Accelerator
 from accelerate.big_modeling import dispatch_model
-from accelerate.test_utils import assert_exception, device_count, execute_subprocess_async, require_multi_device
+from accelerate.test_utils import (
+    assert_exception,
+    device_count,
+    execute_subprocess_async,
+    require_multi_device,
+    require_multi_gpu,
+    require_pippy,
+)
 from accelerate.utils import patch_environment
 
 
@@ -64,6 +71,23 @@ class MultiDeviceTester(unittest.TestCase):
         print(f"Found {device_count} devices, using 2 devices only")
         cmd = ["torchrun", f"--nproc_per_node={device_count}", self.data_loop_file_path]
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
+            execute_subprocess_async(cmd, env=os.environ.copy())
+
+    @require_multi_gpu
+    @require_pippy
+    def test_pippy(self):
+        """
+        Checks the integration with the pippy framework
+        """
+        print(f"Found {torch.cuda.device_count()} devices")
+        cmd = [
+            "accelerate",
+            "launch",
+            "--multi_gpu",
+            f"--num_processes={torch.cuda.device_count()}",
+            self.pippy_file_path,
+        ]
+        with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
 

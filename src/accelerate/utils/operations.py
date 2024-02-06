@@ -263,6 +263,23 @@ def find_batch_size(data):
     return data.shape[0]
 
 
+def ignorant_find_batch_size(data):
+    """
+    Same as [`utils.operations.find_batch_size`] except will ignore if `ValueError` and `TypeErrors` are raised
+
+    Args:
+        data (nested list/tuple/dictionary of `torch.Tensor`): The data from which to find the batch size.
+
+    Returns:
+        `int`: The batch size.
+    """
+    try:
+        return find_batch_size(data)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 def listify(data):
     """
     Recursively finds tensors in a nested list/tuple/dictionary and converts them to a list of numbers.
@@ -603,6 +620,46 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
 
     return recursively_apply(
         _pad_across_processes, tensor, error_on_other_type=True, dim=dim, pad_index=pad_index, pad_first=pad_first
+    )
+
+
+def pad_input_tensors(tensor, batch_size, num_processes, dim=0):
+    """
+    Takes a `tensor` of arbitrary size and pads it so that it can work given `num_processes` needed dimensions.
+
+    New tensors are just the last input repeated.
+
+    E.g.:
+      Tensor: ([3,4,4]) Num processes: 4 Expected result shape: ([4,4,4])
+
+    """
+
+    def _pad_input_tensors(tensor, batch_size, num_processes, dim=0):
+        remainder = batch_size // num_processes
+        last_inputs = batch_size - (remainder * num_processes)
+        if batch_size // num_processes == 0:
+            to_pad = num_processes - batch_size
+        else:
+            to_pad = num_processes - (batch_size // num_processes)
+        # In the rare case that `to_pad` is negative,
+        # we need to pad the last inputs - the found `to_pad`
+        if last_inputs > to_pad & to_pad < 1:
+            to_pad = last_inputs - to_pad
+        old_size = tensor.shape
+        new_size = list(old_size)
+        new_size[0] = batch_size + to_pad
+        new_tensor = tensor.new_zeros(tuple(new_size))
+        indices = tuple(slice(0, old_size[dim]) if i == dim else slice(None) for i in range(len(new_size)))
+        new_tensor[indices] = tensor
+        return new_tensor
+
+    return recursively_apply(
+        _pad_input_tensors,
+        tensor,
+        error_on_other_type=True,
+        batch_size=batch_size,
+        num_processes=num_processes,
+        dim=dim,
     )
 
 

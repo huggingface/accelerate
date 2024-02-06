@@ -13,6 +13,7 @@ from .testing import (
     require_multi_gpu,
     require_multi_xpu,
     require_non_cpu,
+    require_pippy,
     require_single_device,
     require_single_gpu,
     require_single_xpu,
