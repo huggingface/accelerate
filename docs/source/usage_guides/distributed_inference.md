@@ -18,15 +18,15 @@ rendered properly in your Markdown viewer.
 Distributed inference can fall into three brackets:
 
 1. Loading an entire model onto each GPU and sending chunks of a batch through each model at a time
-2. Load parts of a model onto each GPU and process a single input at one time
-3. Load parts of a model onto each GPU and use what is called scheduled Pipeline Parallelism to combine the two prior techniques. 
+2. Loading parts of a model onto each GPU and processing a single input at one time
+3. Loading parts of a model onto each GPU and using what is called scheduled Pipeline Parallelism to combine the two prior techniques. 
 
-We're going to go through the first and the last, showcasing how to do each as they are more realistic scenarios.
+We're going to go through the first and the last bracket, showcasing how to do each as they are more realistic scenarios.
 
 
-## Sending chunks of inputs automatically to each loaded model
+## Sending chunks of a batch automatically to each loaded model
 
-This is the most memory-intensive solution, as it requires each GPU keeps a full copy of the model in memory at a given time. 
+This is the most memory-intensive solution, as it requires each GPU to keep a full copy of the model in memory at a given time. 
 
 Normally when doing this, users send the model to a specific device to load it from the CPU, and then move each prompt to a different device. 
 
@@ -144,21 +144,21 @@ Make sure to drop the final sample, as it will be a duplicate of the previous on
 
 This next part will discuss using *pipeline parallelism*. This is an **experimental** API utilizing the [PiPPy library by PyTorch](https://github.com/pytorch/PiPPy/) as a native solution. 
 
-The general idea with pipeline parallism is say you have 4 GPUs, and a model big enough it can be *split* on four GPUs using `device_map="auto"`. What this version will do is you can send in 4 inputs at at time (for example here, any amount works) and each model chunk will work on an input, then recieve the next input after the prior chunk finished it making it *much* more efficient **and faster** than the prior version. Here's a visual taken from the PyTorch repository:
+The general idea with pipeline parallelism is: say you have 4 GPUs and a model big enough it can be *split* on four GPUs using `device_map="auto"`. With this method you can send in 4 inputs at a time (for example here, any amount works) and each model chunk will work on an input, then receive the next input once the prior chunk finished, making it *much* more efficient **and faster** than the method described earlier. Here's a visual taken from the PyTorch repository:
 
 ![PiPPy example](https://camo.githubusercontent.com/681d7f415d6142face9dd1b837bdb2e340e5e01a58c3a4b119dea6c0d99e2ce0/68747470733a2f2f692e696d6775722e636f6d2f657955633934372e706e67)
 
-To use this with Accelerate, we have created a [model zoo](https://github.com/muellerzr/pippy-device-map-playground/) showcasing a number of different models and situations to do so. In this tutorial we'll take GPT2 however across two gpus.
+To illustrate how you can use this with Accelerate, we have created a [model zoo example](https://github.com/muellerzr/pippy-device-map-playground/) showcasing a number of different models and situations. In this tutorial, we'll show this method for GPT2 across two GPUs.
 
-Before anything, please make sure you have the latest pippy installed by performing:
+Before you proceed, please make sure you have the latest pippy installed by running the following:
 
 ```bash
 pip install torchpippy
 ```
 
-We require at least version 0.2.0, please perform `pip show torchpippy` to check this!
+We require at least version 0.2.0. To confirm that you have the correct version, run `pip show torchpippy`.
 
-First we need to create the model on the CPU:
+Start by creating the model on the CPU:
 
 ```{python}
 from transformers import GPT2ForSequenceClassification, GPT2Config
@@ -168,7 +168,7 @@ model = GPT2ForSequenceClassification(config)
 model.eval()
 ```
 
-Next we need to create some example inputs to use. These help PiPPy trace the model.
+Next you'll need to create some example inputs to use. These help PiPPy trace the model.
 
 <Tip warning={true}>
     However you make this example will determine the relative batch size that will be used/passed
@@ -185,7 +185,7 @@ input = torch.randint(
     requires_grad=False,
 )
 ```
-Next we need to actually perform the tracing and get the model ready. To do so you simply use the [`inference.prepare_pippy`] function and it will fully wrap the model for pipeline parallism automatically:
+Next we need to actually perform the tracing and get the model ready. To do so, use the [`inference.prepare_pippy`] function and it will fully wrap the model for pipeline parallelism automatically:
 
 ```{python}
 from accelerate.inference import prepare_pippy
@@ -194,15 +194,17 @@ model = prepare_pippy(model, example_args=(input,))
 ```
 
 <Tip>
+
     There are a variety of parameters you can pass through to `prepare_pippy`:
     * `split_points` will let you determine where to split the model at. By default we use wherever `device_map="auto" declares
-    * `num_chunks` can be used to determine how the batch will be split and sent to the model itself (so `num_chunks=1` with four split points/four GPUs would have a naive MP where a single input gets passed between the four layer split points)
+    * `num_chunks` determines how the batch will be split and sent to the model itself (so `num_chunks=1` with four split points/four GPUs will have a naive MP where a single input gets passed between the four layer split points)
 </Tip>
 
-From here all that's left is to actually perform the distributed inference!
+From here, all that's left is to actually perform the distributed inference!
 
 <Tip warning={true}>
-    When passing in inputs, while using `kwargs` are supported currently those are even *more* experimental, so it's highly recommended to just simply pass inputs in as a tuple of arguments.
+
+When passing inputs, we highly recommend to pass them in as a tuple of arguments. Using `kwargs` is supported, however, this approach is experimental.
 </Tip>
 
 ```{python}
@@ -211,7 +213,7 @@ with torch.no_grad():
     output = model(*args)
 ```
 
-Afterwards all the data will be on the last GPU, which you can use the [`PartialState`] to find and extract:
+When finished, all the data will be on the last GPU, which you can use the [`PartialState`] to find and extract:
 
 ```{python}
 from accelerate import PartialState
