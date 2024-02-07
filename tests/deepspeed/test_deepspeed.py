@@ -623,31 +623,22 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             model, _, train_dataloader, eval_dataloader, _ = accelerator.prepare(
                 model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
             )
-            self.assertEqual(accelerator.deepspeed_config["train_micro_batch_size_per_gpu"], 16)
-            self.assertEqual(accelerator.deepspeed_config["train_batch_size"], 16)
+            config = accelerator.deepspeed_config
+            assert config["train_micro_batch_size_per_gpu"] == 16
+            assert config["train_batch_size"] == 16
 
-            self.assertEqual(accelerator.deepspeed_config["optimizer"]["params"]["lr"], 5e-5)
-            self.assertEqual(accelerator.deepspeed_config["optimizer"]["params"]["weight_decay"], 1e-4)
+            assert config["optimizer"]["params"]["lr"] == 5e-05
+            assert config["optimizer"]["params"]["weight_decay"] == 1e-4
 
-            self.assertEqual(accelerator.deepspeed_config["scheduler"]["params"]["warmup_min_lr"], 0.0)
-            self.assertEqual(accelerator.deepspeed_config["scheduler"]["params"]["warmup_max_lr"], 5e-5)
-            self.assertEqual(accelerator.deepspeed_config["scheduler"]["params"]["warmup_num_steps"], 10)
+            assert config["scheduler"]["params"]["warmup_min_lr"] == 0.0
+            assert config["scheduler"]["params"]["warmup_max_lr"] == 5e-05
+            assert config["scheduler"]["params"]["warmup_num_steps"] == 10
 
-            self.assertEqual(accelerator.deepspeed_config["gradient_clipping"], 1.0)
-            self.assertEqual(
-                accelerator.deepspeed_config["zero_optimization"]["reduce_bucket_size"], hidden_size * hidden_size
-            )
-            self.assertEqual(
-                accelerator.deepspeed_config["zero_optimization"]["stage3_prefetch_bucket_size"],
-                0.9 * hidden_size * hidden_size,
-            )
-            self.assertEqual(
-                accelerator.deepspeed_config["zero_optimization"]["stage3_param_persistence_threshold"],
-                10 * hidden_size,
-            )
-            self.assertFalse(
-                accelerator.deepspeed_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
-            )
+            assert config["gradient_clipping"] == 1.0
+            assert config["zero_optimization"]["reduce_bucket_size"] == (hidden_size * hidden_size)
+            assert config["zero_optimization"]["stage3_prefetch_bucket_size"] == ((0.9 * hidden_size) * hidden_size)
+            assert config["zero_optimization"]["stage3_param_persistence_threshold"] == (10 * hidden_size)
+            assert not config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
 
     @parameterized.expand(model_types, name_func=parameterized_custom_name_func)
     def test_autofill_comm_buffers_dsconfig(self, model_type):
@@ -701,17 +692,10 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
                 )
-                self.assertEqual(
-                    accelerator.deepspeed_config["zero_optimization"]["reduce_bucket_size"], hidden_size * hidden_size
-                )
-                self.assertEqual(
-                    accelerator.deepspeed_config["zero_optimization"]["stage3_prefetch_bucket_size"],
-                    0.9 * hidden_size * hidden_size,
-                )
-                self.assertEqual(
-                    accelerator.deepspeed_config["zero_optimization"]["stage3_param_persistence_threshold"],
-                    10 * hidden_size,
-                )
+                zero_opt = accelerator.deepspeed_config["zero_optimization"]
+                assert zero_opt["reduce_bucket_size"] == (hidden_size * hidden_size)
+                assert zero_opt["stage3_prefetch_bucket_size"] == (0.9 * hidden_size) * hidden_size
+                assert zero_opt["stage3_param_persistence_threshold"] == (10 * hidden_size)
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
     def test_autofill_dsconfig_from_ds_plugin(self, dtype):
@@ -741,18 +725,14 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=dtype)
-            deepspeed_plugin = accelerator.state.deepspeed_plugin
-            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_clipping"], 1.0)
-            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 2)
-            self.assertEqual(deepspeed_plugin.deepspeed_config["zero_optimization"]["stage"], 2)
-            self.assertEqual(
-                deepspeed_plugin.deepspeed_config["zero_optimization"]["offload_optimizer"]["device"], "cpu"
-            )
-            self.assertEqual(deepspeed_plugin.deepspeed_config["zero_optimization"]["offload_param"]["device"], "cpu")
-            self.assertTrue(
-                deepspeed_plugin.deepspeed_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
-            )
-            self.assertTrue(deepspeed_plugin.deepspeed_config[dtype]["enabled"])
+            config = accelerator.state.deepspeed_plugin.deepspeed_config
+            assert config["gradient_clipping"] == 1.0
+            assert config["gradient_accumulation_steps"] == 2
+            assert config["zero_optimization"]["stage"] == 2
+            assert config["zero_optimization"]["offload_optimizer"]["device"] == "cpu"
+            assert config["zero_optimization"]["offload_param"]["device"] == "cpu"
+            assert config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
+            assert config[dtype]["enabled"]
 
         AcceleratorState._reset_state(True)
         diff_dtype = "bf16" if dtype == "fp16" else "fp16"
