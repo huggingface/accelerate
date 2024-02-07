@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import inspect
-import io
 import itertools
 import json
 import os
@@ -118,9 +117,9 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
 
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
-        with io.open(self.ds_config_file[ZERO2], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO2], encoding="utf-8") as f:
             config_zero2 = json.load(f)
-        with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
             config_zero3 = json.load(f)
             # The following setting slows things down, so don't enable it by default unless needed by a test.
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
@@ -924,7 +923,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             cmd_stage.extend([f"--zero_stage={stage}"])
             cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
             if self.zero3_offload_config:
-                with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
                     ds_config = json.load(f)
                     del ds_config["bf16"]
                     del ds_config["optimizer"]["params"]["torch_adam"]
@@ -968,7 +967,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             cmd_stage.extend([f"--zero_stage={stage}"])
             cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
             if self.zero3_offload_config:
-                with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
                     ds_config = json.load(f)
                     del ds_config["bf16"]
                     del ds_config["optimizer"]["params"]["torch_adam"]
@@ -1039,7 +1038,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                     ]
                 )
                 if "cpu_offload" in spec:
-                    with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                    with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
                         ds_config = json.load(f)
                         del ds_config["bf16"]
                         del ds_config["fp16"]

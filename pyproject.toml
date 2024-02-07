@@ -1,5 +1,6 @@
 [tool.ruff]
 line-length = 119
+target-version = "py38"
 
 [tool.ruff.lint]
 ignore-init-module-imports = true
@@ -10,11 +11,13 @@ extend-select = [
     "F", # PEP8 formatting
     "I", # Import sorting
     "W", # PEP8 warnings
+    "UP", # Pyupgrade
 ]
 ignore = [
     "E501", # Line length (handled by ruff-format)
     "E741", # Ambiguous variable name
     "W605", # Invalid escape sequence
+    "UP007", # X | Y type annotations
 ]
 
 [tool.ruff.lint.per-file-ignores]

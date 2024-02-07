@@ -1548,7 +1548,7 @@ def load_checkpoint_in_model(
 
     if index_filename is not None:
         checkpoint_folder = os.path.split(index_filename)[0]
-        with open(index_filename, "r") as f:
+        with open(index_filename) as f:
             index = json.loads(f.read())
 
         if "weight_map" in index:

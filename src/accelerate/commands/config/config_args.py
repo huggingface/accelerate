@@ -51,7 +51,7 @@ def load_config_from_file(config_file):
             )
     else:
         config_file = default_config_file
-    with open(config_file, "r", encoding="utf-8") as f:
+    with open(config_file, encoding="utf-8") as f:
         if config_file.endswith(".json"):
             if (
                 json.load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
@@ -94,7 +94,7 @@ class BaseConfig:
     @classmethod
     def from_json_file(cls, json_file=None):
         json_file = default_json_config_file if json_file is None else json_file
-        with open(json_file, "r", encoding="utf-8") as f:
+        with open(json_file, encoding="utf-8") as f:
             config_dict = json.load(f)
         if "compute_environment" not in config_dict:
             config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE
@@ -126,7 +126,7 @@ class BaseConfig:
     @classmethod
     def from_yaml_file(cls, yaml_file=None):
         yaml_file = default_yaml_config_file if yaml_file is None else yaml_file
-        with open(yaml_file, "r", encoding="utf-8") as f:
+        with open(yaml_file, encoding="utf-8") as f:
             config_dict = yaml.safe_load(f)
         if "compute_environment" not in config_dict:
             config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE

@@ -417,9 +417,7 @@ def prepare_sagemager_args_inputs(
         os.environ["AWS_ACCESS_KEY_ID"] = args.aws_access_key_id
         os.environ["AWS_SECRET_ACCESS_KEY"] = args.aws_secret_access_key
     else:
-        raise EnvironmentError(
-            "You need to provide an aws_access_key_id and aws_secret_access_key when not using aws_profile"
-        )
+        raise OSError("You need to provide an aws_access_key_id and aws_secret_access_key when not using aws_profile")
 
     # extract needed arguments
     source_dir = os.path.dirname(args.training_script)
