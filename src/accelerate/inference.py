@@ -6,6 +6,7 @@ from .state import PartialState
 from .utils import (
     calculate_maximum_sizes,
     convert_bytes,
+    gather_object,
     ignorant_find_batch_size,
     infer_auto_device_map,
     is_pippy_available,
@@ -82,7 +83,7 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     return stage
 
 
-def pippy_forward(forward, num_chunks, *args, **kwargs):
+def pippy_forward(forward, num_chunks, send_output_to_cpu, *args, **kwargs):
     state = PartialState()
     output = None
 
@@ -101,6 +102,10 @@ def pippy_forward(forward, num_chunks, *args, **kwargs):
         output = forward()
     else:
         forward()
+    if send_output_to_cpu:
+        output = gather_object([output if output is not None else object()])
+        # The outputs themselves are on the last GPU, so they will be the last item
+        output = send_to_device(output[-1], "cpu")
     return output
 
 
@@ -111,6 +116,7 @@ def prepare_pippy(
     example_args=(),
     example_kwargs: Optional[Dict[str, Any]] = None,
     num_chunks=None,
+    send_output_to_cpu=True,
 ):
     """
     Wraps `model` for PipelineParallelism
@@ -132,6 +138,9 @@ def prepare_pippy(
         num_chunks (`int`):
             The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
             this can be tuned and played with. In general one should have num_chunks >= num_gpus.
+        send_output_to_cpu (`bool`, defaults to `True`):
+            Whether to broadcast the model output across processes and send it to the CPU afterwards or to leave the
+            model output on the last device.
     """
     if not is_pippy_available():
         raise ImportError(
@@ -156,7 +165,7 @@ def prepare_pippy(
     model.hf_split_points = split_points
 
     def forward(*args, **kwargs):
-        return pippy_forward(stage.forward, num_chunks, *args, **kwargs)
+        return pippy_forward(stage.forward, num_chunks, send_output_to_cpu, *args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
     # Note: creates an infinite recursion loop with `generate`
