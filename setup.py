@@ -19,7 +19,7 @@ extras = {}
 extras["quality"] = [
     "black ~= 23.1",  # hf-doc-builder has a hidden dependency on `black`
     "hf-doc-builder >= 0.3.0",
-    "ruff ~= 0.1.15",
+    "ruff ~= 0.2.1",
 ]
 extras["docs"] = []
 extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
