@@ -119,10 +119,7 @@ class TpuConfigTester(unittest.TestCase):
             + ["--command", self.command, "--tpu_zone", self.tpu_zone, "--tpu_name", self.tpu_name, "--debug"],
             return_stdout=True,
         )
-        self.assertIn(
-            f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all",
-            output,
-        )
+        assert f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all" in output
 
     def test_base_backward_compatibility(self):
         output = run_command(
@@ -140,18 +137,15 @@ class TpuConfigTester(unittest.TestCase):
             ],
             return_stdout=True,
         )
-        self.assertIn(
-            f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all",
-            output,
-        )
+        assert f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all" in output
 
     def test_with_config_file(self):
         output = run_command(
             self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--debug"], return_stdout=True
         )
-        self.assertIn(
-            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all',
-            output,
+        assert (
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all'
+            in output
         )
 
     def test_with_config_file_and_command(self):
@@ -159,10 +153,7 @@ class TpuConfigTester(unittest.TestCase):
             self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--command", self.command, "--debug"],
             return_stdout=True,
         )
-        self.assertIn(
-            f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all",
-            output,
-        )
+        assert f"{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls --worker all" in output
 
     def test_with_config_file_and_multiple_command(self):
         output = run_command(
@@ -178,9 +169,9 @@ class TpuConfigTester(unittest.TestCase):
             ],
             return_stdout=True,
         )
-        self.assertIn(
-            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls; echo "Hello World" --worker all',
-            output,
+        assert (
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; ls; echo "Hello World" --worker all'
+            in output
         )
 
     def test_with_config_file_and_command_file(self):
@@ -189,9 +180,9 @@ class TpuConfigTester(unittest.TestCase):
             + ["--config_file", "tests/test_configs/latest.yaml", "--command_file", self.command_file, "--debug"],
             return_stdout=True,
         )
-        self.assertIn(
-            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all',
-            output,
+        assert (
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all'
+            in output
         )
 
     def test_with_config_file_and_command_file_backward_compatibility(self):
@@ -210,9 +201,9 @@ class TpuConfigTester(unittest.TestCase):
             ],
             return_stdout=True,
         )
-        self.assertIn(
-            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all',
-            output,
+        assert (
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; echo "hello world"; echo "this is a second command" --worker all'
+            in output
         )
 
     def test_accelerate_install(self):
@@ -220,9 +211,9 @@ class TpuConfigTester(unittest.TestCase):
             self.cmd + ["--config_file", "tests/test_configs/latest.yaml", "--install_accelerate", "--debug"],
             return_stdout=True,
         )
-        self.assertIn(
-            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate -U; echo "hello world"; echo "this is a second command" --worker all',
-            output,
+        assert (
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate -U; echo "hello world"; echo "this is a second command" --worker all'
+            in output
         )
 
     def test_accelerate_install_version(self):
@@ -238,9 +229,9 @@ class TpuConfigTester(unittest.TestCase):
             ],
             return_stdout=True,
         )
-        self.assertIn(
-            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate==12.0.0; echo "hello world"; echo "this is a second command" --worker all',
-            output,
+        assert (
+            f'{self.gcloud} test-tpu --zone us-central1-a --command {self.base_output}; pip install accelerate==12.0.0; echo "hello world"; echo "this is a second command" --worker all'
+            in output
         )
 
 
@@ -304,7 +295,7 @@ class ModelEstimatorTester(unittest.TestCase):
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 89075712, 433249280
         # Check that full precision -> int4 is calculating correctly
-        self.assertEqual(len(output), 2, f"Output was missing a precision, expected 2 but received {len(output)}")
+        assert len(output) == 2, f"Output was missing a precision, expected 2 but received {len(output)}"
 
         for i, factor in enumerate([1, 2]):
             precision = 32 // factor
@@ -313,23 +304,17 @@ class ModelEstimatorTester(unittest.TestCase):
             total_size_estimate = total_size / factor
             total_training_size_estimate = total_size_estimate * 4
 
-            self.assertEqual(precision_str, output[i][0], f"Output is missing precision `{precision_str}`")
-            self.assertEqual(
-                largest_layer_estimate,
-                output[i][1],
-                f"Calculation for largest layer size in `{precision_str}` is incorrect.",
-            )
+            assert precision_str == output[i][0], f"Output is missing precision `{precision_str}`"
+            assert (
+                largest_layer_estimate == output[i][1]
+            ), f"Calculation for largest layer size in `{precision_str}` is incorrect."
 
-            self.assertEqual(
-                total_size_estimate,
-                output[i][2],
-                msg=f"Calculation for total size in `{precision_str}` is incorrect.",
-            )
-            self.assertEqual(
-                total_training_size_estimate,
-                output[i][3],
-                msg=f"Calculation for total training size in `{precision_str}` is incorrect.",
-            )
+            assert (
+                total_size_estimate == output[i][2]
+            ), f"Calculation for total size in `{precision_str}` is incorrect."
+            assert (
+                total_training_size_estimate == output[i][3]
+            ), f"Calculation for total training size in `{precision_str}` is incorrect."
 
     @require_transformers
     def test_transformers_model(self):
@@ -337,16 +322,12 @@ class ModelEstimatorTester(unittest.TestCase):
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 89075712, 433249280
-        self.assertEqual(
-            largest_layer,
-            output[0][1],
-            f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}",
-        )
-        self.assertEqual(
-            total_size,
-            output[0][2],
-            f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}",
-        )
+        assert (
+            largest_layer == output[0][1]
+        ), f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
+        assert (
+            total_size == output[0][2]
+        ), f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"
 
     @require_transformers
     def test_no_split_modules(self):
@@ -354,11 +335,9 @@ class ModelEstimatorTester(unittest.TestCase):
         args = self.parser.parse_args(["HuggingFaceM4/idefics-80b-instruct", "--dtypes", "float32"])
         output = gather_data(args)
         # without factoring in `no_split` modules, the largest layer is 721420288 bytes
-        self.assertNotEqual(
-            output[0][1], 721420288, "Largest layer calculation incorrect, did not factor in `no_split` modules."
-        )
+        assert output[0][1] != 721420288, "Largest layer calculation incorrect, did not factor in `no_split` modules."
         # the real answer is 3240165632 bytes
-        self.assertEqual(output[0][1], 3240165632)
+        assert output[0][1] == 3240165632
 
     @require_timm
     def test_timm_model(self):
@@ -366,13 +345,9 @@ class ModelEstimatorTester(unittest.TestCase):
         output = gather_data(args)
         # The largest layer and total size of the model in bytes
         largest_layer, total_size = 9437184, 102441032
-        self.assertEqual(
-            largest_layer,
-            output[0][1],
-            f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}",
-        )
-        self.assertEqual(
-            total_size,
-            output[0][2],
-            f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}",
-        )
+        assert (
+            largest_layer == output[0][1]
+        ), f"Calculation for largest layer size in `fp32` is incorrect, expected {largest_layer} but received {output[0][1]}"
+        assert (
+            total_size == output[0][2]
+        ), f"Calculation for total size in `fp32` is incorrect, expected {total_size} but received {output[0][2]}"

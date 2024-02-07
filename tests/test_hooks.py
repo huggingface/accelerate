@@ -58,16 +58,16 @@ class HooksModelTester(unittest.TestCase):
         test_hook = ModelHook()
 
         add_hook_to_module(test_model, test_hook)
-        self.assertEqual(test_model._hf_hook, test_hook)
-        self.assertTrue(hasattr(test_model, "_old_forward"))
+        assert test_model._hf_hook == test_hook
+        assert hasattr(test_model, "_old_forward")
 
         # Check adding the hook did not change the name or the signature
-        self.assertEqual(test_model.forward.__name__, "forward")
+        assert test_model.forward.__name__ == "forward"
         self.assertListEqual(list(inspect.signature(test_model.forward).parameters), ["x"])
 
         remove_hook_from_module(test_model)
-        self.assertFalse(hasattr(test_model, "_hf_hook"))
-        self.assertFalse(hasattr(test_model, "_old_forward"))
+        assert not hasattr(test_model, "_hf_hook")
+        assert not hasattr(test_model, "_old_forward")
 
     def test_append_and_remove_hooks(self):
         test_model = ModelForTest()
@@ -76,17 +76,17 @@ class HooksModelTester(unittest.TestCase):
         add_hook_to_module(test_model, test_hook)
         add_hook_to_module(test_model, test_hook, append=True)
 
-        self.assertEqual(isinstance(test_model._hf_hook, SequentialHook), True)
-        self.assertEqual(len(test_model._hf_hook.hooks), 2)
-        self.assertTrue(hasattr(test_model, "_old_forward"))
+        assert isinstance(test_model._hf_hook, SequentialHook) is True
+        assert len(test_model._hf_hook.hooks) == 2
+        assert hasattr(test_model, "_old_forward")
 
         # Check adding the hook did not change the name or the signature
-        self.assertEqual(test_model.forward.__name__, "forward")
+        assert test_model.forward.__name__ == "forward"
         self.assertListEqual(list(inspect.signature(test_model.forward).parameters), ["x"])
 
         remove_hook_from_module(test_model)
-        self.assertFalse(hasattr(test_model, "_hf_hook"))
-        self.assertFalse(hasattr(test_model, "_old_forward"))
+        assert not hasattr(test_model, "_hf_hook")
+        assert not hasattr(test_model, "_old_forward")
 
     def test_pre_forward_hook_is_executed(self):
         test_model = ModelForTest()
@@ -97,13 +97,13 @@ class HooksModelTester(unittest.TestCase):
         test_hook = PreForwardHook()
         add_hook_to_module(test_model, test_hook)
         output1 = test_model(x)
-        self.assertTrue(torch.allclose(output1, expected, atol=1e-5))
+        assert torch.allclose(output1, expected, atol=1e-5)
 
         # Attaching a hook to a model when it already has one replaces, does not chain
         test_hook = PreForwardHook()
         add_hook_to_module(test_model, test_hook)
         output1 = test_model(x)
-        self.assertTrue(torch.allclose(output1, expected, atol=1e-5))
+        assert torch.allclose(output1, expected, atol=1e-5)
 
         # You need to use the sequential hook to chain two or more hooks
         test_hook = SequentialHook(PreForwardHook(), PreForwardHook())
@@ -120,13 +120,13 @@ class HooksModelTester(unittest.TestCase):
         test_hook = PostForwardHook()
         add_hook_to_module(test_model, test_hook)
         output1 = test_model(x)
-        self.assertTrue(torch.allclose(output1, output + 1, atol=1e-5))
+        assert torch.allclose(output1, (output + 1), atol=1e-5)
 
         # Attaching a hook to a model when it already has one replaces, does not chain
         test_hook = PostForwardHook()
         add_hook_to_module(test_model, test_hook)
         output1 = test_model(x)
-        self.assertTrue(torch.allclose(output1, output + 1, atol=1e-5))
+        assert torch.allclose(output1, (output + 1), atol=1e-5)
 
         # You need to use the sequential hook to chain two or more hooks
         test_hook = SequentialHook(PostForwardHook(), PostForwardHook())
@@ -143,49 +143,49 @@ class HooksModelTester(unittest.TestCase):
         test_hook = PostForwardHook()
         add_hook_to_module(test_model, test_hook)
         output1 = test_model(x)
-        self.assertTrue(torch.allclose(output1, output + 1))
-        self.assertTrue(output1.requires_grad)
+        assert torch.allclose(output1, (output + 1))
+        assert output1.requires_grad
 
         test_hook.no_grad = True
         output1 = test_model(x)
-        self.assertFalse(output1.requires_grad)
+        assert not output1.requires_grad
 
     @require_multi_gpu
     def test_align_devices_as_model_parallelism(self):
         model = ModelForTest()
         # Everything is on CPU
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
         # This will move each submodule on different devices
         add_hook_to_module(model.linear1, AlignDevicesHook(execution_device=0))
         add_hook_to_module(model.batchnorm, AlignDevicesHook(execution_device=0))
         add_hook_to_module(model.linear2, AlignDevicesHook(execution_device=1))
 
-        self.assertEqual(model.linear1.weight.device, torch.device(0))
-        self.assertEqual(model.batchnorm.weight.device, torch.device(0))
-        self.assertEqual(model.batchnorm.running_mean.device, torch.device(0))
-        self.assertEqual(model.linear2.weight.device, torch.device(1))
+        assert model.linear1.weight.device == torch.device(0)
+        assert model.batchnorm.weight.device == torch.device(0)
+        assert model.batchnorm.running_mean.device == torch.device(0)
+        assert model.linear2.weight.device == torch.device(1)
 
         # We can still make a forward pass. The input does not need to be on any particular device
         x = torch.randn(2, 3)
         output = model(x)
-        self.assertEqual(output.device, torch.device(1))
+        assert output.device == torch.device(1)
 
         # We can add a general hook to put back output on same device as input.
         add_hook_to_module(model, AlignDevicesHook(io_same_device=True))
         x = torch.randn(2, 3).to(0)
         output = model(x)
-        self.assertEqual(output.device, torch.device(0))
+        assert output.device == torch.device(0)
 
     def test_align_devices_as_cpu_offload(self):
         model = ModelForTest()
 
         # Everything is on CPU
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
         # This will move each submodule on different devices
         hook_kwargs = {"execution_device": 0 if torch.cuda.is_available() else "cpu", "offload": True}
@@ -195,24 +195,24 @@ class HooksModelTester(unittest.TestCase):
         add_hook_to_module(model.linear2, AlignDevicesHook(**hook_kwargs))
 
         # Parameters have been offloaded, so on the meta device
-        self.assertEqual(model.linear1.weight.device, torch.device("meta"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("meta"))
-        self.assertEqual(model.linear2.weight.device, torch.device("meta"))
+        assert model.linear1.weight.device == torch.device("meta")
+        assert model.batchnorm.weight.device == torch.device("meta")
+        assert model.linear2.weight.device == torch.device("meta")
         # Buffers are not included in the offload by default, so are on the execution device
         device = torch.device(hook_kwargs["execution_device"])
-        self.assertEqual(model.batchnorm.running_mean.device, device)
+        assert model.batchnorm.running_mean.device == device
 
         x = torch.randn(2, 3)
         output = model(x)
-        self.assertEqual(output.device, device)
+        assert output.device == device
 
         # Removing hooks loads back the weights in the model.
         remove_hook_from_module(model.linear1)
         remove_hook_from_module(model.batchnorm)
         remove_hook_from_module(model.linear2)
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
         # Now test with buffers included in the offload
         hook_kwargs = {
@@ -226,79 +226,79 @@ class HooksModelTester(unittest.TestCase):
         add_hook_to_module(model.linear2, AlignDevicesHook(**hook_kwargs))
 
         # Parameters have been offloaded, so on the meta device, buffers included
-        self.assertEqual(model.linear1.weight.device, torch.device("meta"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("meta"))
-        self.assertEqual(model.linear2.weight.device, torch.device("meta"))
-        self.assertEqual(model.batchnorm.running_mean.device, torch.device("meta"))
+        assert model.linear1.weight.device == torch.device("meta")
+        assert model.batchnorm.weight.device == torch.device("meta")
+        assert model.linear2.weight.device == torch.device("meta")
+        assert model.batchnorm.running_mean.device == torch.device("meta")
 
         x = torch.randn(2, 3)
         output = model(x)
-        self.assertEqual(output.device, device)
+        assert output.device == device
 
         # Removing hooks loads back the weights in the model.
         remove_hook_from_module(model.linear1)
         remove_hook_from_module(model.batchnorm)
         remove_hook_from_module(model.linear2)
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
     def test_attach_align_device_hook_as_cpu_offload(self):
         model = ModelForTest()
 
         # Everything is on CPU
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
         # This will move each submodule on different devices
         execution_device = 0 if torch.cuda.is_available() else "cpu"
         attach_align_device_hook(model, execution_device=execution_device, offload=True)
 
         # Parameters have been offloaded, so on the meta device
-        self.assertEqual(model.linear1.weight.device, torch.device("meta"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("meta"))
-        self.assertEqual(model.linear2.weight.device, torch.device("meta"))
+        assert model.linear1.weight.device == torch.device("meta")
+        assert model.batchnorm.weight.device == torch.device("meta")
+        assert model.linear2.weight.device == torch.device("meta")
         # Buffers are not included in the offload by default, so are on the execution device
         device = torch.device(execution_device)
-        self.assertEqual(model.batchnorm.running_mean.device, device)
+        assert model.batchnorm.running_mean.device == device
 
         x = torch.randn(2, 3)
         output = model(x)
-        self.assertEqual(output.device, device)
+        assert output.device == device
 
         # Removing hooks loads back the weights in the model.
         remove_hook_from_submodules(model)
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
         # Now test with buffers included in the offload
         attach_align_device_hook(model, execution_device=execution_device, offload=True, offload_buffers=True)
 
         # Parameters have been offloaded, so on the meta device, buffers included
-        self.assertEqual(model.linear1.weight.device, torch.device("meta"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("meta"))
-        self.assertEqual(model.linear2.weight.device, torch.device("meta"))
-        self.assertEqual(model.batchnorm.running_mean.device, torch.device("meta"))
+        assert model.linear1.weight.device == torch.device("meta")
+        assert model.batchnorm.weight.device == torch.device("meta")
+        assert model.linear2.weight.device == torch.device("meta")
+        assert model.batchnorm.running_mean.device == torch.device("meta")
 
         x = torch.randn(2, 3)
         output = model(x)
-        self.assertEqual(output.device, device)
+        assert output.device == device
 
         # Removing hooks loads back the weights in the model.
         remove_hook_from_submodules(model)
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
     def test_attach_align_device_hook_as_cpu_offload_with_weight_map(self):
         model = ModelForTest()
 
         # Everything is on CPU
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
         # This will move each submodule on different devices
         execution_device = 0 if torch.cuda.is_available() else "cpu"
@@ -307,22 +307,22 @@ class HooksModelTester(unittest.TestCase):
         )
 
         # Parameters have been offloaded, so on the meta device
-        self.assertEqual(model.linear1.weight.device, torch.device("meta"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("meta"))
-        self.assertEqual(model.linear2.weight.device, torch.device("meta"))
+        assert model.linear1.weight.device == torch.device("meta")
+        assert model.batchnorm.weight.device == torch.device("meta")
+        assert model.linear2.weight.device == torch.device("meta")
         # Buffers are not included in the offload by default, so are on the execution device
         device = torch.device(execution_device)
-        self.assertEqual(model.batchnorm.running_mean.device, device)
+        assert model.batchnorm.running_mean.device == device
 
         x = torch.randn(2, 3)
         output = model(x)
-        self.assertEqual(output.device, device)
+        assert output.device == device
 
         # Removing hooks loads back the weights in the model.
         remove_hook_from_submodules(model)
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
         # Now test with buffers included in the offload
         attach_align_device_hook(
@@ -334,20 +334,20 @@ class HooksModelTester(unittest.TestCase):
         )
 
         # Parameters have been offloaded, so on the meta device, buffers included
-        self.assertEqual(model.linear1.weight.device, torch.device("meta"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("meta"))
-        self.assertEqual(model.linear2.weight.device, torch.device("meta"))
-        self.assertEqual(model.batchnorm.running_mean.device, torch.device("meta"))
+        assert model.linear1.weight.device == torch.device("meta")
+        assert model.batchnorm.weight.device == torch.device("meta")
+        assert model.linear2.weight.device == torch.device("meta")
+        assert model.batchnorm.running_mean.device == torch.device("meta")
 
         x = torch.randn(2, 3)
         output = model(x)
-        self.assertEqual(output.device, device)
+        assert output.device == device
 
         # Removing hooks loads back the weights in the model.
         remove_hook_from_submodules(model)
-        self.assertEqual(model.linear1.weight.device, torch.device("cpu"))
-        self.assertEqual(model.batchnorm.weight.device, torch.device("cpu"))
-        self.assertEqual(model.linear2.weight.device, torch.device("cpu"))
+        assert model.linear1.weight.device == torch.device("cpu")
+        assert model.batchnorm.weight.device == torch.device("cpu")
+        assert model.linear2.weight.device == torch.device("cpu")
 
     def test_add_remove_hook_fx_graph_module(self):
         with torch.no_grad():
@@ -361,7 +361,7 @@ class HooksModelTester(unittest.TestCase):
 
             output2 = graph_model(x)
 
-            self.assertTrue(torch.allclose(output1, output2))
+            assert torch.allclose(output1, output2)
 
             add_hook_to_module(graph_model, test_hook)
             remove_hook_from_module(graph_model, recurse=True)
@@ -374,7 +374,7 @@ class HooksModelTester(unittest.TestCase):
             for node in graph_model.graph.nodes:
                 if node.name == "linear2":
                     linear2_node = node
-            self.assertTrue(linear2_node is not None)
+            assert linear2_node is not None
 
             graph_model.graph.inserting_after(linear2_node)
             new_node = graph_model.graph.create_node(
@@ -385,7 +385,7 @@ class HooksModelTester(unittest.TestCase):
             for node in graph_model.graph.nodes:
                 if node.name == "output":
                     output_node = node
-            self.assertTrue(output_node is not None)
+            assert output_node is not None
 
             output_node.replace_input_with(linear2_node, new_node)
 
@@ -395,4 +395,4 @@ class HooksModelTester(unittest.TestCase):
             output3 = graph_model(x)
 
             # Now the output is expected to be different since we modified the graph.
-            self.assertFalse(torch.allclose(output1, output3))
+            assert not torch.allclose(output1, output3)

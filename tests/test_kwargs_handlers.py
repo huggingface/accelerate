@@ -57,13 +57,13 @@ class KwargsHandlerTester(unittest.TestCase):
         scaler = accelerator.scaler
 
         # Check the kwargs have been applied
-        self.assertEqual(scaler._init_scale, 1024.0)
-        self.assertEqual(scaler._growth_factor, 2.0)
+        assert scaler._init_scale == 1024.0
+        assert scaler._growth_factor == 2.0
 
         # Check the other values are at the default
-        self.assertEqual(scaler._backoff_factor, 0.5)
-        self.assertEqual(scaler._growth_interval, 2000)
-        self.assertEqual(scaler._enabled, True)
+        assert scaler._backoff_factor == 0.5
+        assert scaler._growth_interval == 2000
+        assert scaler._enabled is True
 
     @require_multi_device
     def test_ddp_kwargs(self):
@@ -103,7 +103,7 @@ class KwargsHandlerTester(unittest.TestCase):
             os.environ[prefix + "MODE"] = "reduce-overhead"
 
             dynamo_plugin_kwargs = TorchDynamoPlugin().to_kwargs()
-            self.assertEqual(dynamo_plugin_kwargs, {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"})
+            assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
 
 
 if __name__ == "__main__":

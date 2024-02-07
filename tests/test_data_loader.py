@@ -301,8 +301,8 @@ class DataLoaderTester(unittest.TestCase):
         batch_sampler = [[0, 1, 2], [3, 4], [5, 6, 7, 8], [9, 10, 11], [12, 13]]
         batch_sampler_shards = [BatchSamplerShard(batch_sampler, 2, i, even_batches=False) for i in range(2)]
 
-        self.assertEqual(len(batch_sampler_shards[0]), 3)
-        self.assertEqual(len(batch_sampler_shards[1]), 2)
+        assert len(batch_sampler_shards[0]) == 3
+        assert len(batch_sampler_shards[1]) == 2
 
         self.assertListEqual(list(batch_sampler_shards[0]), [[0, 1, 2], [5, 6, 7, 8], [12, 13]])
         self.assertListEqual(list(batch_sampler_shards[1]), [[3, 4], [9, 10, 11]])
@@ -334,8 +334,8 @@ class DataLoaderTester(unittest.TestCase):
         # All iterable dataset shard should have the same length, a round multiple of shard_batch_size
         first_list = iterable_dataset_lists[0]
         for l in iterable_dataset_lists[1:]:
-            self.assertEqual(len(l), len(first_list))
-            self.assertTrue(len(l) % shard_batch_size == 0)
+            assert len(l) == len(first_list)
+            assert (len(l) % shard_batch_size) == 0
 
         observed = []
         for idx in range(0, len(first_list), shard_batch_size):
@@ -381,18 +381,18 @@ class DataLoaderTester(unittest.TestCase):
     def test_end_of_dataloader(self):
         dataloader = DataLoaderShard(list(range(16)), batch_size=4)
         for idx, _ in enumerate(dataloader):
-            self.assertEqual(dataloader.end_of_dataloader, idx == 3)
+            assert dataloader.end_of_dataloader == (idx == 3)
 
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
-            self.assertEqual(dataloader.end_of_dataloader, idx == 3)
+            assert dataloader.end_of_dataloader == (idx == 3)
 
     def test_end_of_dataloader_dispatcher(self):
         Accelerator()
         dataloader = DataLoaderDispatcher(range(16), batch_size=4)
         for idx, _ in enumerate(dataloader):
-            self.assertEqual(dataloader.end_of_dataloader, idx == 3)
+            assert dataloader.end_of_dataloader == (idx == 3)
 
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
-            self.assertEqual(dataloader.end_of_dataloader, idx == 3)
+            assert dataloader.end_of_dataloader == (idx == 3)

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
 import io
 import itertools
@@ -153,7 +152,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3_save_16bit_model=True,
             zero3_init_flag=True,
         )
-        self.assertFalse(deepspeed_plugin.zero3_init_flag)
+        assert not deepspeed_plugin.zero3_init_flag
         deepspeed_plugin.deepspeed_config = None
 
         # Test zero3_init_flag will be set to True only when ZeRO stage == 3
@@ -166,15 +165,15 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3_save_16bit_model=True,
             zero3_init_flag=True,
         )
-        self.assertTrue(deepspeed_plugin.zero3_init_flag)
+        assert deepspeed_plugin.zero3_init_flag
         deepspeed_plugin.deepspeed_config = None
 
         # Test config files are loaded correctly
         deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[stage], zero3_init_flag=True)
         if stage == ZERO2:
-            self.assertFalse(deepspeed_plugin.zero3_init_flag)
+            assert not deepspeed_plugin.zero3_init_flag
         elif stage == ZERO3:
-            self.assertTrue(deepspeed_plugin.zero3_init_flag)
+            assert deepspeed_plugin.zero3_init_flag
 
         # Test `gradient_accumulation_steps` is set to 1 if unavailable in config file
         with tempfile.TemporaryDirectory() as dirpath:
@@ -183,7 +182,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             with open(os.path.join(dirpath, "ds_config.json"), "w") as out_file:
                 json.dump(ds_config, out_file)
             deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=os.path.join(dirpath, "ds_config.json"))
-            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 1)
+            assert deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"] == 1
             deepspeed_plugin.deepspeed_config = None
 
         # Test `ValueError` is raised if `zero_optimization` is unavailable in config file
@@ -194,9 +193,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 json.dump(ds_config, out_file)
             with self.assertRaises(ValueError) as cm:
                 deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=os.path.join(dirpath, "ds_config.json"))
-            self.assertTrue(
-                "Please specify the ZeRO optimization config in the DeepSpeed config." in str(cm.exception)
-            )
+            assert "Please specify the ZeRO optimization config in the DeepSpeed config." in str(cm.exception)
             deepspeed_plugin.deepspeed_config = None
 
         # Test `deepspeed_config_process`
@@ -221,7 +218,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         for ds_key_long, value in kwargs.items():
             config, ds_key = deepspeed_plugin.hf_ds_config.find_config_node(ds_key_long)
             if config.get(ds_key) is not None:
-                self.assertEqual(config.get(ds_key), value)
+                assert config.get(ds_key) == value
 
         # Test mismatches
         mismatches = {
@@ -234,17 +231,14 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             new_kwargs.update(mismatches)
             deepspeed_plugin.deepspeed_config_process(**new_kwargs)
         for key in mismatches.keys():
-            self.assertTrue(
-                key in str(cm.exception),
-                f"{key} is not in the exception message:\n{cm.exception}",
-            )
+            assert key in str(cm.exception), f"{key} is not in the exception message: {cm.exception}"
 
         # Test `ValueError` is raised if some config file fields with `auto` value is missing in `kwargs`
         deepspeed_plugin.deepspeed_config["optimizer"]["params"]["lr"] = "auto"
         with self.assertRaises(ValueError) as cm:
             del kwargs["optimizer.params.lr"]
             deepspeed_plugin.deepspeed_config_process(**kwargs)
-        self.assertTrue("`optimizer.params.lr` not found in kwargs." in str(cm.exception))
+        assert "`optimizer.params.lr` not found in kwargs." in str(cm.exception)
 
     @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
     def test_accelerate_state_deepspeed(self, dtype):
@@ -260,7 +254,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
         with mockenv_context(**self.dist_env):
             state = Accelerator(mixed_precision=dtype, deepspeed_plugin=deepspeed_plugin).state
-            self.assertTrue(state.deepspeed_plugin.deepspeed_config[dtype]["enabled"])
+            assert state.deepspeed_plugin.deepspeed_config[dtype]["enabled"]
 
     def test_init_zero3(self):
         deepspeed_plugin = DeepSpeedPlugin(
@@ -277,7 +271,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)  # noqa: F841
             from transformers.deepspeed import is_deepspeed_zero3_enabled
 
-            self.assertTrue(is_deepspeed_zero3_enabled())
+            assert is_deepspeed_zero3_enabled()
 
     @parameterized.expand(optim_scheduler_params, name_func=parameterized_custom_name_func)
     def test_prepare_deepspeed(self, optim_type, scheduler_type):
@@ -333,15 +327,14 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                         model, dummy_optimizer, train_dataloader, eval_dataloader, lr_scheduler
                     )
-                self.assertTrue(
-                    "You cannot create a `DummyOptim` without specifying an optimizer in the config file."
-                    in str(cm.exception)
+                assert "You cannot create a `DummyOptim` without specifying an optimizer in the config file." in str(
+                    cm.exception
                 )
                 with self.assertRaises(ValueError) as cm:
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                         model, optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                     )
-                self.assertTrue(
+                assert (
                     "Either specify a scheduler in the config file or "
                     "pass in the `lr_scheduler_callable` parameter when using `accelerate.utils.DummyScheduler`."
                     in str(cm.exception)
@@ -349,7 +342,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
                 with self.assertRaises(ValueError) as cm:
                     model, optimizer, lr_scheduler = accelerator.prepare(model, optimizer, lr_scheduler)
-                self.assertTrue(
+                assert (
                     "When using DeepSpeed, `accelerate.prepare()` requires you to pass at least one of training or evaluation dataloaders "
                     "with `batch_size` attribute returning an integer value "
                     "or alternatively set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
@@ -360,12 +353,12 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
                 )
-                self.assertTrue(accelerator.deepspeed_config["zero_allow_untested_optimizer"])
-                self.assertTrue(accelerator.deepspeed_config["train_batch_size"], 16)
-                self.assertEqual(type(model), DeepSpeedEngine)
-                self.assertEqual(type(optimizer), DeepSpeedOptimizerWrapper)
-                self.assertEqual(type(lr_scheduler), AcceleratedScheduler)
-                self.assertEqual(type(accelerator.deepspeed_engine_wrapped), DeepSpeedEngineWrapper)
+                assert accelerator.deepspeed_config["zero_allow_untested_optimizer"]
+                assert accelerator.deepspeed_config["train_batch_size"], 16
+                assert type(model) == DeepSpeedEngine
+                assert type(optimizer) == DeepSpeedOptimizerWrapper
+                assert type(lr_scheduler) == AcceleratedScheduler
+                assert type(accelerator.deepspeed_engine_wrapped) == DeepSpeedEngineWrapper
 
         elif optim_type == DS_OPTIMIZER and scheduler_type == DS_SCHEDULER:
             # Test DeepSpeed optimizer + DeepSpeed scheduler
@@ -396,36 +389,33 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                         model, optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                     )
-                self.assertTrue(
-                    "You cannot specify an optimizer in the config file and in the code at the same time"
-                    in str(cm.exception)
+                assert "You cannot specify an optimizer in the config file and in the code at the same time" in str(
+                    cm.exception
                 )
 
                 with self.assertRaises(ValueError) as cm:
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                         model, dummy_optimizer, train_dataloader, eval_dataloader, lr_scheduler
                     )
-                self.assertTrue(
-                    "You cannot specify a scheduler in the config file and in the code at the same time"
-                    in str(cm.exception)
+                assert "You cannot specify a scheduler in the config file and in the code at the same time" in str(
+                    cm.exception
                 )
 
                 with self.assertRaises(ValueError) as cm:
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                         model, dummy_optimizer, train_dataloader, eval_dataloader, lr_scheduler
                     )
-                self.assertTrue(
-                    "You cannot specify a scheduler in the config file and in the code at the same time"
-                    in str(cm.exception)
+                assert "You cannot specify a scheduler in the config file and in the code at the same time" in str(
+                    cm.exception
                 )
 
                 model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                     model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                 )
-                self.assertTrue(type(model) == DeepSpeedEngine)
-                self.assertTrue(type(optimizer) == DeepSpeedOptimizerWrapper)
-                self.assertTrue(type(lr_scheduler) == DeepSpeedSchedulerWrapper)
-                self.assertTrue(type(accelerator.deepspeed_engine_wrapped) == DeepSpeedEngineWrapper)
+                assert type(model) == DeepSpeedEngine
+                assert type(optimizer) == DeepSpeedOptimizerWrapper
+                assert type(lr_scheduler) == DeepSpeedSchedulerWrapper
+                assert type(accelerator.deepspeed_engine_wrapped) == DeepSpeedEngineWrapper
 
         elif optim_type == CUSTOM_OPTIMIZER and scheduler_type == DS_SCHEDULER:
             # Test custom optimizer + DeepSpeed scheduler
@@ -456,10 +446,10 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                     model, optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                 )
-                self.assertTrue(type(model) == DeepSpeedEngine)
-                self.assertTrue(type(optimizer) == DeepSpeedOptimizerWrapper)
-                self.assertTrue(type(lr_scheduler) == DeepSpeedSchedulerWrapper)
-                self.assertTrue(type(accelerator.deepspeed_engine_wrapped) == DeepSpeedEngineWrapper)
+                assert type(model) == DeepSpeedEngine
+                assert type(optimizer) == DeepSpeedOptimizerWrapper
+                assert type(lr_scheduler) == DeepSpeedSchedulerWrapper
+                assert type(accelerator.deepspeed_engine_wrapped) == DeepSpeedEngineWrapper
         elif optim_type == DS_OPTIMIZER and scheduler_type == CUSTOM_SCHEDULER:
             # Test deepspeed optimizer + custom scheduler
             deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
@@ -490,7 +480,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                         model, dummy_optimizer, train_dataloader, eval_dataloader, lr_scheduler
                     )
-                self.assertTrue(
+                assert (
                     "You can only specify `accelerate.utils.DummyScheduler` in the code when using `accelerate.utils.DummyOptim`."
                     in str(cm.exception)
                 )
@@ -500,7 +490,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                         model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                     )
-                self.assertTrue(
+                assert (
                     "Either specify a scheduler in the config file or "
                     "pass in the `lr_scheduler_callable` parameter when using `accelerate.utils.DummyScheduler`."
                     in str(cm.exception)
@@ -554,7 +544,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
                 )
-            self.assertTrue(
+            assert (
                 "At least one of the dataloaders passed to `accelerate.prepare()` has `None` as batch size. "
                 "Please set an integer value in `train_micro_batch_size_per_gpu` in the deepspeed config file "
                 "or assign integer value to `AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu']`."
@@ -610,7 +600,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 "set `zero3_save_16bit_model` to True when using `accelerate config`. "
                 "To save the full checkpoint, run `model.save_checkpoint(save_dir)` and use `zero_to_fp32.py` to recover weights."
             )
-            self.assertTrue(msg in str(cm.exception))
+            assert msg in str(cm.exception)
 
     def test_autofill_dsconfig(self):
         deepspeed_plugin = DeepSpeedPlugin(
@@ -699,14 +689,14 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
                     )
                 msg = "Can't find `model.config` entry"
-                self.assertTrue(msg in str(cm.exception))
+                assert msg in str(cm.exception)
             elif model_type == CONFIG_WITH_NO_HIDDEN_SIZE:
                 with self.assertRaises(ValueError) as cm:
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
                     )
                 msg = "Can find neither `model.config.hidden_size` nor `model.config.hidden_sizes`"
-                self.assertTrue(msg in str(cm.exception))
+                assert msg in str(cm.exception)
             else:
                 model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
@@ -769,7 +759,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         with mockenv_context(**self.dist_env):
             with self.assertRaises(ValueError) as cm:
                 accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=diff_dtype)
-            self.assertTrue(
+            assert (
                 f"`--mixed_precision` arg cannot be set to `{diff_dtype}` when `{dtype}` is set in the DeepSpeed config file."
                 in str(cm.exception)
             )
@@ -780,7 +770,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=dtype)
             deepspeed_plugin = accelerator.state.deepspeed_plugin
-            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 4)
+            assert deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"] == 4
 
         # filling the `auto` gradient_accumulation_steps via Accelerator's value
         AcceleratorState._reset_state(True)
@@ -808,7 +798,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
             )
             deepspeed_plugin = accelerator.state.deepspeed_plugin
-            self.assertEqual(deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"], 8)
+            assert deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"] == 8
 
     def test_ds_config_assertions(self):
         ambiguous_env = self.dist_env.copy()
@@ -829,7 +819,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                     zero3_save_16bit_model=True,
                 )
                 _ = Accelerator(deepspeed_plugin=deepspeed_plugin, mixed_precision=FP16)
-            self.assertTrue(
+            assert (
                 "If you are using an accelerate config file, remove others config variables mentioned in the above specified list."
                 in str(cm.exception)
             )
@@ -840,7 +830,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             hf_ds_config=self.ds_config_file[stage],
             zero3_init_flag=True,
         )
-        self.assertEqual(deepspeed_plugin.zero_stage, int(stage.replace("zero", "")))
+        assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
 
     def test_basic_run(self):
         mod_file = inspect.getfile(accelerate.test_utils)

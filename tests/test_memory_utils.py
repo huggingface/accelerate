@@ -71,7 +71,7 @@ class MemoryTest(unittest.TestCase):
 
         with self.assertRaises(RuntimeError) as cm:
             mock_training_loop_function()
-            self.assertIn("No executable batch size found, reached zero.", cm.exception.args[0])
+            assert "No executable batch size found, reached zero." in cm.exception.args[0]
 
     def test_approach_zero(self):
         @find_executable_batch_size(starting_batch_size=16)
@@ -82,7 +82,7 @@ class MemoryTest(unittest.TestCase):
 
         with self.assertRaises(RuntimeError) as cm:
             mock_training_loop_function()
-            self.assertIn("No executable batch size found, reached zero.", cm.exception.args[0])
+            assert "No executable batch size found, reached zero." in cm.exception.args[0]
 
     def test_verbose_guard(self):
         @find_executable_batch_size(starting_batch_size=128)
@@ -92,8 +92,8 @@ class MemoryTest(unittest.TestCase):
 
         with self.assertRaises(TypeError) as cm:
             mock_training_loop_function(128, "hello", "world")
-            self.assertIn("Batch size was passed into `f`", cm.exception.args[0])
-            self.assertIn("`f(arg1='hello', arg2='world')", cm.exception.args[0])
+            assert "Batch size was passed into `f`" in cm.exception.args[0]
+            assert "`f(arg1='hello', arg2='world')" in cm.exception.args[0]
 
     def test_any_other_error(self):
         @find_executable_batch_size(starting_batch_size=16)
@@ -102,13 +102,13 @@ class MemoryTest(unittest.TestCase):
 
         with self.assertRaises(ValueError) as cm:
             mock_training_loop_function()
-            self.assertIn("Oops, we had an error!", cm.exception.args[0])
+            assert "Oops, we had an error!" in cm.exception.args[0]
 
     @require_non_cpu
     def test_release_memory(self):
         starting_memory = memory_allocated_func()
         model = ModelForTest()
         model.to(torch_device)
-        self.assertGreater(memory_allocated_func(), starting_memory)
+        assert memory_allocated_func() > starting_memory
         model = release_memory(model)
-        self.assertEqual(memory_allocated_func(), starting_memory)
+        assert memory_allocated_func() == starting_memory

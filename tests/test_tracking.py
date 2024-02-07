@@ -77,7 +77,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
             accelerator.end_training()
             for child in Path(f"{dirpath}/{project_name}").glob("*/**"):
                 log = list(filter(lambda x: x.is_file(), child.iterdir()))[0]
-            self.assertNotEqual(str(log), "")
+            assert str(log) != ""
 
     def test_log(self):
         project_name = "test_project_with_log"
@@ -90,7 +90,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
             # Logged values are stored in the outermost-tfevents file and can be read in as a TFRecord
             # Names are randomly generated each time
             log = list(filter(lambda x: x.is_file(), Path(f"{dirpath}/{project_name}").iterdir()))[0]
-            self.assertNotEqual(str(log), "")
+            assert str(log) != ""
 
     def test_log_with_tensor(self):
         project_name = "test_project_with_log"
@@ -119,7 +119,7 @@ class TensorBoardTrackingTest(unittest.TestCase):
                     for value in event.summary.value:
                         if value.simple_value == 1.0 and value.tag == "tensor":
                             found_tensor = True
-            self.assertTrue(found_tensor, "Converted tensor was not found in the log file!")
+            assert found_tensor, "Converted tensor was not found in the log file!"
 
     def test_project_dir(self):
         with self.assertRaisesRegex(ValueError, "Logging with `tensorboard` requires a `logging_dir`"):
@@ -182,22 +182,22 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
 
         # Check HPS through careful parsing and cleaning
         logged_items = self.parse_log(content, "config")
-        self.assertEqual(logged_items["num_iterations"], "12")
-        self.assertEqual(logged_items["learning_rate"], "0.01")
-        self.assertEqual(logged_items["some_boolean"], "false")
-        self.assertEqual(logged_items["some_string"], "some_value")
-        self.assertEqual(logged_items["some_string"], "some_value")
+        assert logged_items["num_iterations"] == "12"
+        assert logged_items["learning_rate"] == "0.01"
+        assert logged_items["some_boolean"] == "false"
+        assert logged_items["some_string"] == "some_value"
+        assert logged_items["some_string"] == "some_value"
 
         # Run tags
         logged_items = self.parse_log(content, "run", False)
-        self.assertEqual(logged_items["tags"], "my_tag")
+        assert logged_items["tags"] == "my_tag"
 
         # Actual logging
         logged_items = self.parse_log(content, "history")
-        self.assertEqual(logged_items["total_loss"], "0.1")
-        self.assertEqual(logged_items["iteration"], "1")
-        self.assertEqual(logged_items["my_text"], "some_value")
-        self.assertEqual(logged_items["_step"], "0")
+        assert logged_items["total_loss"] == "0.1"
+        assert logged_items["iteration"] == "1"
+        assert logged_items["my_text"] == "some_value"
+        assert logged_items["_step"] == "0"
 
 
 # Comet has a special `OfflineExperiment` we need to use for testing
@@ -239,10 +239,10 @@ class CometMLTest(unittest.TestCase):
             archive = zipfile.ZipFile(p, "r")
             log = archive.open("messages.json").read().decode("utf-8")
         list_of_json = log.split("\n")[:-1]
-        self.assertEqual(self.get_value_from_key(list_of_json, "num_iterations", True), 12)
-        self.assertEqual(self.get_value_from_key(list_of_json, "learning_rate", True), 0.01)
-        self.assertEqual(self.get_value_from_key(list_of_json, "some_boolean", True), False)
-        self.assertEqual(self.get_value_from_key(list_of_json, "some_string", True), "some_value")
+        assert self.get_value_from_key(list_of_json, "num_iterations", True) == 12
+        assert self.get_value_from_key(list_of_json, "learning_rate", True) == 0.01
+        assert self.get_value_from_key(list_of_json, "some_boolean", True) is False
+        assert self.get_value_from_key(list_of_json, "some_string", True) == "some_value"
 
     def test_log(self):
         with tempfile.TemporaryDirectory() as d:
@@ -258,10 +258,10 @@ class CometMLTest(unittest.TestCase):
             archive = zipfile.ZipFile(p, "r")
             log = archive.open("messages.json").read().decode("utf-8")
         list_of_json = log.split("\n")[:-1]
-        self.assertEqual(self.get_value_from_key(list_of_json, "curr_step", True), 0)
-        self.assertEqual(self.get_value_from_key(list_of_json, "total_loss"), 0.1)
-        self.assertEqual(self.get_value_from_key(list_of_json, "iteration"), 1)
-        self.assertEqual(self.get_value_from_key(list_of_json, "my_text"), "some_value")
+        assert self.get_value_from_key(list_of_json, "curr_step", True) == 0
+        assert self.get_value_from_key(list_of_json, "total_loss") == 0.1
+        assert self.get_value_from_key(list_of_json, "iteration") == 1
+        assert self.get_value_from_key(list_of_json, "my_text") == "some_value"
 
 
 @require_clearml
@@ -318,20 +318,20 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         accelerator.end_training()
 
         metrics = ClearMLTest._get_metrics(offline_dir)
-        self.assertEqual(len(values_with_iteration) + len(single_values), len(metrics))
+        assert (len(values_with_iteration) + len(single_values)) == len(metrics)
         for metric in metrics:
             if metric["metric"] == "Summary":
-                self.assertIn(metric["variant"], single_values)
-                self.assertEqual(metric["value"], single_values[metric["variant"]])
+                assert metric["variant"] in single_values
+                assert metric["value"] == single_values[metric["variant"]]
             elif metric["metric"] == "should_be_under_train":
-                self.assertEqual(metric["variant"], "train")
-                self.assertEqual(metric["iter"], 1)
-                self.assertEqual(metric["value"], values_with_iteration["should_be_under_train"])
+                assert metric["variant"] == "train"
+                assert metric["iter"] == 1
+                assert metric["value"] == values_with_iteration["should_be_under_train"]
             else:
                 values_with_iteration_key = metric["variant"] + "_" + metric["metric"]
-                self.assertIn(values_with_iteration_key, values_with_iteration)
-                self.assertEqual(metric["iter"], 1)
-                self.assertEqual(metric["value"], values_with_iteration[values_with_iteration_key])
+                assert values_with_iteration_key in values_with_iteration
+                assert metric["iter"] == 1
+                assert metric["value"] == values_with_iteration[values_with_iteration_key]
 
     def test_log_images(self):
         from clearml import Task
@@ -352,7 +352,7 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         accelerator.end_training()
 
         images_saved = Path(os.path.join(offline_dir, "data")).rglob("*.jpeg")
-        self.assertEqual(len(list(images_saved)), len(images))
+        assert len(list(images_saved)) == len(images)
 
     def test_log_table(self):
         from clearml import Task
@@ -369,9 +369,9 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         accelerator.end_training()
 
         metrics = ClearMLTest._get_metrics(offline_dir)
-        self.assertEqual(len(metrics), 2)
+        assert len(metrics) == 2
         for metric in metrics:
-            self.assertIn(metric["metric"], ["from lists", "from lists with columns"])
+            assert metric["metric"] in ("from lists", "from lists with columns")
             plot = json.loads(metric["plot_str"])
             if metric["metric"] == "from lists with columns":
                 print(plot["data"][0])
@@ -398,8 +398,8 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         accelerator.end_training()
 
         metrics = ClearMLTest._get_metrics(offline_dir)
-        self.assertEqual(len(metrics), 1)
-        self.assertEqual(metrics[0]["metric"], "from df")
+        assert len(metrics) == 1
+        assert metrics[0]["metric"] == "from df"
         plot = json.loads(metrics[0]["plot_str"])
         self.assertCountEqual(plot["data"][0]["header"]["values"], [["A"], ["B"], ["C"]])
         self.assertCountEqual(plot["data"][0]["cells"]["values"], [[1, 2], [3, 4], [5, 6]])

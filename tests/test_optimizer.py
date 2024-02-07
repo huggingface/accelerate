@@ -52,7 +52,7 @@ class OptimizerTester(unittest.TestCase):
             p.grad.fill_(0.01)
 
         optimizer.step()
-        self.assertTrue(optimizer.step_was_skipped is False)
+        assert optimizer.step_was_skipped is False
 
         loss = model(torch.randn(2, 5, device=accelerator.device)).sum()
         accelerator.backward(loss)
@@ -62,7 +62,7 @@ class OptimizerTester(unittest.TestCase):
         p.grad[0] = torch.tensor(float("nan"))
 
         optimizer.step()
-        self.assertTrue(optimizer.step_was_skipped is True)
+        assert optimizer.step_was_skipped is True
 
         loss = model(torch.randn(2, 5, device=accelerator.device)).sum()
         accelerator.backward(loss)
@@ -72,7 +72,7 @@ class OptimizerTester(unittest.TestCase):
         p.grad[0] = torch.tensor(float("nan"))
 
         optimizer.step()
-        self.assertTrue(optimizer.step_was_skipped is True)
+        assert optimizer.step_was_skipped is True
 
         loss = model(torch.randn(2, 5, device=accelerator.device)).sum()
         accelerator.backward(loss)
@@ -81,6 +81,6 @@ class OptimizerTester(unittest.TestCase):
             p.grad.fill_(0.01)
 
         optimizer.step()
-        self.assertTrue(optimizer.step_was_skipped is False)
+        assert optimizer.step_was_skipped is False
 
         AcceleratorState._reset_state()
