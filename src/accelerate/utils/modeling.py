@@ -472,8 +472,7 @@ def named_module_tensors(
             Whether or not to remove the non persistent buffer from the buffers. Useful only when include_buffers =
             True
     """
-    for named_parameter in module.named_parameters(recurse=recurse):
-        yield named_parameter
+    yield from module.named_parameters(recurse=recurse)
 
     if include_buffers:
         non_persistent_buffers = set()

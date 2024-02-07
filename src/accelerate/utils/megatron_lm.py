@@ -247,8 +247,7 @@ class MegatronLMDummyDataLoader:
     def build_train_valid_test_data_iterators(self):
         def cyclic_iter(iter):
             while True:
-                for x in iter:
-                    yield x
+                yield from iter
 
         args = get_args()
 
@@ -926,7 +925,7 @@ class MegatronEngine(torch.nn.Module):
     """
 
     def __init__(self, accelerator, model, optimizer, scheduler):
-        super(MegatronEngine, self).__init__()
+        super().__init__()
         self.module = model
         self.base_model = model[0]
         self.optimizer = optimizer
