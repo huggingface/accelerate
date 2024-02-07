@@ -699,7 +699,7 @@ def deepspeed_launcher(args):
             logger.warning(message)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-        with open(".deepspeed_env", "w") as f:
+        with open(".deepspeed_env", "a") as f:
             forbidden_chars = [';', '\n', '<', '>', ' ', '=']
             valid_env_items = []
             for key, value in current_env.items():
