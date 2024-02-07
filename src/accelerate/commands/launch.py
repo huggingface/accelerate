@@ -699,11 +699,16 @@ def deepspeed_launcher(args):
             logger.warning(message)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-        with open(".deepspeed_env", "a") as f:
+        with open(".deepspeed_env", "w") as f:
+            forbidden_chars = [';', '\n', '<', '>', ' ', '=']
+            valid_env_items = []
             for key, value in current_env.items():
-                if ";" in value or " " in value:
-                    continue
-                f.write(f"{key}={value}\n")
+                if all(char not in key and char not in value for char in forbidden_chars) and len(key) >= 1 and len(value) >= 1:
+                    valid_env_items.append(f"{key}={value}")
+                else:
+                    logger.warning(f"WARNING skipping {key}={value} because of illegal characters or missing values")
+            if valid_env_items:
+                f.write("\n".join(valid_env_items))
 
         process = subprocess.Popen(cmd, env=current_env)
         process.wait()
