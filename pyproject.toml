@@ -2,13 +2,23 @@
 line-length = 119
 
 [tool.ruff.lint]
-# Never enforce `E501` (line length violations).
-ignore = ["E501", "E741", "W605"]
-select = ["E", "F", "I", "W"]
+ignore-init-module-imports = true
+extend-select = [
+    "E", # PEP8 errors
+    "F", # PEP8 formatting
+    "I", # Import sorting
+    "W", # PEP8 warnings
+]
+ignore = [
+    "E501", # Line length (handled by ruff-format)
+    "E741", # Ambiguous variable name
+    "W605", # Invalid escape sequence
+]
 
-# Ignore import violations in all `__init__.py` files.
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["E402", "F401", "F403", "F811"]
+"__init__.py" = [
+    "F401", # Ignore seemingly unused imports (they're meant for re-export)
+]
 "manim_animations/*" = ["ALL"]
 
 [tool.ruff.lint.isort]
