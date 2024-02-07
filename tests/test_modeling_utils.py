@@ -179,70 +179,75 @@ class ModelingUtilsTester(unittest.TestCase):
     def test_named_tensors(self):
         model = nn.BatchNorm1d(4)
         named_tensors = named_module_tensors(model)
-        self.assertListEqual(
-            [name for name, _ in named_tensors],
-            ["weight", "bias", "running_mean", "running_var", "num_batches_tracked"],
-        )
+        assert [name for name, _ in named_tensors] == [
+            "weight",
+            "bias",
+            "running_mean",
+            "running_var",
+            "num_batches_tracked",
+        ]
 
         named_tensors = named_module_tensors(model, include_buffers=False)
-        self.assertListEqual([name for name, _ in named_tensors], ["weight", "bias"])
+        assert [name for name, _ in named_tensors] == ["weight", "bias"]
 
         model = ModelForTest()
         named_tensors = named_module_tensors(model)
-        self.assertListEqual([name for name, _ in named_tensors], [])
+        assert [name for name, _ in named_tensors] == []
 
         named_tensors = named_module_tensors(model, recurse=True)
-        self.assertListEqual(
-            [name for name, _ in named_tensors],
-            [
-                "linear1.weight",
-                "linear1.bias",
-                "batchnorm.weight",
-                "batchnorm.bias",
-                "linear2.weight",
-                "linear2.bias",
-                "batchnorm.running_mean",
-                "batchnorm.running_var",
-                "batchnorm.num_batches_tracked",
-            ],
-        )
+        assert [name for name, _ in named_tensors] == [
+            "linear1.weight",
+            "linear1.bias",
+            "batchnorm.weight",
+            "batchnorm.bias",
+            "linear2.weight",
+            "linear2.bias",
+            "batchnorm.running_mean",
+            "batchnorm.running_var",
+            "batchnorm.num_batches_tracked",
+        ]
 
         named_tensors = named_module_tensors(model, include_buffers=False, recurse=True)
-        self.assertListEqual(
-            [name for name, _ in named_tensors],
-            ["linear1.weight", "linear1.bias", "batchnorm.weight", "batchnorm.bias", "linear2.weight", "linear2.bias"],
-        )
+        assert [name for name, _ in named_tensors] == [
+            "linear1.weight",
+            "linear1.bias",
+            "batchnorm.weight",
+            "batchnorm.bias",
+            "linear2.weight",
+            "linear2.bias",
+        ]
 
         model = LinearWithNonPersistentBuffers(10, 10)
 
         named_tensors = named_module_tensors(model, include_buffers=True, remove_non_persistent=False)
-        self.assertListEqual([name for name, _ in named_tensors], ["weight", "bias"])
+        assert [name for name, _ in named_tensors] == ["weight", "bias"]
 
         named_tensors = named_module_tensors(model, include_buffers=True, remove_non_persistent=True)
-        self.assertListEqual([name for name, _ in named_tensors], ["weight"])
+        assert [name for name, _ in named_tensors] == ["weight"]
 
     def test_find_tied_parameters(self):
         model = sequential_model(4)
-        self.assertListEqual(find_tied_parameters(model), [])
+        assert find_tied_parameters(model) == []
 
         model.linear2.weight = model.linear1.weight
-        self.assertListEqual(find_tied_parameters(model), [["linear1.weight", "linear2.weight"]])
+        assert find_tied_parameters(model) == [["linear1.weight", "linear2.weight"]]
 
         model.linear4.weight = model.linear1.weight
-        self.assertListEqual(find_tied_parameters(model), [["linear1.weight", "linear2.weight", "linear4.weight"]])
+        assert find_tied_parameters(model) == [["linear1.weight", "linear2.weight", "linear4.weight"]]
 
         model = sequential_model(5)
         model.linear1.weight = model.linear4.weight
         model.linear2.weight = model.linear3.weight
         model.linear5.weight = model.linear2.weight
         tied_params = sorted(find_tied_parameters(model), key=lambda x: len(x))
-        self.assertListEqual(
-            tied_params, [["linear1.weight", "linear4.weight"], ["linear2.weight", "linear3.weight", "linear5.weight"]]
-        )
+        assert tied_params == [
+            ["linear1.weight", "linear4.weight"],
+            ["linear2.weight", "linear3.weight", "linear5.weight"],
+        ]
 
         model = nn.Sequential(OrderedDict([("block1", sequential_model(4)), ("block2", sequential_model(4))]))
         model.block1.linear1.weight = model.block2.linear1.weight
-        self.assertListEqual(find_tied_parameters(model), [["block1.linear1.weight", "block2.linear1.weight"]])
+        assert find_tied_parameters(model) == [["block1.linear1.weight", "block2.linear1.weight"]]
 
     def test_retie_parameters(self):
         model = sequential_model(2)
@@ -279,7 +284,7 @@ class ModelingUtilsTester(unittest.TestCase):
         )
 
         module_sizes = compute_module_sizes(model)
-        self.assertDictEqual(module_sizes, expected_sizes)
+        assert module_sizes == expected_sizes
 
         model.half()
         expected_sizes = {k: s // 2 for k, s in expected_sizes.items()}
@@ -290,7 +295,7 @@ class ModelingUtilsTester(unittest.TestCase):
         expected_sizes[""] += 4
 
         module_sizes = compute_module_sizes(model)
-        self.assertDictEqual(module_sizes, expected_sizes)
+        assert module_sizes == expected_sizes
 
     def test_check_device_map(self):
         model = ModelForTest()
@@ -450,16 +455,16 @@ class ModelingUtilsTester(unittest.TestCase):
 
     def test_clean_device_map(self):
         # Regroup everything if all is on the same device
-        self.assertDictEqual(clean_device_map({"a": 0, "b": 0, "c": 0}), {"": 0})
+        assert clean_device_map({"a": 0, "b": 0, "c": 0}) == {"": 0}
         # Regroups children of level 1 on the same device
-        self.assertDictEqual(
-            clean_device_map({"a.x": 0, "a.y": 0, "b.x": 1, "b.y": 1, "c": 1}), {"a": 0, "b": 1, "c": 1}
-        )
+        assert clean_device_map({"a.x": 0, "a.y": 0, "b.x": 1, "b.y": 1, "c": 1}) == {"a": 0, "b": 1, "c": 1}
         # Regroups children of level 2 on the same device
-        self.assertDictEqual(
-            clean_device_map({"a.x": 0, "a.y": 0, "b.x.0": 1, "b.x.1": 1, "b.y.0": 2, "b.y.1": 2, "c": 2}),
-            {"a": 0, "b.x": 1, "b.y": 2, "c": 2},
-        )
+        assert clean_device_map({"a.x": 0, "a.y": 0, "b.x.0": 1, "b.x.1": 1, "b.y.0": 2, "b.y.1": 2, "c": 2}) == {
+            "a": 0,
+            "b.x": 1,
+            "b.y": 2,
+            "c": 2,
+        }
 
     def test_infer_auto_device_map(self):
         model = ModelForTest()
@@ -467,29 +472,29 @@ class ModelingUtilsTester(unittest.TestCase):
 
         device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 200})
         # only linear1 fits on device 0 as we keep memory available for the maximum layer in case of offload
-        self.assertDictEqual(device_map, {"linear1": 0, "batchnorm": 1, "linear2": 1})
+        assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": 1}
 
         device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 172, 2: 200})
         # On device 1, we don't care about keeping size available for the max layer, so even if there is just the
         # size available for batchnorm + linear2, they fit here.
-        self.assertDictEqual(device_map, {"linear1": 0, "batchnorm": 1, "linear2": 1})
+        assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": 1}
 
         model.linear1.weight = model.linear2.weight
         device_map = infer_auto_device_map(model, max_memory={0: 200, 1: 200})
         # By tying weights, the whole model fits on device 0
-        self.assertDictEqual(device_map, {"": 0})
+        assert device_map == {"": 0}
 
         # When splitting a bigger model, the split is done at the layer level
         model = nn.Sequential(ModelForTest(), ModelForTest(), ModelForTest())
         device_map = infer_auto_device_map(model, max_memory={0: 500, 1: 500})
-        self.assertDictEqual(device_map, {"0": 0, "1.linear1": 0, "1.batchnorm": 0, "1.linear2": 1, "2": 1})
+        assert device_map == {"0": 0, "1.linear1": 0, "1.batchnorm": 0, "1.linear2": 1, "2": 1}
 
         # With no_split_module_classes, it's done at that module level
         model = nn.Sequential(ModelForTest(), ModelForTest(), ModelForTest())
         device_map = infer_auto_device_map(
             model, max_memory={0: 500, 1: 500}, no_split_module_classes=["ModelForTest"]
         )
-        self.assertDictEqual(device_map, {"0": 0, "1": 1, "2": 1})
+        assert device_map == {"0": 0, "1": 1, "2": 1}
 
     def test_infer_auto_device_map_with_tied_weights(self):
         model = nn.Sequential(
@@ -498,7 +503,7 @@ class ModelingUtilsTester(unittest.TestCase):
         model.layer3.linear2.weight = model.layer1.linear2.weight
         device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 500})
         expected = {"layer1": 0, "layer3.linear2": 0, "layer2": 1, "layer3.linear1": 1, "layer3.batchnorm": 1}
-        self.assertDictEqual(device_map, expected)
+        assert device_map == expected
 
         # With three weights tied together
         model.layer2.linear2.weight = model.layer1.linear2.weight
@@ -512,7 +517,7 @@ class ModelingUtilsTester(unittest.TestCase):
             "layer3.linear1": 1,
             "layer3.batchnorm": 1,
         }
-        self.assertDictEqual(device_map, expected)
+        assert device_map == expected
 
         # With two groups of weights tied together
         model.layer2.linear1.weight = model.layer1.linear1.weight
@@ -526,7 +531,7 @@ class ModelingUtilsTester(unittest.TestCase):
             "layer3.linear1": 1,
             "layer3.batchnorm": 1,
         }
-        self.assertDictEqual(device_map, expected)
+        assert device_map == expected
 
         # With weights ties in the same module
         model = nn.Sequential(
@@ -543,7 +548,7 @@ class ModelingUtilsTester(unittest.TestCase):
         model.linear3.bias = model.linear1.bias
         device_map = infer_auto_device_map(model, max_memory={0: 250, 1: 400})
         expected = {"linear1": 0, "linear2": 1, "linear3": 0, "linear4": 1}
-        self.assertDictEqual(device_map, expected)
+        assert device_map == expected
 
         # With tied weights sharing a same prefix name (`compute.weight` vs `compute.weight_submodule.parameter`)
         class SubModule(torch.nn.Module):
@@ -604,30 +609,30 @@ class ModelingUtilsTester(unittest.TestCase):
         model = ModelForTest()
         # model has size 236: linear1 64, batchnorm 72, linear2 100
         max_memory = get_balanced_memory(model, max_memory={0: 200, 1: 200})
-        self.assertDictEqual({0: 200, 1: 200}, max_memory)
+        assert {0: 200, 1: 200} == max_memory
 
         # We should be able to set models on a non-contiguous sub-set of
         max_memory = get_balanced_memory(model, max_memory={0: 200, 2: 200})
-        self.assertDictEqual({0: 200, 2: 200}, max_memory)
+        assert {0: 200, 2: 200} == max_memory
 
         max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 300})
-        self.assertDictEqual({0: 215, 1: 300}, max_memory)
+        assert {0: 215, 1: 300} == max_memory
 
         # Last device always get max memory to give more buffer and avoid accidental CPU offload
         max_memory = get_balanced_memory(model, max_memory={0: 300, 1: 500})
-        self.assertDictEqual({0: 215, 1: 500}, max_memory)
+        assert {0: 215, 1: 500} == max_memory
 
         # Last device always get max memory to give more buffer, even if CPU is provided
         max_memory = get_balanced_memory(model, max_memory={0: 300, "cpu": 1000})
-        self.assertDictEqual({0: 300, "cpu": 1000}, max_memory)
+        assert {0: 300, "cpu": 1000} == max_memory
 
         # If we set a device to 0, it's not counted.
         max_memory = get_balanced_memory(model, max_memory={0: 0, 1: 300, 2: 300})
-        self.assertDictEqual({0: 0, 1: 215, 2: 300}, max_memory)
+        assert {0: 0, 1: 215, 2: 300} == max_memory
 
         # If we set a device to 0, it's not counted.
         max_memory = get_balanced_memory(model, max_memory={0: 0, "cpu": 100})
-        self.assertDictEqual({0: 0, "cpu": 100}, max_memory)
+        assert {0: 0, "cpu": 100} == max_memory
 
     @require_cuda
     def test_load_state_dict(self):

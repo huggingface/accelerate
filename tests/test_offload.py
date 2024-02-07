@@ -62,7 +62,7 @@ class OffloadTester(unittest.TestCase):
                 index = offload_weight(weight, "weight", tmp_dir, {})
                 weight_file = os.path.join(tmp_dir, "weight.dat")
                 assert os.path.isfile(weight_file)
-                self.assertDictEqual(index, {"weight": {"shape": [2, 3], "dtype": str(dtype).split(".")[1]}})
+                assert index == {"weight": {"shape": [2, 3], "dtype": str(dtype).split(".")[1]}}
 
                 new_weight = load_offloaded_weight(weight_file, index["weight"])
                 assert torch.equal(weight, new_weight)
@@ -107,8 +107,8 @@ class OffloadTester(unittest.TestCase):
     def test_extract_submodules_state_dict(self):
         state_dict = {"a.1": 0, "a.10": 1, "a.2": 2}
         extracted = extract_submodules_state_dict(state_dict, ["a.1", "a.2"])
-        self.assertDictEqual(extracted, {"a.1": 0, "a.2": 2})
+        assert extracted == {"a.1": 0, "a.2": 2}
 
         state_dict = {"a.1.a": 0, "a.10.a": 1, "a.2.a": 2}
         extracted = extract_submodules_state_dict(state_dict, ["a.1", "a.2"])
-        self.assertDictEqual(extracted, {"a.1.a": 0, "a.2.a": 2})
+        assert extracted == {"a.1.a": 0, "a.2.a": 2}

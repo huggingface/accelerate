@@ -63,7 +63,7 @@ class HooksModelTester(unittest.TestCase):
 
         # Check adding the hook did not change the name or the signature
         assert test_model.forward.__name__ == "forward"
-        self.assertListEqual(list(inspect.signature(test_model.forward).parameters), ["x"])
+        assert list(inspect.signature(test_model.forward).parameters) == ["x"]
 
         remove_hook_from_module(test_model)
         assert not hasattr(test_model, "_hf_hook")
@@ -82,7 +82,7 @@ class HooksModelTester(unittest.TestCase):
 
         # Check adding the hook did not change the name or the signature
         assert test_model.forward.__name__ == "forward"
-        self.assertListEqual(list(inspect.signature(test_model.forward).parameters), ["x"])
+        assert list(inspect.signature(test_model.forward).parameters) == ["x"]
 
         remove_hook_from_module(test_model)
         assert not hasattr(test_model, "_hf_hook")

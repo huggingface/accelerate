@@ -301,7 +301,7 @@ class ClearMLTest(TempDirTestCase, MockingTestCase):
         with open(os.path.join(offline_dir, "task.json")) as f:
             offline_session = json.load(f)
         clearml_offline_config = text_to_config_dict(offline_session["configuration"]["General"]["value"])
-        self.assertDictEqual(config, clearml_offline_config)
+        assert config == clearml_offline_config
 
     def test_log(self):
         from clearml import Task
@@ -462,7 +462,7 @@ class CustomTrackerTestCase(unittest.TestCase):
                     "some_boolean": "False",
                     "some_string": "some_value",
                 }
-                self.assertDictEqual(data, truth)
+                assert data == truth
 
     def test_log(self):
         with tempfile.TemporaryDirectory() as d:
@@ -484,7 +484,7 @@ class CustomTrackerTestCase(unittest.TestCase):
                     "some_boolean": "",
                     "some_string": "",
                 }
-                self.assertDictEqual(data, truth)
+                assert data == truth
 
 
 @require_dvclive
