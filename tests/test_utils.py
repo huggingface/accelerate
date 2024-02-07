@@ -41,19 +41,18 @@ from accelerate.utils import (
     send_to_device,
 )
 
+
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
 
 
 class UtilsTester(unittest.TestCase):
-
     def setUp(self):
         # logging requires initialized state
         PartialState()
 
     def test_send_to_device(self):
         tensor = torch.randn(5, 2)
-        device = torch.device(
-            "cuda") if torch.cuda.is_available() else torch.device("cpu")
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
         result1 = send_to_device(tensor, device)
         self.assertTrue(torch.equal(result1.cpu(), tensor))
@@ -66,11 +65,7 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(torch.equal(result2[1][1].cpu(), tensor))
         self.assertEqual(result2[2], 1)
 
-        result2 = send_to_device({
-            "a": tensor,
-            "b": [tensor, tensor],
-            "c": 1
-        }, device)
+        result2 = send_to_device({"a": tensor, "b": [tensor, tensor], "c": 1}, device)
         self.assertIsInstance(result2, dict)
         self.assertTrue(torch.equal(result2["a"].cpu(), tensor))
         self.assertIsInstance(result2["b"], list)
@@ -78,8 +73,7 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(torch.equal(result2["b"][1].cpu(), tensor))
         self.assertEqual(result2["c"], 1)
 
-        result3 = send_to_device(
-            ExampleNamedTuple(a=tensor, b=[tensor, tensor], c=1), device)
+        result3 = send_to_device(ExampleNamedTuple(a=tensor, b=[tensor, tensor], c=1), device)
         self.assertIsInstance(result3, ExampleNamedTuple)
         self.assertTrue(torch.equal(result3.a.cpu(), tensor))
         self.assertIsInstance(result3.b, list)
@@ -87,12 +81,7 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(torch.equal(result3.b[1].cpu(), tensor))
         self.assertEqual(result3.c, 1)
 
-        result4 = send_to_device(
-            UserDict({
-                "a": tensor,
-                "b": [tensor, tensor],
-                "c": 1
-            }), device)
+        result4 = send_to_device(UserDict({"a": tensor, "b": [tensor, tensor], "c": 1}), device)
         self.assertIsInstance(result4, UserDict)
         self.assertTrue(torch.equal(result4["a"].cpu(), tensor))
         self.assertIsInstance(result4["b"], list)
@@ -102,8 +91,7 @@ class UtilsTester(unittest.TestCase):
 
     def test_honor_type(self):
         with self.assertRaises(TypeError) as cm:
-            _ = recursively_apply(torch.tensor, (torch.tensor(1), 1),
-                                  error_on_other_type=True)
+            _ = recursively_apply(torch.tensor, (torch.tensor(1), 1), error_on_other_type=True)
         self.assertEqual(
             str(cm.exception),
             "Unsupported types (<class 'int'>) passed to `tensor`. Only nested list/tuple/dicts of objects that are valid for `is_torch_tensor` should be passed.",
@@ -116,11 +104,10 @@ class UtilsTester(unittest.TestCase):
         tensor = torch.tensor([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]])
         self.assertEqual(listify(tensor), [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]])
 
-        tensor = torch.tensor([[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
-                               [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]])
-        self.assertEqual(listify(tensor),
-                         [[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
-                          [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]])
+        tensor = torch.tensor([[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]])
+        self.assertEqual(
+            listify(tensor), [[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], [[11, 12, 13, 14, 15], [16, 17, 18, 19, 20]]]
+        )
 
     def test_patch_environment(self):
         with patch_environment(aa=1, BB=2):
@@ -160,8 +147,7 @@ class UtilsTester(unittest.TestCase):
     def test_can_undo_fp16_conversion(self):
         model = RegressionModel()
         model._original_forward = model.forward
-        model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(
-            model.forward)
+        model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
         model.forward = convert_outputs_to_fp32(model.forward)
         model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
         _ = pickle.dumps(model)
@@ -171,8 +157,7 @@ class UtilsTester(unittest.TestCase):
     def test_dynamo(self):
         model = RegressionModel()
         model._original_forward = model.forward
-        model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(
-            model.forward)
+        model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
         model.forward = convert_outputs_to_fp32(model.forward)
         model.forward = torch.compile(model.forward, backend="inductor")
         inputs = torch.randn(4, 10).cuda()
@@ -194,44 +179,32 @@ class UtilsTester(unittest.TestCase):
         # could also do a test with DistributedDataParallel, but difficult to run on CPU or single GPU
         distributed_model = torch.nn.parallel.DataParallel(model)
         distributed_compiled_model = torch.compile(distributed_model)
-        compiled_model_unwrapped = extract_model_from_parallel(
-            distributed_compiled_model)
+        compiled_model_unwrapped = extract_model_from_parallel(distributed_compiled_model)
 
-        self.assertEqual(compiled_model._orig_mod,
-                         compiled_model_unwrapped._orig_mod)
+        self.assertEqual(compiled_model._orig_mod, compiled_model_unwrapped._orig_mod)
 
     def test_find_device(self):
-        self.assertEqual(find_device([1, "a", torch.tensor([1, 2, 3])]),
-                         torch.device("cpu"))
-        self.assertEqual(find_device({
-            "a": 1,
-            "b": torch.tensor([1, 2, 3])
-        }), torch.device("cpu"))
+        self.assertEqual(find_device([1, "a", torch.tensor([1, 2, 3])]), torch.device("cpu"))
+        self.assertEqual(find_device({"a": 1, "b": torch.tensor([1, 2, 3])}), torch.device("cpu"))
         self.assertIsNone(find_device([1, "a"]))
 
     def test_check_os_kernel_no_warning_when_release_gt_min(self):
         # min version is 5.5
-        with patch("platform.uname",
-                   return_value=Mock(release="5.15.0-35-generic",
-                                     system="Linux")):
+        with patch("platform.uname", return_value=Mock(release="5.15.0-35-generic", system="Linux")):
             with warnings.catch_warnings(record=True) as w:
                 check_os_kernel()
             self.assertEqual(len(w), 0)
 
     def test_check_os_kernel_no_warning_when_not_linux(self):
         # system must be Linux
-        with patch("platform.uname",
-                   return_value=Mock(release="5.4.0-35-generic",
-                                     system="Darwin")):
+        with patch("platform.uname", return_value=Mock(release="5.4.0-35-generic", system="Darwin")):
             with warnings.catch_warnings(record=True) as w:
                 check_os_kernel()
             self.assertEqual(len(w), 0)
 
     def test_check_os_kernel_warning_when_release_lt_min(self):
         # min version is 5.5
-        with patch("platform.uname",
-                   return_value=Mock(release="5.4.0-35-generic",
-                                     system="Linux")):
+        with patch("platform.uname", return_value=Mock(release="5.4.0-35-generic", system="Linux")):
             with self.assertLogs() as ctx:
                 check_os_kernel()
             self.assertEqual(len(ctx.records), 1)
@@ -240,9 +213,7 @@ class UtilsTester(unittest.TestCase):
             self.assertIn("5.5.0", ctx.records[0].msg)
 
     def test_save_safetensor_shared_memory(self):
-
         class Model(nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.a = nn.Linear(100, 100)
@@ -334,11 +305,9 @@ class UtilsTester(unittest.TestCase):
         assert result.shape == torch.Size([66, 4, 4])
 
     def test_send_to_device_compiles(self):
-        compiled_send_to_device = torch.compile(operations.send_to_device,
-                                                fullgraph=True)
+        compiled_send_to_device = torch.compile(operations.send_to_device, fullgraph=True)
         compiled_send_to_device(torch.zeros([1], dtype=torch.bfloat16), "cpu")
 
     def test_convert_to_fp32(self):
-        compiled_convert_to_fp32 = torch.compile(operations.convert_to_fp32,
-                                                 fullgraph=True)
+        compiled_convert_to_fp32 = torch.compile(operations.convert_to_fp32, fullgraph=True)
         compiled_convert_to_fp32(torch.zeros([1], dtype=torch.bfloat16))
