@@ -21,8 +21,8 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 
+import pytest
 import torch
-from parameterized import parameterized
 from torch.utils.data import BatchSampler, DataLoader, RandomSampler, SequentialSampler
 from transformers import AutoConfig, AutoModel, AutoModelForCausalLM, get_scheduler
 from transformers.testing_utils import mockenv_context
@@ -85,13 +85,6 @@ else:
     dtypes = [FP16]
 
 
-def parameterized_custom_name_func(func, param_num, param):
-    # customize the test name generator function as we want both params to appear in the sub-test
-    # name, as by default it shows only the first param
-    param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
-    return f"{func.__name__}_{param_based_name}"
-
-
 # Cartesian-product of zero stages with models to test
 params = list(itertools.product(stages, dtypes))
 optim_scheduler_params = list(itertools.product(optims, schedulers))
@@ -141,7 +134,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         # As some tests modify the dict, always make a copy
         return deepcopy(self.ds_config_dict[stage])
 
-    @parameterized.expand(stages, name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("stage", stages)
     def test_deepspeed_plugin(self, stage):
         # Test zero3_init_flag will be set to False when ZeRO stage != 3
         deepspeed_plugin = DeepSpeedPlugin(
@@ -246,7 +239,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             deepspeed_plugin.deepspeed_config_process(**kwargs)
         self.assertTrue("`optimizer.params.lr` not found in kwargs." in str(cm.exception))
 
-    @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("dtype", [FP16, BF16])
     def test_accelerate_state_deepspeed(self, dtype):
         AcceleratorState._reset_state(True)
         deepspeed_plugin = DeepSpeedPlugin(
@@ -279,7 +272,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 
             self.assertTrue(is_deepspeed_zero3_enabled())
 
-    @parameterized.expand(optim_scheduler_params, name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("optim_type", optims)
+    @pytest.mark.parametrize("scheduler_type", schedulers)
     def test_prepare_deepspeed(self, optim_type, scheduler_type):
         # 1. Testing with one of the ZeRO Stages is enough to test the `_prepare_deepspeed` function.
         # Here we test using ZeRO Stage 2 with FP16 enabled.
@@ -659,7 +653,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 accelerator.deepspeed_config["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"]
             )
 
-    @parameterized.expand(model_types, name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("model_type", model_types)
     def test_autofill_comm_buffers_dsconfig(self, model_type):
         deepspeed_plugin = DeepSpeedPlugin(
             hf_ds_config=self.ds_config_file[ZERO3],
@@ -723,7 +717,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                     10 * hidden_size,
                 )
 
-    @parameterized.expand([FP16, BF16], name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("dtype", [FP16, BF16])
     def test_autofill_dsconfig_from_ds_plugin(self, dtype):
         ds_config = self.ds_config_dict["zero3"]
         if dtype == BF16:
@@ -834,7 +828,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 in str(cm.exception)
             )
 
-    @parameterized.expand(stages, name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("stage", stages)
     def test_ds_config(self, stage):
         deepspeed_plugin = DeepSpeedPlugin(
             hf_ds_config=self.ds_config_file[stage],

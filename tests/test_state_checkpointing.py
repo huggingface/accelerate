@@ -24,7 +24,6 @@ from contextlib import contextmanager
 
 import pytest
 import torch
-from parameterized import parameterized_class
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -81,16 +80,9 @@ class DummyModel(nn.Module):
         return x * self.a + self.b
 
 
-def parameterized_custom_name_func(func, param_num, param):
-    # customize the test name generator function as we want both params to appear in the sub-test
-    # name, as by default it shows only the first param
-    param_based_name = "use_safetensors" if param["use_safetensors"] is True else "use_pytorch"
-    return f"{func.__name__}_{param_based_name}"
-
-
-@parameterized_class(("use_safetensors",), [[True], [False]], class_name_func=parameterized_custom_name_func)
+@pytest.mark.parametrize("use_safetensors", [True, False], ids=["use_safetensors", "use_pytorch"])
 class CheckpointTest(unittest.TestCase):
-    def test_with_save_limit(self):
+    def test_with_save_limit(self, use_safetensors):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
             model = DummyModel()
@@ -103,13 +95,13 @@ class CheckpointTest(unittest.TestCase):
                 model, optimizer, train_dataloader, valid_dataloader
             )
             # Save initial
-            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=use_safetensors)
 
             # Save second state
-            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=use_safetensors)
             self.assertEqual(len(os.listdir(accelerator.project_dir)), 1)
 
-    def test_can_resume_training_with_folder(self):
+    def test_can_resume_training_with_folder(self, use_safetensors):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
             model = DummyModel()
@@ -122,7 +114,7 @@ class CheckpointTest(unittest.TestCase):
             )
             # Save initial
             initial = os.path.join(tmpdir, "initial")
-            accelerator.save_state(initial, safe_serialization=self.use_safetensors)
+            accelerator.save_state(initial, safe_serialization=use_safetensors)
             (a, b) = model.a.item(), model.b.item()
             opt_state = optimizer.state_dict()
             ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
@@ -148,7 +140,7 @@ class CheckpointTest(unittest.TestCase):
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
             checkpoint = os.path.join(tmpdir, "checkpoint")
-            accelerator.save_state(checkpoint, safe_serialization=self.use_safetensors)
+            accelerator.save_state(checkpoint, safe_serialization=use_safetensors)
 
             # Load everything back in and make sure all states work
             accelerator.load_state(checkpoint)
@@ -160,7 +152,7 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(opt_state1, opt_state3)
             self.assertEqual(ground_truth_rands, test_rands)
 
-    def test_can_resume_training(self):
+    def test_can_resume_training(self, use_safetensors):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
             model = DummyModel()
@@ -174,7 +166,7 @@ class CheckpointTest(unittest.TestCase):
                 model, optimizer, train_dataloader, valid_dataloader
             )
             # Save initial
-            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=use_safetensors)
             (a, b) = model.a.item(), model.b.item()
             opt_state = optimizer.state_dict()
             ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
@@ -200,7 +192,7 @@ class CheckpointTest(unittest.TestCase):
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
-            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=use_safetensors)
 
             # Load everything back in and make sure all states work
             accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_1"))
@@ -212,7 +204,7 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(opt_state1, opt_state3)
             self.assertEqual(ground_truth_rands, test_rands)
 
-    def test_can_resume_training_checkpoints_relative_path(self):
+    def test_can_resume_training_checkpoints_relative_path(self, use_safetensors):
         # See #1983
         # This test is like test_can_resume_training but uses a relative path for the checkpoint and automatically
         # infers the checkpoint path when loading.
@@ -239,7 +231,7 @@ class CheckpointTest(unittest.TestCase):
                 model, optimizer, train_dataloader, valid_dataloader
             )
             # Save initial
-            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=use_safetensors)
             (a, b) = model.a.item(), model.b.item()
             opt_state = optimizer.state_dict()
             ground_truth_rands = train(3, model, train_dataloader, optimizer, accelerator)
@@ -265,7 +257,7 @@ class CheckpointTest(unittest.TestCase):
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
-            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=use_safetensors)
 
             # Load everything back in and make sure all states work
             accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_1"))
@@ -291,7 +283,7 @@ class CheckpointTest(unittest.TestCase):
         self.assertFalse("Item at index 2" in message)
         self.assertFalse("Item at index 3" in message)
 
-    def test_with_scheduler(self):
+    def test_with_scheduler(self, use_safetensors):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
             model = DummyModel()
@@ -305,7 +297,7 @@ class CheckpointTest(unittest.TestCase):
                 model, optimizer, train_dataloader, valid_dataloader, scheduler
             )
             # Save initial
-            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=use_safetensors)
             scheduler_state = scheduler.state_dict()
             train(3, model, train_dataloader, optimizer, accelerator, scheduler)
             self.assertNotEqual(scheduler_state, scheduler.state_dict())
@@ -314,7 +306,7 @@ class CheckpointTest(unittest.TestCase):
             accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
             self.assertEqual(scheduler_state, scheduler.state_dict())
 
-    def test_automatic_loading(self):
+    def test_automatic_loading(self, use_safetensors):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
             model = DummyModel()
@@ -328,11 +320,11 @@ class CheckpointTest(unittest.TestCase):
                 model, optimizer, train_dataloader, valid_dataloader, scheduler
             )
             # Save initial
-            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=use_safetensors)
             train(2, model, train_dataloader, optimizer, accelerator, scheduler)
             (a2, b2) = model.a.item(), model.b.item()
             # Save a first time
-            accelerator.save_state(safe_serialization=self.use_safetensors)
+            accelerator.save_state(safe_serialization=use_safetensors)
             train(1, model, train_dataloader, optimizer, accelerator, scheduler)
             (a3, b3) = model.a.item(), model.b.item()
 
@@ -343,7 +335,7 @@ class CheckpointTest(unittest.TestCase):
             self.assertEqual(a2, model.a.item())
             self.assertEqual(b2, model.b.item())
 
-    def test_checkpoint_deletion(self):
+    def test_checkpoint_deletion(self, use_safetensors):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
             model = DummyModel()
@@ -353,21 +345,21 @@ class CheckpointTest(unittest.TestCase):
             model = accelerator.prepare(model)
             # Save 3 states:
             for _ in range(11):
-                accelerator.save_state(safe_serialization=self.use_safetensors)
+                accelerator.save_state(safe_serialization=use_safetensors)
             self.assertTrue(not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9")))
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10")))
 
     @require_non_cpu
-    def test_map_location(self):
+    def test_map_location(self, use_safetensors):
         cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
         env = os.environ.copy()
-        env["USE_SAFETENSORS"] = str(self.use_safetensors)
+        env["USE_SAFETENSORS"] = str(use_safetensors)
         env["OMP_NUM_THREADS"] = "1"
         execute_subprocess_async(cmd, env=env)
 
 
-if __name__ == "__main__":
+def main():
     use_safetensors = os.environ.get("USE_SAFETENSORS", "False") == "True"
     savedir = "/tmp/accelerate/state_checkpointing"
     model = DummyModel()
@@ -422,3 +414,7 @@ if __name__ == "__main__":
     if accelerator.process_index == 0:
         shutil.rmtree(savedir)
     accelerator.wait_for_everyone()
+
+
+if __name__ == "__main__":
+    main()

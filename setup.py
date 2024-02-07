@@ -22,7 +22,7 @@ extras["quality"] = [
     "ruff ~= 0.1.15",
 ]
 extras["docs"] = []
-extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
+extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests"]
 extras["test_dev"] = [
     "datasets",
     "evaluate",

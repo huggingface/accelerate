@@ -4,8 +4,8 @@ import pickle
 import tempfile
 from unittest.mock import patch
 
+import pytest
 import torch
-from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import DistributedType, infer_auto_device_map, init_empty_weights, load_checkpoint_and_dispatch
@@ -45,13 +45,6 @@ def get_signature(model):
 def load_random_weights(model):
     state = torch.nn.Linear(*tuple(model.weight.T.shape)).state_dict()
     model.load_state_dict(state)
-
-
-def parameterized_custom_name_func(func, param_num, param):
-    # customize the test name generator function as we want both params to appear in the sub-test
-    # name, as by default it shows only the first param
-    param_based_name = "use_safetensors" if param.args[0] is True else "use_pytorch"
-    return f"{func.__name__}_{param_based_name}"
 
 
 class AcceleratorTester(AccelerateTestCase):
@@ -116,7 +109,7 @@ class AcceleratorTester(AccelerateTestCase):
             accelerator = Accelerator()
             self.assertEqual(str(accelerator.state.device), "cuda:64")
 
-    @parameterized.expand((True, False), name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("use_safetensors", [True, False])
     def test_save_load_model(self, use_safetensors):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
@@ -135,7 +128,7 @@ class AcceleratorTester(AccelerateTestCase):
             accelerator.load_state(tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
 
-    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("use_safetensors", [True, False])
     def test_save_model(self, use_safetensors):
         accelerator = Accelerator()
         model = torch.nn.Linear(10, 10)
@@ -147,7 +140,7 @@ class AcceleratorTester(AccelerateTestCase):
             load_checkpoint_in_model(model, tmpdirname)
             self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
 
-    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("use_safetensors", [True, False])
     def test_save_model_offload(self, use_safetensors):
         accelerator = Accelerator()
 
@@ -167,7 +160,7 @@ class AcceleratorTester(AccelerateTestCase):
             output = model(inputs)
         self.assertTrue(torch.allclose(expected, output, atol=1e-5))
 
-    @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
+    @pytest.mark.parametrize("use_safetensors", [True, False])
     def test_save_load_model_with_hooks(self, use_safetensors):
         accelerator = Accelerator()
         model, optimizer, scheduler, train_dl, valid_dl = create_components()
