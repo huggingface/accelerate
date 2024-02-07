@@ -108,10 +108,10 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     """
     Prepares and returns an environment with the correct multi-GPU environment variables.
     """
-    num_processes = getattr(args, "num_processes")
-    num_machines = getattr(args, "num_machines")
-    main_process_ip = getattr(args, "main_process_ip")
-    main_process_port = getattr(args, "main_process_port")
+    num_processes = args.num_processes
+    num_machines = args.num_machines
+    main_process_ip = args.main_process_ip
+    main_process_port = args.main_process_port
     if num_machines > 1:
         args.nproc_per_node = str(num_processes // num_machines)
         args.nnodes = str(num_machines)
@@ -227,10 +227,10 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     """
     Prepares and returns the command list and an environment with the correct DeepSpeed environment variables.
     """
-    num_processes = getattr(args, "num_processes")
-    num_machines = getattr(args, "num_machines")
-    main_process_ip = getattr(args, "main_process_ip")
-    main_process_port = getattr(args, "main_process_port")
+    num_processes = args.num_processes
+    num_machines = args.num_machines
+    main_process_ip = args.main_process_ip
+    main_process_port = args.main_process_port
     cmd = None
 
     # make sure launcher is not None

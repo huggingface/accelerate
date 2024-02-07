@@ -2386,7 +2386,7 @@ class Accelerator:
                 self.trackers.append(tracker)
             else:
                 tracker_init = LOGGER_TYPE_TO_CLASS[str(tracker)]
-                if getattr(tracker_init, "requires_logging_directory"):
+                if tracker_init.requires_logging_directory:
                     # We can skip this check since it was done in `__init__`
                     self.trackers.append(
                         tracker_init(project_name, self.logging_dir, **init_kwargs.get(str(tracker), {}))
