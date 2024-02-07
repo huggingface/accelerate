@@ -102,10 +102,10 @@ def pippy_forward(forward, num_chunks, send_output_to_cpu, *args, **kwargs):
         output = forward()
     else:
         forward()
+    # Each node will get a copy of the full output, which is only on the last GPU
+    output = gather_object([output if output is not None else object()])[-1]
     if send_output_to_cpu:
-        output = gather_object([output if output is not None else object()])
-        # The outputs themselves are on the last GPU, so they will be the last item
-        output = send_to_device(output[-1], "cpu")
+        output = send_to_device(output, "cpu")
     return output
 
 
