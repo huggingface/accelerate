@@ -1,0 +1,2 @@
+accelerate
+pippy>=0.2.0
