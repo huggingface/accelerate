@@ -430,7 +430,6 @@ class Accelerator:
         # Mixed precision attributes
         self.scaler = None
         self.native_amp = False
-        err = "{mode} mixed precision requires {requirement}"
         if (
             self.state.mixed_precision == "fp16"
             and self.device.type != "cpu"
@@ -438,7 +437,7 @@ class Accelerator:
         ):
             self.native_amp = True
             if self.device.type not in ("xpu", "cuda", "mps", "npu"):
-                raise ValueError(err.format(mode="fp16", requirement="a GPU"))
+                raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
                 from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
@@ -458,7 +457,7 @@ class Accelerator:
             else:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
-                raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
+                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
 
         # Start of internal step tracking
         self.step = 0

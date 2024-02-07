@@ -844,8 +844,7 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
         if getattr(args, key, None) is not None:
             if args.rank == 0:
                 print(
-                    f"WARNING: overriding default arguments for {key}:{getattr(args, key)} \
-                        with {key}:{value}",
+                    f"WARNING: overriding default arguments for " f"{key}:{getattr(args, key)} with {key}:{value}",
                     flush=True,
                 )
         setattr(args, key, value)

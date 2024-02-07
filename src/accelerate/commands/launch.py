@@ -924,14 +924,12 @@ def _validate_launch_command(args):
                 args.mixed_precision = defaults.mixed_precision
                 mp_from_config_flag = True
         else:
-            native_amp = False
-            err = "{mode} mixed precision requires {requirement}"
             if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
                 native_amp = is_torch_version(">=", "1.10")
             else:
                 native_amp = is_bf16_available(True)
             if args.mixed_precision == "bf16" and not native_amp and not (args.tpu and is_tpu_available()):
-                raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
+                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
 
         # Silently set the default here
         if args.dynamo_backend is None:

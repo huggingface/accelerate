@@ -656,7 +656,7 @@ ZeRO Stage-3 has 2 options:
    Below is the snippet from `examples/by_feature/deepspeed_with_config_support.py` showing this:
    ```python
    success = model.save_checkpoint(PATH, ckpt_id, checkpoint_state_dict)
-   status_msg = "checkpointing: PATH={}, ckpt_id={}".format(PATH, ckpt_id)
+   status_msg = f"checkpointing: PATH={PATH}, ckpt_id={ckpt_id}"
    if success:
        logging.info(f"Success {status_msg}")
    else:
