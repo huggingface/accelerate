@@ -407,7 +407,7 @@ def set_module_tensor_to_device(
 
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
-                setattr(module._parameters[tensor_name], "SCB", fp16_statistics.to(device))
+                module._parameters[tensor_name].SCB = fp16_statistics.to(device)
                 del fp16_statistics
             # as we put the weight to meta, it doesn't have SCB attr anymore. make sure that it is not a meta weight
             if (

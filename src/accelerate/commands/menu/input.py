@@ -30,7 +30,7 @@ def mark(key: str):
     def decorator(func):
         handle = getattr(func, "handle_key", [])
         handle += [key]
-        setattr(func, "handle_key", handle)
+        func.handle_key = handle
         return func
 
     return decorator
@@ -44,7 +44,7 @@ def mark_multiple(*keys: List[str]):
     def decorator(func):
         handle = getattr(func, "handle_key", [])
         handle += keys
-        setattr(func, "handle_key", handle)
+        func.handle_key = handle
         return func
 
     return decorator
@@ -58,8 +58,8 @@ class KeyHandler(type):
     def __new__(cls, name, bases, attrs):
         new_cls = super().__new__(cls, name, bases, attrs)
         if not hasattr(new_cls, "key_handler"):
-            setattr(new_cls, "key_handler", {})
-        setattr(new_cls, "handle_input", KeyHandler.handle_input)
+            new_cls.key_handler = {}
+        new_cls.handle_input = KeyHandler.handle_input
 
         for value in attrs.values():
             handled_keys = getattr(value, "handle_key", [])

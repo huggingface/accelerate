@@ -4,6 +4,7 @@ line-length = 119
 [tool.ruff.lint]
 ignore-init-module-imports = true
 extend-select = [
+    "B010", # static setattr
     "E", # PEP8 errors
     "F", # PEP8 formatting
     "I", # Import sorting

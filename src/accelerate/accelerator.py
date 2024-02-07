@@ -1245,7 +1245,7 @@ class Accelerator:
                 item in container
                 for container in (self._dataloaders, self._models, self._optimizers, self._schedulers)
             ):
-                setattr(item, "_is_accelerate_prepared", True)
+                item._is_accelerate_prepared = True
 
         return result if len(result) > 1 else result[0]
 
