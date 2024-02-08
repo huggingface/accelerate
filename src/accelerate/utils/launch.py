@@ -55,21 +55,22 @@ def _get_mpirun_args():
     Returns: Program name and arg names for hostfile, num processes, and processes per node
     """
     # Find the MPI program name
-    mpi_apps = [x for x in ['mpirun', 'mpiexec'] if which(x)]
+    mpi_apps = [x for x in ["mpirun", "mpiexec"] if which(x)]
 
     if not mpi_apps:
-        raise EnvironmentError("mpirun or mpiexec were not found. Ensure that Intel MPI, Open MPI, or MVAPICH are "
-                               "installed.")
+        raise EnvironmentError(
+            "mpirun or mpiexec were not found. Ensure that Intel MPI, Open MPI, or MVAPICH are " "installed."
+        )
 
     # Call the app with the --version flag to determine which MPI app is installed
     mpi_app = mpi_apps[0]
-    mpirun_version = subprocess.check_output([mpi_app, '--version'])
+    mpirun_version = subprocess.check_output([mpi_app, "--version"])
 
-    if b'Open MPI' in mpirun_version:
-        return mpi_app, '--hostfile', '-n', '--npernode'
+    if b"Open MPI" in mpirun_version:
+        return mpi_app, "--hostfile", "-n", "--npernode"
     else:
         # Intel MPI and MVAPICH both use the same arg names
-        return mpi_app, '-f', '-n', '-ppn'
+        return mpi_app, "-f", "-n", "-ppn"
 
 
 def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:
@@ -79,7 +80,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     cmd = []
     if args.no_python and args.module:
         raise ValueError("--module and --no_python cannot be used together")
-    
+
     mpirun_hostfile = getattr(args, "mpirun_hostfile", None)
 
     if mpirun_hostfile:
@@ -87,7 +88,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
         mpirun_ccl = getattr(args, "mpirun_ccl", None)
         num_machines = getattr(args, "num_machines")
         num_processes = getattr(args, "num_processes", None)
-        nproc_per_node = str(num_processes // num_machines) if num_processes and num_machines else '1'
+        nproc_per_node = str(num_processes // num_machines) if num_processes and num_machines else "1"
         cmd += [mpi_app_name, hostfile_arg, args.mpirun_hostfile, proc_per_node_arg, nproc_per_node]
         if num_processes:
             cmd += [num_proc_arg, str(num_processes)]
