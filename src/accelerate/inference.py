@@ -115,7 +115,7 @@ def prepare_pippy(
     example_args=(),
     example_kwargs: Optional[Dict[str, Any]] = None,
     num_chunks=None,
-    gather_output=True,
+    gather_output=False,
 ):
     """
     Wraps `model` for pipeline parallel inference.
@@ -137,9 +137,8 @@ def prepare_pippy(
         num_chunks (`int`):
             The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
             this can be tuned and played with. In general one should have num_chunks >= num_gpus.
-        gather_output (`bool`, defaults to `True`):
-            Whether or not to copy the output from the last GPU (which holds the true outputs) and send them across to
-            all GPUs.
+        gather_output (`bool`):
+            If `True`, the output from the last GPU (which holds the true outputs) is sent across to all GPUs.
     """
     if not is_pippy_available():
         raise ImportError(
