@@ -20,6 +20,8 @@ from .testing import (
     require_torch_min_version,
     require_tpu,
     require_xpu,
+    require_non_xpu,
+    require_npu,
     skip,
     slow,
     torch_device,
