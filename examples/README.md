@@ -28,6 +28,7 @@ pip install datasets evaluate transformers
 
 The same script can be run in any of the following configurations:
 - single CPU or single GPU
+- multi CPUs
 - multi GPUs (using PyTorch distributed mode)
 - (multi) TPUs
 - fp16 (mixed-precision) or fp32 (normal precision)
@@ -58,6 +59,18 @@ To run it in each of these various modes, use the following commands:
     * from any server with Accelerate launcher
         ```bash
         accelerate launch --mixed_precision fp16 ./nlp_example.py
+- multi CPUs (requires Open MPI, Intel MPI, or MVAPICH)
+    * With Accelerate config and launcher, execute the following from node 0:
+        ```bash
+        accelerate config  # Select to have accelerate launch mpirun
+        accelerate launch ./nlp_example.py  # This will run the script on each server
+        ```
+    * With Intel MPI:
+        ```bash
+        export CCL_WORKER_COUNT=1
+        export MASTER_ADDR=xxx.xxx.xxx.xxx #node0 ip
+        mpirun -f hostfile -n 16 -ppn 4 python ./nlp_example.py
+        ```
 - multi GPUs (using PyTorch distributed mode)
     * With Accelerate config and launcher
         ```bash
@@ -100,6 +113,7 @@ The [cv_example.py](./cv_example.py) script is a simple example to fine-tune a R
 
 The same script can be run in any of the following configurations:
 - single CPU or single GPU
+- multi CPUs
 - multi GPUs (using PyTorch distributed mode)
 - (multi) TPUs
 - fp16 (mixed-precision) or fp32 (normal precision)
@@ -143,6 +157,18 @@ To run it in each of these various modes, use the following commands:
     * from any server with Accelerate launcher
         ```bash
         accelerate launch --mixed_precison fp16 ./cv_example.py --data_dir path_to_data
+- multi CPUs (requires Open MPI, Intel MPI, or MVAPICH)
+    * With Accelerate config and launcher, run the following from node 0:
+        ```bash
+        accelerate config --config_file config.yaml  # Select to have accelerate launch mpirun
+        accelerate launch ./cv_example.py --data_dir path_to_data # This will run the script on each server
+        ```
+    * With Intel MPI, execute mpirun from node 0:
+        ```bash
+        export CCL_WORKER_COUNT=1
+        export MASTER_ADDR=xxx.xxx.xxx.xxx #node0 ip
+        mpirun -f hostfile -n 16 -ppn 4 python ./cv_example.py --data_dir path_to_data
+        ```
 - multi GPUs (using PyTorch distributed mode)
     * With Accelerate config and launcher
         ```bash

@@ -115,8 +115,11 @@ What is the IP address of the machine that will host the main process? 36.112.23
 What is the port you will use to communicate with the main process? 29500
 Are all the machines on the same local network? Answer `no` if nodes are on the cloud and/or on different network hosts [YES/no]: yes
 Do you want to use Intel PyTorch Extension (IPEX) to speed up training on CPU? [yes/NO]:yes
+Do you want accelerate to launch mpirun? [yes/NO]: yes
+Please enter the path to the hostfile to use with mpirun [~/hostfile]: ~/hostfile
+Enter the number of oneCCL worker threads [1]: 1
 Do you wish to optimize your script with torch dynamo?[yes/NO]:NO
-How many CPU(s) should be used for distributed training? [1]:16
+How many processes should be used for distributed training? [1]:16
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
 Do you wish to use FP16 or BF16 (mixed precision)?
 bf16
@@ -135,6 +138,9 @@ main_process_ip: 36.112.23.24
 main_process_port: 29500
 main_training_function: main
 mixed_precision: bf16
+mpirun_config:
+  mpirun_ccl: '1'
+  mpirun_hostfile: /home/user/hostfile
 num_machines: 4
 num_processes: 16
 rdzv_backend: static
@@ -148,6 +154,7 @@ use_cpu: true
 Set following env and using intel MPI to launch the training
 
 In node0, you need to create a configuration file which contains the IP addresses of each node (for example hostfile) and pass that configuration file path as an argument.
+If you selected to have Accelerate launch `mpirun`, ensure that the location of your hostfile matches the path in the config.
 ```bash
 $ cat hostfile
 xxx.xxx.xxx.xxx #node0 ip
@@ -155,7 +162,16 @@ xxx.xxx.xxx.xxx #node1 ip
 xxx.xxx.xxx.xxx #node2 ip
 xxx.xxx.xxx.xxx #node3 ip
 ```
-Now, run the following command in node0 and **16DDP** will be enabled in node0,node1,node2,node3 with BF16 mixed precision:
+When Accelerate is launching `mpirun`, source the oneCCL bindings setvars.sh to get your Intel MPI environment, and then
+run your script using `accelerate launch`:
+```bash
+oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
+source $oneccl_bindings_for_pytorch_path/env/setvars.sh
+
+accelerate launch examples/nlp_example.py
+```
+Otherwise, if you selected not to have Accelerate launch `mpirun`, run the following command in node0 and **16DDP** will
+be enabled in node0,node1,node2,node3 with BF16 mixed precision:
 ```bash
 oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
 source $oneccl_bindings_for_pytorch_path/env/setvars.sh
