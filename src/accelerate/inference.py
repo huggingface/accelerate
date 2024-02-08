@@ -6,7 +6,7 @@ from .state import PartialState
 from .utils import (
     calculate_maximum_sizes,
     convert_bytes,
-    gather_object,
+    copy_tensor_to_devices,
     ignorant_find_batch_size,
     infer_auto_device_map,
     is_pippy_available,
@@ -83,7 +83,7 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     return stage
 
 
-def pippy_forward(forward, num_chunks, send_output_to_cpu, *args, **kwargs):
+def pippy_forward(forward, num_chunks, gather_output, *args, **kwargs):
     state = PartialState()
     output = None
 
@@ -102,8 +102,9 @@ def pippy_forward(forward, num_chunks, send_output_to_cpu, *args, **kwargs):
         output = forward()
     else:
         forward()
-    # Each node will get a copy of the full output, which is only on the last GPU
-    output = gather_object([output if output is not None else object()])[-1]
+    if gather_output is True:
+        # Each node will get a copy of the full output which is only on the last GPU
+        output = copy_tensor_to_devices(output)
     return output
 
 
@@ -114,7 +115,7 @@ def prepare_pippy(
     example_args=(),
     example_kwargs: Optional[Dict[str, Any]] = None,
     num_chunks=None,
-    send_output_to_cpu=True,
+    gather_output=True,
 ):
     """
     Wraps `model` for PipelineParallelism. Also ensures that the output is sent to each GPU at the end, reducing the
@@ -137,6 +138,9 @@ def prepare_pippy(
         num_chunks (`int`):
             The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
             this can be tuned and played with. In general one should have num_chunks >= num_gpus.
+        gather_output (`bool`, defaults to `True`):
+            Whether or not to copy the output from the last GPU (which holds the true outputs) and send them across to
+            all GPUs.
     """
     if not is_pippy_available():
         raise ImportError(
@@ -161,7 +165,7 @@ def prepare_pippy(
     model.hf_split_points = split_points
 
     def forward(*args, **kwargs):
-        return pippy_forward(stage.forward, num_chunks, *args, **kwargs)
+        return pippy_forward(stage.forward, num_chunks, gather_output, *args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
     # Note: creates an infinite recursion loop with `generate`
