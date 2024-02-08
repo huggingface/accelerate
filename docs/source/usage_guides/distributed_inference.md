@@ -216,7 +216,7 @@ with torch.no_grad():
     output = model(*args)
 ```
 
-When finished all the data will be on the CPU on each process for convenience:
+When finished all the data will be on each GPU for convenience:
 
 ```{python}
 print(output)
