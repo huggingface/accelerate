@@ -118,8 +118,7 @@ def prepare_pippy(
     gather_output=True,
 ):
     """
-    Wraps `model` for PipelineParallelism. Also ensures that the output is sent to each GPU at the end, reducing the
-    need to check for process indexes.
+    Wraps `model` for pipeline parallel inference.
 
     Args:
         model (`torch.nn.Module`):
