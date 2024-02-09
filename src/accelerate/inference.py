@@ -1,6 +1,6 @@
 import math
 from types import MethodType
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .state import PartialState
 from .utils import (
@@ -110,12 +110,12 @@ def pippy_forward(forward, num_chunks, gather_output, *args, **kwargs):
 
 def prepare_pippy(
     model,
-    split_points="auto",
-    no_split_module_classes=None,
-    example_args=(),
+    split_points: Optional[Union[str, List[str]]] = "auto",
+    no_split_module_classes: Optional[List[str]] = None,
+    example_args: Optional[Tuple[Any]] = (),
     example_kwargs: Optional[Dict[str, Any]] = None,
-    num_chunks=None,
-    gather_output=False,
+    num_chunks: Optional[int] = None,
+    gather_output: Optional[bool] = False,
 ):
     """
     Wraps `model` for pipeline parallel inference.
@@ -123,14 +123,14 @@ def prepare_pippy(
     Args:
         model (`torch.nn.Module`):
             A model we want to split for pipeline-parallel inference
-        split_points (`str`, defaults to 'auto'):
+        split_points (`str` or `List[str]`, defaults to 'auto'):
             How to generate the split points and chunk the model across each GPU. 'auto' will find the best balanced
-            split given any model.
+            split given any model. Should be a list of layer names in the model to split by otherwise.
         no_split_module_classes (`List[str]`):
             A list of class names for layers we don't want to be split.
-        example_args (tuple of `torch.Tensor`):
+        example_args (tuple of model inputs):
             The expected inputs for the model that uses order-based inputs. Recommended to use this method if possible.
-        example_kwargs (dict of `torch.Tensor`)
+        example_kwargs (dict of model inputs)
             The expected inputs for the model that uses dictionary-based inputs. This is a *highly* limiting structure
             that requires the same keys be present at *all* inference calls. Not recommended unless the prior condition
             is true for all cases.
