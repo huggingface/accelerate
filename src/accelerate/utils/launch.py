@@ -59,7 +59,7 @@ def _get_mpirun_args():
 
     if not mpi_apps:
         raise EnvironmentError(
-            "mpirun or mpiexec were not found. Ensure that Intel MPI, Open MPI, or MVAPICH are " "installed."
+            "mpirun or mpiexec were not found. Ensure that Intel MPI, Open MPI, or MVAPICH are installed."
         )
 
     # Call the app with the --version flag to determine which MPI app is installed
