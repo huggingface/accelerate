@@ -216,10 +216,20 @@ with torch.no_grad():
     output = model(*args)
 ```
 
-When finished, all the data will be on the CPU on each node:
+When finished all the data will be on the last process only:
 
 ```{python}
-print(output)
+from accelerate import PartialState
+if PartialState().is_last_process:
+    print(output)
 ```
+
+<Tip>
+
+    If you pass in `gather_output=True` to [`inference.prepare_pippy`], the output will be sent
+    across to all the GPUs afterwards without needing the `is_last_process` check. This is 
+    `False` by default as it incurs a communication call.
+    
+</Tip>
 
 And that's it! To explore more, please check out the inference examples in the [Accelerate repo](https://github.com/huggingface/accelerate/tree/main/examples/inference) and our [documentation](../package_reference/inference) as we work to improving this integration. 
