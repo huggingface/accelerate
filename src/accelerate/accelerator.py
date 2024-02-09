@@ -373,8 +373,6 @@ class Accelerator:
                         raise ValueError("You can only pass one `AutocastKwargs` in `kwargs_handler`.")
                     else:
                         self.autocast_handler = handler
-        if self.fp8_recipe_handler is None and mixed_precision == "fp8":
-            self.fp8_recipe_handler = FP8RecipeKwargs()
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -387,6 +385,9 @@ class Accelerator:
             _from_accelerator=True,
             **kwargs,
         )
+
+        if self.fp8_recipe_handler is None and self.state.mixed_precision == "fp8":
+            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP" if is_msamp_available() else "TE")
 
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
