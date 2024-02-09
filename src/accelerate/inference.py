@@ -1,11 +1,12 @@
 import math
 from types import MethodType
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .state import PartialState
 from .utils import (
     calculate_maximum_sizes,
     convert_bytes,
+    copy_tensor_to_devices,
     ignorant_find_batch_size,
     infer_auto_device_map,
     is_pippy_available,
@@ -82,7 +83,7 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     return stage
 
 
-def pippy_forward(forward, num_chunks, *args, **kwargs):
+def pippy_forward(forward, num_chunks, gather_output, *args, **kwargs):
     state = PartialState()
     output = None
 
@@ -101,37 +102,43 @@ def pippy_forward(forward, num_chunks, *args, **kwargs):
         output = forward()
     else:
         forward()
+    if gather_output:
+        # Each node will get a copy of the full output which is only on the last GPU
+        output = copy_tensor_to_devices(output)
     return output
 
 
 def prepare_pippy(
     model,
-    split_points="auto",
-    no_split_module_classes=None,
-    example_args=(),
+    split_points: Optional[Union[str, List[str]]] = "auto",
+    no_split_module_classes: Optional[List[str]] = None,
+    example_args: Optional[Tuple[Any]] = (),
     example_kwargs: Optional[Dict[str, Any]] = None,
-    num_chunks=None,
+    num_chunks: Optional[int] = None,
+    gather_output: Optional[bool] = False,
 ):
     """
-    Wraps `model` for PipelineParallelism
+    Wraps `model` for pipeline parallel inference.
 
     Args:
         model (`torch.nn.Module`):
             A model we want to split for pipeline-parallel inference
-        split_points (`str`, defaults to 'auto'):
+        split_points (`str` or `List[str]`, defaults to 'auto'):
             How to generate the split points and chunk the model across each GPU. 'auto' will find the best balanced
-            split given any model.
+            split given any model. Should be a list of layer names in the model to split by otherwise.
         no_split_module_classes (`List[str]`):
             A list of class names for layers we don't want to be split.
-        example_args (tuple of `torch.Tensor`):
+        example_args (tuple of model inputs):
             The expected inputs for the model that uses order-based inputs. Recommended to use this method if possible.
-        example_kwargs (dict of `torch.Tensor`)
+        example_kwargs (dict of model inputs)
             The expected inputs for the model that uses dictionary-based inputs. This is a *highly* limiting structure
             that requires the same keys be present at *all* inference calls. Not recommended unless the prior condition
             is true for all cases.
-        num_chunks (`int`):
+        num_chunks (`int`, defaults to the number of available GPUs):
             The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
             this can be tuned and played with. In general one should have num_chunks >= num_gpus.
+        gather_output (`bool`, defaults to `False`):
+            If `True`, the output from the last GPU (which holds the true outputs) is sent across to all GPUs.
     """
     if not is_pippy_available():
         raise ImportError(
@@ -156,7 +163,7 @@ def prepare_pippy(
     model.hf_split_points = split_points
 
     def forward(*args, **kwargs):
-        return pippy_forward(stage.forward, num_chunks, *args, **kwargs)
+        return pippy_forward(stage.forward, num_chunks, gather_output, *args, **kwargs)
 
     # To act like a decorator so that it can be popped when doing `extract_model_from_parallel`
     # Note: creates an infinite recursion loop with `generate`

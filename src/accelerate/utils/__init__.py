@@ -121,6 +121,7 @@ from .operations import (
     concatenate,
     convert_outputs_to_fp32,
     convert_to_fp32,
+    copy_tensor_to_devices,
     find_batch_size,
     find_device,
     gather,
