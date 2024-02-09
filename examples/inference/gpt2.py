@@ -45,6 +45,10 @@ input = torch.randint(
 # number of total GPUs available if it fits on one GPU
 model = prepare_pippy(model, split_points="auto", example_args=(input,))
 
+# You can pass `gather_output=True` to have the output from the model
+# available on all GPUs
+# model = prepare_pippy(model, split_points="auto", example_args=(input,), gather_output=True)
+
 # Move the inputs to the first device
 input = input.to("cuda:0")
 
@@ -67,9 +71,8 @@ for i in range(5):
 torch.cuda.synchronize()
 end_time = time.time()
 
-# The outputs are on the CPU on each process,
-# we print it once for posterity
-if PartialState().is_main_process:
+# The outputs are only on the final process by default
+if PartialState().is_last_process:
     output = torch.stack(tuple(output[0]))
     print(f"Time of first pass: {first_batch}")
     print(f"Average time per batch: {(end_time - start_time)/5}")

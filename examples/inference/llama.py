@@ -38,15 +38,18 @@ inputs = tokenizer(prompts, return_tensors="pt", padding=True)
 # number of total GPUs available if it fits on one GPU
 model = prepare_pippy(model, split_points="auto", example_args=inputs)
 
+# You can pass `gather_output=True` to have the output from the model
+# available on all GPUs
+# model = prepare_pippy(model, split_points="auto", example_args=(input,), gather_output=True)
+
 # currently we don't support `model.generate`
 # output = model.generate(**inputs, max_new_tokens=1)
 
 with torch.no_grad():
     output = model(**inputs)
 
-# The outputs are on the CPU on each process,
-# we print it once for posterity
-if PartialState().is_main_process:
+# The outputs are only on the final process by default
+if PartialState().is_last_process:
     next_token_logits = output[0][:, -1, :]
     next_token = torch.argmax(next_token_logits, dim=-1)
     print(tokenizer.batch_decode(next_token))

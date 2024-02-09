@@ -51,6 +51,15 @@ model = prepare_pippy(
     example_kwargs=example_inputs,
 )
 
+# You can pass `gather_output=True` to have the output from the model
+# available on all GPUs
+# model = prepare_pippy(
+#     model,
+#     no_split_module_classes=["T5Block"],
+#     example_kwargs=example_inputs,
+#     gather_outputs=True
+# )
+
 # The model expects a tuple during real inference
 # with the data on the first device
 args = (example_inputs["input_ids"].to("cuda:0"), example_inputs["decoder_input_ids"].to("cuda:0"))
@@ -74,9 +83,8 @@ for i in range(5):
 torch.cuda.synchronize()
 end_time = time.time()
 
-# The outputs are on the CPU on each process,
-# we print it once for posterity
-if PartialState().is_main_process:
+# The outputs are only on the final process by default
+if PartialState().is_last_process:
     output = torch.stack(tuple(output[0]))
     print(f"Time of first pass: {first_batch}")
     print(f"Average time per batch: {(end_time - start_time)/5}")
