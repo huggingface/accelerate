@@ -17,13 +17,14 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import accelerate
 from accelerate import debug_launcher
-from accelerate.commands.launch import launch_command_parser, _validate_launch_command
-from accelerate.test_utils import execute_subprocess_async, require_cpu, test_ops, test_script
+from accelerate.commands.launch import _validate_launch_command, launch_command_parser
+from accelerate.test_utils import require_cpu, test_ops, test_script
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
+
 
 @require_cpu
 class MultiCPUTester(unittest.TestCase):
@@ -57,13 +58,13 @@ class MultiCPUTester(unittest.TestCase):
                 cmd, current_env = prepare_simple_launcher_cmd_env(args)
 
         # Verify the mpirun command args
-        expected_mpirun_cmd= ['mpirun', "-f", '/home/user/hostfile', "-ppn", '4', "-n", '16']
+        expected_mpirun_cmd = ["mpirun", "-f", "/home/user/hostfile", "-ppn", "4", "-n", "16"]
         self.assertGreater(len(cmd), len(expected_mpirun_cmd))
-        generated_mpirun_cmd = cmd[0:len(expected_mpirun_cmd)]
+        generated_mpirun_cmd = cmd[0 : len(expected_mpirun_cmd)]
         self.assertEqual(expected_mpirun_cmd, generated_mpirun_cmd)
 
         # Verify that the python script and arg
-        python_script_cmd = cmd[len(expected_mpirun_cmd):]
+        python_script_cmd = cmd[len(expected_mpirun_cmd) :]
         self.assertEqual(len(python_script_cmd), 3)
         self.assertEqual(python_script_cmd[1], self.test_file_path)
         self.assertEqual(python_script_cmd[2], test_file_arg)
