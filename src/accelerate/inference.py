@@ -134,10 +134,10 @@ def prepare_pippy(
             The expected inputs for the model that uses dictionary-based inputs. This is a *highly* limiting structure
             that requires the same keys be present at *all* inference calls. Not recommended unless the prior condition
             is true for all cases.
-        num_chunks (`int`):
+        num_chunks (`int`, defaults to the number of available GPUs):
             The number of different stages the Pipeline will have. By default it will assign one chunk per GPU, but
             this can be tuned and played with. In general one should have num_chunks >= num_gpus.
-        gather_output (`bool`):
+        gather_output (`bool`, defaults to `False`):
             If `True`, the output from the last GPU (which holds the true outputs) is sent across to all GPUs.
     """
     if not is_pippy_available():
