@@ -137,7 +137,7 @@ def get_cluster_input():
                     str,
                     default="~/hostfile",
                 )
-                mpirun_config["mpirun_hostfile"] = os.path.expanduser(mpirun_hostfile)
+                mpirun_config["mpirun_hostfile"] = os.path.expanduser(mpirun_hostfile.strip())
                 mpirun_config["mpirun_ccl"] = _ask_field("Enter the number of oneCCL worker threads [1]: ", default=1)
     if (
         not use_cpu
