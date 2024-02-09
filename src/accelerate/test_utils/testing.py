@@ -129,6 +129,20 @@ def require_xpu(test_case):
     return unittest.skipUnless(is_xpu_available(), "test requires a XPU")(test_case)
 
 
+def require_non_xpu(test_case):
+    """
+    Decorator marking a test that should be skipped for XPU.
+    """
+    return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
+
+
+def require_npu(test_case):
+    """
+    Decorator marking a test that requires NPU. These tests are skipped when there are no NPU available.
+    """
+    return unittest.skipUnless(is_npu_available(), "test require a NPU")(test_case)
+
+
 def require_mps(test_case):
     """
     Decorator marking a test that requires MPS backend. These tests are skipped when torch doesn't support `mps`
