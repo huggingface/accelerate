@@ -506,13 +506,17 @@ def gather_tensor_shape(tensor):
     state = PartialState()
     base_tensor = torch.empty(max_tensor_dimension, dtype=torch.int, device=state.device)
 
+    # Since PyTorch can't just send a tensor to another GPU without
+    # knowing its size, we store the size of the tensor with data
+    # in an allocation
     if tensor is not None:
         shape = tensor.shape
         tensor_dtype = TENSOR_TYPE_TO_INT[tensor.dtype]
         base_tensor[: len(shape) + 1] = torch.tensor(list(shape) + [tensor_dtype], dtype=int)
-    # Perform a reduction
+    # Perform a reduction to copy the size data onto all GPUs
     base_tensor = reduce(base_tensor, reduction="sum")
     base_tensor = base_tensor[base_tensor.nonzero()]
+    # The last non-zero data contains the coded dtype the source tensor is
     dtype = int(base_tensor[-1:][0])
     base_tensor = base_tensor[:-1]
     return base_tensor, dtype
@@ -531,7 +535,7 @@ def copy_tensor_to_devices(tensor=None) -> torch.Tensor:
     state = PartialState()
     shape, dtype = gather_tensor_shape(tensor)
     if tensor is None:
-        tensor = torch.empty(shape, dtype=TENSOR_INT_TO_DTYPE[dtype]).to(state.device)
+        tensor = torch.zeros(shape, dtype=TENSOR_INT_TO_DTYPE[dtype]).to(state.device)
     return reduce(tensor, reduction="sum")
 
 
