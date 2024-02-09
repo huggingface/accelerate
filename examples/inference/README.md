@@ -8,7 +8,7 @@ This repo contains a variety of tutorials for using the [PiPPy](https://github.c
 
 ## Installation
 
-This requires the `main` branch of accelerate (or a version at least 0.27.0) and  `pippy` version of 0.2.0 or greater. Please install using `pip install .` to pull from the `setup.py` in this repo, or run manually:
+This requires the `main` branch of accelerate (or a version at least 0.27.0),  `pippy` version of 0.2.0 or greater, and at least python 3.9. Please install using `pip install .` to pull from the `setup.py` in this repo, or run manually:
 
 ```bash
 pip install 'accelerate>=0.27.0' 'torchpippy>=0.2.0'
@@ -16,14 +16,22 @@ pip install 'accelerate>=0.27.0' 'torchpippy>=0.2.0'
 
 ## Running code
 
-You can either use `torchrun` or the recommended way of `accelerate launch` on each script:
+You can either use `torchrun` or the recommended way of `accelerate launch` (without needing to run `accelerate config`) on each script:
 
 ```bash
 accelerate launch bert.py
 ```
 
+Or:
+
 ```bash
-torchrun bert.py
+accelerate launch --num_processes {NUM_GPUS} bert.py
+```
+
+Or:
+
+```bash
+torchrun --nproc-per-node {NUM_GPUS} bert.py
 ```
 
 ## General speedups
