@@ -26,6 +26,7 @@ extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameteriz
 extras["test_dev"] = [
     "datasets",
     "evaluate",
+    "torchpippy>=0.2.0",
     "transformers",
     "scipy",
     "scikit-learn",
