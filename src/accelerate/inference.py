@@ -102,7 +102,7 @@ def pippy_forward(forward, num_chunks, gather_output, *args, **kwargs):
         output = forward()
     else:
         forward()
-    if gather_output is True:
+    if gather_output:
         # Each node will get a copy of the full output which is only on the last GPU
         output = copy_tensor_to_devices(output)
     return output
