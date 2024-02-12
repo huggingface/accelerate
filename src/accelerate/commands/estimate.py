@@ -105,6 +105,8 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
                 f"To check `{model_name}`, `transformers` must be installed. Please install it via `pip install transformers`"
             )
         print(f"Loading pretrained config for `{model_name}` from `transformers`...")
+        if model_info.config is None:
+            raise RuntimeError(f"Tried to load `{model_name}` with `transformers` but it does not have any metadata.")
 
         auto_map = model_info.config.get("auto_map", False)
         config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code, token=access_token)
