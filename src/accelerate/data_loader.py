@@ -809,7 +809,8 @@ def prepare_data_loader(
         use_seedable_sampler (`bool`, *optional*, defaults to `False`):
             Whether to use the [`~data_loader.SeedableRandomSampler`] instead of a `RandomSampler` for better
             reproducability. Comes at a cost of potentially different performances due to different shuffling
-            algorithms but ensures results will be the *exact* same.
+            algorithms but ensures results will be the *exact* same. Should be paired with `set_seed()` at every
+            `self.set_epoch`
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -927,11 +928,6 @@ def prepare_data_loader(
         kwargs["batch_size"] = (
             dataloader.batch_size // num_processes if split_batches and not dispatch_batches else dataloader.batch_size
         )
-    if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
-        if sampler_is_batch_sampler:
-            dataloader.sampler.sampler = sampler
-        else:
-            dataloader.batch_sampler.sampler = sampler
     if dispatch_batches:
         kwargs.pop("generator")
         dataloader = DataLoaderDispatcher(
@@ -964,6 +960,11 @@ def prepare_data_loader(
             **kwargs,
         )
 
+    if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
+        if sampler_is_batch_sampler:
+            dataloader.sampler.sampler = sampler
+        else:
+            dataloader.batch_sampler.sampler = sampler
     if state.distributed_type == DistributedType.TPU:
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader
