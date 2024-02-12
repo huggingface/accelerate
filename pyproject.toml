@@ -1,7 +1,3 @@
-[tool.black]
-line-length = 119
-target-version = ['py37']
-
 [tool.ruff]
 # Never enforce `E501` (line length violations).
 ignore = ["E501", "E741", "W605"]
@@ -11,7 +7,13 @@ line-length = 119
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["E402", "F401", "F403", "F811"]
+"manim_animations/*" = ["ALL"]
 
 [tool.ruff.isort]
 lines-after-imports = 2
 known-first-party = ["accelerate"]
+
+[tool.ruff.format]
+exclude = [
+    "manim_animations/*"
+]

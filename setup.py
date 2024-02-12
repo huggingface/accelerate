@@ -12,15 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from setuptools import setup
-from setuptools import find_packages
+from setuptools import find_packages, setup
+
 
 extras = {}
-extras["quality"] = ["black ~= 23.1", "ruff >= 0.0.241", "hf-doc-builder >= 0.3.0", "urllib3 < 2.0.0"]
+extras["quality"] = [
+    "black ~= 23.1",  # hf-doc-builder has a hidden dependency on `black`
+    "hf-doc-builder >= 0.3.0",
+    "ruff ~= 0.1.15",
+]
 extras["docs"] = []
 extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
 extras["test_dev"] = [
-    "datasets", "evaluate", "transformers", "scipy", "scikit-learn", "deepspeed", "tqdm", "bitsandbytes", "timm"
+    "datasets",
+    "evaluate",
+    "torchpippy>=0.2.0",
+    "transformers",
+    "scipy",
+    "scikit-learn",
+    "deepspeed<0.13.0",
+    "tqdm",
+    "bitsandbytes",
+    "timm",
 ]
 extras["testing"] = extras["test_prod"] + extras["test_dev"]
 extras["rich"] = ["rich"]
@@ -34,7 +47,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.27.0.dev0",
+    version="0.28.0",
     description="Accelerate",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -54,7 +67,15 @@ setup(
         ]
     },
     python_requires=">=3.8.0",
-    install_requires=["numpy>=1.17", "packaging>=20.0", "psutil", "pyyaml", "torch>=1.10.0", "huggingface_hub", "safetensors>=0.3.1"],
+    install_requires=[
+        "numpy>=1.17",
+        "packaging>=20.0",
+        "psutil",
+        "pyyaml",
+        "torch>=1.10.0",
+        "huggingface_hub",
+        "safetensors>=0.3.1",
+    ],
     extras_require=extras,
     classifiers=[
         "Development Status :: 5 - Production/Stable",

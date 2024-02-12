@@ -18,6 +18,7 @@ import torch
 from ..logging import get_logger
 from .constants import FSDP_MODEL_NAME, FSDP_PYTORCH_VERSION, OPTIMIZER_NAME
 from .imports import is_torch_distributed_available
+from .modeling import is_peft_model
 from .versions import is_torch_version
 
 
@@ -32,7 +33,25 @@ if is_torch_version(">=", FSDP_PYTORCH_VERSION) and is_torch_distributed_availab
 logger = get_logger(__name__)
 
 
-def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0):
+def _get_model_state_dict(model, adapter_only=False):
+    if adapter_only and is_peft_model(model):
+        from peft import get_peft_model_state_dict
+
+        return get_peft_model_state_dict(model, adapter_name=model.active_adapter)
+    else:
+        return model.state_dict()
+
+
+def _set_model_state_dict(model, state_dict, adapter_only=False):
+    if adapter_only and is_peft_model(model):
+        from peft import set_peft_model_state_dict
+
+        return set_peft_model_state_dict(model, state_dict, adapter_name=model.active_adapter)
+    else:
+        return model.load_state_dict(state_dict)
+
+
+def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0, adapter_only=False):
     os.makedirs(output_dir, exist_ok=True)
 
     if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
@@ -45,7 +64,7 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0):
     with FSDP.state_dict_type(
         model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
     ):
-        state_dict = model.state_dict()
+        state_dict = _get_model_state_dict(model, adapter_only=adapter_only)
         if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
             weights_name = f"{FSDP_MODEL_NAME}.bin" if model_index == 0 else f"{FSDP_MODEL_NAME}_{model_index}.bin"
             output_model_file = os.path.join(output_dir, weights_name)
@@ -77,7 +96,7 @@ def save_fsdp_model(fsdp_plugin, accelerator, model, output_dir, model_index=0):
             logger.info(f"Model saved to {ckpt_dir}")
 
 
-def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0):
+def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0, adapter_only=False):
     accelerator.wait_for_everyone()
     if fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT:
         # FSDP raises error when single GPU is used with `offload_to_cpu=True` for FULL_STATE_DICT
@@ -118,7 +137,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0):
                 else input_dir
             )
             logger.info(f"Loading model from {ckpt_dir}")
-            state_dict = {"model": model.state_dict()}
+            state_dict = {"model": _get_model_state_dict(model, adapter_only=adapter_only)}
             dist_cp.load_state_dict(
                 state_dict=state_dict,
                 storage_reader=dist_cp.FileSystemReader(ckpt_dir),
@@ -126,7 +145,7 @@ def load_fsdp_model(fsdp_plugin, accelerator, model, input_dir, model_index=0):
             )
             state_dict = state_dict["model"]
             logger.info(f"Model loaded from {ckpt_dir}")
-        load_result = model.load_state_dict(state_dict)
+        load_result = _set_model_state_dict(model, state_dict, adapter_only=adapter_only)
     return load_result
 
 
@@ -157,7 +176,7 @@ def save_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, output_dir, 
             logger.info(f"Optimizer state saved in {ckpt_dir}")
 
 
-def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0):
+def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, optimizer_index=0, adapter_only=False):
     accelerator.wait_for_everyone()
     with FSDP.state_dict_type(
         model, fsdp_plugin.state_dict_type, fsdp_plugin.state_dict_config, fsdp_plugin.optim_state_dict_config
@@ -180,7 +199,7 @@ def load_fsdp_optimizer(fsdp_plugin, accelerator, optimizer, model, input_dir, o
             )
             logger.info(f"Loading Optimizer from {ckpt_dir}")
             optim_state = load_sharded_optimizer_state_dict(
-                model_state_dict=model.state_dict(),
+                model_state_dict=_get_model_state_dict(model, adapter_only=adapter_only),
                 optimizer_key="optimizer",
                 storage_reader=dist_cp.FileSystemReader(ckpt_dir),
             )

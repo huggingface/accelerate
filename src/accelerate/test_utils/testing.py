@@ -40,6 +40,7 @@ from ..utils import (
     is_mps_available,
     is_npu_available,
     is_pandas_available,
+    is_pippy_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_version,
@@ -53,20 +54,20 @@ from ..utils import (
 
 def get_backend():
     if is_torch_xla_available():
-        return "xla", torch.cuda.device_count()
+        return "xla", torch.cuda.device_count(), torch.cuda.memory_allocated
     elif is_cuda_available():
-        return "cuda", torch.cuda.device_count()
+        return "cuda", torch.cuda.device_count(), torch.cuda.memory_allocated
     elif is_mps_available():
-        return "mps", 1
+        return "mps", 1, torch.mps.current_allocated_memory()
     elif is_npu_available():
-        return "npu", torch.npu.device_count()
+        return "npu", torch.npu.device_count(), torch.npu.memory_allocated
     elif is_xpu_available():
-        return "xpu", torch.xpu.device_count()
+        return "xpu", torch.xpu.device_count(), torch.xpu.memory_allocated
     else:
-        return "cpu", 1
+        return "cpu", 1, 0
 
 
-torch_device, device_count = get_backend()
+torch_device, device_count, memory_allocated_func = get_backend()
 
 
 def parse_flag_from_env(key, default=False):
@@ -129,6 +130,20 @@ def require_xpu(test_case):
     Decorator marking a test that requires XPU. These tests are skipped when there are no XPU available.
     """
     return unittest.skipUnless(is_xpu_available(), "test requires a XPU")(test_case)
+
+
+def require_non_xpu(test_case):
+    """
+    Decorator marking a test that should be skipped for XPU.
+    """
+    return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
+
+
+def require_npu(test_case):
+    """
+    Decorator marking a test that requires NPU. These tests are skipped when there are no NPU available.
+    """
+    return unittest.skipUnless(is_npu_available(), "test require a NPU")(test_case)
 
 
 def require_mps(test_case):
@@ -299,6 +314,13 @@ def require_pandas(test_case):
     Decorator marking a test that requires pandas installed. These tests are skipped when pandas isn't installed
     """
     return unittest.skipUnless(is_pandas_available(), "test requires pandas")(test_case)
+
+
+def require_pippy(test_case):
+    """
+    Decorator marking a test that requires pippy installed. These tests are skipped when pippy isn't installed
+    """
+    return unittest.skipUnless(is_pippy_available(), "test requires pippy")(test_case)
 
 
 _atleast_one_tracker_available = (

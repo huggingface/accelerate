@@ -15,12 +15,18 @@ rendered properly in your Markdown viewer.
 
 # Distributed Inference with 🤗 Accelerate
 
-Distributed inference is a common use case, especially with natural language processing (NLP) models. Users often want to
-send a number of different prompts, each to a different GPU, and then get the results back. This also has other cases
-outside of just NLP, however for this tutorial we will focus on just this idea of each GPU receiving a different prompt,
-and then returning the results.
+Distributed inference can fall into three brackets:
 
-## The Problem
+1. Loading an entire model onto each GPU and sending chunks of a batch through each GPU's model copy at a time
+2. Loading parts of a model onto each GPU and processing a single input at one time
+3. Loading parts of a model onto each GPU and using what is called scheduled Pipeline Parallelism to combine the two prior techniques. 
+
+We're going to go through the first and the last bracket, showcasing how to do each as they are more realistic scenarios.
+
+
+## Sending chunks of a batch automatically to each loaded model
+
+This is the most memory-intensive solution, as it requires each GPU to keep a full copy of the model in memory at a given time. 
 
 Normally when doing this, users send the model to a specific device to load it from the CPU, and then move each prompt to a different device. 
 
@@ -55,7 +61,6 @@ a simple way to manage this. (To learn more, check out the relevant section in t
 
 Can it manage it? Yes. Does it add unneeded extra code however: also yes.
 
-## The Solution
 
 With 🤗 Accelerate, we can simplify this process by using the [`Accelerator.split_between_processes`] context manager (which also exists in `PartialState` and `AcceleratorState`). 
 This function will automatically split whatever data you pass to it (be it a prompt, a set of tensors, a dictionary of the prior data, etc.) across all the processes (with a potential
@@ -134,3 +139,97 @@ with distributed_state.split_between_processes(["a dog", "a cat", "a chicken"], 
 
 On the first GPU, the prompts will be `["a dog", "a cat"]`, and on the second GPU it will be `["a chicken", "a chicken"]`.
 Make sure to drop the final sample, as it will be a duplicate of the previous one.
+
+## Memory-efficient pipeline parallelism (experimental)
+
+This next part will discuss using *pipeline parallelism*. This is an **experimental** API utilizing the [PiPPy library by PyTorch](https://github.com/pytorch/PiPPy/) as a native solution. 
+
+The general idea with pipeline parallelism is: say you have 4 GPUs and a model big enough it can be *split* on four GPUs using `device_map="auto"`. With this method you can send in 4 inputs at a time (for example here, any amount works) and each model chunk will work on an input, then receive the next input once the prior chunk finished, making it *much* more efficient **and faster** than the method described earlier. Here's a visual taken from the PyTorch repository:
+
+![PiPPy example](https://camo.githubusercontent.com/681d7f415d6142face9dd1b837bdb2e340e5e01a58c3a4b119dea6c0d99e2ce0/68747470733a2f2f692e696d6775722e636f6d2f657955633934372e706e67)
+
+To illustrate how you can use this with Accelerate, we have created an [example zoo](https://github.com/huggingface/accelerate/tree/main/examples/inference) showcasing a number of different models and situations. In this tutorial, we'll show this method for GPT2 across two GPUs.
+
+Before you proceed, please make sure you have the latest pippy installed by running the following:
+
+```bash
+pip install torchpippy
+```
+
+We require at least version 0.2.0. To confirm that you have the correct version, run `pip show torchpippy`.
+
+Start by creating the model on the CPU:
+
+```{python}
+from transformers import GPT2ForSequenceClassification, GPT2Config
+
+config = GPT2Config()
+model = GPT2ForSequenceClassification(config)
+model.eval()
+```
+
+Next you'll need to create some example inputs to use. These help PiPPy trace the model.
+
+<Tip warning={true}>
+    However you make this example will determine the relative batch size that will be used/passed
+    through the model at a given time, so make sure to remember how many items there are!
+</Tip>
+
+```{python}
+input = torch.randint(
+    low=0,
+    high=config.vocab_size,
+    size=(2, 1024),  # bs x seq_len
+    device="cpu",
+    dtype=torch.int64,
+    requires_grad=False,
+)
+```
+Next we need to actually perform the tracing and get the model ready. To do so, use the [`inference.prepare_pippy`] function and it will fully wrap the model for pipeline parallelism automatically:
+
+```{python}
+from accelerate.inference import prepare_pippy
+example_inputs = {"input_ids": input}
+model = prepare_pippy(model, example_args=(input,))
+```
+
+<Tip>
+
+    There are a variety of parameters you can pass through to `prepare_pippy`:
+    
+    * `split_points` lets you determine what layers to split the model at. By default we use wherever `device_map="auto" declares, such as `fc` or `conv1`.
+
+    * `num_chunks` determines how the batch will be split and sent to the model itself (so `num_chunks=1` with four split points/four GPUs will have a naive MP where a single input gets passed between the four layer split points)
+
+</Tip>
+
+From here, all that's left is to actually perform the distributed inference!
+
+<Tip warning={true}>
+
+When passing inputs, we highly recommend to pass them in as a tuple of arguments. Using `kwargs` is supported, however, this approach is experimental.
+</Tip>
+
+```{python}
+args = some_more_arguments
+with torch.no_grad():
+    output = model(*args)
+```
+
+When finished all the data will be on the last process only:
+
+```{python}
+from accelerate import PartialState
+if PartialState().is_last_process:
+    print(output)
+```
+
+<Tip>
+
+    If you pass in `gather_output=True` to [`inference.prepare_pippy`], the output will be sent
+    across to all the GPUs afterwards without needing the `is_last_process` check. This is 
+    `False` by default as it incurs a communication call.
+    
+</Tip>
+
+And that's it! To explore more, please check out the inference examples in the [Accelerate repo](https://github.com/huggingface/accelerate/tree/main/examples/inference) and our [documentation](../package_reference/inference) as we work to improving this integration. 

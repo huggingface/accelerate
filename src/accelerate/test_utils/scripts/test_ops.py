@@ -22,6 +22,7 @@ from accelerate.utils.dataclasses import DistributedType
 from accelerate.utils.operations import (
     DistributedOperationException,
     broadcast,
+    copy_tensor_to_devices,
     gather,
     gather_object,
     pad_across_processes,
@@ -135,6 +136,17 @@ def test_op_checker(state):
     state.debug = False
 
 
+def test_copy_tensor_to_devices(state):
+    if state.distributed_type not in [DistributedType.MULTI_GPU, DistributedType.TPU]:
+        return
+    if state.is_main_process:
+        tensor = torch.tensor([1, 2, 3], dtype=torch.int).to(state.device)
+    else:
+        tensor = None
+    tensor = copy_tensor_to_devices(tensor)
+    assert torch.allclose(tensor, torch.tensor([1, 2, 3], dtype=torch.int, device="cuda"))
+
+
 def _mp_fn(index):
     # For xla_spawn (TPUs)
     main()
@@ -159,6 +171,8 @@ def main():
     test_reduce_mean(state)
     state.print("testing op_checker")
     test_op_checker(state)
+    state.print("testing sending tensors across devices")
+    test_copy_tensor_to_devices(state)
 
 
 if __name__ == "__main__":

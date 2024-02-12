@@ -19,11 +19,11 @@ import torch
 
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import require_cpu, require_cuda
+from accelerate.test_utils import require_cpu, require_non_cpu, require_non_xpu
 
 
 @require_cpu
-class OptimizerTester(unittest.TestCase):
+class CPUOptimizerTester(unittest.TestCase):
     def test_accelerated_optimizer_pickling(self):
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.SGD(model.parameters(), 0.1)
@@ -36,8 +36,9 @@ class OptimizerTester(unittest.TestCase):
         AcceleratorState._reset_state()
 
 
-@require_cuda
-class CudaOptimizerTester(unittest.TestCase):
+@require_non_cpu
+@require_non_xpu
+class OptimizerTester(unittest.TestCase):
     def test_accelerated_optimizer_step_was_skipped(self):
         model = torch.nn.Linear(5, 5)
         optimizer = torch.optim.SGD(model.parameters(), 0.1)

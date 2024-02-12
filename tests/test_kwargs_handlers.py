@@ -21,7 +21,13 @@ import torch
 
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import execute_subprocess_async, require_cuda, require_multi_gpu
+from accelerate.test_utils import (
+    device_count,
+    execute_subprocess_async,
+    require_multi_device,
+    require_non_cpu,
+    require_non_xpu,
+)
 from accelerate.utils import AutocastKwargs, KwargsHandler, TorchDynamoPlugin, clear_environment
 from accelerate.utils.dataclasses import DistributedType
 
@@ -41,7 +47,8 @@ class KwargsHandlerTester(unittest.TestCase):
         self.assertDictEqual(MockClass(a=2, b=True).to_kwargs(), {"a": 2, "b": True})
         self.assertDictEqual(MockClass(a=2, c=2.25).to_kwargs(), {"a": 2, "c": 2.25})
 
-    @require_cuda
+    @require_non_cpu
+    @require_non_xpu
     def test_grad_scaler_kwargs(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         scaler_handler = GradScalerKwargs(init_scale=1024, growth_factor=2)
@@ -59,12 +66,12 @@ class KwargsHandlerTester(unittest.TestCase):
         self.assertEqual(scaler._growth_interval, 2000)
         self.assertEqual(scaler._enabled, True)
 
-    @require_multi_gpu
+    @require_multi_device
     def test_ddp_kwargs(self):
-        cmd = ["torchrun", f"--nproc_per_node={torch.cuda.device_count()}", inspect.getfile(self.__class__)]
+        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd, env=os.environ.copy())
 
-    @require_cuda
+    @require_non_cpu
     def test_autocast_kwargs(self):
         kwargs = AutocastKwargs(enabled=False)
         AcceleratorState._reset_state()

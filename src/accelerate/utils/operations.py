@@ -26,7 +26,14 @@ import torch
 from ..state import PartialState
 from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
-from .imports import is_npu_available, is_torch_distributed_available, is_torch_version, is_torch_xla_available
+from .imports import (
+    is_npu_available,
+    is_torch_distributed_available,
+    is_torch_version,
+    is_torch_xla_available,
+    is_tpu_available,
+    is_xpu_available,
+)
 
 
 if is_torch_xla_available():
@@ -164,9 +171,18 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             }
         )
     elif hasattr(tensor, "to"):
-        # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if is_npu_available() and isinstance(device, int):
-            device = f"npu:{device}"
+        if is_npu_available():
+            # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
+            if isinstance(device, int):
+                device = f"npu:{device}"
+            # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
+            elif device == torch.device("npu"):
+                device = "npu:0"
+        elif is_xpu_available():
+            if isinstance(device, int):
+                device = f"xpu:{device}"
+            elif device == torch.device("xpu"):
+                device = "xpu:0"
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
@@ -246,6 +262,23 @@ def find_batch_size(data):
     elif not isinstance(data, torch.Tensor):
         raise TypeError(f"Can only find the batch size of tensors but got {type(data)}.")
     return data.shape[0]
+
+
+def ignorant_find_batch_size(data):
+    """
+    Same as [`utils.operations.find_batch_size`] except will ignore if `ValueError` and `TypeErrors` are raised
+
+    Args:
+        data (nested list/tuple/dictionary of `torch.Tensor`): The data from which to find the batch size.
+
+    Returns:
+        `int`: The batch size.
+    """
+    try:
+        return find_batch_size(data)
+    except (ValueError, TypeError):
+        pass
+    return None
 
 
 def listify(data):
@@ -449,6 +482,64 @@ def _tpu_broadcast(tensor, src=0, name="broadcast tensor"):
     return xm.mesh_reduce(name, tensor, lambda x: x[src])
 
 
+TENSOR_TYPE_TO_INT = {
+    torch.float: 1,
+    torch.double: 2,
+    torch.half: 3,
+    torch.bfloat16: 4,
+    torch.uint8: 5,
+    torch.int8: 6,
+    torch.int16: 7,
+    torch.int32: 8,
+    torch.int64: 9,
+    torch.bool: 10,
+}
+
+TENSOR_INT_TO_DTYPE = {v: k for k, v in TENSOR_TYPE_TO_INT.items()}
+
+
+def gather_tensor_shape(tensor):
+    """
+    Grabs the shape of `tensor` only available on one process and returns a tensor of its shape
+    """
+    # Allocate 80 bytes to store the shape
+    max_tensor_dimension = 2**20
+    state = PartialState()
+    base_tensor = torch.empty(max_tensor_dimension, dtype=torch.int, device=state.device)
+
+    # Since PyTorch can't just send a tensor to another GPU without
+    # knowing its size, we store the size of the tensor with data
+    # in an allocation
+    if tensor is not None:
+        shape = tensor.shape
+        tensor_dtype = TENSOR_TYPE_TO_INT[tensor.dtype]
+        base_tensor[: len(shape) + 1] = torch.tensor(list(shape) + [tensor_dtype], dtype=int)
+    # Perform a reduction to copy the size data onto all GPUs
+    base_tensor = reduce(base_tensor, reduction="sum")
+    base_tensor = base_tensor[base_tensor.nonzero()]
+    # The last non-zero data contains the coded dtype the source tensor is
+    dtype = int(base_tensor[-1:][0])
+    base_tensor = base_tensor[:-1]
+    return base_tensor, dtype
+
+
+def copy_tensor_to_devices(tensor=None) -> torch.Tensor:
+    """
+    Copys a tensor that only exists on a single device and broadcasts it to other devices. Differs from `broadcast` as
+    each worker doesn't need to know its shape when used (and tensor can be `None`)
+
+    Args:
+        tensor (`torch.tensor`):
+            The tensor that should be sent to all devices. Must only have it be defined on a single device, the rest
+            should be `None`.
+    """
+    state = PartialState()
+    shape, dtype = gather_tensor_shape(tensor)
+    if tensor is None:
+        tensor = torch.zeros(shape, dtype=TENSOR_INT_TO_DTYPE[dtype]).to(state.device)
+    return reduce(tensor, reduction="sum")
+
+
 @verify_operation
 def broadcast(tensor, from_process: int = 0):
     """
@@ -588,6 +679,46 @@ def pad_across_processes(tensor, dim=0, pad_index=0, pad_first=False):
 
     return recursively_apply(
         _pad_across_processes, tensor, error_on_other_type=True, dim=dim, pad_index=pad_index, pad_first=pad_first
+    )
+
+
+def pad_input_tensors(tensor, batch_size, num_processes, dim=0):
+    """
+    Takes a `tensor` of arbitrary size and pads it so that it can work given `num_processes` needed dimensions.
+
+    New tensors are just the last input repeated.
+
+    E.g.:
+      Tensor: ([3,4,4]) Num processes: 4 Expected result shape: ([4,4,4])
+
+    """
+
+    def _pad_input_tensors(tensor, batch_size, num_processes, dim=0):
+        remainder = batch_size // num_processes
+        last_inputs = batch_size - (remainder * num_processes)
+        if batch_size // num_processes == 0:
+            to_pad = num_processes - batch_size
+        else:
+            to_pad = num_processes - (batch_size // num_processes)
+        # In the rare case that `to_pad` is negative,
+        # we need to pad the last inputs - the found `to_pad`
+        if last_inputs > to_pad & to_pad < 1:
+            to_pad = last_inputs - to_pad
+        old_size = tensor.shape
+        new_size = list(old_size)
+        new_size[0] = batch_size + to_pad
+        new_tensor = tensor.new_zeros(tuple(new_size))
+        indices = tuple(slice(0, old_size[dim]) if i == dim else slice(None) for i in range(len(new_size)))
+        new_tensor[indices] = tensor
+        return new_tensor
+
+    return recursively_apply(
+        _pad_input_tensors,
+        tensor,
+        error_on_other_type=True,
+        batch_size=batch_size,
+        num_processes=num_processes,
+        dim=dim,
     )
 
 

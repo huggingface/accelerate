@@ -152,7 +152,7 @@ Follow these steps to start contributing:
    $ make test
    ```
 
-   `accelerate` relies on `black` and `ruff` to format its source code
+   `accelerate` relies on `ruff` to format its source code
    consistently. After you make changes, apply automatic style corrections and code verifications
    that can't be automated in one go with:
 

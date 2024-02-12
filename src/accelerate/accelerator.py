@@ -374,8 +374,6 @@ class Accelerator:
                         raise ValueError("You can only pass one `AutocastKwargs` in `kwargs_handler`.")
                     else:
                         self.autocast_handler = handler
-        if self.fp8_recipe_handler is None and mixed_precision == "fp8":
-            self.fp8_recipe_handler = FP8RecipeKwargs()
 
         kwargs = self.init_handler.to_kwargs() if self.init_handler is not None else {}
         self.state = AcceleratorState(
@@ -388,6 +386,9 @@ class Accelerator:
             _from_accelerator=True,
             **kwargs,
         )
+
+        if self.fp8_recipe_handler is None and self.state.mixed_precision == "fp8":
+            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP" if is_msamp_available() else "TE")
 
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
@@ -1758,10 +1759,11 @@ class Accelerator:
         for obj in result:
             if isinstance(obj, torch.nn.Module):
                 model = obj
+                model.train()
             elif isinstance(obj, (torch.optim.Optimizer)):
                 optimizer = obj
         if optimizer is not None and model is not None:
-            dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else torch.float32
+            dtype = torch.bfloat16 if self.state.mixed_precision == "bf16" else None
             if self.device.type == "xpu" and is_xpu_available():
                 model = model.to(self.device)
                 model, optimizer = torch.xpu.optimize(
