@@ -21,7 +21,13 @@ import torch
 
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
-from accelerate.test_utils import device_count, execute_subprocess_async, require_multi_device, require_non_cpu
+from accelerate.test_utils import (
+    device_count,
+    execute_subprocess_async,
+    require_multi_device,
+    require_non_cpu,
+    require_non_xpu,
+)
 from accelerate.utils import AutocastKwargs, KwargsHandler, TorchDynamoPlugin, clear_environment
 
 
@@ -41,6 +47,7 @@ class KwargsHandlerTester(unittest.TestCase):
         self.assertDictEqual(MockClass(a=2, c=2.25).to_kwargs(), {"a": 2, "c": 2.25})
 
     @require_non_cpu
+    @require_non_xpu
     def test_grad_scaler_kwargs(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         scaler_handler = GradScalerKwargs(init_scale=1024, growth_factor=2)

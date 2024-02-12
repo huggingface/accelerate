@@ -26,6 +26,7 @@ extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameteriz
 extras["test_dev"] = [
     "datasets",
     "evaluate",
+    "torchpippy>=0.2.0",
     "transformers",
     "scipy",
     "scikit-learn",
@@ -46,7 +47,7 @@ extras["sagemaker"] = [
 
 setup(
     name="accelerate",
-    version="0.27.0.dev0",
+    version="0.28.0",
     description="Accelerate",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",

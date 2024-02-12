@@ -23,7 +23,14 @@ from unittest import mock
 import torch
 
 from accelerate.test_utils.examples import compare_against_test
-from accelerate.test_utils.testing import TempDirTestCase, require_trackers, run_command, slow
+from accelerate.test_utils.testing import (
+    TempDirTestCase,
+    require_multi_gpu,
+    require_pippy,
+    require_trackers,
+    run_command,
+    slow,
+)
 from accelerate.utils import write_basic_config
 
 
@@ -226,4 +233,29 @@ class FeatureExamplesTests(TempDirTestCase):
 
     def test_early_stopping(self):
         testargs = ["examples/by_feature/early_stopping.py"]
+        run_command(self._launch_args + testargs)
+
+    @require_pippy
+    @require_multi_gpu
+    def test_pippy_examples_bert(self):
+        testargs = ["examples/inference/bert.py"]
+        run_command(self._launch_args + testargs)
+
+    @require_pippy
+    @require_multi_gpu
+    def test_pippy_examples_gpt2(self):
+        testargs = ["examples/inference/gpt2.py"]
+        run_command(self._launch_args + testargs)
+
+    @require_pippy
+    @require_multi_gpu
+    def test_pippy_examples_t5(self):
+        testargs = ["examples/inference/t5.py"]
+        run_command(self._launch_args + testargs)
+
+    @slow
+    @require_pippy
+    @require_multi_gpu
+    def test_pippy_examples_llama(self):
+        testargs = ["examples/inference/llama.py"]
         run_command(self._launch_args + testargs)

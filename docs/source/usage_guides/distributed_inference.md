@@ -148,7 +148,7 @@ The general idea with pipeline parallelism is: say you have 4 GPUs and a model b
 
 ![PiPPy example](https://camo.githubusercontent.com/681d7f415d6142face9dd1b837bdb2e340e5e01a58c3a4b119dea6c0d99e2ce0/68747470733a2f2f692e696d6775722e636f6d2f657955633934372e706e67)
 
-To illustrate how you can use this with Accelerate, we have created a [model zoo example](https://github.com/muellerzr/pippy-device-map-playground/) showcasing a number of different models and situations. In this tutorial, we'll show this method for GPT2 across two GPUs.
+To illustrate how you can use this with Accelerate, we have created an [example zoo](https://github.com/huggingface/accelerate/tree/main/examples/inference) showcasing a number of different models and situations. In this tutorial, we'll show this method for GPT2 across two GPUs.
 
 Before you proceed, please make sure you have the latest pippy installed by running the following:
 
@@ -216,13 +216,20 @@ with torch.no_grad():
     output = model(*args)
 ```
 
-When finished, all the data will be on the last GPU, which you can use the [`PartialState`] to find and extract:
+When finished all the data will be on the last process only:
 
 ```{python}
 from accelerate import PartialState
-
 if PartialState().is_last_process:
     print(output)
 ```
 
-And that's it! To explore more, please check out the examples in [this repository](https://github.com/muellerzr/pippy-device-map-playground/) and our documentation as we work to improving this integration. 
+<Tip>
+
+    If you pass in `gather_output=True` to [`inference.prepare_pippy`], the output will be sent
+    across to all the GPUs afterwards without needing the `is_last_process` check. This is 
+    `False` by default as it incurs a communication call.
+    
+</Tip>
+
+And that's it! To explore more, please check out the inference examples in the [Accelerate repo](https://github.com/huggingface/accelerate/tree/main/examples/inference) and our [documentation](../package_reference/inference) as we work to improving this integration. 

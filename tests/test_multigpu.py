@@ -62,14 +62,14 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
-    @require_multi_device
+    @require_multi_gpu
     def test_distributed_data_loop(self):
         """
         This TestCase checks the behaviour that occurs during distributed training or evaluation,
         when the batch size does not evenly divide the dataset size.
         """
         print(f"Found {device_count} devices, using 2 devices only")
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.data_loop_file_path]
+        cmd = ["torchrun", "--nproc_per_node=2", self.data_loop_file_path]
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
