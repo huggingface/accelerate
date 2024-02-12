@@ -22,7 +22,6 @@ import warnings
 from contextlib import contextmanager
 from functools import partial
 from typing import Any, Callable, Optional
-from datasets import Dataset
 
 import torch
 
@@ -35,6 +34,7 @@ from .utils import (
     get_ccl_version,
     get_int_from_env,
     is_ccl_available,
+    is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
     is_ipex_available,
@@ -427,7 +427,7 @@ class PartialState:
             self.wait_for_everyone()
 
     @contextmanager
-    def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor | Dataset, apply_padding: bool = False):
+    def split_between_processes(self, inputs: list | tuple | dict | torch.Tensor | "datasets.Dataset", apply_padding: bool = False):
         """
         Splits `input` between `self.num_processes` quickly and can be then used on that process. Useful when doing
         distributed inference, such as with different prompts.
@@ -500,14 +500,18 @@ class PartialState:
                 for key in inputs.keys():
                     inputs[key] = _split_values(inputs[key], start_index, end_index)
                 return inputs
-            elif isinstance(inputs, Dataset):
-                if start_index >= len(inputs):
-                    start_index=len(inputs)-1
-                if end_index > len(inputs):
-                    end_index=len(inputs)
-                return inputs.select(range(start_index, end_index))
             else:
-                return inputs
+                if is_datasets_available:
+                    from datasets import Dataset
+
+                if isinstance(inputs, Dataset):
+                    if start_index >= len(inputs):
+                        start_index=len(inputs)-1
+                    if end_index > len(inputs):
+                        end_index=len(inputs)
+                    return inputs.select(range(start_index, end_index))
+                else:
+                    return inputs
 
         yield _split_values(inputs, start_index, end_index)
 
