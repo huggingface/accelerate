@@ -29,6 +29,7 @@ from accelerate.utils import (
     CannotPadNestedTensorWarning,
     check_os_kernel,
     convert_outputs_to_fp32,
+    convert_to_fp32,
     extract_model_from_parallel,
     find_device,
     listify,
@@ -39,7 +40,6 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
-from accelerate.utils.operations import convert_to_fp32
 
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
