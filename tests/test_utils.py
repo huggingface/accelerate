@@ -32,7 +32,6 @@ from accelerate.utils import (
     extract_model_from_parallel,
     find_device,
     listify,
-    operations,
     pad_across_processes,
     pad_input_tensors,
     patch_environment,
@@ -40,6 +39,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
+from accelerate.utils.operations import send_to_device, convert_to_fp32
 
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
@@ -305,9 +305,9 @@ class UtilsTester(unittest.TestCase):
         assert result.shape == torch.Size([66, 4, 4])
 
     def test_send_to_device_compiles(self):
-        compiled_send_to_device = torch.compile(operations.send_to_device, fullgraph=True)
+        compiled_send_to_device = torch.compile(send_to_device, fullgraph=True)
         compiled_send_to_device(torch.zeros([1], dtype=torch.bfloat16), "cpu")
 
     def test_convert_to_fp32(self):
-        compiled_convert_to_fp32 = torch.compile(operations.convert_to_fp32, fullgraph=True)
+        compiled_convert_to_fp32 = torch.compile(convert_to_fp32, fullgraph=True)
         compiled_convert_to_fp32(torch.zeros([1], dtype=torch.bfloat16))
