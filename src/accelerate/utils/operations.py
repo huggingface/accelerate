@@ -150,44 +150,48 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             The data to send to a given device.
         device (`torch.device`):
             The device to send the data to.
+        non_blocking (bool): `non_blocking` for `torch.to()` calls.
+        skip_keys (str/list of str): an optional list of strings to skip when
+            a dictionary is encountered.
 
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
-    if isinstance(tensor, (tuple, list)):
-        return honor_type(
-            tensor, (send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys) for t in tensor)
-        )
-    elif isinstance(tensor, Mapping):
+    if skip_keys is not None:
         if isinstance(skip_keys, str):
             skip_keys = [skip_keys]
-        elif skip_keys is None:
-            skip_keys = []
-        return type(tensor)(
-            {
-                k: t if k in skip_keys else send_to_device(t, device, non_blocking=non_blocking, skip_keys=skip_keys)
-                for k, t in tensor.items()
-            }
-        )
-    elif hasattr(tensor, "to"):
-        if is_npu_available():
-            # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-            if isinstance(device, int):
-                device = f"npu:{device}"
-            # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
-            elif device == torch.device("npu"):
-                device = "npu:0"
-        elif is_xpu_available():
-            if isinstance(device, int):
-                device = f"xpu:{device}"
-            elif device == torch.device("xpu"):
-                device = "xpu:0"
-        try:
-            return tensor.to(device, non_blocking=non_blocking)
-        except TypeError:  # .to() doesn't accept non_blocking as kwarg
-            return tensor.to(device)
+        def must_be_skipped(path):
+            for key in path:
+                if isinstance(key, torch.utils._pytree.MappingKey) and key.key in skip_keys:
+                    return True
+            else:
+                return False
     else:
-        return tensor
+        must_be_skipped = None
+    def _to_device(path, leaf, device=device):
+        if must_be_skipped is not None:
+            if must_be_skipped(path):
+                return leaf
+        if hasattr(leaf, "to"):
+            if is_npu_available():
+                # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
+                if isinstance(device, int):
+                    device = f"npu:{device}"
+                # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
+                elif device == torch.device("npu"):
+                    device = "npu:0"
+            elif is_xpu_available():
+                if isinstance(device, int):
+                    device = f"xpu:{device}"
+                elif device == torch.device("xpu"):
+                    device = "xpu:0"
+            try:
+                return leaf.to(device, non_blocking=non_blocking)
+            except TypeError:  # .to() doesn't accept non_blocking as kwarg
+                return leaf.to(device)
+        else:
+            return leaf
+    return torch.utils._pytree.tree_map_with_path(_to_device, tensor)
 
 
 def get_data_structure(data):
