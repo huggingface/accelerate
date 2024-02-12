@@ -39,7 +39,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
-from accelerate.utils.operations import send_to_device, convert_to_fp32
+from accelerate.utils.operations import convert_to_fp32
 
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
