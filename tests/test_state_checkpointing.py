@@ -107,7 +107,7 @@ class CheckpointTest(unittest.TestCase):
 
             # Save second state
             accelerator.save_state(safe_serialization=self.use_safetensors)
-            self.assertEqual(len(os.listdir(accelerator.project_dir)), 1)
+            assert len(os.listdir(accelerator.project_dir)) == 1
 
     def test_can_resume_training_with_folder(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -141,9 +141,9 @@ class CheckpointTest(unittest.TestCase):
             accelerator.load_state(initial)
             (a2, b2) = model.a.item(), model.b.item()
             opt_state2 = optimizer.state_dict()
-            self.assertEqual(a, a2)
-            self.assertEqual(b, b2)
-            self.assertEqual(opt_state, opt_state2)
+            assert a == a2
+            assert b == b2
+            assert opt_state == opt_state2
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
@@ -155,10 +155,10 @@ class CheckpointTest(unittest.TestCase):
             test_rands += train(1, model, train_dataloader, optimizer, accelerator)
             (a3, b3) = model.a.item(), model.b.item()
             opt_state3 = optimizer.state_dict()
-            self.assertEqual(a1, a3)
-            self.assertEqual(b1, b3)
-            self.assertEqual(opt_state1, opt_state3)
-            self.assertEqual(ground_truth_rands, test_rands)
+            assert a1 == a3
+            assert b1 == b3
+            assert opt_state1 == opt_state3
+            assert ground_truth_rands == test_rands
 
     def test_can_resume_training(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -194,9 +194,9 @@ class CheckpointTest(unittest.TestCase):
             accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
             (a2, b2) = model.a.item(), model.b.item()
             opt_state2 = optimizer.state_dict()
-            self.assertEqual(a, a2)
-            self.assertEqual(b, b2)
-            self.assertEqual(opt_state, opt_state2)
+            assert a == a2
+            assert b == b2
+            assert opt_state == opt_state2
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
@@ -207,10 +207,10 @@ class CheckpointTest(unittest.TestCase):
             test_rands += train(1, model, train_dataloader, optimizer, accelerator)
             (a3, b3) = model.a.item(), model.b.item()
             opt_state3 = optimizer.state_dict()
-            self.assertEqual(a1, a3)
-            self.assertEqual(b1, b3)
-            self.assertEqual(opt_state1, opt_state3)
-            self.assertEqual(ground_truth_rands, test_rands)
+            assert a1 == a3
+            assert b1 == b3
+            assert opt_state1 == opt_state3
+            assert ground_truth_rands == test_rands
 
     def test_can_resume_training_checkpoints_relative_path(self):
         # See #1983
@@ -259,9 +259,9 @@ class CheckpointTest(unittest.TestCase):
             accelerator.load_state()  # <= infer the directory automatically
             (a2, b2) = model.a.item(), model.b.item()
             opt_state2 = optimizer.state_dict()
-            self.assertEqual(a, a2)
-            self.assertEqual(b, b2)
-            self.assertEqual(opt_state, opt_state2)
+            assert a == a2
+            assert b == b2
+            assert opt_state == opt_state2
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
@@ -272,10 +272,10 @@ class CheckpointTest(unittest.TestCase):
             test_rands += train(1, model, train_dataloader, optimizer, accelerator)
             (a3, b3) = model.a.item(), model.b.item()
             opt_state3 = optimizer.state_dict()
-            self.assertEqual(a1, a3)
-            self.assertEqual(b1, b3)
-            self.assertEqual(opt_state1, opt_state3)
-            self.assertEqual(ground_truth_rands, test_rands)
+            assert a1 == a3
+            assert b1 == b3
+            assert opt_state1 == opt_state3
+            assert ground_truth_rands == test_rands
 
     def test_invalid_registration(self):
         t = torch.tensor([1, 2, 3])
@@ -286,10 +286,10 @@ class CheckpointTest(unittest.TestCase):
         with self.assertRaises(ValueError) as ve:
             accelerator.register_for_checkpointing(t, t1, net, opt)
         message = str(ve.exception)
-        self.assertTrue("Item at index 0" in message)
-        self.assertTrue("Item at index 1" in message)
-        self.assertFalse("Item at index 2" in message)
-        self.assertFalse("Item at index 3" in message)
+        assert "Item at index 0" in message
+        assert "Item at index 1" in message
+        assert "Item at index 2" not in message
+        assert "Item at index 3" not in message
 
     def test_with_scheduler(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -308,11 +308,11 @@ class CheckpointTest(unittest.TestCase):
             accelerator.save_state(safe_serialization=self.use_safetensors)
             scheduler_state = scheduler.state_dict()
             train(3, model, train_dataloader, optimizer, accelerator, scheduler)
-            self.assertNotEqual(scheduler_state, scheduler.state_dict())
+            assert scheduler_state != scheduler.state_dict()
 
             # Load everything back in and make sure all states work
             accelerator.load_state(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
-            self.assertEqual(scheduler_state, scheduler.state_dict())
+            assert scheduler_state == scheduler.state_dict()
 
     def test_automatic_loading(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -338,10 +338,10 @@ class CheckpointTest(unittest.TestCase):
 
             # Load back in the last saved checkpoint, should point to a2, b2
             accelerator.load_state()
-            self.assertNotEqual(a3, model.a.item())
-            self.assertNotEqual(b3, model.b.item())
-            self.assertEqual(a2, model.a.item())
-            self.assertEqual(b2, model.b.item())
+            assert a3 != model.a.item()
+            assert b3 != model.b.item()
+            assert a2 == model.a.item()
+            assert b2 == model.b.item()
 
     def test_checkpoint_deletion(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -354,9 +354,9 @@ class CheckpointTest(unittest.TestCase):
             # Save 3 states:
             for _ in range(11):
                 accelerator.save_state(safe_serialization=self.use_safetensors)
-            self.assertTrue(not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0")))
-            self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9")))
-            self.assertTrue(os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10")))
+            assert not os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_0"))
+            assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_9"))
+            assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
 
     @require_non_cpu
     def test_map_location(self):

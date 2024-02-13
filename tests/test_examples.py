@@ -109,7 +109,7 @@ class ExampleDifferenceTests(unittest.TestCase):
                         if special_strings is not None:
                             for string in special_strings:
                                 diff = diff.replace(string, "")
-                        self.assertEqual(diff, "")
+                        assert diff == ""
 
     def test_nlp_examples(self):
         self.one_complete_example("complete_nlp_example.py", True)
@@ -157,7 +157,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --output_dir {self.tmpdir}
         """.split()
         run_command(self._launch_args + testargs)
-        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "epoch_0")))
+        assert os.path.exists(os.path.join(self.tmpdir, "epoch_0"))
 
     def test_checkpointing_by_steps(self):
         testargs = f"""
@@ -166,7 +166,7 @@ class FeatureExamplesTests(TempDirTestCase):
         --output_dir {self.tmpdir}
         """.split()
         _ = run_command(self._launch_args + testargs)
-        self.assertTrue(os.path.exists(os.path.join(self.tmpdir, "step_2")))
+        assert os.path.exists(os.path.join(self.tmpdir, "step_2"))
 
     def test_load_states_by_epoch(self):
         testargs = f"""
@@ -174,8 +174,8 @@ class FeatureExamplesTests(TempDirTestCase):
         --resume_from_checkpoint {os.path.join(self.tmpdir, "epoch_0")}
         """.split()
         output = run_command(self._launch_args + testargs, return_stdout=True)
-        self.assertNotIn("epoch 0:", output)
-        self.assertIn("epoch 1:", output)
+        assert "epoch 0:" not in output
+        assert "epoch 1:" in output
 
     def test_load_states_by_steps(self):
         testargs = f"""
@@ -188,11 +188,11 @@ class FeatureExamplesTests(TempDirTestCase):
         else:
             num_processes = 1
         if num_processes > 1:
-            self.assertNotIn("epoch 0:", output)
-            self.assertIn("epoch 1:", output)
+            assert "epoch 0:" not in output
+            assert "epoch 1:" in output
         else:
-            self.assertIn("epoch 0:", output)
-            self.assertIn("epoch 1:", output)
+            assert "epoch 0:" in output
+            assert "epoch 1:" in output
 
     @slow
     def test_cross_validation(self):
@@ -205,7 +205,7 @@ class FeatureExamplesTests(TempDirTestCase):
             results = re.findall("({.+})", output)
             results = [r for r in results if "accuracy" in r][-1]
             results = ast.literal_eval(results)
-            self.assertGreaterEqual(results["accuracy"], 0.75)
+            assert results["accuracy"] >= 0.75
 
     def test_multi_process_metrics(self):
         testargs = ["examples/by_feature/multi_process_metrics.py"]
@@ -221,7 +221,7 @@ class FeatureExamplesTests(TempDirTestCase):
             --project_dir {tmpdir}
             """.split()
             run_command(self._launch_args + testargs)
-            self.assertTrue(os.path.exists(os.path.join(tmpdir, "tracking")))
+            assert os.path.exists(os.path.join(tmpdir, "tracking"))
 
     def test_gradient_accumulation(self):
         testargs = ["examples/by_feature/gradient_accumulation.py"]
