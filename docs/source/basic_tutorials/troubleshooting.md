@@ -129,9 +129,10 @@ encountering this problem, we recommend upgrading your system to a later kernel 
 
 ### Hanging when running distributed training using MPI
 
-If your distributed CPU training job using MPI is hanging, ensure that you have passwordless SSH setup (using keys)
-between the nodes. This means that for all of the nodes in your hostfile, you should to be able to SSH from one node
-to another without it prompting you for a password.
+If your distributed CPU training job using MPI is hanging, ensure that you have
+[passwordless SSH](https://www.open-mpi.org/faq/?category=rsh#ssh-keys) setup (using keys) between the nodes. This means
+that for all of the nodes in your hostfile, you should to be able to SSH from one node to another without it prompting
+you for a password.
 
 Next, you can try a simple `mpirun` command as a sanity check. For example, the command below should print out the
 hostnames for each of the nodes.
