@@ -335,6 +335,30 @@ def custom_sampler_check():
         ), "Custom sampler was changed after calling `prepare_data_loader`"
 
 
+def check_seedable_sampler():
+    # Set seed
+    set_seed(42)
+    train_set = RegressionDataset(length=10, seed=42)
+    train_dl = DataLoader(train_set, batch_size=2, shuffle=True)
+    accelerator = Accelerator(use_seedable_sampler=True)
+    train_dl = accelerator.prepare(train_dl)
+    original_items = []
+    for _ in range(3):
+        for batch in train_dl:
+            original_items.append(batch["x"])
+    original_items = torch.cat(original_items)
+
+    # Set seed again and the epoch
+    set_seed(42)
+    train_dl.set_epoch(0)
+    new_items = []
+    for _ in range(3):
+        for batch in train_dl:
+            new_items.append(batch["x"])
+    new_items = torch.cat(new_items)
+    assert torch.allclose(original_items, new_items), "Did not obtain the same items with the same seed and epoch."
+
+
 def mock_training(length, batch_size, generator, use_seedable_sampler=False):
     set_seed(42)
     generator.manual_seed(42)
@@ -667,6 +691,7 @@ def main():
     if state.distributed_type != DistributedType.TPU:
         central_dl_preparation_check()
     custom_sampler_check()
+    check_seedable_sampler()
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
     if state.distributed_type == DistributedType.DEEPSPEED:
