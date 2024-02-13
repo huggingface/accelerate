@@ -177,12 +177,14 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
             return tensor.to(device)
-        except AssertionError:
+        except AssertionError as error:
             # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
             # This call is inside the try-block since is_npu_available is not supported by torch.compile.
             if is_npu_available():
                 if isinstance(device, int):
                     device = f"npu:{device}"
+            else:
+                raise error
         except Exception as error:
             if is_xpu_available():
                 if isinstance(device, int):
