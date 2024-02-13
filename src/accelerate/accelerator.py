@@ -47,6 +47,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     AutocastKwargs,
+    DataLoaderConfiguration,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -257,6 +258,7 @@ class Accelerator:
         mixed_precision: PrecisionType | str | None = None,
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
+        dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
@@ -421,10 +423,30 @@ class Accelerator:
                 )
 
         self.device_placement = device_placement
-        self.split_batches = split_batches
-        self.dispatch_batches = dispatch_batches
-        self.even_batches = even_batches
-        self.use_seedable_sampler = use_seedable_sampler
+        if dataloader_config is None:
+            self.dataloader_config = DataLoaderConfiguration()
+        # Deal with deprecated args
+        deprecated_dl_args = {}
+        if dispatch_batches is not None:
+            deprecated_dl_args["dispatch_batches"] = dispatch_batches
+            self.dataloader_config.dispatch_batches = dispatch_batches
+        if split_batches is not True:
+            deprecated_dl_args["split_batches"] = split_batches
+            self.dataloader_config.split_batches = split_batches
+        if not even_batches:
+            deprecated_dl_args["even_batches"] = even_batches
+            self.dataloader_config.even_batches = even_batches
+        if use_seedable_sampler:
+            deprecated_dl_args["use_seedable_sampler"] = use_seedable_sampler
+            self.dataloader_config.use_seedable_sampler = use_seedable_sampler
+        if len(deprecated_dl_args) > 0:
+            values = ", ".join([f"{k}={v}" for k, v in deprecated_dl_args.items()])
+            warnings.warn(
+                f"Passing the following arguments to `Accelerator` is deprecated and will be removed in version 1.0 of Accelerate: {deprecated_dl_args.keys()}. "
+                "Please use `DataLoaderConfiguration` instead: \n"
+                f"dataloader_config = DataLoaderConfiguration({values})",
+                FutureWarning,
+            )
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
@@ -510,6 +532,22 @@ class Accelerator:
     @property
     def device(self):
         return self.state.device
+
+    @property
+    def split_batches(self):
+        return self.dataloader_config.split_batches
+
+    @property
+    def dispatch_batches(self):
+        return self.dataloader_config.dispatch_batches
+
+    @property
+    def even_batches(self):
+        return self.dataloader_config.even_batches
+
+    @property
+    def use_seedable_sampler(self):
+        return self.dataloader_config.use_seedable_sampler
 
     @property
     def project_dir(self):

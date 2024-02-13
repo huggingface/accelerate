@@ -55,6 +55,25 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    # Should be removed after 1.0.0 release
+    def test_deprecated_values(self):
+        with self.assertWarns(FutureWarning) as cm:
+            accelerator = Accelerator(
+                dispatch_batches=True,
+                split_batches=False,
+                even_batches=False,
+                use_seedable_sampler=True,
+            )
+        deprecation_warning = cm.warning.args[0]
+        assert "dispatch_batches" in deprecation_warning
+        assert accelerator.dispatch_batches is True
+        assert "split_batches" in deprecation_warning
+        assert accelerator.split_batches is False
+        assert "even_batches" in deprecation_warning
+        assert accelerator.even_batches is False
+        assert "use_seedable_sampler" in deprecation_warning
+        assert accelerator.use_seedable_sampler is True
+
     @require_non_cpu
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
