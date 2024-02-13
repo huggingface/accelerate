@@ -83,7 +83,7 @@ is shuffled the same way (if you decided to use `shuffle=True` or any kind of ra
     your script. For instance, training on 4 GPUs with a batch size of 16 set when creating the training dataloader will
     train at an actual batch size of 64 (4 * 16).
     If you want the batch size remain the same regardless of how many GPUs the script is run on, you can use the 
-    option `split_batches=True` when creating and initializing [`Accelerator`].
+    option `split_batches=True` when creating and initializing [`Accelerator`] by passing in a [`utils.DataLoaderConfig`].
     Your training dataloader may change length when going through this method: if you run on X GPUs, it will have its
     length divided by X (since your actual batch size will be multiplied by X), unless you set
     `split_batches=True`.
