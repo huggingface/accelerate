@@ -506,9 +506,9 @@ class PartialState:
 
                 if isinstance(inputs, Dataset):
                     if start_index >= len(inputs):
-                        start_index=len(inputs)-1
+                        start_index = len(inputs) - 1
                     if end_index > len(inputs):
-                        end_index=len(inputs)
+                        end_index = len(inputs)
                     return inputs.select(range(start_index, end_index))
                 else:
                     return inputs
