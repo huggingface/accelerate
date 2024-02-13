@@ -164,7 +164,7 @@ class Accelerator:
             `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a
             round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
             in your script multiplied by the number of processes. Will be deprecated in version 1.0 of Accelerate,
-            please use the `utils.DataLoaderConfig`.
+            please use the [`utils.DataLoaderConfiguration`].
         mixed_precision (`str`, *optional*):
             Whether or not to use mixed precision training. Choose from 'no','fp16','bf16 or 'fp8'. Will default to the
             value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
@@ -215,17 +215,18 @@ class Accelerator:
             If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
             and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
             underlying dataset is an `IterableDataset`, `False` otherwise. Will be deprecated in version 1.0 of
-            Accelerate, please use the `utils.DataLoaderConfig`.
+            Accelerate, please use the [`utils.DataLoaderConfiguration`].
         even_batches (`bool`, *optional*, defaults to `True`):
             If set to `True`, in cases where the total batch size across all processes does not exactly divide the
             dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
-            all workers. Will be deprecated in version 1.0 of Accelerate, please use the `utils.DataLoaderConfig`.
+            all workers. Will be deprecated in version 1.0 of Accelerate, please use the
+            [`utils.DataLoaderConfiguration`].
         use_seedable_sampler (`bool`, *optional*, defaults to `False`):
             Whether or not use a fully seedable random sampler ([`~data_loader.SeedableRandomSampler`]). Ensures
             training results are fully reproducable using a different sampling technique. While seed-to-seed results
             may differ, on average the differences are neglible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] each time for the best results. Will be deprecated in version 1.0 of
-            Accelerate, please use the `utils.DataLoaderConfig`.
+            Accelerate, please use the [`utils.DataLoaderConfiguration`].
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).

@@ -95,6 +95,8 @@ These are classes which can be configured and passed through to the appropriate 
 
 [[autodoc]] utils.BnbQuantizationConfig
 
+[[autodoc]] utils.DataLoaderConfiguration
+
 [[autodoc]] utils.ProjectConfiguration
 
 ## Environmental Variables
