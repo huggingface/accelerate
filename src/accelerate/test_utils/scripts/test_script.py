@@ -33,6 +33,7 @@ from accelerate.utils import (
     DistributedType,
     gather,
     is_bf16_available,
+    is_datasets_available,
     is_ipex_available,
     is_npu_available,
     is_xpu_available,
@@ -538,6 +539,19 @@ def training_check(use_seedable_sampler=False):
         model = accelerator.unwrap_model(model).cpu()
         assert torch.allclose(old_model.a, model.a), "Did not obtain the same model on XPU or distributed training."
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on XPU or distributed training."
+
+
+def test_split_between_processes_dataset():
+    assert is_datasets_available(), "test requires Hugging Face datasets"
+    from datasets import Dataset
+
+    state = AcceleratorState()
+    data = Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes)])
+    with state.split_between_processes(data) as results:
+        assert (
+            len(results) == 2
+        ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+    state.wait_for_everyone()
 
 
 def test_split_between_processes_list():
