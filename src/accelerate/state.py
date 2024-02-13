@@ -501,7 +501,7 @@ class PartialState:
                     inputs[key] = _split_values(inputs[key], start_index, end_index)
                 return inputs
             else:
-                if is_datasets_available:
+                if is_datasets_available():
                     from datasets import Dataset
 
                 if isinstance(inputs, Dataset):
