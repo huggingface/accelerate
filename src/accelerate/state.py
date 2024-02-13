@@ -509,7 +509,10 @@ class PartialState:
                             start_index = len(inputs) - 1
                         if end_index > len(inputs):
                             end_index = len(inputs)
-                        return inputs.select(range(start_index, end_index))
+                        result_idcs = list(range(start_index, end_index))
+                        if apply_padding:
+                            result_idcs += [end_index - 1] * (num_samples_per_process - len(result_idcs))
+                        return inputs.select(result_idcs) 
                 return inputs
 
         yield _split_values(inputs, start_index, end_index)
