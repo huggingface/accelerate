@@ -225,8 +225,8 @@ class Accelerator:
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
-        kwargs_handlers (`list[~utils.KwargsHandler]`, *optional*)
-            A list of `[~utils.KwargsHandler]` to customize how the objects related to distributed training or mixed
+        kwargs_handlers (`list[KwargsHandler]`, *optional*)
+            A list of [`~utils.KwargsHandler`] to customize how the objects related to distributed training or mixed
             precision are created. See [kwargs](kwargs) for more information.
         dynamo_backend (`str` or [`~utils.DynamoBackend`], *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
