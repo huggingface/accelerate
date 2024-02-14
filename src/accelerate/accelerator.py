@@ -83,7 +83,7 @@ from .utils import (
     is_msamp_available,
     is_npu_available,
     is_torch_version,
-    is_tpu_available,
+    is_torch_xla_available,
     is_xpu_available,
     load_fsdp_model,
     load_fsdp_optimizer,
@@ -134,7 +134,8 @@ if is_megatron_lm_available():
 from torch.distributed.algorithms.join import Join
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
+    import torch_xla.amp as xamp
     import torch_xla.core.xla_model as xm
     import torch_xla.distributed.xla_multiprocessing as xmp
 
@@ -389,7 +390,7 @@ class Accelerator:
         if (
             (mixed_precision != "bf16")
             and getattr(self.state, "downcast_bfloat", False)
-            and (self.state.distributedType != DistributedType.TPU)
+            and (self.state.distributedType != DistributedType.XLA)
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
@@ -406,7 +407,7 @@ class Accelerator:
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
-        if self.state.distributed_type == DistributedType.TPU:
+        if self.state.distributed_type == DistributedType.XLA:
             if self.gradient_state.num_steps != 1:
                 raise ValueError(
                     "Gradient accumulation is not supported on TPU. Please set `gradient_accumulation_steps` to 1 and don't pass in a `GradientAccumulationPlugin` object."
@@ -443,20 +444,23 @@ class Accelerator:
         # Mixed precision attributes
         self.scaler = None
         self.native_amp = False
-        err = "{mode} mixed precision requires {requirement}"
         if (
             self.state.mixed_precision == "fp16"
             and self.device.type != "cpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("xpu", "cuda", "mps", "npu"):
-                raise ValueError(err.format(mode="fp16", requirement="a GPU"))
+            if self.device.type not in ("xpu", "cuda", "mps", "npu", "xla") or is_torch_xla_available(
+                check_is_tpu=True
+            ):
+                raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
                 from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
 
                 self.scaler = ShardedGradScaler(**kwargs)
+            elif is_torch_xla_available(check_is_gpu=True):
+                self.scaler = xamp.GradScaler(**kwargs)
             elif is_npu_available():
                 self.scaler = torch.npu.amp.GradScaler(**kwargs)
             else:
@@ -470,8 +474,8 @@ class Accelerator:
                 self.native_amp = True
             else:
                 self.native_amp = is_bf16_available(True)
-            if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
-                raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
+            if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available(check_is_gpu=True):
+                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
 
         # Start of internal step tracking
         self.step = 0
@@ -1227,7 +1231,7 @@ class Accelerator:
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
-        if self.distributed_type == DistributedType.TPU:
+        if self.distributed_type == DistributedType.XLA:
             model_device, optimizer_device = self._get_devices()
             if model_device is not None and optimizer_device is not None and model_device != optimizer_device:
                 raise ValueError(
@@ -1239,7 +1243,7 @@ class Accelerator:
                 )
 
         # If we're dealing with device placement, this deals with that by...
-        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
+        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
         if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
@@ -1278,7 +1282,7 @@ class Accelerator:
                 item in container
                 for container in (self._dataloaders, self._models, self._optimizers, self._schedulers)
             ):
-                setattr(item, "_is_accelerate_prepared", True)
+                item._is_accelerate_prepared = True
 
         return result if len(result) > 1 else result[0]
 
@@ -1440,7 +1444,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.MULTI_CPU:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
-            elif self.distributed_type == DistributedType.TPU and self.state.fork_launched:
+            elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
@@ -1877,7 +1881,7 @@ class Accelerator:
                 self._dataloaders.append(data_loader)
             return data_loader
         if device_placement is None:
-            device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
+            device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
@@ -2090,10 +2094,6 @@ class Accelerator:
             for opt in optimizer:
                 while isinstance(opt, AcceleratedOptimizer):
                     opt = opt.optimizer
-                # Reduce gradients first for XLA
-                if self.distributed_type == DistributedType.TPU:
-                    gradients = xm._fetch_gradients(opt)
-                    self.reduce(gradients, scale=1.0 / self.num_processes)
                 self.scaler.unscale_(opt)
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
@@ -2131,6 +2131,19 @@ class Accelerator:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
             return None
+        elif self.distributed_type == DistributedType.XLA:
+            # Reduce gradients first for XLA
+            for acc_opt in self._optimizers:
+                if not acc_opt.gradient_state.is_xla_gradients_synced:
+                    opt = acc_opt
+                    while isinstance(opt, AcceleratedOptimizer):
+                        opt = opt.optimizer
+                    gradients = xm._fetch_gradients(opt)
+                    # Use xm.all_reduce to perform an in-place all-reduce. Recusrsive all-reduce each tensor
+                    # one by one in self.reduce is non-inplace.
+                    xm.all_reduce("sum", gradients, scale=1.0 / self.num_processes)
+                    # Set is_xla_gradients_synced to True to avoid all-reduce twice in the AcceleratedOptimizer step.
+                    acc_opt.gradient_state.is_xla_gradients_synced = True
         self.unscale_gradients()
         return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
@@ -2419,7 +2432,7 @@ class Accelerator:
                 self.trackers.append(tracker)
             else:
                 tracker_init = LOGGER_TYPE_TO_CLASS[str(tracker)]
-                if getattr(tracker_init, "requires_logging_directory"):
+                if tracker_init.requires_logging_directory:
                     # We can skip this check since it was done in `__init__`
                     self.trackers.append(
                         tracker_init(project_name, self.logging_dir, **init_kwargs.get(str(tracker), {}))
@@ -2748,7 +2761,7 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
 
-        if self.distributed_type == DistributedType.TPU:
+        if self.distributed_type == DistributedType.XLA:
             # Finish running the previous step before checkpointing
             xm.mark_step()
 

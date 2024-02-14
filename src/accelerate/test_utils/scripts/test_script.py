@@ -96,7 +96,7 @@ def process_execution_check():
     accelerator.wait_for_everyone()
 
     if accelerator.is_main_process:
-        with open(path, "r") as f:
+        with open(path) as f:
             text = "".join(f.readlines())
         try:
             assert text.startswith("Currently in the main process\n"), "Main process was not first"
@@ -413,7 +413,7 @@ def training_check(use_seedable_sampler=False):
     train_dl, model, optimizer = accelerator.prepare(train_dl, model, optimizer)
     set_seed(42)
     generator.manual_seed(42)
-    for epoch in range(3):
+    for _ in range(3):
         for batch in train_dl:
             model.zero_grad()
             output = model(batch["x"])
@@ -693,10 +693,10 @@ def main():
     if state.local_process_index == 0:
         print("\n**DataLoader integration test**")
     dl_preparation_check()
-    if state.distributed_type != DistributedType.TPU:
+    if state.distributed_type != DistributedType.XLA:
         central_dl_preparation_check()
-    custom_sampler_check()
-    check_seedable_sampler()
+        custom_sampler_check()
+        check_seedable_sampler()
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
     if state.distributed_type == DistributedType.DEEPSPEED:

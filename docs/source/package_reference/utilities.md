@@ -152,7 +152,7 @@ These functionalities check the state of the current working environment includi
 
 [[autodoc]] utils.is_torch_version
 
-[[autodoc]] utils.is_tpu_available
+[[autodoc]] utils.is_torch_xla_available
 
 [[autodoc]] utils.is_xpu_available
 

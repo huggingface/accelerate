@@ -12,7 +12,7 @@ from accelerate import DistributedType, infer_auto_device_map, init_empty_weight
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_device, require_non_cpu, slow, torch_device
-from accelerate.test_utils.testing import AccelerateTestCase
+from accelerate.test_utils.testing import AccelerateTestCase, require_non_torch_xla
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import load_checkpoint_in_model
 
@@ -96,7 +96,7 @@ class AcceleratorTester(AccelerateTestCase):
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
         assert PartialState._shared_state["_cpu"] is False
-        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu"]
+        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla"]
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
@@ -141,6 +141,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert len(accelerator._schedulers) == 0
         assert len(accelerator._dataloaders) == 0
 
+    @require_non_torch_xla
     def test_env_var_device(self):
         """Tests that setting the torch device with ACCELERATE_TORCH_DEVICE overrides default device."""
         PartialState._reset_state()
@@ -221,7 +222,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         # loading hook
         def load_config(models, input_dir):
-            with open(os.path.join(input_dir, "data.json"), "r") as f:
+            with open(os.path.join(input_dir, "data.json")) as f:
                 config = json.load(f)
 
             models[0].class_name = config["class_name"]
@@ -308,6 +309,7 @@ class AcceleratorTester(AccelerateTestCase):
             getattr(valid_dl, "_is_accelerate_prepared", False) is True
         ), "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     def test_accelerator_bnb(self):
@@ -324,6 +326,7 @@ class AcceleratorTester(AccelerateTestCase):
         # This should work
         model = accelerator.prepare(model)
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     def test_accelerator_bnb_cpu_error(self):
@@ -349,6 +352,7 @@ class AcceleratorTester(AccelerateTestCase):
         with self.assertRaises(ValueError):
             model = accelerator.prepare(model)
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     @require_multi_device
@@ -384,6 +388,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         PartialState._reset_state()
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     @require_multi_device

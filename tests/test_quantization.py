@@ -20,7 +20,14 @@ import torch
 import torch.nn as nn
 
 from accelerate import Accelerator, init_empty_weights
-from accelerate.test_utils import require_bnb, require_cuda, require_huggingface_suite, require_multi_gpu, slow
+from accelerate.test_utils import (
+    require_bnb,
+    require_cuda,
+    require_huggingface_suite,
+    require_multi_gpu,
+    require_non_torch_xla,
+    slow,
+)
 from accelerate.utils.bnb import load_and_quantize_model
 from accelerate.utils.dataclasses import BnbQuantizationConfig
 
@@ -31,6 +38,7 @@ class BitsAndBytesConfigIntegration(unittest.TestCase):
             BnbQuantizationConfig(load_in_8bit=True, load_in_4bit=True)
 
 
+@require_non_torch_xla
 @slow
 @require_cuda
 @require_bnb
@@ -489,6 +497,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             self.check_inference_correctness(model_8bit_from_saved)
 
 
+@require_non_torch_xla
 @slow
 @require_cuda
 @require_bnb
@@ -594,6 +603,7 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
         assert model.lm_head.weight.dtype == torch.float32
 
 
+@require_non_torch_xla
 @slow
 @require_cuda
 @require_bnb
@@ -843,6 +853,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             self.check_inference_correctness(model_4bit)
 
 
+@require_non_torch_xla
 @slow
 @require_cuda
 @require_bnb
