@@ -15,6 +15,7 @@
 import functools
 import logging
 import os
+from typing import Optional
 
 from .state import PartialState
 
@@ -80,7 +81,7 @@ class MultiProcessAdapter(logging.LoggerAdapter):
         self.warning(*args, **kwargs)
 
 
-def get_logger(name: str, log_level: str = None):
+def get_logger(name: str, log_level: Optional[str] = None):
     """
     Returns a `logging.Logger` for `name` that can handle multiprocessing.
 

@@ -20,7 +20,7 @@ import socket
 from contextlib import contextmanager
 from functools import partial, reduce
 from types import MethodType
-from typing import OrderedDict
+from typing import Optional, OrderedDict
 
 import torch
 from packaging.version import Version
@@ -290,7 +290,7 @@ def merge_dicts(source, destination):
     return destination
 
 
-def is_port_in_use(port: int = None) -> bool:
+def is_port_in_use(port: Optional[int] = None) -> bool:
     """
     Checks if a port is in use on `localhost`. Useful for checking if multiple `accelerate launch` commands have been
     run and need to see if the port is already in use.

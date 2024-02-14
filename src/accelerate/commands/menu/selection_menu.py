@@ -18,6 +18,7 @@ Main driver for the selection menu, based on https://github.com/bchao1/bullet
 
 import builtins
 import sys
+from typing import Optional
 
 from ...utils.imports import _is_package_available
 from . import cursor, input
@@ -38,7 +39,7 @@ class BulletMenu:
     A CLI menu to select a choice from a list of choices using the keyboard.
     """
 
-    def __init__(self, prompt: str = None, choices: list = []):
+    def __init__(self, prompt: Optional[str] = None, choices: list = []):
         self.position = 0
         self.choices = choices
         self.prompt = prompt

@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 def load_and_quantize_model(
     model: torch.nn.Module,
     bnb_quantization_config: BnbQuantizationConfig,
-    weights_location: Union[str, os.PathLike] = None,
+    weights_location: Optional[Union[str, os.PathLike]] = None,
     device_map: Optional[Dict[str, Union[int, str, torch.device]]] = None,
     no_split_module_classes: Optional[List[str]] = None,
     max_memory: Optional[Dict[Union[int, str], Union[int, str]]] = None,

@@ -33,7 +33,9 @@ if is_pippy_available():
     from pippy.PipelineStage import PipelineStage
 
 
-def generate_device_map(model, num_processes: int = 1, no_split_module_classes=None, max_memory: dict = None):
+def generate_device_map(
+    model, num_processes: int = 1, no_split_module_classes=None, max_memory: Optional[dict] = None
+):
     """
     Calculates the device map for `model` with an offset for PiPPy
     """

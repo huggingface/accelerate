@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def init_empty_weights(include_buffers: bool = None):
+def init_empty_weights(include_buffers: Optional[bool] = None):
     """
     A context manager under which models are initialized with all parameters on the meta device, therefore creating an
     empty model. Useful when just initializing the model would blow the available RAM.
@@ -87,7 +87,7 @@ def init_empty_weights(include_buffers: bool = None):
 
 
 @contextmanager
-def init_on_device(device: torch.device, include_buffers: bool = None):
+def init_on_device(device: torch.device, include_buffers: Optional[bool] = None):
     """
     A context manager under which models are initialized with all parameters on the specified device.
 

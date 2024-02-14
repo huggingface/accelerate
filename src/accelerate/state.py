@@ -21,7 +21,7 @@ import threading
 import warnings
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import torch
 
@@ -552,7 +552,7 @@ class PartialState:
         """
         yield from self._goes_first(self.is_local_main_process)
 
-    def on_main_process(self, function: Callable[..., Any] = None):
+    def on_main_process(self, function: Callable[..., Any] | None = None):
         """
         Decorator that only runs the decorated function on the main process.
 
@@ -582,7 +582,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_local_main_process(self, function: Callable[..., Any] = None):
+    def on_local_main_process(self, function: Callable[..., Any] | None = None):
         """
         Decorator that only runs the decorated function on the local main process.
 
@@ -641,7 +641,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_process(self, function: Callable[..., Any] = None, process_index: int = None):
+    def on_process(self, function: Callable[..., Any] | None = None, process_index: int | None = None):
         """
         Decorator that only runs the decorated function on the process with the given index.
 
@@ -674,7 +674,7 @@ class PartialState:
             return function
         return do_nothing
 
-    def on_local_process(self, function: Callable[..., Any] = None, local_process_index: int = None):
+    def on_local_process(self, function: Callable[..., Any] | None = None, local_process_index: int | None = None):
         """
         Decorator that only runs the decorated function on the process with the given index on the current node.
 
@@ -761,7 +761,7 @@ class AcceleratorState:
 
     def __init__(
         self,
-        mixed_precision: str = None,
+        mixed_precision: str | None = None,
         cpu: bool = False,
         dynamo_plugin=None,
         deepspeed_plugin=None,
@@ -1024,7 +1024,7 @@ class GradientState:
 
     _shared_state = SharedDict()
 
-    def __init__(self, gradient_accumulation_plugin: Optional[GradientAccumulationPlugin] = None):
+    def __init__(self, gradient_accumulation_plugin: GradientAccumulationPlugin | None = None):
         self.__dict__ = self._shared_state
         if not self.initialized:
             self.sync_gradients = True
