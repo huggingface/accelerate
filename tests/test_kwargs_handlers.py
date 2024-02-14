@@ -69,7 +69,7 @@ class KwargsHandlerTester(unittest.TestCase):
     @require_multi_device
     def test_ddp_kwargs(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
-        execute_subprocess_async(cmd, env=os.environ.copy())
+        execute_subprocess_async(cmd)
 
     @require_non_cpu
     def test_autocast_kwargs(self):

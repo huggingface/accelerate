@@ -832,7 +832,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 f"--output_dir={dirpath}",
             ]
             with patch_environment(omp_num_threads=1):
-                execute_subprocess_async(cmd, env=os.environ.copy())
+                execute_subprocess_async(cmd)
 
 
 @require_deepspeed
@@ -909,7 +909,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 ]
             )
             with patch_environment(omp_num_threads=1):
-                execute_subprocess_async(cmd_stage, env=os.environ.copy())
+                execute_subprocess_async(cmd_stage)
 
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
@@ -953,7 +953,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 ]
             )
             with patch_environment(omp_num_threads=1):
-                execute_subprocess_async(cmd_stage, env=os.environ.copy())
+                execute_subprocess_async(cmd_stage)
 
             cmd_stage = cmd_stage[:-1]
             resume_from_checkpoint = os.path.join(self.tmpdir, "epoch_0")
@@ -963,7 +963,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 ]
             )
             with patch_environment(omp_num_threads=1):
-                execute_subprocess_async(cmd_stage, env=os.environ.copy())
+                execute_subprocess_async(cmd_stage)
 
     def test_peak_memory_usage(self):
         self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
@@ -1026,7 +1026,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 ]
             )
             with patch_environment(omp_num_threads=1):
-                execute_subprocess_async(cmd_stage, env=os.environ.copy())
+                execute_subprocess_async(cmd_stage)
 
     def test_lr_scheduler(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
@@ -1050,4 +1050,4 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             f"--performance_lower_bound={self.performance_lower_bound}",
         ]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)

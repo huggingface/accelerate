@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import inspect
-import os
 import unittest
 
 import torch
@@ -47,21 +46,21 @@ class MultiDeviceTester(unittest.TestCase):
         print(f"Found {device_count} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [self.test_file_path]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
     @require_multi_device
     def test_multi_device_ops(self):
         print(f"Found {device_count} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [self.operation_file_path]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
     @require_multi_device
     def test_pad_across_processes(self):
         print(f"Found {device_count} devices.")
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
     @require_non_torch_xla
     @require_multi_gpu
@@ -73,7 +72,7 @@ class MultiDeviceTester(unittest.TestCase):
         print(f"Found {device_count} devices, using 2 devices only")
         cmd = get_launch_command(num_processes=2) + [self.data_loop_file_path]
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
     @require_multi_gpu
     @require_pippy
@@ -85,7 +84,7 @@ class MultiDeviceTester(unittest.TestCase):
         print(f"Found {device_count} devices")
         cmd = get_launch_command(multi_gpu=True, num_processes=device_count) + [self.pippy_file_path]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
 
 if __name__ == "__main__":

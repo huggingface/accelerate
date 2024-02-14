@@ -74,7 +74,7 @@ class AccelerateLauncherTester(unittest.TestCase):
                 continue
             with self.subTest(config_file=config):
                 cmd = get_launch_command(config_file=config) + [self.test_file_path]
-                execute_subprocess_async(cmd, env=os.environ.copy())
+                execute_subprocess_async(cmd)
 
     def test_invalid_keys(self):
         config_path = self.test_config_path / "invalid_keys.yaml"
@@ -83,10 +83,10 @@ class AccelerateLauncherTester(unittest.TestCase):
             msg="The config file at 'invalid_keys.yaml' had unknown keys ('another_invalid_key', 'invalid_key')",
         ):
             cmd = get_launch_command(config_file=config_path) + [self.test_file_path]
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
     def test_accelerate_test(self):
-        execute_subprocess_async(["accelerate", "test"], env=os.environ.copy())
+        execute_subprocess_async(["accelerate", "test"])
 
     @require_multi_device
     def test_notebook_launcher(self):
@@ -96,7 +96,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         """
         cmd = ["python", self.notebook_launcher_path]
         with patch_environment(omp_num_threads=1, accelerate_num_processes=2):
-            run_command(cmd, env=os.environ.copy())
+            run_command(cmd)
 
 
 class TpuConfigTester(unittest.TestCase):
