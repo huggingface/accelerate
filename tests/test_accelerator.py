@@ -65,7 +65,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
 
         # Pass some arguments only
-        with self.assertWarnsRegex(FutureWarning) as cm:
+        with self.assertWarns(FutureWarning) as cm:
             accelerator = Accelerator(
                 dispatch_batches=True,
                 split_batches=False,
