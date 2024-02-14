@@ -1354,7 +1354,8 @@ class Accelerator:
             model, "hf_device_map", False
         ):
             model_devices = set(model.hf_device_map.values())
-            if len(model_devices) > 1 and self.distributed_type != DistributedType.NO:
+            model_devices_str = str(list(model_devices)[0])
+            if model_devices_str == 'cuda' or (len(model_devices) > 1 and se:lf.distributed_type != DistributedType.NO):
                 raise ValueError(
                     "You can't train a model that has been loaded in 8-bit precision on multiple devices in any distributed mode."
                     " In order to use 8-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
