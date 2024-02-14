@@ -41,7 +41,7 @@ class MultiDeviceTester(unittest.TestCase):
             mod_file.split(os.path.sep)[:-1] + ["scripts", "test_distributed_data_loop.py"]
         )
         self.operation_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_ops.py"])
-        self.pippy_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_pippy.py"])
+        self.pippy_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_pippy.py"])
 
     @require_multi_device
     def test_multi_device(self):
