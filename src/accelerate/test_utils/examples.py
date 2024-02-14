@@ -84,14 +84,14 @@ def compare_against_test(base_filename: str, feature_filename: str, parser_only:
             functionalities off of "examples/nlp_example.py", so if `base_filename` is a script other than
             `complete_nlp_example.py`, the template script should be included here. Such as `examples/cv_example.py`
     """
-    with open(base_filename, "r") as f:
+    with open(base_filename) as f:
         base_file_contents = f.readlines()
-    with open(os.path.abspath(os.path.join("examples", "nlp_example.py")), "r") as f:
+    with open(os.path.abspath(os.path.join("examples", "nlp_example.py"))) as f:
         full_file_contents = f.readlines()
-    with open(feature_filename, "r") as f:
+    with open(feature_filename) as f:
         feature_file_contents = f.readlines()
     if secondary_filename is not None:
-        with open(secondary_filename, "r") as f:
+        with open(secondary_filename) as f:
             secondary_file_contents = f.readlines()
 
     # This is our base, we remove all the code from here in our `full_filename` and `feature_filename` to find the new content

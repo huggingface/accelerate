@@ -36,7 +36,7 @@ os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
 
 class ListHandler(logging.Handler):
     def __init__(self, *args, **kwargs):
-        super(ListHandler, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.logs = []
 
     def emit(self, record):
@@ -161,8 +161,7 @@ def test_gather_for_metrics_with_non_tensor_objects_iterable_dataset():
             return len(self.data)
 
         def __iter__(self):
-            for element in self.data:
-                yield element
+            yield from self.data
 
     iterable_dataset = DummyIterableDataset([n for n in range(30)])
     dataloader = DataLoader(iterable_dataset, batch_size=4)
@@ -194,8 +193,7 @@ def test_gather_for_metrics_with_iterable_dataset():
             return len(self.data)
 
         def __iter__(self):
-            for element in self.data:
-                yield element
+            yield from self.data
 
     iterable_dataset = DummyIterableDataset(torch.as_tensor(range(30)))
     dataloader = DataLoader(iterable_dataset, batch_size=4)

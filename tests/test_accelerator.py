@@ -185,7 +185,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         # loading hook
         def load_config(models, input_dir):
-            with open(os.path.join(input_dir, "data.json"), "r") as f:
+            with open(os.path.join(input_dir, "data.json")) as f:
                 config = json.load(f)
 
             models[0].class_name = config["class_name"]
