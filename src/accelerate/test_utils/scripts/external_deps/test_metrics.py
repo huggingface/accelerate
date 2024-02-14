@@ -82,7 +82,7 @@ def get_dataloader(accelerator: Accelerator, use_longest=False):
 
 def get_mrpc_setup(dispatch_batches, split_batches):
     dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, split_batches=split_batches)
-    accelerator = Accelerator(data_loader_config=dataloader_config)
+    accelerator = Accelerator(dataloader_config=dataloader_config)
     dataloader = get_dataloader(accelerator, not dispatch_batches)
     model = AutoModelForSequenceClassification.from_pretrained(
         "hf-internal-testing/mrpc-bert-base-cased", return_dict=True
