@@ -78,15 +78,16 @@ class SeedableRandomSampler(RandomSampler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epoch = 0
-        self.seed = torch.random.initial_seed()
+        self.initial_seed = torch.random.initial_seed()
 
     def __iter__(self):
         if self.generator is None:
             self.generator = torch.Generator()
-        else:
-            self.seed = self.generator.initial_seed()
+            self.generator.manual_seed(self.initial_seed)
+
         # Allow `self.epoch` to modify the seed of the generator
-        seed = self.epoch + self.seed
+        seed = self.epoch + self.initial_seed
+        # print("Setting seed at epoch", self.epoch, seed)
         self.generator.manual_seed(seed)
         yield from super().__iter__()
         self.set_epoch(self.epoch + 1)
@@ -809,7 +810,8 @@ def prepare_data_loader(
         use_seedable_sampler (`bool`, *optional*, defaults to `False`):
             Whether to use the [`~data_loader.SeedableRandomSampler`] instead of a `RandomSampler` for better
             reproducability. Comes at a cost of potentially different performances due to different shuffling
-            algorithms but ensures results will be the *exact* same.
+            algorithms but ensures results will be the *exact* same. Should be paired with `set_seed()` at every
+            `self.set_epoch`
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -927,11 +929,6 @@ def prepare_data_loader(
         kwargs["batch_size"] = (
             dataloader.batch_size // num_processes if split_batches and not dispatch_batches else dataloader.batch_size
         )
-    if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
-        if sampler_is_batch_sampler:
-            dataloader.sampler.sampler = sampler
-        else:
-            dataloader.batch_sampler.sampler = sampler
     if dispatch_batches:
         kwargs.pop("generator")
         dataloader = DataLoaderDispatcher(
@@ -964,6 +961,11 @@ def prepare_data_loader(
             **kwargs,
         )
 
+    if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
+        if sampler_is_batch_sampler:
+            dataloader.sampler.sampler = sampler
+        else:
+            dataloader.batch_sampler.sampler = sampler
     if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader

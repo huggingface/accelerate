@@ -4,7 +4,7 @@
 # Use base conda image to reduce time
 FROM continuumio/miniconda3:latest AS compile-image
 # Specify py version
-ENV PYTHON_VERSION=3.8
+ENV PYTHON_VERSION=3.9
 # Install apt libs
 RUN apt-get update && \
     apt-get install -y curl git wget && \

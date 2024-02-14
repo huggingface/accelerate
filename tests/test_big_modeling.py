@@ -145,13 +145,13 @@ class BigModelingTester(unittest.TestCase):
         # base use
         with init_empty_weights():
             module = nn.Linear(4, 5)
-        self.assertEqual(module.weight.device, torch.device("meta"))
+        assert module.weight.device == torch.device("meta")
 
         # base use with buffers, they are not touched
         with init_empty_weights():
             module = nn.BatchNorm1d(4)
-        self.assertEqual(module.weight.device, torch.device("meta"))
-        self.assertEqual(module.running_mean.device, torch.device("cpu"))
+        assert module.weight.device == torch.device("meta")
+        assert module.running_mean.device == torch.device("cpu")
 
         # Use with include_buffers=True
         register_parameter_func = nn.Module.register_parameter
@@ -160,15 +160,15 @@ class BigModelingTester(unittest.TestCase):
             module = nn.BatchNorm1d(4)
             # nn.Module.register_parameter/buffer shouldn't be changed with torch >= 2.0
             if is_torch_version(">=", "2.0"):
-                self.assertEqual(register_parameter_func, nn.Module.register_parameter)
-                self.assertEqual(register_buffer_func, nn.Module.register_buffer)
-        self.assertEqual(module.weight.device, torch.device("meta"))
-        self.assertEqual(module.running_mean.device, torch.device("meta"))
+                assert register_parameter_func == nn.Module.register_parameter
+                assert register_buffer_func == nn.Module.register_buffer
+        assert module.weight.device == torch.device("meta")
+        assert module.running_mean.device == torch.device("meta")
 
         # Double check we didn't break PyTorch
         module = nn.BatchNorm1d(4)
-        self.assertEqual(module.weight.device, torch.device("cpu"))
-        self.assertEqual(module.running_mean.device, torch.device("cpu"))
+        assert module.weight.device == torch.device("cpu")
+        assert module.running_mean.device == torch.device("cpu")
 
     def test_init_empty_weights_very_large_model(self):
         # This is a 100 billion parameters model.
@@ -180,16 +180,16 @@ class BigModelingTester(unittest.TestCase):
         device = torch.device("cuda:0")
         with init_on_device(device):
             model = nn.Linear(10, 10)
-        self.assertEqual(model.weight.device, device)
-        self.assertEqual(model.weight.device, device)
+        assert model.weight.device == device
+        assert model.weight.device == device
 
     @require_mps
     def test_init_on_device_mps(self):
         device = torch.device("mps:0")
         with init_on_device(device):
             model = nn.Linear(10, 10)
-        self.assertEqual(model.weight.device, device)
-        self.assertEqual(model.weight.device, device)
+        assert model.weight.device == device
+        assert model.weight.device == device
 
     def test_cpu_offload(self):
         model = ModelForTest()
@@ -200,18 +200,14 @@ class BigModelingTester(unittest.TestCase):
 
         cpu_offload(model, execution_device=device)
         output = model(x)
-        self.assertTrue(
-            torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
-        )
+        assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
 
         # Clean up for next test.
         remove_hook_from_submodules(model)
 
         cpu_offload(model, execution_device=device, offload_buffers=True)
         output = model(x)
-        self.assertTrue(
-            torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
-        )
+        assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
 
     def test_cpu_offload_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
@@ -222,9 +218,7 @@ class BigModelingTester(unittest.TestCase):
 
         cpu_offload(model, execution_device=device, preload_module_classes=["ModuleWithUnusedSubModules"])
         output = model(x)
-        self.assertTrue(
-            torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
-        )
+        assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
 
         # Clean up for next test.
         remove_hook_from_submodules(model)
@@ -236,9 +230,7 @@ class BigModelingTester(unittest.TestCase):
             preload_module_classes=["ModuleWithUnusedSubModules"],
         )
         output = model(x)
-        self.assertTrue(
-            torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
-        )
+        assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
 
     @slow
     @require_cuda
@@ -249,9 +241,9 @@ class BigModelingTester(unittest.TestCase):
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
         cpu_offload(gpt2, execution_device=0)
         outputs = gpt2.generate(inputs["input_ids"])
-        self.assertEqual(
-            tokenizer.decode(outputs[0].tolist()),
-            "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+        assert (
+            tokenizer.decode(outputs[0].tolist())
+            == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
         )
 
     def test_disk_offload(self):
@@ -264,9 +256,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             disk_offload(model, tmp_dir, execution_device=device)
             output = model(x)
-            self.assertTrue(
-                torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
-            )
+            assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
 
             # Clean up for next test.
             remove_hook_from_submodules(model)
@@ -274,9 +264,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             disk_offload(model, tmp_dir, execution_device=device, offload_buffers=True)
             output = model(x)
-            self.assertTrue(
-                torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
-            )
+            assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
 
     def test_disk_offload_with_unused_submodules(self):
         model = ModelWithUnusedSubModulesForTest()
@@ -290,9 +278,7 @@ class BigModelingTester(unittest.TestCase):
                 model, tmp_dir, execution_device=device, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
-            self.assertTrue(
-                torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
-            )
+            assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
 
             # Clean up for next test.
             remove_hook_from_submodules(model)
@@ -306,9 +292,7 @@ class BigModelingTester(unittest.TestCase):
                 preload_module_classes=["ModuleWithUnusedSubModules"],
             )
             output = model(x)
-            self.assertTrue(
-                torch.allclose(expected, output.cpu(), 1e-4, 1e-5), msg=f"Expected: {expected}\nActual: {output.cpu()}"
-            )
+            assert torch.allclose(expected, output.cpu(), 1e-4, 1e-5), f"Expected: {expected}, Actual: {output.cpu()}"
 
     @slow
     @require_cuda
@@ -320,9 +304,9 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             disk_offload(gpt2, tmp_dir, execution_device=0)
             outputs = gpt2.generate(inputs["input_ids"])
-            self.assertEqual(
-                tokenizer.decode(outputs[0].tolist()),
-                "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+            assert (
+                tokenizer.decode(outputs[0].tolist())
+                == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
             )
 
     @require_cuda
@@ -336,7 +320,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_cuda
     def test_dispatch_model_with_non_persistent_buffers(self):
@@ -348,7 +332,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir, offload_buffers=True)
             output = model(x)
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_mps
     def test_dispatch_model_mps(self):
@@ -361,7 +345,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_cuda
     def test_dispatch_model_tied_weights(self):
@@ -370,7 +354,7 @@ class BigModelingTester(unittest.TestCase):
         device_map = {"linear1": 0, "batchnorm": 0, "linear2": 0}
 
         dispatch_model(model, device_map)
-        self.assertIs(model.linear2.weight, model.linear1.weight)
+        assert model.linear2.weight is model.linear1.weight
 
     @require_multi_gpu
     def test_dispatch_model_tied_weights_memory(self):
@@ -422,7 +406,7 @@ class BigModelingTester(unittest.TestCase):
 
         with torch.no_grad():
             output = model(x)
-        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+        assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_cuda
     def test_dispatch_model_tied_weights_memory_with_nested_offload_cpu(self):
@@ -487,7 +471,7 @@ class BigModelingTester(unittest.TestCase):
         dispatch_model(model, device_map)
         free_memory_bytes_after_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
 
-        self.assertTrue((free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130)
+        assert (free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130
 
         original_pointer = model.compute1._hf_hook.weights_map["weight"].data_ptr()
 
@@ -501,16 +485,16 @@ class BigModelingTester(unittest.TestCase):
             except Exception as e:
                 raise e
 
-        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+        assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
         torch.cuda.empty_cache()
 
         free_memory_bytes_after_infer = torch.cuda.mem_get_info("cuda:0")[0]
 
         # Check that we have no more references on GPU for the offloaded tied weight.
-        self.assertTrue(len(model.compute1.weight_submodule._hf_hook.tied_params_map[original_pointer]) == 0)
-        self.assertTrue(len(model.compute1._hf_hook.tied_params_map[original_pointer]) == 0)
-        self.assertTrue((free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130)
+        assert len(model.compute1.weight_submodule._hf_hook.tied_params_map[original_pointer]) == 0
+        assert len(model.compute1._hf_hook.tied_params_map[original_pointer]) == 0
+        assert (free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130
 
         # Test is flacky otherwise.
         del model
@@ -580,7 +564,7 @@ class BigModelingTester(unittest.TestCase):
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             free_memory_bytes_after_dispatch = torch.cuda.mem_get_info("cuda:0")[0]
 
-            self.assertTrue((free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130)
+            assert (free_memory_bytes_after_dispatch - free_memory_bytes_before_dispatch) * 1e-6 < 130
 
             with torch.no_grad():
                 try:
@@ -592,7 +576,7 @@ class BigModelingTester(unittest.TestCase):
                 except Exception as e:
                     raise e
 
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
             torch.cuda.empty_cache()
 
@@ -603,15 +587,15 @@ class BigModelingTester(unittest.TestCase):
             for pointer, pointer_dict in model.compute1.weight_submodule._hf_hook.tied_params_map.items():
                 if len(pointer_dict) > 0:
                     n_non_empty += 1
-            self.assertTrue(n_non_empty == 1)  # `compute` layer one.
+            assert n_non_empty == 1  # `compute` layer one.
 
             n_non_empty = 0
             for pointer, pointer_dict in model.compute1._hf_hook.tied_params_map.items():
                 if len(pointer_dict) > 0:
                     n_non_empty += 1
-            self.assertTrue(n_non_empty == 1)  # `compute` layer one.
+            assert n_non_empty == 1  # `compute` layer one.
 
-            self.assertTrue((free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130)
+            assert (free_memory_bytes_after_infer - free_memory_bytes_after_dispatch) * 1e-6 < 130
 
     @require_multi_gpu
     def test_dispatch_model_multi_gpu(self):
@@ -624,7 +608,7 @@ class BigModelingTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             dispatch_model(model, device_map, offload_dir=tmp_dir)
             output = model(x)
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_cuda
     def test_dispatch_model_copy(self):
@@ -640,10 +624,10 @@ class BigModelingTester(unittest.TestCase):
         copied_model.id = 2
         output, copied_output_id = copied_model(x)
 
-        self.assertEqual(original_model.id, original_output_id)
-        self.assertEqual(copied_model.id, copied_output_id)
-        self.assertFalse(copied_model.linear1.forward is original_model.linear1.forward)
-        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+        assert original_model.id == original_output_id
+        assert copied_model.id == copied_output_id
+        assert copied_model.linear1.forward is not original_model.linear1.forward
+        assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_cuda
     def test_dispatch_model_move_offloaded_model(self):
@@ -687,9 +671,9 @@ class BigModelingTester(unittest.TestCase):
 
         gpt2 = dispatch_model(gpt2, device_map)
         outputs = gpt2.generate(inputs["input_ids"])
-        self.assertEqual(
-            tokenizer.decode(outputs[0].tolist()),
-            "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+        assert (
+            tokenizer.decode(outputs[0].tolist())
+            == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
         )
 
         # Dispatch with a bit of CPU offload
@@ -698,9 +682,9 @@ class BigModelingTester(unittest.TestCase):
             device_map[f"transformer.h.{i}"] = "cpu"
         gpt2 = dispatch_model(gpt2, device_map)
         outputs = gpt2.generate(inputs["input_ids"])
-        self.assertEqual(
-            tokenizer.decode(outputs[0].tolist()),
-            "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+        assert (
+            tokenizer.decode(outputs[0].tolist())
+            == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
         )
         # Dispatch with a bit of CPU and disk offload
         gpt2 = AutoModelForCausalLM.from_pretrained("gpt2")
@@ -714,9 +698,9 @@ class BigModelingTester(unittest.TestCase):
             offload_state_dict(tmp_dir, state_dict)
             gpt2 = dispatch_model(gpt2, device_map, offload_dir=tmp_dir)
             outputs = gpt2.generate(inputs["input_ids"])
-            self.assertEqual(
-                tokenizer.decode(outputs[0].tolist()),
-                "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo",
+            assert (
+                tokenizer.decode(outputs[0].tolist())
+                == "Hello world! My name is Kiyoshi, and I'm a student at the University of Tokyo"
             )
 
     @require_cuda
@@ -732,7 +716,7 @@ class BigModelingTester(unittest.TestCase):
                 model, device_map, offload_dir=tmp_dir, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_mps
     def test_dispatch_model_with_unused_submodules_mps(self):
@@ -747,7 +731,7 @@ class BigModelingTester(unittest.TestCase):
                 model, device_map, offload_dir=tmp_dir, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_multi_gpu
     def test_dispatch_model_with_unused_submodules_multi_gpu(self):
@@ -762,7 +746,7 @@ class BigModelingTester(unittest.TestCase):
                 model, device_map, offload_dir=tmp_dir, preload_module_classes=["ModuleWithUnusedSubModules"]
             )
             output = model(x)
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_cuda
     def test_dispatch_model_force_hooks(self):
@@ -774,7 +758,7 @@ class BigModelingTester(unittest.TestCase):
 
         dispatch_model(model, device_map, force_hooks=True)
         output = model(x)
-        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+        assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_cuda
     def test_load_checkpoint_and_dispatch(self):
@@ -792,11 +776,11 @@ class BigModelingTester(unittest.TestCase):
             new_model = load_checkpoint_and_dispatch(new_model, checkpoint, device_map=device_map)
 
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
-        self.assertEqual(new_model.linear1.weight.device, torch.device("meta"))
-        self.assertEqual(new_model.linear2.weight.device, torch.device(0))
+        assert new_model.linear1.weight.device == torch.device("meta")
+        assert new_model.linear2.weight.device == torch.device(0)
 
         output = new_model(x)
-        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+        assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_mps
     def test_load_checkpoint_and_dispatch_mps(self):
@@ -816,11 +800,11 @@ class BigModelingTester(unittest.TestCase):
             )
 
             # CPU-offloaded weights are on the meta device while waiting for the forward pass.
-            self.assertEqual(new_model.linear1.weight.device, torch.device("mps:0"))
-            self.assertEqual(new_model.linear2.weight.device, torch.device("meta"))
+            assert new_model.linear1.weight.device == torch.device("mps:0")
+            assert new_model.linear2.weight.device == torch.device("meta")
 
             output = new_model(x)
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_multi_gpu
     def test_load_checkpoint_and_dispatch_multi_gpu(self):
@@ -838,13 +822,13 @@ class BigModelingTester(unittest.TestCase):
             new_model = load_checkpoint_and_dispatch(new_model, checkpoint, device_map=device_map)
 
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
-        self.assertEqual(new_model.linear1.weight.device, torch.device("meta"))
-        self.assertEqual(new_model.linear2.weight.device, torch.device("meta"))
-        self.assertEqual(new_model.linear3.weight.device, torch.device(0))
-        self.assertEqual(new_model.linear4.weight.device, torch.device(1))
+        assert new_model.linear1.weight.device == torch.device("meta")
+        assert new_model.linear2.weight.device == torch.device("meta")
+        assert new_model.linear3.weight.device == torch.device(0)
+        assert new_model.linear4.weight.device == torch.device(1)
 
         output = new_model(x)
-        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+        assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_cuda
     def test_load_checkpoint_and_dispatch_with_unused_submodules(self):
@@ -864,13 +848,13 @@ class BigModelingTester(unittest.TestCase):
             )
 
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
-        self.assertEqual(new_model.linear1.linear.weight.device, torch.device("meta"))
-        self.assertEqual(new_model.linear2.linear.weight.device, torch.device("meta"))
-        self.assertEqual(new_model.linear3.linear.weight.device, torch.device(0))
-        self.assertEqual(new_model.linear4.linear.weight.device, torch.device(0))
+        assert new_model.linear1.linear.weight.device == torch.device("meta")
+        assert new_model.linear2.linear.weight.device == torch.device("meta")
+        assert new_model.linear3.linear.weight.device == torch.device(0)
+        assert new_model.linear4.linear.weight.device == torch.device(0)
 
         output = new_model(x)
-        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+        assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_mps
     def test_load_checkpoint_and_dispatch_with_unused_submodules_mps(self):
@@ -894,13 +878,13 @@ class BigModelingTester(unittest.TestCase):
             )
 
             # CPU-offloaded weights are on the meta device while waiting for the forward pass.
-            self.assertEqual(new_model.linear1.linear.weight.device, torch.device("mps:0"))
-            self.assertEqual(new_model.linear2.linear.weight.device, torch.device("mps:0"))
-            self.assertEqual(new_model.linear3.linear.weight.device, torch.device("meta"))
-            self.assertEqual(new_model.linear4.linear.weight.device, torch.device("meta"))
+            assert new_model.linear1.linear.weight.device == torch.device("mps:0")
+            assert new_model.linear2.linear.weight.device == torch.device("mps:0")
+            assert new_model.linear3.linear.weight.device == torch.device("meta")
+            assert new_model.linear4.linear.weight.device == torch.device("meta")
 
             output = new_model(x)
-            self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+            assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_multi_gpu
     def test_load_checkpoint_and_dispatch_multi_gpu_with_unused_submodules(self):
@@ -920,43 +904,43 @@ class BigModelingTester(unittest.TestCase):
             )
 
         # CPU-offloaded weights are on the meta device while waiting for the forward pass.
-        self.assertEqual(new_model.linear1.linear.weight.device, torch.device("meta"))
-        self.assertEqual(new_model.linear2.linear.weight.device, torch.device("meta"))
-        self.assertEqual(new_model.linear3.linear.weight.device, torch.device(0))
-        self.assertEqual(new_model.linear4.linear.weight.device, torch.device(1))
+        assert new_model.linear1.linear.weight.device == torch.device("meta")
+        assert new_model.linear2.linear.weight.device == torch.device("meta")
+        assert new_model.linear3.linear.weight.device == torch.device(0)
+        assert new_model.linear4.linear.weight.device == torch.device(1)
 
         output = new_model(x)
-        self.assertTrue(torch.allclose(expected, output.cpu(), atol=1e-5))
+        assert torch.allclose(expected, output.cpu(), atol=1e-5)
 
     @require_cuda
     def test_cpu_offload_with_hook(self):
         model1 = torch.nn.Linear(4, 5)
         model1, hook1 = cpu_offload_with_hook(model1)
-        self.assertEqual(model1.weight.device, torch.device("cpu"))
+        assert model1.weight.device == torch.device("cpu")
 
         inputs = torch.randn(3, 4)
         outputs = model1(inputs)
-        self.assertEqual(outputs.device, torch.device(0))
-        self.assertEqual(model1.weight.device, torch.device(0))
+        assert outputs.device == torch.device(0)
+        assert model1.weight.device == torch.device(0)
 
         hook1.offload()
-        self.assertEqual(model1.weight.device, torch.device("cpu"))
+        assert model1.weight.device == torch.device("cpu")
 
         model2 = torch.nn.Linear(5, 5)
         model2, hook2 = cpu_offload_with_hook(model2, prev_module_hook=hook1)
-        self.assertEqual(model2.weight.device, torch.device("cpu"))
+        assert model2.weight.device == torch.device("cpu")
 
         outputs = model1(inputs)
-        self.assertEqual(outputs.device, torch.device(0))
-        self.assertEqual(model1.weight.device, torch.device(0))
+        assert outputs.device == torch.device(0)
+        assert model1.weight.device == torch.device(0)
 
         outputs = model2(outputs)
-        self.assertEqual(outputs.device, torch.device(0))
-        self.assertEqual(model1.weight.device, torch.device("cpu"))
-        self.assertEqual(model2.weight.device, torch.device(0))
+        assert outputs.device == torch.device(0)
+        assert model1.weight.device == torch.device("cpu")
+        assert model2.weight.device == torch.device(0)
 
         hook2.offload()
-        self.assertEqual(model2.weight.device, torch.device("cpu"))
+        assert model2.weight.device == torch.device("cpu")
 
     @require_non_torch_xla
     @slow
@@ -984,11 +968,11 @@ class BigModelingTester(unittest.TestCase):
             device_map="balanced",
         )
 
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+        assert model.h[0].self_attention.query_key_value.weight.dtype == torch.int8
+        assert model.h[0].self_attention.query_key_value.weight.device.index == 0
 
-        self.assertTrue(model.h[-1].self_attention.query_key_value.weight.dtype == torch.int8)
-        self.assertTrue(model.h[-1].self_attention.query_key_value.weight.device.index == 1)
+        assert model.h[(-1)].self_attention.query_key_value.weight.dtype == torch.int8
+        assert model.h[(-1)].self_attention.query_key_value.weight.device.index == 1
 
     @require_non_torch_xla
     @slow
@@ -1016,8 +1000,8 @@ class BigModelingTester(unittest.TestCase):
             device_map="auto",
         )
 
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+        assert model.h[0].self_attention.query_key_value.weight.dtype == torch.int8
+        assert model.h[0].self_attention.query_key_value.weight.device.index == 0
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
@@ -1033,8 +1017,8 @@ class BigModelingTester(unittest.TestCase):
             device_map={"": torch.device("cuda:0")},
         )
 
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+        assert model.h[0].self_attention.query_key_value.weight.dtype == torch.int8
+        assert model.h[0].self_attention.query_key_value.weight.device.index == 0
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
@@ -1050,8 +1034,8 @@ class BigModelingTester(unittest.TestCase):
             device_map={"": "cuda:0"},
         )
 
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.int8)
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+        assert model.h[0].self_attention.query_key_value.weight.dtype == torch.int8
+        assert model.h[0].self_attention.query_key_value.weight.device.index == 0
 
     @require_non_torch_xla
     @slow
@@ -1080,8 +1064,8 @@ class BigModelingTester(unittest.TestCase):
             device_map="auto",
         )
 
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8)
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+        assert model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8
+        assert model.h[0].self_attention.query_key_value.weight.device.index == 0
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
@@ -1097,8 +1081,8 @@ class BigModelingTester(unittest.TestCase):
             device_map={"": torch.device("cuda:0")},
         )
 
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8)
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+        assert model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8
+        assert model.h[0].self_attention.query_key_value.weight.device.index == 0
 
         with init_empty_weights():
             model = AutoModel.from_config(AutoConfig.from_pretrained("bigscience/bloom-560m"))
@@ -1114,5 +1098,5 @@ class BigModelingTester(unittest.TestCase):
             device_map={"": "cuda:0"},
         )
 
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8)
-        self.assertTrue(model.h[0].self_attention.query_key_value.weight.device.index == 0)
+        assert model.h[0].self_attention.query_key_value.weight.dtype == torch.uint8
+        assert model.h[0].self_attention.query_key_value.weight.device.index == 0

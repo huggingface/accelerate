@@ -45,12 +45,12 @@ class OffloadTester(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             offload_state_dict(tmp_dir, model.state_dict())
             index_file = os.path.join(tmp_dir, "index.json")
-            self.assertTrue(os.path.isfile(index_file))
+            assert os.path.isfile(index_file)
             # TODO: add tests on what is inside the index
 
             for key in ["linear1.weight", "linear1.bias", "linear2.weight", "linear2.bias"]:
                 weight_file = os.path.join(tmp_dir, f"{key}.dat")
-                self.assertTrue(os.path.isfile(weight_file))
+                assert os.path.isfile(weight_file)
                 # TODO: add tests on the fact weights are properly loaded
 
     def test_offload_weight(self):
@@ -61,11 +61,11 @@ class OffloadTester(unittest.TestCase):
             with TemporaryDirectory() as tmp_dir:
                 index = offload_weight(weight, "weight", tmp_dir, {})
                 weight_file = os.path.join(tmp_dir, "weight.dat")
-                self.assertTrue(os.path.isfile(weight_file))
-                self.assertDictEqual(index, {"weight": {"shape": [2, 3], "dtype": str(dtype).split(".")[1]}})
+                assert os.path.isfile(weight_file)
+                assert index == {"weight": {"shape": [2, 3], "dtype": str(dtype).split(".")[1]}}
 
                 new_weight = load_offloaded_weight(weight_file, index["weight"])
-                self.assertTrue(torch.equal(weight, new_weight))
+                assert torch.equal(weight, new_weight)
 
     def test_offload_weights_loader(self):
         model = ModelForTest()
@@ -78,9 +78,9 @@ class OffloadTester(unittest.TestCase):
             weight_map = OffloadedWeightsLoader(state_dict=cpu_part, save_folder=tmp_dir)
 
             # Every key is there with the right value
-            self.assertEqual(sorted(weight_map), sorted(state_dict.keys()))
+            assert sorted(weight_map) == sorted(state_dict.keys())
             for key, param in state_dict.items():
-                self.assertTrue(torch.allclose(param, weight_map[key]))
+                assert torch.allclose(param, weight_map[key])
 
         cpu_part = {k: v for k, v in state_dict.items() if "weight" in k}
         disk_part = {k: v for k, v in state_dict.items() if "weight" not in k}
@@ -90,9 +90,9 @@ class OffloadTester(unittest.TestCase):
             weight_map = OffloadedWeightsLoader(state_dict=cpu_part, save_folder=tmp_dir)
 
             # Every key is there with the right value
-            self.assertEqual(sorted(weight_map), sorted(state_dict.keys()))
+            assert sorted(weight_map) == sorted(state_dict.keys())
             for key, param in state_dict.items():
-                self.assertTrue(torch.allclose(param, weight_map[key]))
+                assert torch.allclose(param, weight_map[key])
 
         with TemporaryDirectory() as tmp_dir:
             offload_state_dict(tmp_dir, state_dict)
@@ -100,15 +100,15 @@ class OffloadTester(unittest.TestCase):
             weight_map = OffloadedWeightsLoader(state_dict=cpu_part, save_folder=tmp_dir)
 
             # Every key is there with the right value
-            self.assertEqual(sorted(weight_map), sorted(state_dict.keys()))
+            assert sorted(weight_map) == sorted(state_dict.keys())
             for key, param in state_dict.items():
-                self.assertTrue(torch.allclose(param, weight_map[key]))
+                assert torch.allclose(param, weight_map[key])
 
     def test_extract_submodules_state_dict(self):
         state_dict = {"a.1": 0, "a.10": 1, "a.2": 2}
         extracted = extract_submodules_state_dict(state_dict, ["a.1", "a.2"])
-        self.assertDictEqual(extracted, {"a.1": 0, "a.2": 2})
+        assert extracted == {"a.1": 0, "a.2": 2}
 
         state_dict = {"a.1.a": 0, "a.10.a": 1, "a.2.a": 2}
         extracted = extract_submodules_state_dict(state_dict, ["a.1", "a.2"])
-        self.assertDictEqual(extracted, {"a.1.a": 0, "a.2.a": 2})
+        assert extracted == {"a.1.a": 0, "a.2.a": 2}
