@@ -57,22 +57,40 @@ def parameterized_custom_name_func(func, param_num, param):
 class AcceleratorTester(AccelerateTestCase):
     # Should be removed after 1.0.0 release
     def test_deprecated_values(self):
-        with self.assertWarns(FutureWarning) as cm:
+        # Test defaults
+        accelerator = Accelerator()
+        assert accelerator.split_batches is False, "split_batches should be False by default"
+        assert accelerator.dispatch_batches is None, "dispatch_batches should be None by default"
+        assert accelerator.even_batches is True, "even_batches should be True by default"
+        assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
+
+        # Pass some arguments only
+        with self.assertWarnsRegex(FutureWarning) as cm:
             accelerator = Accelerator(
                 dispatch_batches=True,
                 split_batches=False,
-                even_batches=False,
-                use_seedable_sampler=True,
             )
-        deprecation_warning = cm.warning.args[0]
-        assert "dispatch_batches" in deprecation_warning
-        assert accelerator.dispatch_batches is True
-        assert "split_batches" in deprecation_warning
-        assert accelerator.split_batches is False
-        assert "even_batches" in deprecation_warning
-        assert accelerator.even_batches is False
-        assert "use_seedable_sampler" in deprecation_warning
-        assert accelerator.use_seedable_sampler is True
+            deprecation_warning = cm.warnings[0].message.args[0]
+            assert accelerator.split_batches is False, "split_batches should be True"
+            assert accelerator.dispatch_batches is True, "dispatch_batches should be True"
+            assert accelerator.even_batches is True, "even_batches should be True by default"
+            assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
+            assert "dispatch_batches" in deprecation_warning
+            assert "split_batches" in deprecation_warning
+            assert "even_batches" not in deprecation_warning
+            assert "use_seedable_sampler" not in deprecation_warning
+
+        # Pass in some arguments, but with their defaults
+        with self.assertWarns(FutureWarning) as cm:
+            accelerator = Accelerator(
+                even_batches=True,
+                use_seedable_sampler=False,
+            )
+            deprecation_warning = cm.warnings[0].message.args[0]
+            assert "even_batches" in deprecation_warning
+            assert accelerator.even_batches is True
+            assert "use_seedable_sampler" in deprecation_warning
+            assert accelerator.use_seedable_sampler is False
 
     @require_non_cpu
     def test_accelerator_can_be_reinstantiated(self):
