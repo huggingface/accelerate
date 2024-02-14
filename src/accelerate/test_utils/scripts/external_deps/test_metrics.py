@@ -25,7 +25,7 @@ from datasets import load_dataset
 from torch.utils.data import DataLoader, IterableDataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from accelerate import Accelerator, DistributedType, DataLoaderConfiguration
+from accelerate import Accelerator, DataLoaderConfiguration, DistributedType
 from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.test_utils import RegressionDataset, RegressionModel, torch_device
 from accelerate.utils import is_torch_xla_available, set_seed
@@ -278,7 +278,9 @@ def main():
             print("**Test torch metrics**")
         for split_batches in [True, False]:
             for dispatch_batches in dispatch_batches_options:
-                dataloader_config = DataLoaderConfiguration(split_batches=split_batches, dispatch_batches=dispatch_batches)
+                dataloader_config = DataLoaderConfiguration(
+                    split_batches=split_batches, dispatch_batches=dispatch_batches
+                )
                 accelerator = Accelerator(dataloader_config=dataloader_config)
                 if accelerator.is_local_main_process:
                     print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`, length=99")
