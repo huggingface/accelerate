@@ -536,6 +536,10 @@ class Accelerator:
     def even_batches(self):
         return self.dataloader_config.even_batches
 
+    @even_batches.setter
+    def even_batches(self, value: bool):
+        self.dataloader_config.even_batches = value
+
     @property
     def use_seedable_sampler(self):
         return self.dataloader_config.use_seedable_sampler
