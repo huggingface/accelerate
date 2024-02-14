@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
@@ -37,7 +36,6 @@ from .imports import (
 
 if is_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
-
 
 if is_torch_distributed_available():
     from torch.distributed import ReduceOp
@@ -169,19 +167,30 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
                 for k, t in tensor.items()
             }
         )
-    elif hasattr(tensor, "to"):
-        if is_npu_available():
+    elif is_torch_tensor(tensor) or hasattr(tensor, "to"):
+        # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
+        if device == "npu":
+            device = "npu:0"
+        if device == "xpu":
+            device = "xpu:0"
+        try:
+            return tensor.to(device, non_blocking=non_blocking)
+        except TypeError:  # .to() doesn't accept non_blocking as kwarg
+            return tensor.to(device)
+        except AssertionError as error:
             # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-            if isinstance(device, int):
-                device = f"npu:{device}"
-            # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
-            elif device == torch.device("npu"):
-                device = "npu:0"
-        elif is_xpu_available():
-            if isinstance(device, int):
-                device = f"xpu:{device}"
-            elif device == torch.device("xpu"):
-                device = "xpu:0"
+            # This call is inside the try-block since is_npu_available is not supported by torch.compile.
+            if is_npu_available():
+                if isinstance(device, int):
+                    device = f"npu:{device}"
+            else:
+                raise error
+        except Exception as error:
+            if is_xpu_available():
+                if isinstance(device, int):
+                    device = f"xpu:{device}"
+            else:
+                raise error
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
@@ -779,7 +788,10 @@ def convert_to_fp32(tensor):
         return tensor.float()
 
     def _is_fp16_bf16_tensor(tensor):
-        return hasattr(tensor, "dtype") and tensor.dtype in (torch.float16, torch.bfloat16)
+        return (is_torch_tensor(tensor) or hasattr(tensor, "dtype")) and tensor.dtype in (
+            torch.float16,
+            torch.bfloat16,
+        )
 
     return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
 

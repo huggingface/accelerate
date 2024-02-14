@@ -29,6 +29,7 @@ from accelerate.utils import (
     CannotPadNestedTensorWarning,
     check_os_kernel,
     convert_outputs_to_fp32,
+    convert_to_fp32,
     extract_model_from_parallel,
     find_device,
     listify,
@@ -300,3 +301,11 @@ class UtilsTester(unittest.TestCase):
         result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 66 items now
         assert result.shape == torch.Size([66, 4, 4])
+
+    def test_send_to_device_compiles(self):
+        compiled_send_to_device = torch.compile(send_to_device, fullgraph=True)
+        compiled_send_to_device(torch.zeros([1], dtype=torch.bfloat16), "cpu")
+
+    def test_convert_to_fp32(self):
+        compiled_convert_to_fp32 = torch.compile(convert_to_fp32, fullgraph=True)
+        compiled_convert_to_fp32(torch.zeros([1], dtype=torch.bfloat16))
