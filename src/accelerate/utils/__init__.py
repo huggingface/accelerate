@@ -18,6 +18,7 @@ from .dataclasses import (
     BnbQuantizationConfig,
     ComputeEnvironment,
     CustomDtype,
+    DataLoaderConfiguration,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,

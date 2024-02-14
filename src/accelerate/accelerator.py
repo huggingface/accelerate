@@ -47,6 +47,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     AutocastKwargs,
+    DataLoaderConfiguration,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -150,6 +151,12 @@ except ImportError:
 
 logger = get_logger(__name__)
 
+# Sentinel values for defaults
+_split_batches = object()
+_dispatch_batches = object()
+_even_batches = object()
+_use_seedable_sampler = object()
+
 
 class Accelerator:
     """
@@ -159,11 +166,6 @@ class Accelerator:
         device_placement (`bool`, *optional*, defaults to `True`):
             Whether or not the accelerator should put objects on device (tensors yielded by the dataloader, model,
             etc...).
-        split_batches (`bool`, *optional*, defaults to `False`):
-            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
-            `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a
-            round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
-            in your script multiplied by the number of processes.
         mixed_precision (`str`, *optional*):
             Whether or not to use mixed precision training. Choose from 'no','fp16','bf16 or 'fp8'. Will default to the
             value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
@@ -176,6 +178,8 @@ class Accelerator:
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
+        dataloader_config (`DataLoaderConfiguration`, *optional*):
+            A configuration for how the dataloaders should be handled in distributed scenarios.
         deepspeed_plugin (`DeepSpeedPlugin`, *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -210,19 +214,6 @@ class Accelerator:
         project_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing data such as logs of locally-compatible loggers and potentially saved
             checkpoints.
-        dispatch_batches (`bool`, *optional*):
-            If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
-            and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
-            underlying dataset is an `IterableDataset`, `False` otherwise.
-        even_batches (`bool`, *optional*, defaults to `True`):
-            If set to `True`, in cases where the total batch size across all processes does not exactly divide the
-            dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
-            all workers.
-        use_seedable_sampler (`bool`, *optional*, defaults to `False`):
-            Whether or not use a fully seedable random sampler ([`~data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducable using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
-            also be ran with [`~utils.set_seed`] each time for the best results.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
@@ -254,10 +245,11 @@ class Accelerator:
     def __init__(
         self,
         device_placement: bool = True,
-        split_batches: bool = False,
+        split_batches: bool = _split_batches,
         mixed_precision: PrecisionType | str | None = None,
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
+        dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
@@ -266,9 +258,9 @@ class Accelerator:
         project_dir: str | os.PathLike | None = None,
         project_config: ProjectConfiguration | None = None,
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
-        dispatch_batches: bool | None = None,
-        even_batches: bool = True,
-        use_seedable_sampler: bool = False,
+        dispatch_batches: bool | None = _dispatch_batches,
+        even_batches: bool = _even_batches,
+        use_seedable_sampler: bool = _use_seedable_sampler,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
@@ -422,10 +414,32 @@ class Accelerator:
                 )
 
         self.device_placement = device_placement
-        self.split_batches = split_batches
-        self.dispatch_batches = dispatch_batches
-        self.even_batches = even_batches
-        self.use_seedable_sampler = use_seedable_sampler
+        if dataloader_config is None:
+            dataloader_config = DataLoaderConfiguration()
+        self.dataloader_config = dataloader_config
+        # Deal with deprecated args
+        # TODO: Remove in v1.0.0
+        deprecated_dl_args = {}
+        if dispatch_batches is not _dispatch_batches:
+            deprecated_dl_args["dispatch_batches"] = dispatch_batches
+            self.dataloader_config.dispatch_batches = dispatch_batches
+        if split_batches is not _split_batches:
+            deprecated_dl_args["split_batches"] = split_batches
+            self.dataloader_config.split_batches = split_batches
+        if even_batches is not _even_batches:
+            deprecated_dl_args["even_batches"] = even_batches
+            self.dataloader_config.even_batches = even_batches
+        if use_seedable_sampler is not _use_seedable_sampler:
+            deprecated_dl_args["use_seedable_sampler"] = use_seedable_sampler
+            self.dataloader_config.use_seedable_sampler = use_seedable_sampler
+        if len(deprecated_dl_args) > 0:
+            values = ", ".join([f"{k}={v}" for k, v in deprecated_dl_args.items()])
+            warnings.warn(
+                f"Passing the following arguments to `Accelerator` is deprecated and will be removed in version 1.0 of Accelerate: {deprecated_dl_args.keys()}. "
+                "Please pass an `accelerate.DataLoaderConfiguration` instead: \n"
+                f"dataloader_config = DataLoaderConfiguration({values})",
+                FutureWarning,
+            )
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
@@ -514,6 +528,26 @@ class Accelerator:
     @property
     def device(self):
         return self.state.device
+
+    @property
+    def split_batches(self):
+        return self.dataloader_config.split_batches
+
+    @property
+    def dispatch_batches(self):
+        return self.dataloader_config.dispatch_batches
+
+    @property
+    def even_batches(self):
+        return self.dataloader_config.even_batches
+
+    @even_batches.setter
+    def even_batches(self, value: bool):
+        self.dataloader_config.even_batches = value
+
+    @property
+    def use_seedable_sampler(self):
+        return self.dataloader_config.use_seedable_sampler
 
     @property
     def project_dir(self):
