@@ -415,7 +415,8 @@ class Accelerator:
 
         self.device_placement = device_placement
         if dataloader_config is None:
-            self.dataloader_config = DataLoaderConfiguration()
+            dataloader_config = DataLoaderConfiguration()
+        self.dataloader_config = dataloader_config
         # Deal with deprecated args
         # TODO: Remove in v1.0.0
         deprecated_dl_args = {}
