@@ -4,6 +4,7 @@ import pickle
 import tempfile
 from unittest.mock import patch
 
+import pytest
 import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
@@ -65,12 +66,12 @@ class AcceleratorTester(AccelerateTestCase):
         assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
 
         # Pass some arguments only
-        with self.assertWarns(FutureWarning) as cm:
+        with pytest.warns(FutureWarning) as cm:
             accelerator = Accelerator(
                 dispatch_batches=True,
                 split_batches=False,
             )
-            deprecation_warning = cm.warnings[0].message.args[0]
+            deprecation_warning = str(cm.list[0].message)
             assert accelerator.split_batches is False, "split_batches should be True"
             assert accelerator.dispatch_batches is True, "dispatch_batches should be True"
             assert accelerator.even_batches is True, "even_batches should be True by default"
@@ -81,12 +82,12 @@ class AcceleratorTester(AccelerateTestCase):
             assert "use_seedable_sampler" not in deprecation_warning
 
         # Pass in some arguments, but with their defaults
-        with self.assertWarns(FutureWarning) as cm:
+        with pytest.warns(FutureWarning) as cm:
             accelerator = Accelerator(
                 even_batches=True,
                 use_seedable_sampler=False,
             )
-            deprecation_warning = cm.warnings[0].message.args[0]
+            deprecation_warning = str(cm.list[0].message)
             assert "even_batches" in deprecation_warning
             assert accelerator.even_batches is True
             assert "use_seedable_sampler" in deprecation_warning
