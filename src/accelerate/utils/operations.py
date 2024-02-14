@@ -29,12 +29,12 @@ from .imports import (
     is_npu_available,
     is_torch_distributed_available,
     is_torch_version,
-    is_tpu_available,
+    is_torch_xla_available,
     is_xpu_available,
 )
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 if is_torch_distributed_available():
@@ -440,7 +440,7 @@ def gather(tensor):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
-    if PartialState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.XLA:
         return _tpu_gather(tensor)
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_gather(tensor)
@@ -466,7 +466,7 @@ def gather_object(object: Any):
     Returns:
         The same data structure as `object` with all the objects sent to every device.
     """
-    if PartialState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.XLA:
         raise NotImplementedError("gather objects in TPU is not supported")
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_gather_object(object)
@@ -562,7 +562,7 @@ def broadcast(tensor, from_process: int = 0):
     Returns:
         The same data structure as `tensor` with all tensors broadcasted to the proper device.
     """
-    if PartialState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.XLA:
         return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_broadcast(tensor, src=from_process)
@@ -583,7 +583,7 @@ def broadcast_object_list(object_list, from_process: int = 0):
     Returns:
         The same list containing the objects from process 0.
     """
-    if PartialState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.XLA:
         for i, obj in enumerate(object_list):
             object_list[i] = xm.mesh_reduce("accelerate.utils.broadcast_object_list", obj, lambda x: x[from_process])
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
@@ -753,7 +753,7 @@ def reduce(tensor, reduction="mean", scale=1.0):
         cloned_tensor = tensor.clone()
         if state.distributed_type == DistributedType.NO:
             return cloned_tensor
-        if state.distributed_type == DistributedType.TPU:
+        if state.distributed_type == DistributedType.XLA:
             # Some processes may have different HLO graphs than other
             # processes, for example in the breakpoint API
             # accelerator.set_trigger(). Use mark_step to make HLOs

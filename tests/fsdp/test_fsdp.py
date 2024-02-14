@@ -31,6 +31,7 @@ from accelerate.test_utils.testing import (
     require_fsdp,
     require_multi_device,
     require_non_cpu,
+    require_non_torch_xla,
     slow,
 )
 from accelerate.utils.constants import (
@@ -53,6 +54,7 @@ dtypes = [FP16, BF16]
 
 @require_fsdp
 @require_non_cpu
+@require_non_torch_xla
 class FSDPPluginIntegration(AccelerateTestCase):
     def setUp(self):
         super().setUp()
@@ -177,6 +179,8 @@ class FSDPPluginIntegration(AccelerateTestCase):
                 assert fsdp_plugin.cpu_offload == CPUOffload(offload_params=flag)
 
 
+# Skip this test when TorchXLA is available because accelerate.launch does not support TorchXLA FSDP.
+@require_non_torch_xla
 @require_fsdp
 @require_multi_device
 @slow

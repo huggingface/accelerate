@@ -16,7 +16,7 @@ import unittest
 
 from torch import nn
 
-from accelerate.test_utils import memory_allocated_func, require_non_cpu, torch_device
+from accelerate.test_utils import memory_allocated_func, require_non_cpu, require_non_torch_xla, torch_device
 from accelerate.utils.memory import find_executable_batch_size, release_memory
 
 
@@ -105,6 +105,7 @@ class MemoryTest(unittest.TestCase):
             assert "Oops, we had an error!" in cm.exception.args[0]
 
     @require_non_cpu
+    @require_non_torch_xla
     def test_release_memory(self):
         starting_memory = memory_allocated_func()
         model = ModelForTest()

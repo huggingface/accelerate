@@ -126,7 +126,7 @@ def get_cluster_input():
     if (
         not use_cpu
         and is_xpu_available()
-        and distributed_type not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.TPU]
+        and distributed_type not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.XLA]
     ):
         ipex_config["use_xpu"] = _ask_field(
             "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
@@ -481,7 +481,7 @@ def get_cluster_input():
         DistributedType.MULTI_XPU,
         DistributedType.MULTI_GPU,
         DistributedType.MULTI_NPU,
-        DistributedType.TPU,
+        DistributedType.XLA,
     ]:
         machine_type = str(distributed_type).split(".")[1].replace("MULTI_", "")
         if machine_type == "TPU":
@@ -529,7 +529,7 @@ def get_cluster_input():
             default="all",
         )
 
-    if distributed_type == DistributedType.TPU:
+    if distributed_type == DistributedType.XLA:
         mixed_precision = "no"
         main_training_function = _ask_field(
             "What is the name of the function in your script that should be launched in all parallel scripts? [main]: ",
@@ -620,7 +620,7 @@ def get_cluster_input():
             "Torch dynamo used without mixed precision requires TF32 to be efficient. Accelerate will enable it by default when launching your scripts."
         )
 
-    if distributed_type == DistributedType.TPU and mixed_precision == "bf16":
+    if distributed_type == DistributedType.XLA and mixed_precision == "bf16":
         tpu_downcast_bf16 = _ask_field(
             "Should `torch.float` be cast as `bfloat16` and `torch.double` remain `float32` on TPUs?", default="no"
         )
