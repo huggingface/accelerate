@@ -25,7 +25,7 @@ from datasets import load_dataset
 from torch.utils.data import DataLoader, IterableDataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from accelerate import Accelerator
+from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.test_utils import RegressionDataset, RegressionModel, torch_device
 from accelerate.utils import set_seed
@@ -81,7 +81,8 @@ def get_dataloader(accelerator: Accelerator, use_longest=False):
 
 
 def get_mrpc_setup(dispatch_batches, split_batches):
-    accelerator = Accelerator(dispatch_batches=dispatch_batches, split_batches=split_batches)
+    dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, split_batches=split_batches)
+    accelerator = Accelerator(data_loader_config=dataloader_config)
     dataloader = get_dataloader(accelerator, not dispatch_batches)
     model = AutoModelForSequenceClassification.from_pretrained(
         "hf-internal-testing/mrpc-bert-base-cased", return_dict=True
@@ -242,7 +243,8 @@ def test_gather_for_metrics_drop_last():
 
 
 def main():
-    accelerator = Accelerator(split_batches=False, dispatch_batches=False)
+    dataloader_config = DataLoaderConfiguration(split_batches=False, dispatch_batches=False)
+    accelerator = Accelerator(dataloader_config=dataloader_config)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_warning()
@@ -267,7 +269,8 @@ def main():
         print("**Test torch metrics**")
     for split_batches in [True, False]:
         for dispatch_batches in [True, False]:
-            accelerator = Accelerator(split_batches=split_batches, dispatch_batches=dispatch_batches)
+            dataloader_config = DataLoaderConfiguration(split_batches=split_batches, dispatch_batches=dispatch_batches)
+            accelerator = Accelerator(dataloader_config=dataloader_config)
             if accelerator.is_local_main_process:
                 print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`, length=99")
             test_torch_metrics(accelerator, 99)
