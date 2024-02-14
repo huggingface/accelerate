@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import os
 import unittest
 from pathlib import Path
@@ -20,7 +19,6 @@ from pathlib import Path
 import torch
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
-import accelerate
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
@@ -30,6 +28,7 @@ from accelerate.test_utils.testing import (
     run_command,
 )
 from accelerate.utils import patch_environment
+from accelerate.utils.other import path_in_accelerate_package
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -39,9 +38,8 @@ class AccelerateLauncherTester(unittest.TestCase):
     for the duration of the tests.
     """
 
-    mod_file = inspect.getfile(accelerate.test_utils)
-    test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_cli.py"])
-    notebook_launcher_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_notebook.py"])
+    test_file_path = path_in_accelerate_package("test_utils", "scripts", "test_cli.py")
+    notebook_launcher_path = path_in_accelerate_package("test_utils", "scripts", "test_notebook.py")
 
     base_cmd = ["accelerate", "launch"]
     config_folder = Path.home() / ".cache/huggingface/accelerate"
@@ -65,14 +63,14 @@ class AccelerateLauncherTester(unittest.TestCase):
         cmd = self.base_cmd
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
             cmd += ["--multi_gpu"]
-        execute_subprocess_async(cmd + [self.test_file_path], env=os.environ.copy())
+        execute_subprocess_async(cmd + [str(self.test_file_path)], env=os.environ.copy())
 
     def test_config_compatibility(self):
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
             if "invalid" not in str(config):
                 with self.subTest(config_file=config):
                     execute_subprocess_async(
-                        self.base_cmd + ["--config_file", str(config), self.test_file_path], env=os.environ.copy()
+                        self.base_cmd + ["--config_file", str(config), str(self.test_file_path)], env=os.environ.copy()
                     )
 
     def test_invalid_keys(self):
@@ -82,7 +80,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         ):
             execute_subprocess_async(
                 self.base_cmd
-                + ["--config_file", str(self.test_config_path / "invalid_keys.yaml"), self.test_file_path],
+                + ["--config_file", str(self.test_config_path / "invalid_keys.yaml"), str(self.test_file_path)],
                 env=os.environ.copy(),
             )
 

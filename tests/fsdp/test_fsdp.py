@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import inspect
 import os
 
 import torch
@@ -21,7 +20,6 @@ from transformers import AutoModel
 from transformers.testing_utils import mockenv_context
 from transformers.trainer_utils import set_seed
 
-import accelerate
 from accelerate.accelerator import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import (
@@ -41,7 +39,7 @@ from accelerate.utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
-from accelerate.utils.other import patch_environment
+from accelerate.utils.other import patch_environment, path_in_accelerate_package
 
 
 set_seed(42)
@@ -185,6 +183,8 @@ class FSDPPluginIntegration(AccelerateTestCase):
 @require_multi_device
 @slow
 class FSDPIntegrationTest(TempDirTestCase):
+    test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
+
     def setUp(self):
         super().setUp()
         self.performance_lower_bound = 0.82
@@ -202,9 +202,6 @@ class FSDPIntegrationTest(TempDirTestCase):
         }
         self.n_train = 160
         self.n_val = 160
-
-        mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps"])
 
     def test_performance(self):
         self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")

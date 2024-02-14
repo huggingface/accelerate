@@ -27,7 +27,6 @@ from transformers.testing_utils import mockenv_context
 from transformers.trainer_utils import set_seed
 from transformers.utils import is_torch_bf16_available
 
-import accelerate
 from accelerate.accelerator import Accelerator
 from accelerate.scheduler import AcceleratedScheduler
 from accelerate.state import AcceleratorState
@@ -49,7 +48,7 @@ from accelerate.utils.deepspeed import (
     DummyOptim,
     DummyScheduler,
 )
-from accelerate.utils.other import patch_environment
+from accelerate.utils.other import patch_environment, path_in_accelerate_package
 
 
 set_seed(42)
@@ -812,10 +811,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
 
     def test_basic_run(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        test_file_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_performance.py"]
-        )
+        test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_performance.py")
         with tempfile.TemporaryDirectory() as dirpath:
             cmd = [
                 "accelerate",
@@ -829,7 +825,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 "--zero_stage=2",
                 "--offload_optimizer_device=none",
                 "--offload_param_device=none",
-                test_file_path,
+                str(test_file_path),
                 "--model_name_or_path=distilbert-base-uncased",
                 "--num_epochs=1",
                 f"--output_dir={dirpath}",
@@ -842,6 +838,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 @require_multi_device
 @slow
 class DeepSpeedIntegrationTest(TempDirTestCase):
+    test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
+
     def setUp(self):
         super().setUp()
         self._test_file_path = inspect.getfile(self.__class__)
@@ -867,9 +865,6 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         }
         self.n_train = 160
         self.n_val = 160
-
-        mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps"])
 
     def test_performance(self):
         self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
