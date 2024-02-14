@@ -95,7 +95,7 @@ def process_execution_check():
     accelerator.wait_for_everyone()
 
     if accelerator.is_main_process:
-        with open(path, "r") as f:
+        with open(path) as f:
             text = "".join(f.readlines())
         try:
             assert text.startswith("Currently in the main process\n"), "Main process was not first"

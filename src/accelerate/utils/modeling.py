@@ -407,7 +407,7 @@ def set_module_tensor_to_device(
 
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
-                setattr(module._parameters[tensor_name], "SCB", fp16_statistics.to(device))
+                module._parameters[tensor_name].SCB = fp16_statistics.to(device)
                 del fp16_statistics
             # as we put the weight to meta, it doesn't have SCB attr anymore. make sure that it is not a meta weight
             if (
@@ -472,8 +472,7 @@ def named_module_tensors(
             Whether or not to remove the non persistent buffer from the buffers. Useful only when include_buffers =
             True
     """
-    for named_parameter in module.named_parameters(recurse=recurse):
-        yield named_parameter
+    yield from module.named_parameters(recurse=recurse)
 
     if include_buffers:
         non_persistent_buffers = set()
@@ -1548,7 +1547,7 @@ def load_checkpoint_in_model(
 
     if index_filename is not None:
         checkpoint_folder = os.path.split(index_filename)[0]
-        with open(index_filename, "r") as f:
+        with open(index_filename) as f:
             index = json.loads(f.read())
 
         if "weight_map" in index:

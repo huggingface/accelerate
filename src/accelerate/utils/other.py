@@ -87,7 +87,7 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
         model = model.module
 
     if not keep_fp32_wrapper:
-        forward = getattr(model, "forward")
+        forward = model.forward
         original_forward = model.__dict__.pop("_original_forward", None)
         if original_forward is not None:
             while hasattr(forward, "__wrapped__"):

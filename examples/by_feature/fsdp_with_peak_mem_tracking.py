@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -334,13 +333,11 @@ def training_function(config, args):
                         accelerator.save_state(output_dir)
         # New Code #
         # Printing the GPU memory usage details such as allocated memory, peak memory, and total memory usage
-        accelerator.print("Memory before entering the train : {}".format(b2mb(tracemalloc.begin)))
-        accelerator.print("Memory consumed at the end of the train (end-begin): {}".format(tracemalloc.used))
-        accelerator.print("Peak Memory consumed during the train (max-begin): {}".format(tracemalloc.peaked))
+        accelerator.print(f"Memory before entering the train : {b2mb(tracemalloc.begin)}")
+        accelerator.print(f"Memory consumed at the end of the train (end-begin): {tracemalloc.used}")
+        accelerator.print(f"Peak Memory consumed during the train (max-begin): {tracemalloc.peaked}")
         accelerator.print(
-            "Total Peak Memory consumed during the train (max): {}".format(
-                tracemalloc.peaked + b2mb(tracemalloc.begin)
-            )
+            f"Total Peak Memory consumed during the train (max): {tracemalloc.peaked + b2mb(tracemalloc.begin)}"
         )
         # Logging the peak memory usage of the GPU to the tracker
         if args.with_tracking:
@@ -387,11 +384,11 @@ def training_function(config, args):
                 accelerator.save_state(output_dir)
         # New Code #
         # Printing the GPU memory usage details such as allocated memory, peak memory, and total memory usage
-        accelerator.print("Memory before entering the eval : {}".format(b2mb(tracemalloc.begin)))
-        accelerator.print("Memory consumed at the end of the eval (end-begin): {}".format(tracemalloc.used))
-        accelerator.print("Peak Memory consumed during the eval (max-begin): {}".format(tracemalloc.peaked))
+        accelerator.print(f"Memory before entering the eval : {b2mb(tracemalloc.begin)}")
+        accelerator.print(f"Memory consumed at the end of the eval (end-begin): {tracemalloc.used}")
+        accelerator.print(f"Peak Memory consumed during the eval (max-begin): {tracemalloc.peaked}")
         accelerator.print(
-            "Total Peak Memory consumed during the eval (max): {}".format(tracemalloc.peaked + b2mb(tracemalloc.begin))
+            f"Total Peak Memory consumed during the eval (max): {tracemalloc.peaked + b2mb(tracemalloc.begin)}"
         )
         # Logging the peak memory usage of the GPU to the tracker
         if args.with_tracking:

@@ -19,7 +19,7 @@ extras = {}
 extras["quality"] = [
     "black ~= 23.1",  # hf-doc-builder has a hidden dependency on `black`
     "hf-doc-builder >= 0.3.0",
-    "ruff ~= 0.1.15",
+    "ruff ~= 0.2.1",
 ]
 extras["docs"] = []
 extras["test_prod"] = ["pytest", "pytest-xdist", "pytest-subtests", "parameterized"]
@@ -49,7 +49,7 @@ setup(
     name="accelerate",
     version="0.28.0.dev",
     description="Accelerate",
-    long_description=open("README.md", "r", encoding="utf-8").read(),
+    long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     keywords="deep learning",
     license="Apache",

@@ -31,8 +31,7 @@ class DummyIterableDataset(IterableDataset):
         self.data = data
 
     def __iter__(self):
-        for element in self.data:
-            yield element
+        yield from self.data
 
 
 def create_accelerator(even_batches=True):
