@@ -26,13 +26,18 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: 3.8
-        cache: 'pip'
-        cache-dependency-path: setup.py
       # Note: Don't use cache for prod
     - name: Install the library
       run: |
-        pip install -e .[test_prod]
-        pip install pytest-reportlog tabulate
+        pip install uv
+        uv venv
+        uv pip install -e .[test_prod]
+        uv pip install pytest-reportlog tabulate
+    - name: Archive pip installs
+      uses: actions/upload-artifact@v3
+      with:
+        name: venv
+        path: .venv
   
   run-tests:
     needs: install-deps
@@ -62,8 +67,11 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: 3.8
-        cache: 'pip'
-        cache-dependency-path: setup.py
+    - name: Download a single artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: venv
+
     
     # - name: Activate python cache
     #   uses: actions/cache@v3
@@ -75,11 +83,12 @@ jobs:
     
     - name: Install the library
       run: |
-        if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
-        if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
-        if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml; fi
-        if [[ ${{ matrix.test-kind }} = minimum ]]; then pip install torch==1.10.0; fi
-        pip install pytest-reportlog tabulate
+        uv venv
+        if [[ ${{ matrix.test-kind }} = test_prod ]]; then uv pip install -e .[test_prod]; fi
+        if [[ ${{ matrix.test-kind }} != test_prod ]]; then uv pip install -e .[testing,test_trackers]; fi
+        if [[ ${{ matrix.test-kind }} = test_rest ]]; then uv pip uninstall comet_ml; fi
+        if [[ ${{ matrix.test-kind }} = minimum ]]; then uv pip install torch==1.10.0; fi
+        uv pip install pytest-reportlog tabulate
     
     # - name: Run Tests
     #   env: 
