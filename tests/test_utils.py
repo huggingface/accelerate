@@ -19,6 +19,7 @@ import warnings
 from collections import UserDict, namedtuple
 from unittest.mock import Mock, patch
 
+import pytest
 import torch
 from torch import nn
 
@@ -28,6 +29,7 @@ from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
     CannotPadNestedTensorWarning,
     check_os_kernel,
+    clear_environment,
     convert_outputs_to_fp32,
     convert_to_fp32,
     extract_model_from_parallel,
@@ -133,6 +135,25 @@ class UtilsTester(unittest.TestCase):
         assert "AA" not in os.environ
         assert "BB" not in os.environ
         assert "CC" not in os.environ
+
+    def test_patch_environment_restores_on_error(self):
+        # we need to find an upper-case envvar
+        # because `patch_environment upper-cases all keys...
+        key, orig_value = next(kv for kv in os.environ.items() if kv[0].isupper())
+        new_value = f"{orig_value}_foofoofoo"
+        with pytest.raises(RuntimeError), patch_environment(**{key: new_value}):
+            assert os.environ[key] == os.getenv(key) == new_value  # noqa: TID251
+            raise RuntimeError("Oopsy daisy!")
+        assert os.environ[key] == os.getenv(key) == orig_value  # noqa: TID251
+
+    def test_clear_environment(self):
+        key, value = os.environ.copy().popitem()
+        with pytest.raises(RuntimeError), clear_environment():
+            assert key not in os.environ
+            assert not os.getenv(key)  # test the environment is actually cleared  # noqa: TID251
+            raise RuntimeError("Oopsy daisy!")
+        # Test values are restored
+        assert os.getenv(key) == os.environ[key] == value  # noqa: TID251
 
     def test_can_undo_convert_outputs(self):
         model = RegressionModel()
