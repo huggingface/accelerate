@@ -3186,6 +3186,7 @@ class Accelerator:
             autocast_handler = self.autocast_handler
         autocast_context = get_mixed_precision_context_manager(self.native_amp, autocast_handler)
         autocast_context.__enter__()
+        # TODO: should the `yield` be in a try/finally block?
         yield
         autocast_context.__exit__(*sys.exc_info())
 

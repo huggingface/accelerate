@@ -215,10 +215,11 @@ def clear_environment():
     _old_os_environ = os.environ.copy()
     os.environ.clear()
 
-    yield
-
-    os.environ.clear()  # clear any added keys,
-    os.environ.update(_old_os_environ)  # then restore previous environment
+    try:
+        yield
+    finally:
+        os.environ.clear()  # clear any added keys,
+        os.environ.update(_old_os_environ)  # then restore previous environment
 
 
 @contextmanager
@@ -246,15 +247,16 @@ def patch_environment(**kwargs):
             existing_vars[key] = os.environ[key]
         os.environ[key] = str(value)
 
-    yield
-
-    for key in kwargs:
-        key = key.upper()
-        if key in existing_vars:
-            # restore previous value
-            os.environ[key] = existing_vars[key]
-        else:
-            os.environ.pop(key, None)
+    try:
+        yield
+    finally:
+        for key in kwargs:
+            key = key.upper()
+            if key in existing_vars:
+                # restore previous value
+                os.environ[key] = existing_vars[key]
+            else:
+                os.environ.pop(key, None)
 
 
 def get_pretty_name(obj):
