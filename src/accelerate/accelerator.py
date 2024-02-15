@@ -407,11 +407,6 @@ class Accelerator:
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
-        if self.state.distributed_type == DistributedType.XLA:
-            if self.gradient_state.num_steps != 1:
-                raise ValueError(
-                    "Gradient accumulation is not supported on TPU. Please set `gradient_accumulation_steps` to 1 and don't pass in a `GradientAccumulationPlugin` object."
-                )
 
         self.device_placement = device_placement
         if dataloader_config is None:
