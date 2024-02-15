@@ -35,8 +35,9 @@ jobs:
         uv venv
         uv pip install -e .[test_prod]
         uv pip install pytest-reportlog tabulate
+  
   run-tests:
-    requires: install-deps
+    needs: install-deps
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
