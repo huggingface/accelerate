@@ -450,7 +450,7 @@ class CustomTrackerTestCase(unittest.TestCase):
             config = {"num_iterations": 12, "learning_rate": 1e-2, "some_boolean": False, "some_string": "some_value"}
             accelerator.init_trackers("Some name", config)
             accelerator.end_training()
-            with open(f"{d}/log.csv", "r") as f:
+            with open(f"{d}/log.csv") as f:
                 data = csv.DictReader(f)
                 data = next(data)
                 truth = {
@@ -472,7 +472,7 @@ class CustomTrackerTestCase(unittest.TestCase):
             values = {"total_loss": 0.1, "iteration": 1, "my_text": "some_value"}
             accelerator.log(values, step=0)
             accelerator.end_training()
-            with open(f"{d}/log.csv", "r") as f:
+            with open(f"{d}/log.csv") as f:
                 data = csv.DictReader(f)
                 data = next(data)
                 truth = {

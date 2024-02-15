@@ -90,7 +90,7 @@ def mocked_dataloaders(accelerator, batch_size: int = 16):
 
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
-        if accelerator.distributed_type == DistributedType.TPU:
+        if accelerator.distributed_type == DistributedType.XLA:
             return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
         return tokenizer.pad(examples, padding="longest", return_tensors="pt")
 

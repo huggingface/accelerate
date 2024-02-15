@@ -31,7 +31,7 @@ from ..logging import get_logger
 from ..state import PartialState
 from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
-from .imports import is_deepspeed_available, is_torch_distributed_available, is_tpu_available
+from .imports import is_deepspeed_available, is_torch_distributed_available, is_torch_xla_available
 from .modeling import id_tensor_storage
 from .transformer_engine import convert_model
 from .versions import is_torch_version
@@ -40,7 +40,7 @@ from .versions import is_torch_version
 logger = get_logger(__name__)
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
@@ -87,7 +87,7 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
         model = model.module
 
     if not keep_fp32_wrapper:
-        forward = getattr(model, "forward")
+        forward = model.forward
         original_forward = model.__dict__.pop("_original_forward", None)
         if original_forward is not None:
             while hasattr(forward, "__wrapped__"):
@@ -167,6 +167,12 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
         safe_serialization (`bool`, *optional*, defaults to `False`):
             Whether to save `obj` using `safetensors` or the traditional PyTorch way (that uses `pickle`).
     """
+    # When TorchXLA is enabled, it's necessary to transfer all data to the CPU before saving.
+    # Another issue arises with `id_tensor_storage`, which treats all XLA tensors as identical.
+    # If tensors remain on XLA, calling `clean_state_dict_for_safetensors` will result in only
+    # one XLA tensor remaining.
+    if PartialState().distributed_type == DistributedType.XLA:
+        obj = xm._maybe_convert_to_cpu(obj)
     # Check if it's a model and remove duplicates
     if safe_serialization:
         save_func = partial(safe_save_file, metadata={"format": "pt"})
@@ -175,9 +181,7 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
     else:
         save_func = torch.save
 
-    if PartialState().distributed_type == DistributedType.TPU:
-        xm.save(obj, f)
-    elif PartialState().is_main_process and not save_on_each_node:
+    if PartialState().is_main_process and not save_on_each_node:
         save_func(obj, f)
     elif PartialState().is_local_main_process and save_on_each_node:
         save_func(obj, f)

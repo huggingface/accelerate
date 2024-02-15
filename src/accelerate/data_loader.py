@@ -20,7 +20,7 @@ import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
-from .state import AcceleratorState, DistributedType, GradientState, is_tpu_available
+from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
 from .utils import (
     RNGType,
     broadcast,
@@ -501,7 +501,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             return len(self.dataset)
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.distributed.parallel_loader as xpl
 
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
@@ -942,7 +942,7 @@ def prepare_data_loader(
     elif sampler_is_batch_sampler:
         dataloader = DataLoaderShard(
             new_dataset,
-            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
+            device=device if put_on_device and state.distributed_type != DistributedType.XLA else None,
             sampler=new_batch_sampler,
             batch_size=dataloader.batch_size,
             rng_types=rng_types,
@@ -953,7 +953,7 @@ def prepare_data_loader(
     else:
         dataloader = DataLoaderShard(
             new_dataset,
-            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
+            device=device if put_on_device and state.distributed_type != DistributedType.XLA else None,
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
             synchronized_generator=synchronized_generator,
@@ -966,7 +966,7 @@ def prepare_data_loader(
             dataloader.sampler.sampler = sampler
         else:
             dataloader.batch_sampler.sampler = sampler
-    if state.distributed_type == DistributedType.TPU:
+    if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader
 

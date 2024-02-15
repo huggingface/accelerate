@@ -27,6 +27,7 @@ from ..utils import (
     PrecisionType,
     is_ipex_available,
     is_npu_available,
+    is_torch_xla_available,
     is_xpu_available,
 )
 from ..utils.constants import DEEPSPEED_MULTINODE_LAUNCHERS
@@ -108,23 +109,23 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     """
     Prepares and returns an environment with the correct multi-GPU environment variables.
     """
-    num_processes = getattr(args, "num_processes")
-    num_machines = getattr(args, "num_machines")
-    main_process_ip = getattr(args, "main_process_ip")
-    main_process_port = getattr(args, "main_process_port")
+    num_processes = args.num_processes
+    num_machines = args.num_machines
+    main_process_ip = args.main_process_ip
+    main_process_port = args.main_process_port
     if num_machines > 1:
-        setattr(args, "nproc_per_node", str(num_processes // num_machines))
-        setattr(args, "nnodes", str(num_machines))
-        setattr(args, "node_rank", int(args.machine_rank))
+        args.nproc_per_node = str(num_processes // num_machines)
+        args.nnodes = str(num_machines)
+        args.node_rank = int(args.machine_rank)
         if getattr(args, "same_network", False):
-            setattr(args, "master_addr", str(main_process_ip))
-            setattr(args, "master_port", str(main_process_port))
+            args.master_addr = str(main_process_ip)
+            args.master_port = str(main_process_port)
         else:
-            setattr(args, "rdzv_endpoint", f"{main_process_ip}:{main_process_port}")
+            args.rdzv_endpoint = f"{main_process_ip}:{main_process_port}"
     else:
-        setattr(args, "nproc_per_node", str(num_processes))
+        args.nproc_per_node = str(num_processes)
         if main_process_port is not None:
-            setattr(args, "master_port", str(main_process_port))
+            args.master_port = str(main_process_port)
 
     if main_process_port is None:
         main_process_port = 29500
@@ -142,9 +143,9 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
     elif args.module:
-        setattr(args, "module", True)
+        args.module = True
     elif args.no_python:
-        setattr(args, "no_python", True)
+        args.no_python = True
 
     current_env = os.environ.copy()
     if args.debug:
@@ -227,16 +228,16 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     """
     Prepares and returns the command list and an environment with the correct DeepSpeed environment variables.
     """
-    num_processes = getattr(args, "num_processes")
-    num_machines = getattr(args, "num_machines")
-    main_process_ip = getattr(args, "main_process_ip")
-    main_process_port = getattr(args, "main_process_port")
+    num_processes = args.num_processes
+    num_machines = args.num_machines
+    main_process_ip = args.main_process_ip
+    main_process_port = args.main_process_port
     cmd = None
 
     # make sure launcher is not None
     if args.deepspeed_multinode_launcher is None:
         # set to default pdsh
-        setattr(args, "deepspeed_multinode_launcher", DEEPSPEED_MULTINODE_LAUNCHERS[0])
+        args.deepspeed_multinode_launcher = DEEPSPEED_MULTINODE_LAUNCHERS[0]
 
     if num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         cmd = ["deepspeed", "--no_local_rank"]
@@ -267,18 +268,18 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         cmd.append(args.training_script)
         cmd.extend(args.training_script_args)
     elif num_machines > 1 and args.deepspeed_multinode_launcher == DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-        setattr(args, "nproc_per_node", str(num_processes // num_machines))
-        setattr(args, "nnodes", str(num_machines))
-        setattr(args, "node_rank", int(args.machine_rank))
+        args.nproc_per_node = str(num_processes // num_machines)
+        args.nnodes = str(num_machines)
+        args.node_rank = int(args.machine_rank)
         if getattr(args, "same_network", False):
-            setattr(args, "master_addr", str(main_process_ip))
-            setattr(args, "master_port", str(main_process_port))
+            args.master_addr = str(main_process_ip)
+            args.master_port = str(main_process_port)
         else:
-            setattr(args, "rdzv_endpoint", f"{main_process_ip}:{main_process_port}")
+            args.rdzv_endpoint = f"{main_process_ip}:{main_process_port}"
     else:
-        setattr(args, "nproc_per_node", str(num_processes))
+        args.nproc_per_node = str(num_processes)
         if main_process_port is not None:
-            setattr(args, "master_port", str(main_process_port))
+            args.master_port = str(main_process_port)
 
     if main_process_port is None:
         main_process_port = 29500
@@ -296,9 +297,9 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     if args.module and args.no_python:
         raise ValueError("--module and --no_python cannot be used together")
     elif args.module:
-        setattr(args, "module", True)
+        args.module = True
     elif args.no_python:
-        setattr(args, "no_python", True)
+        args.no_python = True
 
     current_env = os.environ.copy()
     if args.debug:
@@ -347,7 +348,7 @@ def prepare_tpu(
     """
     Prepares and returns an environment with the correct TPU environment variables.
     """
-    if args.mixed_precision == "bf16":
+    if args.mixed_precision == "bf16" and is_torch_xla_available(check_is_tpu=True):
         if args.downcast_bf16:
             current_env["XLA_DOWNCAST_BF16"] = "1"
         else:
@@ -417,9 +418,7 @@ def prepare_sagemager_args_inputs(
         os.environ["AWS_ACCESS_KEY_ID"] = args.aws_access_key_id
         os.environ["AWS_SECRET_ACCESS_KEY"] = args.aws_secret_access_key
     else:
-        raise EnvironmentError(
-            "You need to provide an aws_access_key_id and aws_secret_access_key when not using aws_profile"
-        )
+        raise OSError("You need to provide an aws_access_key_id and aws_secret_access_key when not using aws_profile")
 
     # extract needed arguments
     source_dir = os.path.dirname(args.training_script)

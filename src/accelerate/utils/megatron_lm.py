@@ -237,7 +237,7 @@ class MegatronLMDummyDataLoader:
                 data_sharding=args.data_sharding,
             )
         else:
-            raise Exception("{} dataloader type is not supported.".format(args.dataloader_type))
+            raise Exception(f"{args.dataloader_type} dataloader type is not supported.")
 
         # Torch dataloader.
         return torch.utils.data.DataLoader(
@@ -247,8 +247,7 @@ class MegatronLMDummyDataLoader:
     def build_train_valid_test_data_iterators(self):
         def cyclic_iter(iter):
             while True:
-                for x in iter:
-                    yield x
+                yield from iter
 
         args = get_args()
 
@@ -281,9 +280,9 @@ class MegatronLMDummyDataLoader:
                 test_iters * args.global_batch_size,
             ]
             print_rank_0(" > datasets target sizes (minimum size):")
-            print_rank_0("    train:      {}".format(train_val_test_num_samples[0]))
-            print_rank_0("    validation: {}".format(train_val_test_num_samples[1]))
-            print_rank_0("    test:       {}".format(train_val_test_num_samples[2]))
+            print_rank_0(f"    train:      {train_val_test_num_samples[0]}")
+            print_rank_0(f"    validation: {train_val_test_num_samples[1]}")
+            print_rank_0(f"    test:       {train_val_test_num_samples[2]}")
 
             # Build the datasets.
             train_valid_test_datasets_provider = self.get_train_valid_test_datasets_provider()
@@ -845,8 +844,7 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
         if getattr(args, key, None) is not None:
             if args.rank == 0:
                 print(
-                    "WARNING: overriding default arguments for {key}:{v} \
-                        with {key}:{v2}".format(key=key, v=getattr(args, key), v2=value),
+                    f"WARNING: overriding default arguments for " f"{key}:{getattr(args, key)} with {key}:{value}",
                     flush=True,
                 )
         setattr(args, key, value)
@@ -889,7 +887,7 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
 
         # Random seeds for reproducibility.
         if args.rank == 0:
-            print("> setting random seeds to {} ...".format(args.seed))
+            print(f"> setting random seeds to {args.seed} ...")
         _set_random_seed(args.seed, args.data_parallel_random_init)
 
     args = get_args()
@@ -926,7 +924,7 @@ class MegatronEngine(torch.nn.Module):
     """
 
     def __init__(self, accelerator, model, optimizer, scheduler):
-        super(MegatronEngine, self).__init__()
+        super().__init__()
         self.module = model
         self.base_model = model[0]
         self.optimizer = optimizer

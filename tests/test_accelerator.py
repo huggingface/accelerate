@@ -4,6 +4,7 @@ import pickle
 import tempfile
 from unittest.mock import patch
 
+import pytest
 import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
@@ -12,7 +13,7 @@ from accelerate import DistributedType, infer_auto_device_map, init_empty_weight
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_device, require_non_cpu, slow, torch_device
-from accelerate.test_utils.testing import AccelerateTestCase
+from accelerate.test_utils.testing import AccelerateTestCase, require_non_torch_xla
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import load_checkpoint_in_model
 
@@ -55,11 +56,48 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    # Should be removed after 1.0.0 release
+    def test_deprecated_values(self):
+        # Test defaults
+        accelerator = Accelerator()
+        assert accelerator.split_batches is False, "split_batches should be False by default"
+        assert accelerator.dispatch_batches is None, "dispatch_batches should be None by default"
+        assert accelerator.even_batches is True, "even_batches should be True by default"
+        assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
+
+        # Pass some arguments only
+        with pytest.warns(FutureWarning) as cm:
+            accelerator = Accelerator(
+                dispatch_batches=True,
+                split_batches=False,
+            )
+            deprecation_warning = str(cm.list[0].message)
+            assert accelerator.split_batches is False, "split_batches should be True"
+            assert accelerator.dispatch_batches is True, "dispatch_batches should be True"
+            assert accelerator.even_batches is True, "even_batches should be True by default"
+            assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
+            assert "dispatch_batches" in deprecation_warning
+            assert "split_batches" in deprecation_warning
+            assert "even_batches" not in deprecation_warning
+            assert "use_seedable_sampler" not in deprecation_warning
+
+        # Pass in some arguments, but with their defaults
+        with pytest.warns(FutureWarning) as cm:
+            accelerator = Accelerator(
+                even_batches=True,
+                use_seedable_sampler=False,
+            )
+            deprecation_warning = str(cm.list[0].message)
+            assert "even_batches" in deprecation_warning
+            assert accelerator.even_batches is True
+            assert "use_seedable_sampler" in deprecation_warning
+            assert accelerator.use_seedable_sampler is False
+
     @require_non_cpu
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
         assert PartialState._shared_state["_cpu"] is False
-        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu"]
+        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla"]
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
@@ -104,6 +142,7 @@ class AcceleratorTester(AccelerateTestCase):
         assert len(accelerator._schedulers) == 0
         assert len(accelerator._dataloaders) == 0
 
+    @require_non_torch_xla
     def test_env_var_device(self):
         """Tests that setting the torch device with ACCELERATE_TORCH_DEVICE overrides default device."""
         PartialState._reset_state()
@@ -184,7 +223,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         # loading hook
         def load_config(models, input_dir):
-            with open(os.path.join(input_dir, "data.json"), "r") as f:
+            with open(os.path.join(input_dir, "data.json")) as f:
                 config = json.load(f)
 
             models[0].class_name = config["class_name"]
@@ -271,6 +310,7 @@ class AcceleratorTester(AccelerateTestCase):
             getattr(valid_dl, "_is_accelerate_prepared", False) is True
         ), "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     def test_accelerator_bnb(self):
@@ -287,6 +327,7 @@ class AcceleratorTester(AccelerateTestCase):
         # This should work
         model = accelerator.prepare(model)
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     def test_accelerator_bnb_cpu_error(self):
@@ -312,6 +353,7 @@ class AcceleratorTester(AccelerateTestCase):
         with self.assertRaises(ValueError):
             model = accelerator.prepare(model)
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     @require_multi_device
@@ -347,6 +389,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         PartialState._reset_state()
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     @require_multi_device

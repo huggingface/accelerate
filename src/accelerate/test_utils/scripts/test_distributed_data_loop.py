@@ -22,7 +22,7 @@ from unittest.mock import Mock
 import torch
 from torch.utils.data import DataLoader, IterableDataset, TensorDataset
 
-from accelerate.accelerator import Accelerator
+from accelerate.accelerator import Accelerator, DataLoaderConfiguration
 from accelerate.utils.dataclasses import DistributedType
 
 
@@ -31,12 +31,12 @@ class DummyIterableDataset(IterableDataset):
         self.data = data
 
     def __iter__(self):
-        for element in self.data:
-            yield element
+        yield from self.data
 
 
 def create_accelerator(even_batches=True):
-    accelerator = Accelerator(even_batches=even_batches)
+    dataloader_config = DataLoaderConfiguration(even_batches=even_batches)
+    accelerator = Accelerator(dataloader_config=dataloader_config)
     assert accelerator.num_processes == 2, "this script expects that two GPUs are available"
     return accelerator
 

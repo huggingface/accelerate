@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -209,13 +208,13 @@ def training_function(config, args):
 
     # If the batch size is too big we use gradient accumulation
     gradient_accumulation_steps = 1
-    if batch_size > MAX_GPU_BATCH_SIZE and accelerator.distributed_type != DistributedType.TPU:
+    if batch_size > MAX_GPU_BATCH_SIZE and accelerator.distributed_type != DistributedType.XLA:
         gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
         batch_size = MAX_GPU_BATCH_SIZE
 
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
-        max_length = 128 if accelerator.distributed_type == DistributedType.TPU else None
+        max_length = 128 if accelerator.distributed_type == DistributedType.XLA else None
         # When using mixed precision we want round multiples of 8/16
         if accelerator.mixed_precision == "fp8":
             pad_to_multiple_of = 16
@@ -334,13 +333,11 @@ def training_function(config, args):
                         accelerator.save_state(output_dir)
         # New Code #
         # Printing the GPU memory usage details such as allocated memory, peak memory, and total memory usage
-        accelerator.print("Memory before entering the train : {}".format(b2mb(tracemalloc.begin)))
-        accelerator.print("Memory consumed at the end of the train (end-begin): {}".format(tracemalloc.used))
-        accelerator.print("Peak Memory consumed during the train (max-begin): {}".format(tracemalloc.peaked))
+        accelerator.print(f"Memory before entering the train : {b2mb(tracemalloc.begin)}")
+        accelerator.print(f"Memory consumed at the end of the train (end-begin): {tracemalloc.used}")
+        accelerator.print(f"Peak Memory consumed during the train (max-begin): {tracemalloc.peaked}")
         accelerator.print(
-            "Total Peak Memory consumed during the train (max): {}".format(
-                tracemalloc.peaked + b2mb(tracemalloc.begin)
-            )
+            f"Total Peak Memory consumed during the train (max): {tracemalloc.peaked + b2mb(tracemalloc.begin)}"
         )
         # Logging the peak memory usage of the GPU to the tracker
         if args.with_tracking:
@@ -387,11 +384,11 @@ def training_function(config, args):
                 accelerator.save_state(output_dir)
         # New Code #
         # Printing the GPU memory usage details such as allocated memory, peak memory, and total memory usage
-        accelerator.print("Memory before entering the eval : {}".format(b2mb(tracemalloc.begin)))
-        accelerator.print("Memory consumed at the end of the eval (end-begin): {}".format(tracemalloc.used))
-        accelerator.print("Peak Memory consumed during the eval (max-begin): {}".format(tracemalloc.peaked))
+        accelerator.print(f"Memory before entering the eval : {b2mb(tracemalloc.begin)}")
+        accelerator.print(f"Memory consumed at the end of the eval (end-begin): {tracemalloc.used}")
+        accelerator.print(f"Peak Memory consumed during the eval (max-begin): {tracemalloc.peaked}")
         accelerator.print(
-            "Total Peak Memory consumed during the eval (max): {}".format(tracemalloc.peaked + b2mb(tracemalloc.begin))
+            f"Total Peak Memory consumed during the eval (max): {tracemalloc.peaked + b2mb(tracemalloc.begin)}"
         )
         # Logging the peak memory usage of the GPU to the tracker
         if args.with_tracking:

@@ -72,7 +72,7 @@ def save_offload_index(index, offload_folder):
 
     offload_index_file = os.path.join(offload_folder, "index.json")
     if os.path.isfile(offload_index_file):
-        with open(offload_index_file, "r", encoding="utf-8") as f:
+        with open(offload_index_file, encoding="utf-8") as f:
             current_index = json.load(f)
     else:
         current_index = {}
