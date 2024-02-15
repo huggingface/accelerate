@@ -18,7 +18,25 @@ env:
   IS_GITHUB_CI: "1"
 
 jobs:
+  install-deps:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up python 3.8
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.8
+        cache: 'pipenv'
+        cache-dependency-path: setup.py
+      # Note: Don't use cache for prod
+    - name: Install the library
+      run: |
+        pip install uv
+        uv venv
+        uv pip install -e .[test_prod]
+        uv pip install pytest-reportlog tabulate
   run-tests:
+    requires: install-deps
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -42,9 +60,11 @@ jobs:
     steps:
     - uses: actions/checkout@v3.1.0
     - name: Set up python 3.8
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: 3.8
+        cache: 'pipenv'
+        cache-dependency-path: setup.py
     
     # - name: Activate python cache
     #   uses: actions/cache@v3
@@ -56,7 +76,6 @@ jobs:
     
     - name: Install the library
       run: |
-        pip install uv
         uv venv
         if [[ ${{ matrix.test-kind }} = test_prod ]]; then uv pip install -e .[test_prod]; fi
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then uv pip install -e .[testing,test_trackers]; fi
