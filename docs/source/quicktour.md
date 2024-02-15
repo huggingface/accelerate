@@ -41,7 +41,7 @@ After you've configured your environment, you can test your setup with [`acceler
 accelerate test
 ```
 
-> [TIP]
+> [!TIP]
 > Add `--config_file` to the `accelerate test` or `accelerate launch` command to specify the location of the configuration file if it is saved in a non-default location like the cache.
 
 Once your environment is setup, launch your training script with [`accelerate launch`](../../docs/source/package_reference/cli#accelerate-launch)!
@@ -131,7 +131,7 @@ for inputs, targets in validation_dataloader:
     metric.add_batch(all_predictions, all_targets)
 ```
 
-> ![TIP]
+> [!TIP]
 > Data at the end of a dataset may be duplicated so the batch can be equally divided among all workers. The [`~Accelerator.gather_for_metrics`] method automatically removes the duplicated data to calculate a more accurate metric.
 
 ## Big Model Inference
