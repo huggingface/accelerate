@@ -35,12 +35,12 @@ jobs:
         uv pip install pytest-reportlog tabulate
     - name: Zip the venv
       run: |
-        zip -r venv.zip .venv/* -r
+        tar -cf venv.tar .venv/*
     - name: Archive pip installs
       uses: actions/upload-artifact@v3
       with:
         name: venv
-        path: venv.zip
+        path: venv.tar
   
   run-tests:
     needs: install-deps
@@ -76,7 +76,7 @@ jobs:
         name: venv
     - name: Unzip the venv
       run: |
-        unzip venv.zip
+        tar -xf venv.tar
 
     
     # - name: Activate python cache
