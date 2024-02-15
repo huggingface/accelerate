@@ -26,6 +26,14 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: 3.8
+    - name: Activate python cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ${{ env.pythonLocation }}
+          ${{ env.HF_HOME }}
+          .venv
+        key: ${{ env.pythonLocation }}-${{ hashFiles('setup.py') }}
       # Note: Don't use cache for prod
     - name: Install the library
       run: |
@@ -33,14 +41,6 @@ jobs:
         uv venv
         uv pip install -e .[test_prod]
         uv pip install pytest-reportlog tabulate
-    - name: Zip the venv
-      run: |
-        tar -cf venv.tar .venv/*
-    - name: Archive pip installs
-      uses: actions/upload-artifact@v3
-      with:
-        name: venv
-        path: venv.tar
   
   run-tests:
     needs: install-deps
@@ -70,22 +70,15 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: 3.8
-    - name: Download a single artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: venv
-    - name: Unzip the venv
-      run: |
-        tar -xf venv.tar
 
-    
-    # - name: Activate python cache
-    #   uses: actions/cache@v3
-    #   with:
-    #     path: |
-    #       ${{ env.pythonLocation }}
-    #       ${{ env.HF_HOME }}
-    #     key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
+    - name: Activate python cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ${{ env.pythonLocation }}
+          ${{ env.HF_HOME }}
+          .venv
+        key: ${{ env.pythonLocation }}-${{ hashFiles('setup.py') }}
     
     - name: Install the library
       run: |
