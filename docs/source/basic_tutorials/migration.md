@@ -13,21 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Migrating your code to 🤗 Accelerate
+# Add Accelerate to your code
 
-This tutorial will detail how to easily convert existing PyTorch code to use 🤗 Accelerate!
-You'll see that by just changing a few lines of code, 🤗 Accelerate can perform its magic and get you on 
-your way toward running your code on distributed systems with ease!
+Each distributed training framework has their own way of doing things which can require writing a lot of custom code to adapt it to your PyTorch training code and training environment. Accelerate offers a friendly way to interface with these distributed training frameworks without having to learn the specific details of each one. Accelerate takes care of those details for you, so you can focus on the training code and scale it to any distributed training environment.
 
-## The base training loop
-
-To begin, write out a very basic PyTorch training loop. 
-
-<Tip>
-
-    We are under the presumption that `training_dataloader`, `model`, `optimizer`, `scheduler`, and `loss_function` have been defined beforehand.
-
-</Tip>
+In this tutorial, you'll learn how to adapt your existing PyTorch code with Accelerate and get you on your way toward training on distributed systems with ease! You'll start with a basic PyTorch training loop (it assumes all the training objects like `model` and `optimizer` have been setup already) and progressively integrate Accelerate into it.
 
 ```python
 device = "cuda"
@@ -45,50 +35,44 @@ for batch in training_dataloader:
     scheduler.step()
 ```
 
-## Add in 🤗 Accelerate
+## Accelerator
 
-To start using 🤗 Accelerate, first import and create an [`Accelerator`] instance:
+The [`Accelerator`] is the main class for adapting your code to work with Accelerate. It knows about the distributed setup you're using such as the number of different processes and your hardware type. This class also provides access to many of the necessary methods for enabling your PyTorch code to work in any distributed training environment and for managing and executing processes across devices.
+
+That's why you should always start by importing and creating an [`Accelerator`] instance in your script.
+
 ```python
 from accelerate import Accelerator
 
 accelerator = Accelerator()
 ```
-[`Accelerator`] is the main force behind utilizing all the possible options for distributed training!
 
-### Setting the right device
-
-The [`Accelerator`] class knows the right device to move any PyTorch object to at any time, so you should
-change the definition of `device` to come from [`Accelerator`]:
+The [`Accelerator`] also knows which device to move your PyTorch objects to, so it is recommended to let Accelerate handle this for you.
 
 ```diff
-- device = 'cuda'
+- device = "cuda"
 + device = accelerator.device
   model.to(device)
 ```
 
-### Preparing your objects
+## Prepare PyTorch objects
 
-Next, you need to pass all of the important objects related to training into [`~Accelerator.prepare`]. 🤗 Accelerate will
-make sure everything is setup in the current environment for you to start training:
+Next, you need to prepare your PyTorch objects (model, optimizer, scheduler, etc.) for distributed training. The [`~Accelerator.prepare`] method takes care of placing your model in the appropriate container (like single GPU or multi-GPU) for your training setup, adapting the optimizer and scheduler to use Accelerate's [`~optimizer.AcceleratedOptimizer`] and [`~scheduler.AcceleratedScheduler`], and creating a new dataloader that can be sharded across processes.
 
-```
+> [!TIP]
+> Accelerate only prepares objects that inherit from their respective PyTorch classes such as `torch.optim.Optimizer`.
+
+The PyTorch objects are returned in the same order they're sent.
+
+```py
 model, optimizer, training_dataloader, scheduler = accelerator.prepare(
     model, optimizer, training_dataloader, scheduler
 )
 ```
-These objects are returned in the same order they were sent in. By default when using `device_placement=True`, all of the objects that can be sent to the right device will be.
-If you need to work with data that isn't passed to [~Accelerator.prepare] but should be on the active device, you should pass in the `device` you made earlier. 
 
-<Tip warning={true}>
+## Training loop
 
-    Accelerate will only prepare objects that inherit from their respective PyTorch classes (such as `torch.optim.Optimizer`).
-
-</Tip>
-
-### Modifying the training loop
-
-Finally, three lines of code need to be changed in the training loop. 🤗 Accelerate's DataLoader classes will automatically handle the device placement by default,
-and [`~Accelerator.backward`] should be used for performing the backward pass:
+Finally, remove the `to(device)` calls to the inputs and targets in the training loop because Accelerate's DataLoader classes automatically places them on the right device. You should also replace the usual `backward()` pass with Accelerate's [`~Accelerator.backward`] method which scales the gradients for you and uses the appropriate `backward()` method depending on your distributed setup (for example, DeepSpeed or Megatron).
 
 ```diff
 -   inputs = inputs.to(device)
@@ -99,17 +83,13 @@ and [`~Accelerator.backward`] should be used for performing the backward pass:
 +   accelerator.backward(loss)
 ```
 
-With that, your training loop is now ready to use 🤗 Accelerate!
-
-## The finished code
-
-Below is the final version of the converted code: 
+Put everything together and your new Accelerate training loop should now look like this!
 
 ```python
 from accelerate import Accelerator
-
 accelerator = Accelerator()
 
+device = accelerator.device
 model, optimizer, training_dataloader, scheduler = accelerator.prepare(
     model, optimizer, training_dataloader, scheduler
 )
@@ -124,6 +104,101 @@ for batch in training_dataloader:
     scheduler.step()
 ```
 
-## More Resources
+## Training features
 
-To check out more ways on how to migrate to 🤗 Accelerate, check out our [interactive migration tutorial](https://huggingface.co/docs/accelerate/usage_guides/explore) which showcases other items that need to be watched for when using Accelerate and how to do so quickly.
+Accelerate offers additional features - like gradient accumulation, gradient clipping, mixed precision training and more - you can add to your script to improve your training run. Let's explore these three features.
+
+### Gradient accumulation
+
+Gradient accumulation enables you to train on larger batch sizes by accumulating the gradients over multiple batches before updating the weights. This can be useful for getting around memory limitations. To enable this feature in Accelerate, specify the `gradient_accumulation_steps` parameter in the [`Accelerator`] class and add the [`~Accelerator.accumulate`] context manager to your script.
+
+```diff
++ accelerator = Accelerator(gradient_accumulation_steps=2)
+  model, optimizer, training_dataloader = accelerator.prepare(model, optimizer, training_dataloader)
+
+  for input, label in training_dataloader:
++     with accelerator.accumulate(model):
+          predictions = model(input)
+          loss = loss_function(predictions, label)
+          accelerator.backward(loss)
+          optimizer.step()
+          scheduler.step()
+          optimizer.zero_grad()
+```
+
+### Gradient clipping
+
+Gradient clipping is a technique to prevent "exploding gradients", and Accelerate offers:
+
+* [`~Accelerator.clip_grad_value_`] to clip gradients to a minimum and maximum value
+* [`~Accelerator.clip_grad_norm_`] for normalizing gradients to a certain value
+
+### Mixed precision
+
+Mixed precision accelerates training by using a lower precision data type like fp16 (half-precision) to calculate the gradients. For the best performance with Accelerate, the loss should be computed inside your model (like in Transformers models) because computations outside of the model are computed in full precision.
+
+Set the mixed precision type to use in the [`Accelerator`], and then use the [`~Accelerator.autocast`] context manager to automatically cast the values to the specified data type.
+
+```diff
++ accelerator = Accelerator(mixed_precision="fp16")
++ with accelerator.autocast():
+      loss = complex_loss_function(outputs, target):
+```
+
+With mixed precision training, it may skip a few gradient updates at the beginning and during training because of the dynamic loss scaling strategy. This strategy reduces the loss scaling factor when gradients overflow during training to avoid it happening again at the next step. This means the learning rate scheduler may be updated even though there was no update, which can impact the training process when you have very little training data or if the first learning rate values of your scheduler are very important. You can prevent the learning rate scheduler from updating if the optimizer wasn't updated with the [`~Accelerator.optimizer_step_was_skipped`] method.
+
+```py
+if not accelerator.optimizer_step_was_skipped:
+    lr_scheduler.step()
+```
+
+## Save and load
+
+Accelerate can also save and load a *model* once training is complete or you can also save the model and optimizer *state* which could be useful for resuming training.
+
+### Model
+
+Once all processes are complete, unwrap the model before saving it because the [`~Accelerator.prepare`] method may have placed your model inside a larger model for distributed training. If you don't unwrap the model, saving the model state dictionary also saves any potential extra layers from the larger model and you won't be able to load the weights back into your base model. You should use the [`~Accelerator.save_model`] method to unwrap and save the model state dictionary. This method can also save a model into sharded checkpoints or into the [safetensors](https://hf.co/docs/safetensors/index) format.
+
+<hfoption id="save">
+<hfoptions id="single checkpoint">
+
+```py
+accelerator.wait_for_everyone()
+accelerator.save_model(model, save_directory)
+```
+
+To load your weights, use the [`~Accelerator.unwrap_model`] method to unwrap the model first before loading the weights. All model parameters are references to tensors, so this loads your weights inside `model`.
+
+```py
+unwrapped_model = accelerator.unwrap_model(model)
+path_to_checkpoint = os.path.join(save_directory,"pytorch_model.bin")
+unwrapped_model.load_state_dict(torch.load(path_to_checkpoint))
+```
+
+</hfoption>
+<hfoption id="sharded checkpoint">
+
+Set `safe_serialization=True` to save the model in the safetensor format.
+
+```py
+accelerator.wait_for_everyone()
+accelerator.save_model(model, save_directory, max_shard_size="1GB", safe_serialization=True)
+```
+
+To load a sharded checkpoint or a safetensor formatted checkpoint, use the [`~accelerate.load_checkpoint_in_model`] method. This method allows you to load a checkpoint onto a specific device.
+
+```py
+load_checkpoint_in_model(unwrapped_model, save_directory, device_map={"":device})
+```
+
+</hfoption>
+</hfoptions>
+
+### State
+
+During training, you may want to save the current state of the model, optimizer, random generators, and potentially learning rate schedulers so they can be restored in the *same script*. You should add the [`~Accelerator.save_state`] and [`~Accelerator.load_state`] methods to your script to save and load states.
+
+To further customize where and how states are saved through [`~Accelerator.save_state`], use the [`~utils.ProjectConfiguration`] class. For example, if `automatic_checkpoint_naming` is enabled, each saved checkpoint is stored at `Accelerator.project_dir/checkpoints/checkpoint_{checkpoint_number}`.
+
+Any other stateful items to be stored should be registered with the [`~Accelerator.register_for_checkpointing`] method so they can be saved and loaded. Every object passed to this method to be stored must have a `load_state_dict` and `state_dict` function.
