@@ -160,8 +160,8 @@ Accelerate can also save and load a *model* once training is complete or you can
 
 Once all processes are complete, unwrap the model before saving it because the [`~Accelerator.prepare`] method may have placed your model inside a larger model for distributed training. If you don't unwrap the model, saving the model state dictionary also saves any potential extra layers from the larger model and you won't be able to load the weights back into your base model. You should use the [`~Accelerator.save_model`] method to unwrap and save the model state dictionary. This method can also save a model into sharded checkpoints or into the [safetensors](https://hf.co/docs/safetensors/index) format.
 
-<hfoption id="save">
-<hfoptions id="single checkpoint">
+<hfoptions id="save">
+<hfoption id="single checkpoint">
 
 ```py
 accelerator.wait_for_everyone()
