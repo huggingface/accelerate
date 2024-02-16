@@ -20,13 +20,13 @@ from accelerate import PartialState, prepare_pippy
 # sdpa implementation which is the default torch>2.1.2 fails with the tracing + attention mask kwarg
 # with attn_implementation="eager" mode, the forward is very slow for some reason
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-2-7b-chat-hf", low_cpu_mem_usage=True, attn_implementation="sdpa"
+    "mistralai/Mistral-7B-v0.1", low_cpu_mem_usage=True, attn_implementation="sdpa"
 )
 model.eval()
 
 # Input configs
 # Create example inputs for the model
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 prompts = ("I would like to", "I really like to", "The weather is")  # bs = 3
 tokenizer.pad_token = tokenizer.eos_token
 inputs = tokenizer(prompts, return_tensors="pt", padding=True)
