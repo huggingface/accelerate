@@ -30,7 +30,7 @@ extras["test_dev"] = [
     "transformers",
     "scipy",
     "scikit-learn",
-    "deepspeed<0.13.0",
+    "deepspeed",
     "tqdm",
     "bitsandbytes",
     "timm",
