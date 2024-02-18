@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
 
 import torch
 
-from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY, FSDP_STATE_DICT_TYPE
+from .constants import DEEPSPEED_ZERO_DYNAMO_VERSION, FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
 from .imports import is_cuda_available, is_npu_available, is_xpu_available
 from .versions import compare_versions
@@ -729,6 +729,8 @@ class DeepSpeedPlugin:
                 self.hf_ds_config.config["gradient_accumulation_steps"] = 1
             if "zero_optimization" not in self.hf_ds_config.config:
                 raise ValueError("Please specify the ZeRO optimization config in the DeepSpeed config.")
+            if compare_versions('deepspeed', ">=", DEEPSPEED_ZERO_DYNAMO_VERSION) and "compile" not in self.hf_ds_config.config:
+                self.hf_ds_config.config["compile"] = {'enabled': 'auto', 'backend': 'auto'}
 
             self._deepspeed_config_checks()
             plugin_to_config_mapping = {

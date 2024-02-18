@@ -1619,13 +1619,13 @@ class Accelerator:
                         if not self.split_batches
                         else scheduler.total_num_steps
                     )
-                if compare_versions(deepspeed.version, ">=", DEEPSPEED_ZERO_DYNAMO_VERSION) and self.state.dynamo_plugin.backend != DynamoBackend.NO:
-                    config_kwargs.update(
-                        {
-                            'compile.disable': False,
-                            "compile.backend": self.state.dynamo_plugin.backend.value.lower()
-                        }
-                    )
+            if compare_versions('deepspeed', ">=", DEEPSPEED_ZERO_DYNAMO_VERSION):
+                config_kwargs.update(
+                    {
+                        'compile.enabled': self.state.dynamo_plugin.backend != DynamoBackend.NO,
+                        "compile.backend": self.state.dynamo_plugin.backend.value.lower()
+                    }
+                )
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
             kwargs = dict(model=model, config_params=self.deepspeed_config)
