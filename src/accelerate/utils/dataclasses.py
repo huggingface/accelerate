@@ -573,16 +573,18 @@ class ProjectConfiguration:
 @dataclass
 class GradientAccumulationPlugin(KwargsHandler):
     """
-    A plugin to configure gradient accumulation behavior. You can only pass one of `gradient_accumulation_plugin` or `gradient_accumulation_steps` to [`Accelerator`]. Passing both raises an error.
+    A plugin to configure gradient accumulation behavior. You can only pass one of `gradient_accumulation_plugin` or
+    `gradient_accumulation_steps` to [`Accelerator`]. Passing both raises an error.
 
     Parameters:
         num_steps (`int`):
             The number of steps to accumulate gradients for.
         adjust_scheduler (`bool`, *optional*, defaults to `True`):
-            Whether to adjust the scheduler steps to account for the number of steps being accumulated. Should be `True` if the used scheduler was not adjusted for gradient accumulation.
+            Whether to adjust the scheduler steps to account for the number of steps being accumulated. Should be
+            `True` if the used scheduler was not adjusted for gradient accumulation.
         sync_with_dataloader (`bool`, *optional*, defaults to `True`):
             Whether to synchronize setting the gradients when at the end of the dataloader.
-            
+
     Example:
 
     ```py
