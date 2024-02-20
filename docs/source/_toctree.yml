@@ -14,7 +14,8 @@
   - local: basic_tutorials/execution
     title: Execution process
   - local: basic_tutorials/tpu
-  - local: TPU training
+    title: TPU training
+  - local: basic_tutorials/launch
     title: Launching distributed code
   - local: basic_tutorials/notebook
     title: Launching distributed training from Jupyter Notebooks
