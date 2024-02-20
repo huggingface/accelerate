@@ -11,7 +11,10 @@
     title: Overview
   - local: basic_tutorials/migration
     title: Add Accelerate to your code
-  - local: basic_tutorials/launch
+  - local: basic_tutorials/execution
+    title: Execution process
+  - local: basic_tutorials/tpu
+  - local: TPU training
     title: Launching distributed code
   - local: basic_tutorials/notebook
     title: Launching distributed training from Jupyter Notebooks
