@@ -158,7 +158,9 @@ Accelerate can also save and load a *model* once training is complete or you can
 
 ### Model
 
-Once all processes are complete, unwrap the model before saving it because the [`~Accelerator.prepare`] method may have placed your model inside a larger model for distributed training. If you don't unwrap the model, saving the model state dictionary also saves any potential extra layers from the larger model and you won't be able to load the weights back into your base model. You should use the [`~Accelerator.save_model`] method to unwrap and save the model state dictionary. This method can also save a model into sharded checkpoints or into the [safetensors](https://hf.co/docs/safetensors/index) format.
+Once all processes are complete, unwrap the model with the [`~Accelerator.unwrap_model`] method before saving it because the [`~Accelerator.prepare`] method may have placed your model inside a larger model for distributed training. If you don't unwrap the model, saving the model state dictionary also saves any potential extra layers from the larger model and you won't be able to load the weights back into your base model.
+
+You should use the [`~Accelerator.save_model`] method to unwrap and save the model state dictionary. This method can also save a model into sharded checkpoints or into the [safetensors](https://hf.co/docs/safetensors/index) format.
 
 <hfoptions id="save">
 <hfoption id="single checkpoint">
@@ -167,6 +169,25 @@ Once all processes are complete, unwrap the model before saving it because the [
 accelerator.wait_for_everyone()
 accelerator.save_model(model, save_directory)
 ```
+
+<Tip>
+
+For models from the [Transformers](https://hf.co/docs/transformers/index) library, save the model with the [`~transformers.PreTrainedModel.save_pretrained`] method so that it can be reloaded with the [`~transformers.PreTrainedModel.from_pretrained`] method.
+
+```py
+from transformers import AutoModel
+
+unwrapped_model = accelerator.unwrap_model(model)
+unwrapped_model.save_pretrained(
+    "path/to/my_model_directory",
+    is_main_process=accelerator.is_main_process,
+    save_function=accelerator.save,
+)
+
+model = AutoModel.from_pretrained("path/to/my_model_directory")
+```
+
+</Tip>
 
 To load your weights, use the [`~Accelerator.unwrap_model`] method to unwrap the model first before loading the weights. All model parameters are references to tensors, so this loads your weights inside `model`.
 

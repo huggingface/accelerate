@@ -21,7 +21,12 @@ This tutorial will teach you how to execute a process on only one machine and ho
 
 ## Execute on one process
 
-Certain code only needs to be run once on a given machine, such as printing a log statement or only displaying one progress bar on the local main process. You should use `accelerator.is_local_main_process` to indicate code that should only be executed once.
+Certain code only needs to be run once on a given machine, such as printing a log statement or only displaying one progress bar on the local main process. 
+
+<hfoptions id="local-execution">
+<hfoption id="statements">
+
+You should use `accelerator.is_local_main_process` to indicate code that should only be executed once.
 
 ```py
 from tqdm.auto import tqdm
@@ -31,17 +36,86 @@ progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_loca
 
 You could also wrap a statement with `accelerator.is_local_main_process`.
 
+> [!TIP]
+> Replace `print` statements with Accelerate's [`~Accelerator.print`] method to only print once per process!
+
 ```py
 if accelerator.is_local_main_process:
     accelerator.print("Accelerate is the best")
 ```
 
-To only execute code once across *all processes* regardless of the number of machines, use `accelerator.is_main_process`. For example, this is useful if you're uploading a final model to the Hub.
+</hfoption>
+<hfoption id="function">
+
+For a function that should only be executed once, use [`~Accelerator.on_local_main_process`].
+
+```py
+@accelerator.on_local_main_process
+def do_my_thing():
+    "Something done once per server"
+    do_thing_once_per_server()
+```
+
+</hfoption>
+</hfoptions>
+
+You could also direct Accelerate to execute code once across *all processes* regardless of the number of machines. This is useful if you're uploading a final model to the Hub.
+
+<hfoptions id="main-execution">
+<hfoption id="statement">
+
+You should use `accelerator.is_main_process` to indicate code that should only be executed once across all processes.
 
 ```py
 if accelerator.is_main_process:
     repo.push_to_hub()
 ```
+
+</hfoption>
+<hfoption id="function">
+
+For a function that should only be executed once across all processes, use [`~Accelerator.on_main_process`].
+
+```py
+@accelerator.on_main_process
+def do_my_thing():
+    "Something done once per server"
+    do_thing_once()
+```
+
+</hfoption>
+</hfoptions>
+
+## Execute on a specific process
+
+Accelerate can also help you execute functions that should only be executed on a specific process or a local process index.
+
+<hfoptions id="specific-execution">
+<hfoption id="specific process">
+
+Use the [`~Accelerator.on_process`] method and specify the process index to execute a function on.
+
+```py
+@accelerator.on_process(process_index=0)
+def do_my_thing():
+    "Something done on process index 0"
+    do_thing_on_index_zero()
+```
+
+</hfoption>
+<hfoption id="local process">
+
+Use the [`~Accelerator.on_local_process`] method and specify the local process index to execute a function on.
+
+```py
+@accelerator.on_local_process(local_process_idx=0)
+def do_my_thing():
+    "Something done on process index 0 on each server"
+    do_thing_on_index_zero_on_each_server()
+```
+
+</hfoption>
+</hfoptions>
 
 ## Defer execution
 
