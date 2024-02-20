@@ -470,7 +470,7 @@ class Accelerator:
                 self.native_amp = True
             else:
                 self.native_amp = is_bf16_available(True)
-            if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available(check_is_gpu=True):
+            if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available():
                 raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
 
         # Start of internal step tracking

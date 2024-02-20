@@ -138,6 +138,10 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
     if not _torch_xla_available:
         return False
 
+    # Don't initialize the XLA client unless we want to check the device type.
+    if not (check_is_tpu or check_is_gpu):
+        return True
+
     try:
         xla_device = xm.xla_device()
         hardware_type = xm.xla_device_hw(xla_device)
@@ -145,7 +149,6 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
             [
                 check_is_tpu and hardware_type == "TPU",
                 check_is_gpu and hardware_type == "GPU",
-                not (check_is_tpu or check_is_gpu),
             ]
         )
     except RuntimeError:
