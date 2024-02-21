@@ -17,6 +17,7 @@ import tempfile
 import unittest
 import warnings
 from collections import UserDict, namedtuple
+from typing import NamedTuple, Optional
 from unittest.mock import Mock, patch
 
 import torch
@@ -39,6 +40,7 @@ from accelerate.utils import (
     save,
     send_to_device,
 )
+from accelerate.utils.operations import is_namedtuple
 
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
@@ -302,3 +304,25 @@ class UtilsTester(unittest.TestCase):
         result = pad_input_tensors(batch, batch_size, num_processes)
         # We should expect there to be 66 items now
         assert result.shape == torch.Size([66, 4, 4])
+
+    def test_named_tuples(self):
+        class QuantTensorBase(NamedTuple):
+            value: torch.Tensor
+            scale: Optional[torch.Tensor]
+            zero_point: Optional[torch.Tensor]
+
+        class Second(QuantTensorBase):
+            pass
+
+        a = QuantTensorBase(torch.tensor(1.0), None, None)
+        b = Second(torch.tensor(1.0), None, None)
+
+        point = namedtuple("Point", ["x", "y"])
+        p = point(11, y=22)
+
+        self.assertTrue(is_namedtuple(a))
+        self.assertTrue(is_namedtuple(b))
+        self.assertTrue(is_namedtuple(p))
+        self.assertFalse(is_namedtuple((1, 2)))
+        self.assertFalse(is_namedtuple("hey"))
+        self.assertFalse(is_namedtuple(object()))
