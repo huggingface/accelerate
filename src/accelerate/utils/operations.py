@@ -66,17 +66,10 @@ def is_tensor_information(tensor_info):
 
 def is_namedtuple(data):
     """
-    Checks if `x` is a `namedtuple` or not. Can have false positives, but only if a user is trying to mimic a
+    Checks if `data` is a `namedtuple` or not. Can have false positives, but only if a user is trying to mimic a
     `namedtuple` perfectly.
     """
-    data_type = type(data)
-    bases = data_type.__bases__
-    if len(bases) != 1 or bases[0] != tuple:
-        return False
-    fields = getattr(data_type, "_fields", None)
-    if not isinstance(fields, tuple):
-        return False
-    return all(isinstance(member, str) for member in fields)
+    return isinstance(data, tuple) and hasattr(data, "_asdict") and hasattr(data, "_fields")
 
 
 def honor_type(obj, generator):
