@@ -163,7 +163,8 @@ xxx.xxx.xxx.xxx #node2 ip
 xxx.xxx.xxx.xxx #node3 ip
 ```
 When Accelerate is launching `mpirun`, source the oneCCL bindings setvars.sh to get your Intel MPI environment, and then
-run your script using `accelerate launch`:
+run your script using `accelerate launch`. Note that the python script and environment needs to exist on all of the
+machines being used for multi-CPU training.
 ```bash
 oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
 source $oneccl_bindings_for_pytorch_path/env/setvars.sh
