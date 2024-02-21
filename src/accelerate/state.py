@@ -251,7 +251,10 @@ class PartialState:
                 if self.device is None:
                     self.device = torch.device("npu", self.local_process_index)
                 torch.npu.set_device(self.device)
-            elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1 or int(os.environ.get("LOCAL_RANK", -1)) != -1:
+            elif (
+                get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
+                or int(os.environ.get("LOCAL_RANK", -1)) != -1
+            ):
                 if not cpu and is_xpu_available():
                     self.distributed_type = DistributedType.MULTI_XPU
                 else:
