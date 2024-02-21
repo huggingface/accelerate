@@ -39,7 +39,7 @@ from .utils import (
     is_ipex_available,
     is_mps_available,
     is_npu_available,
-    is_tpu_available,
+    is_torch_xla_available,
     is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
@@ -47,7 +47,7 @@ from .utils import (
 from .utils.dataclasses import SageMakerDistributedType
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
@@ -98,7 +98,7 @@ class ThreadLocalSharedDict(threading.local):
 
 
 # Prefer global shared dictionary, except when using TPU.
-SharedDict = dict if not is_tpu_available(check_device=False) else ThreadLocalSharedDict
+SharedDict = dict if not is_torch_xla_available() else ThreadLocalSharedDict
 
 
 # Inspired by Alex Martelli's 'Borg'.
@@ -157,12 +157,16 @@ class PartialState:
                     if self.device is None:
                         self.device = torch.device("cuda", self.local_process_index)
                     torch.cuda.set_device(self.device)
-            elif is_tpu_available() and not cpu:
-                self.distributed_type = DistributedType.TPU
+            elif is_torch_xla_available() and not cpu:
+                self.distributed_type = DistributedType.XLA
+                self.device = xm.xla_device()
+                xm.set_replication(self.device, [self.device])
                 self.num_processes = xm.xrt_world_size()
                 self.process_index = xm.get_ordinal()
-                self.local_process_index = xm.get_local_ordinal()
-                self.device = xm.xla_device()
+                if is_torch_xla_available(check_is_tpu=True):
+                    self.local_process_index = xm.get_local_ordinal()
+                else:
+                    self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
             elif (
                 os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true"
                 and int(os.environ.get("LOCAL_RANK", -1)) != -1
@@ -413,7 +417,7 @@ class PartialState:
             DistributedType.FSDP,
         ):
             torch.distributed.barrier()
-        elif self.distributed_type == DistributedType.TPU:
+        elif self.distributed_type == DistributedType.XLA:
             xm.rendezvous("accelerate.utils.wait_for_everyone")
 
     def _goes_first(self, is_main: bool):
@@ -800,7 +804,7 @@ class AcceleratorState:
                 )
             # deepspeed handles mixed_precision using deepspeed_config
             self._mixed_precision = "no" if self.distributed_type == DistributedType.DEEPSPEED else mixed_precision
-            if self.distributed_type == DistributedType.TPU:
+            if self.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_tpu=True):
                 if mixed_precision == "bf16":
                     if os.environ.get("ACCELERATE_DOWNCAST_BF16"):
                         os.environ["XLA_USE_BF16"] = str(0)
@@ -1011,6 +1015,10 @@ class GradientState:
             accumulation
         - **sync_with_dataloader** (`bool`) -- Whether the gradients should be synced at the end of the dataloader
             iteration and the number of total steps reset
+        - **is_xla_gradients_synced** (`bool`) -- Whether the XLA gradients have been synchronized. It is initialized
+          as false. Once gradients have been reduced before the optimizer step, this flag is set to true. Subsequently,
+            after each step, the flag is reset to false. FSDP will always synchronize the gradients, hence
+            is_xla_gradients_synced is always true.
     """
 
     _shared_state = SharedDict()
@@ -1024,6 +1032,7 @@ class GradientState:
             self.plugin_kwargs = (
                 gradient_accumulation_plugin.to_kwargs() if gradient_accumulation_plugin is not None else {}
             )
+            self._is_xla_gradients_synced = False
 
         # Plugin args are different and can be updated
         if gradient_accumulation_plugin is not None and self.plugin_kwargs != gradient_accumulation_plugin.to_kwargs():
@@ -1070,6 +1079,18 @@ class GradientState:
             f"Extra samples added: {self.remainder}\n"
             f"Gradient accumulation plugin: {self.plugin_kwargs}\n"
         )
+
+    @property
+    def is_xla_gradients_synced(self):
+        "Returns the value of is_xla_gradients_synced. FSDP will always synchronize the gradients, hence is_xla_gradients_synced is always true."
+        if parse_flag_from_env("ACCELERATE_USE_FSDP", default=False):
+            return True
+        return self._is_xla_gradients_synced
+
+    @is_xla_gradients_synced.setter
+    def is_xla_gradients_synced(self, is_synced):
+        "Set the _is_xla_gradients_synced attribute."
+        self._is_xla_gradients_synced = is_synced
 
     def _set_sync_gradients(self, sync_gradients):
         "Private function that sets whether gradients should be synchronized. Users should not have to call this."

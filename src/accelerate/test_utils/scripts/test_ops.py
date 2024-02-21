@@ -41,6 +41,9 @@ def test_gather(state):
 
 
 def test_gather_object(state):
+    # Gather objects in TorchXLA is not supported.
+    if state.distributed_type == DistributedType.XLA:
+        return
     obj = [state.process_index]
     gathered_obj = gather_object(obj)
     assert len(gathered_obj) == state.num_processes, f"{gathered_obj}, {len(gathered_obj)} != {state.num_processes}"
@@ -48,6 +51,9 @@ def test_gather_object(state):
 
 
 def test_gather_non_contigous(state):
+    # Skip this test because the 'is_contiguous' function of XLA tensor always returns True.
+    if state.distributed_type == DistributedType.XLA:
+        return
     # Create a non-contiguous tensor
     tensor = torch.arange(12).view(4, 3).t().to(state.device)
     assert not tensor.is_contiguous()
@@ -96,8 +102,8 @@ def test_reduce_mean(state):
 
 
 def test_op_checker(state):
-    # Must be in a distributed state
-    if state.distributed_type == DistributedType.NO:
+    # Must be in a distributed state, and gathering is currently not supported in TorchXLA.
+    if state.distributed_type in [DistributedType.NO, DistributedType.XLA]:
         return
     state.debug = True
     # `pad_across_processes`
@@ -131,14 +137,14 @@ def test_op_checker(state):
 
 
 def test_copy_tensor_to_devices(state):
-    if state.distributed_type not in [DistributedType.MULTI_GPU, DistributedType.TPU]:
+    if state.distributed_type not in [DistributedType.MULTI_GPU, DistributedType.XLA]:
         return
     if state.is_main_process:
         tensor = torch.tensor([1, 2, 3], dtype=torch.int).to(state.device)
     else:
         tensor = None
     tensor = copy_tensor_to_devices(tensor)
-    assert torch.allclose(tensor, torch.tensor([1, 2, 3], dtype=torch.int, device="cuda"))
+    assert torch.allclose(tensor, torch.tensor([1, 2, 3], dtype=torch.int, device=state.device))
 
 
 def _mp_fn(index):

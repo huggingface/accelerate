@@ -95,6 +95,8 @@ These are classes which can be configured and passed through to the appropriate 
 
 [[autodoc]] utils.BnbQuantizationConfig
 
+[[autodoc]] utils.DataLoaderConfiguration
+
 [[autodoc]] utils.ProjectConfiguration
 
 ## Environmental Variables
@@ -150,7 +152,7 @@ These functionalities check the state of the current working environment includi
 
 [[autodoc]] utils.is_torch_version
 
-[[autodoc]] utils.is_tpu_available
+[[autodoc]] utils.is_torch_xla_available
 
 [[autodoc]] utils.is_xpu_available
 

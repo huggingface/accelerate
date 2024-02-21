@@ -41,7 +41,7 @@ from accelerate.utils import (
     is_rich_available,
     is_sagemaker_available,
     is_torch_version,
-    is_tpu_available,
+    is_torch_xla_available,
     is_xpu_available,
     patch_environment,
     prepare_deepspeed_cmd_env,
@@ -105,19 +105,19 @@ class _CustomHelpAction(argparse._HelpAction):
             for i, arg in enumerate(opts):
                 # If the argument's container is outside of the used titles, hide it
                 if arg.container.title not in titles + used_titles:
-                    setattr(opts[i], "help", argparse.SUPPRESS)
+                    opts[i].help = argparse.SUPPRESS
                 # If the argument is hardware selection, but not being passed, hide it
                 elif arg.container.title == "Hardware Selection Arguments":
                     if set(arg.option_strings).isdisjoint(set(args)):
-                        setattr(opts[i], "help", argparse.SUPPRESS)
+                        opts[i].help = argparse.SUPPRESS
                     else:
-                        setattr(opts[i], "help", arg.help + " (currently selected)")
+                        opts[i].help = arg.help + " (currently selected)"
                 # If the argument is a training paradigm, but not being passed, hide it
                 elif arg.container.title == "Training Paradigm Arguments":
                     if set(arg.option_strings).isdisjoint(set(used_platforms)):
-                        setattr(opts[i], "help", argparse.SUPPRESS)
+                        opts[i].help = argparse.SUPPRESS
                     else:
-                        setattr(opts[i], "help", arg.help + " (currently selected)")
+                        opts[i].help = arg.help + " (currently selected)"
             for i, group in enumerate(list(parser._action_groups)):
                 # If all arguments in the group are hidden, hide the group
                 if all([arg.help == argparse.SUPPRESS for arg in group._group_actions]):
@@ -871,7 +871,7 @@ def _validate_launch_command(args):
                 in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_XPU)
                 else False
             )
-            args.tpu = defaults.distributed_type == DistributedType.TPU
+            args.tpu = defaults.distributed_type == DistributedType.XLA
             args.use_fsdp = defaults.distributed_type == DistributedType.FSDP
             args.use_megatron_lm = defaults.distributed_type == DistributedType.MEGATRON_LM
             args.tpu_use_cluster = defaults.tpu_use_cluster if args.tpu else False
@@ -924,14 +924,16 @@ def _validate_launch_command(args):
                 args.mixed_precision = defaults.mixed_precision
                 mp_from_config_flag = True
         else:
-            native_amp = False
-            err = "{mode} mixed precision requires {requirement}"
             if args.use_cpu or (args.use_xpu and torch.xpu.is_available()):
                 native_amp = is_torch_version(">=", "1.10")
             else:
                 native_amp = is_bf16_available(True)
-            if args.mixed_precision == "bf16" and not native_amp and not (args.tpu and is_tpu_available()):
-                raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
+            if (
+                args.mixed_precision == "bf16"
+                and not native_amp
+                and not (args.tpu and is_torch_xla_available(check_is_tpu=True))
+            ):
+                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
 
         # Silently set the default here
         if args.dynamo_backend is None:

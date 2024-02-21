@@ -27,6 +27,7 @@ from accelerate.test_utils import (
     execute_subprocess_async,
     require_multi_device,
     require_multi_gpu,
+    require_non_torch_xla,
     require_pippy,
 )
 from accelerate.utils import patch_environment
@@ -40,6 +41,9 @@ class MultiDeviceTester(unittest.TestCase):
             mod_file.split(os.path.sep)[:-1] + ["scripts", "test_distributed_data_loop.py"]
         )
         self.operation_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_ops.py"])
+        self.pippy_file_path = os.path.sep.join(
+            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_pippy.py"]
+        )
 
     @require_multi_device
     def test_multi_device(self):
@@ -62,6 +66,7 @@ class MultiDeviceTester(unittest.TestCase):
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
 
+    @require_non_torch_xla
     @require_multi_gpu
     def test_distributed_data_loop(self):
         """
