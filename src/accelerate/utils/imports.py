@@ -32,6 +32,7 @@ USE_TORCH_XLA = parse_flag_from_env("USE_TORCH_XLA", default=True)
 _torch_xla_available = False
 if USE_TORCH_XLA:
     try:
+        import torch_xla.runtime
         import torch_xla.core.xla_model as xm  # noqa: F401
 
         _torch_xla_available = True
@@ -137,22 +138,12 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
 
     if not _torch_xla_available:
         return False
+    elif check_is_gpu:
+        return torch_xla.runtime.device_type() in ["GPU", "CUDA"]
+    elif check_is_tpu:
+        return torch_xla.runtime.device_type() == "TPU"
 
-    # Don't initialize the XLA client unless we want to check the device type.
-    if not (check_is_tpu or check_is_gpu):
-        return True
-
-    try:
-        xla_device = xm.xla_device()
-        hardware_type = xm.xla_device_hw(xla_device)
-        return any(
-            [
-                check_is_tpu and hardware_type == "TPU",
-                check_is_gpu and hardware_type == "GPU",
-            ]
-        )
-    except RuntimeError:
-        return False
+    return True
 
 
 def is_deepspeed_available():
