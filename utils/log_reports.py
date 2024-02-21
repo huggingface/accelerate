@@ -37,7 +37,7 @@ payload = [
 total_num_failed = 0
 for log in Path().glob("*.log"):
     section_num_failed = 0
-    with open(log, "r") as f:
+    with open(log) as f:
         for line in f:
             line = json.loads(line)
             if line.get("nodeid", "") != "":

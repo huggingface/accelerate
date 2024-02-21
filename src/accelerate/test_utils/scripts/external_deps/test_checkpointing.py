@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,7 +60,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16, model_name: 
 
     def collate_fn(examples):
         # On TPU it's best to pad everything to the same length or training will be very slow.
-        if accelerator.distributed_type == DistributedType.TPU:
+        if accelerator.distributed_type == DistributedType.XLA:
             return tokenizer.pad(examples, padding="max_length", max_length=128, return_tensors="pt")
         return tokenizer.pad(examples, padding="longest", return_tensors="pt")
 
@@ -182,7 +181,7 @@ def training_function(config, args):
         accelerator.print("resumed checkpoint performance:", accuracy)
         accelerator.print("resumed checkpoint's scheduler's lr:", lr_scheduler.get_lr()[0])
         accelerator.print("resumed optimizers's lr:", optimizer.param_groups[0]["lr"])
-        with open(os.path.join(args.output_dir, f"state_{starting_epoch-1}.json"), "r") as f:
+        with open(os.path.join(args.output_dir, f"state_{starting_epoch-1}.json")) as f:
             resumed_state = json.load(f)
             assert resumed_state["accuracy"] == accuracy, "Accuracy mismatch, loading from checkpoint failed"
             assert (
