@@ -114,7 +114,7 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             accept_arg = "set_to_none" in inspect.signature(self.optimizer.zero_grad).parameters
             if accept_arg:
                 if set_to_none is None:
-                    set_to_none = False
+                    set_to_none = True
                 self.optimizer.zero_grad(set_to_none=set_to_none)
             else:
                 if set_to_none is not None:
