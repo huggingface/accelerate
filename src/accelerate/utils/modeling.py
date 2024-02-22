@@ -671,7 +671,6 @@ def retie_parameters(model, tied_params):
                 splits = param_name.split(".")
                 for split in splits[:-1]:
                     module = getattr(module, split)
-                # param_to_tie = torch.nn.Parameter(param_to_tie)
                 setattr(module, splits[-1], param_to_tie)
 
 
