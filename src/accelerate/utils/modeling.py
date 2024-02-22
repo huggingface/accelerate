@@ -402,6 +402,8 @@ def set_module_tensor_to_device(
                     new_value.SCB = new_value.SCB.to("cpu")
                 else:
                     new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+            elif param_cls.__name__ in ["QTensor"]:
+                new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
 
@@ -669,6 +671,7 @@ def retie_parameters(model, tied_params):
                 splits = param_name.split(".")
                 for split in splits[:-1]:
                     module = getattr(module, split)
+                # param_to_tie = torch.nn.Parameter(param_to_tie)
                 setattr(module, splits[-1], param_to_tie)
 
 
