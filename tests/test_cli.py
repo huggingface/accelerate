@@ -89,7 +89,7 @@ class AccelerateLauncherTester(unittest.TestCase):
                 "accelerate",
                 "launch",
                 "--config_file",
-                config_path,
+                str(config_path),
                 self.test_file_path,
             ]
             execute_subprocess_async(cmd, env=os.environ.copy())
