@@ -867,7 +867,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         self.n_val = 160
 
     def test_performance(self):
-        self.test_file_path = self.test_scripts_folder / "test_performance.py"
+        test_file_path = str(self.test_scripts_folder / "test_performance.py")
         cmd = [
             "accelerate",
             "launch",
@@ -902,7 +902,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
 
             cmd_stage.extend(
                 [
-                    self.test_file_path,
+                    test_file_path,
                     f"--output_dir={self.tmpdir}",
                     f"--performance_lower_bound={self.performance_lower_bound}",
                 ]
@@ -911,7 +911,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_checkpointing(self):
-        self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
+        test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         cmd = [
             "accelerate",
             "launch",
@@ -946,7 +946,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
 
             cmd_stage.extend(
                 [
-                    self.test_file_path,
+                    str(test_file_path),
                     f"--output_dir={self.tmpdir}",
                     "--partial_train_epoch=1",
                 ]
@@ -965,7 +965,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_peak_memory_usage(self):
-        self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
+        test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
         cmd = [
             "accelerate",
             "launch",
@@ -1017,7 +1017,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
 
             cmd_stage.extend(
                 [
-                    self.test_file_path,
+                    str(test_file_path),
                     f"--output_dir={self.tmpdir}",
                     f"--peak_memory_upper_bound={peak_mem_upper_bound}",
                     f"--n_train={self.n_train}",
@@ -1028,7 +1028,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_lr_scheduler(self):
-        self.test_file_path = self.test_scripts_folder / "test_performance.py"
+        test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
             "accelerate",
             "launch",
@@ -1044,7 +1044,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             "--zero_stage=3",
             "--offload_optimizer_device=none",
             "--offload_param_device=none",
-            self.test_file_path,
+            str(test_file_path),
             f"--output_dir={self.tmpdir}",
             f"--performance_lower_bound={self.performance_lower_bound}",
         ]
