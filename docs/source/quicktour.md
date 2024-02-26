@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
 
@@ -66,7 +66,7 @@ model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
 
 **Important notes**:
 
-* You should always pass the the learning rate scheduler to [`~Accelerator.prepare`], however if the scheduler should *not* be stepped at each optimization step, pass `step_with_optimizer=False` to the [`Accelerator`] init.
+* You should always pass the learning rate scheduler to [`~Accelerator.prepare`], however if the scheduler should *not* be stepped at each optimization step, pass `step_with_optimizer=False` to the [`Accelerator`] init.
 * While you can send your dataloader to [`~Accelerator.prepare`] on its own (and there are cases for doing so, such as distributed inference), it's best to send it to [`~Accelerator.prepare`] together with the model and optimizer.
 * If you wish to run distributed evaluation, send your validation dataloader to [`~Accelerator.prepare`] as well. There are some nuances to distributed validation, check the [Distributed evaluation](#add-distributed-evaluation) section of the guide.
 * Any instruction using your training dataloader length (for instance if you want to log the number of total training
@@ -82,7 +82,7 @@ is shuffled the same way (if you decided to use `shuffle=True` or any kind of ra
     The actual batch size for your training will be the number of devices used multiplied by the batch size you set in
     your script. For instance, training on 4 GPUs with a batch size of 16 set when creating the training dataloader will
     train at an actual batch size of 64 (4 * 16).
-    If you want the batch size remain the same regardless of how many GPUs the script is run on, you can use the 
+    If you want the batch size to remain the same regardless of how many GPUs the script is run on, you can use the 
     option `split_batches=True` when creating and initializing [`Accelerator`] by passing in a [`utils.DataLoaderConfiguration`].
     Your training dataloader may change length when going through this method: if you run on X GPUs, it will have its
     length divided by X (since your actual batch size will be multiplied by X), unless you set
@@ -147,7 +147,7 @@ data while gathering and provide a more accurate metric.
 
     The [`~Accelerator.gather`] and [`~Accelerator.gather_for_metrics`] methods require the tensors to be all the same size on each process. If
     you have tensors of different sizes on each process (for instance when dynamically padding to the maximum length in
-    a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad you tensor to the
+    a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad your tensor to the
     biggest size across processes.
 
 </Tip>
