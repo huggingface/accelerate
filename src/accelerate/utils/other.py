@@ -13,7 +13,9 @@
 # limitations under the License.
 
 import collections
+import inspect
 import os
+import pathlib
 import platform
 import re
 import socket
@@ -25,6 +27,8 @@ from typing import OrderedDict
 import torch
 from packaging.version import Version
 from safetensors.torch import save_file as safe_save_file
+
+import accelerate
 
 from ..commands.config.default import write_basic_config  # noqa: F401
 from ..logging import get_logger
@@ -341,3 +345,18 @@ def recursive_getattr(obj, attr: str):
         return getattr(obj, attr)
 
     return reduce(_getattr, [obj] + attr.split("."))
+
+
+def path_in_accelerate_package(*components: str) -> pathlib.Path:
+    """
+    Get a path within the `accelerate` package's directory.
+
+    Args:
+        *components: Components of the path to join after the package directory.
+
+    Returns:
+        `pathlib.Path`: The path to the requested file or directory.
+    """
+
+    accelerate_package_dir = pathlib.Path(inspect.getfile(accelerate)).parent
+    return accelerate_package_dir.joinpath(*components)

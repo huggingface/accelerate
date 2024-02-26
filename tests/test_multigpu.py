@@ -18,7 +18,6 @@ import unittest
 
 import torch
 
-import accelerate
 from accelerate import Accelerator
 from accelerate.big_modeling import dispatch_model
 from accelerate.test_utils import (
@@ -31,19 +30,14 @@ from accelerate.test_utils import (
     require_pippy,
 )
 from accelerate.utils import patch_environment
+from accelerate.utils.other import path_in_accelerate_package
 
 
 class MultiDeviceTester(unittest.TestCase):
-    def setUp(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_script.py"])
-        self.data_loop_file_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "test_distributed_data_loop.py"]
-        )
-        self.operation_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_ops.py"])
-        self.pippy_file_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_pippy.py"]
-        )
+    test_file_path = path_in_accelerate_package("test_utils", "scripts", "test_script.py")
+    data_loop_file_path = path_in_accelerate_package("test_utils", "scripts", "test_distributed_data_loop.py")
+    operation_file_path = path_in_accelerate_package("test_utils", "scripts", "test_ops.py")
+    pippy_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_pippy.py")
 
     @require_multi_device
     def test_multi_device(self):
@@ -90,7 +84,7 @@ class MultiDeviceTester(unittest.TestCase):
             "launch",
             "--multi_gpu",
             f"--num_processes={torch.cuda.device_count()}",
-            self.pippy_file_path,
+            str(self.pippy_file_path),
         ]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())

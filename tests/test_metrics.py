@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import os
 import unittest
 
-import accelerate
 from accelerate import debug_launcher
 from accelerate.test_utils import (
     device_count,
@@ -27,15 +25,13 @@ from accelerate.test_utils import (
     require_single_device,
 )
 from accelerate.utils import patch_environment
+from accelerate.utils.other import path_in_accelerate_package
 
 
 @require_huggingface_suite
 class MetricTester(unittest.TestCase):
     def setUp(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_file_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_metrics.py"]
-        )
+        self.test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_metrics.py")
 
         from accelerate.test_utils.scripts.external_deps import test_metrics  # noqa: F401
 
