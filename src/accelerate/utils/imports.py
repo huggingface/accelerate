@@ -32,8 +32,8 @@ USE_TORCH_XLA = parse_flag_from_env("USE_TORCH_XLA", default=True)
 _torch_xla_available = False
 if USE_TORCH_XLA:
     try:
-        import torch_xla.runtime
         import torch_xla.core.xla_model as xm  # noqa: F401
+        import torch_xla.runtime
 
         _torch_xla_available = True
     except ImportError:
