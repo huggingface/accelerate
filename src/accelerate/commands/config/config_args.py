@@ -45,7 +45,7 @@ def load_config_from_file(config_file):
         if not os.path.isfile(config_file):
             raise FileNotFoundError(
                 f"The passed configuration file `{config_file}` does not exist. "
-                "Please pass an existing file to `accelerate launch`, or use the the default one "
+                "Please pass an existing file to `accelerate launch`, or use the default one "
                 "created through `accelerate config` and run `accelerate launch` "
                 "without the `--config_file` argument."
             )
