@@ -172,6 +172,14 @@ Follow these steps to start contributing:
    $ make quality
    ```
 
+   You can also set up [`pre-commit`](https://pre-commit.com/) to run these checks
+   automatically as Git commit hooks.
+
+   ```bash
+   $ pip install pre-commit
+   $ pre-commit install
+   ```
+
    Once you're happy with your changes, add changed files using `git add` and
    make a commit with `git commit` to record your changes locally:
 
