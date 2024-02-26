@@ -194,9 +194,9 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
 @contextmanager
 def clear_environment():
     """
-    A context manager that will cache origin `os.environ` and replace it with a empty dictionary in this context.
+    A context manager that will temporarily clear environment variables.
 
-    When this context exits, the cached `os.environ` will be back.
+    When this context exits, the previous environment variables will be back.
 
     Example:
 
@@ -216,12 +216,14 @@ def clear_environment():
     bar
     ```
     """
-    _old_os_environ = os.environ
-    os.environ = dict()
+    _old_os_environ = os.environ.copy()
+    os.environ.clear()
 
-    yield
-
-    os.environ = _old_os_environ
+    try:
+        yield
+    finally:
+        os.environ.clear()  # clear any added keys,
+        os.environ.update(_old_os_environ)  # then restore previous environment
 
 
 @contextmanager
@@ -249,15 +251,16 @@ def patch_environment(**kwargs):
             existing_vars[key] = os.environ[key]
         os.environ[key] = str(value)
 
-    yield
-
-    for key in kwargs:
-        key = key.upper()
-        if key in existing_vars:
-            # restore previous value
-            os.environ[key] = existing_vars[key]
-        else:
-            os.environ.pop(key, None)
+    try:
+        yield
+    finally:
+        for key in kwargs:
+            key = key.upper()
+            if key in existing_vars:
+                # restore previous value
+                os.environ[key] = existing_vars[key]
+            else:
+                os.environ.pop(key, None)
 
 
 def get_pretty_name(obj):
