@@ -62,9 +62,7 @@ These are standalone dataclasses used for checks, such as the type of distribute
 
 These are configurable arguments for specific interactions throughout the PyTorch ecosystem that Accelerate handles under the hood.
 
-
 [[autodoc]] utils.AutocastKwargs
-
 
 [[autodoc]] utils.DistributedDataParallelKwargs
 
@@ -73,6 +71,8 @@ These are configurable arguments for specific interactions throughout the PyTorc
 [[autodoc]] utils.GradScalerKwargs
 
 [[autodoc]] utils.InitProcessGroupKwargs
+
+[[autodoc]] utils.KwargsHandler
 
 ## Plugins
 
