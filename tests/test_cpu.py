@@ -40,7 +40,7 @@ class MultiCPUTester(unittest.TestCase):
 
     def test_mpi_multicpu_config_cmd(self):
         """
-        Parses args a launch command with a test file and the mpi_multicpu.yaml config. Tests getting the command and
+        Parses a launch command with a test file and the mpi_multicpu.yaml config. Tests getting the command and
         environment vars and verifies the mpirun command arg values.
         """
         mpi_config_path = str(self.test_config_path / "mpi_multicpu.yaml")
