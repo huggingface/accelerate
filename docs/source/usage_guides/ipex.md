@@ -172,7 +172,8 @@ source $oneccl_bindings_for_pytorch_path/env/setvars.sh
 accelerate launch examples/nlp_example.py
 ```
 Otherwise, if you selected not to have Accelerate launch `mpirun`, run the following command in node0 and **16DDP** will
-be enabled in node0,node1,node2,node3 with BF16 mixed precision:
+be enabled in node0,node1,node2,node3 with BF16 mixed precision. When using this method, the python script, python
+environment, and accelerate config file need to be present on all of the machines used for multi-CPU training.
 ```bash
 oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
 source $oneccl_bindings_for_pytorch_path/env/setvars.sh
