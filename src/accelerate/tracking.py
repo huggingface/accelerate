@@ -618,13 +618,13 @@ class MLflowTracker(GeneralTracker):
         run_name: Optional[str] = None,
         description: Optional[str] = None,
     ):
-        experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", experiment_name)
-        run_id = os.getenv("MLFLOW_RUN_ID", run_id)
-        tags = os.getenv("MLFLOW_TAGS", tags)
+        experiment_name = os.environ.get("MLFLOW_EXPERIMENT_NAME", experiment_name)
+        run_id = os.environ.get("MLFLOW_RUN_ID", run_id)
+        tags = os.environ.get("MLFLOW_TAGS", tags)
         if isinstance(tags, str):
             tags = json.loads(tags)
 
-        nested_run = os.getenv("MLFLOW_NESTED_RUN", nested_run)
+        nested_run = os.environ.get("MLFLOW_NESTED_RUN", nested_run)
 
         import mlflow
 
