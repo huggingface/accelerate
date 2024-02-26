@@ -1095,6 +1095,13 @@ class GradientState:
     def _set_sync_gradients(self, sync_gradients):
         "Private function that sets whether gradients should be synchronized. Users should not have to call this."
         self.sync_gradients = sync_gradients
+        # Allow grad-sync to automatically work on TPUs
+        if (
+            self.sync_gradients
+            and is_torch_xla_available(check_is_tpu=True)
+            and PartialState().distributed_type == DistributedType.XLA
+        ):
+            xm.mark_step()
 
     def _add_dataloader(self, dataloader):
         "Private function that adds a dataloader to `self.dataloader_references` and sets `in_dataloader` to `True`. Users should not have to call this."
