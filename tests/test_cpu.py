@@ -53,8 +53,8 @@ class MultiCPUTester(unittest.TestCase):
         args, _, _ = _validate_launch_command(args)
 
         # Mock out the check for mpirun version to simulate Intel MPI
-        with patch("shutil.which", return_value=True):
-            with patch("subprocess.check_output", return_value=b"Intel MPI"):
+        with patch("accelerate.utils.launch.which", return_value=True):
+            with patch("accelerate.utils.launch.subprocess.check_output", return_value=b"Intel MPI"):
                 cmd, current_env = prepare_simple_launcher_cmd_env(args)
 
         # Verify the mpirun command args

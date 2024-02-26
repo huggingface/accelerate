@@ -67,7 +67,7 @@ class AccelerateLauncherTester(unittest.TestCase):
 
     def test_config_compatibility(self):
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
-            if "invalid" in str(config):
+            if "invalid" in str(config) or "mpi" in str(config):
                 continue
             with self.subTest(config_file=config):
                 cmd = [

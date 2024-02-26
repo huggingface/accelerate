@@ -59,9 +59,7 @@ def _get_mpirun_args():
     mpi_apps = [x for x in ["mpirun", "mpiexec"] if which(x)]
 
     if not mpi_apps:
-        raise EnvironmentError(
-            "mpirun or mpiexec were not found. Ensure that Intel MPI, Open MPI, or MVAPICH are installed."
-        )
+        raise OSError("mpirun or mpiexec were not found. Ensure that Intel MPI, Open MPI, or MVAPICH are installed.")
 
     # Call the app with the --version flag to determine which MPI app is installed
     mpi_app = mpi_apps[0]
@@ -87,7 +85,7 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if mpirun_hostfile:
         mpi_app_name, hostfile_arg, num_proc_arg, proc_per_node_arg = _get_mpirun_args()
         mpirun_ccl = getattr(args, "mpirun_ccl", None)
-        num_machines = getattr(args, "num_machines")
+        num_machines = args.num_machines
         num_processes = getattr(args, "num_processes", None)
         nproc_per_node = str(num_processes // num_machines) if num_processes and num_machines else "1"
         cmd += [mpi_app_name, hostfile_arg, args.mpirun_hostfile, proc_per_node_arg, nproc_per_node]
