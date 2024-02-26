@@ -51,7 +51,7 @@ Below are a few gradio demos related to what was described above. The first is t
     ></iframe>
 </div>
 
-A community member has taken the idea and expended it further, allowing you to filter models directly and see if you can run a particular LLM given GPU constraints and LoRA configurations. To play with it, see [here](https://huggingface.co/spaces/Vokturz/can-it-run-llm) for more details.
+A community member has taken the idea and expanded it further, allowing you to filter models directly and see if you can run a particular LLM given GPU constraints and LoRA configurations. To play with it, see [here](https://huggingface.co/spaces/Vokturz/can-it-run-llm) for more details.
 
 ## The Command
 
