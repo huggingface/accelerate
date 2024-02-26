@@ -62,7 +62,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         cmd = ["accelerate", "launch"]
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
             cmd += ["--multi_gpu"]
-        cmd.append(str(self.test_file_path))
+        cmd.append(self.test_file_path)
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_config_compatibility(self):
@@ -75,7 +75,7 @@ class AccelerateLauncherTester(unittest.TestCase):
                     "launch",
                     "--config_file",
                     str(config),
-                    str(self.test_file_path),
+                    self.test_file_path,
                 ]
                 execute_subprocess_async(cmd, env=os.environ.copy())
 
@@ -88,8 +88,8 @@ class AccelerateLauncherTester(unittest.TestCase):
                 "accelerate",
                 "launch",
                 "--config_file",
-                str(self.test_config_path / "invalid_keys.yaml"),
-                str(self.test_file_path),
+                Path(self.test_config_path) / "invalid_keys.yaml",
+                self.test_file_path,
             ]
             execute_subprocess_async(cmd, env=os.environ.copy())
 

@@ -84,7 +84,7 @@ class MultiDeviceTester(unittest.TestCase):
             "launch",
             "--multi_gpu",
             f"--num_processes={torch.cuda.device_count()}",
-            str(self.pippy_file_path),
+            self.pippy_file_path,
         ]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())

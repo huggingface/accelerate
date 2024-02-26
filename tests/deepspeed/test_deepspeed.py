@@ -838,7 +838,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 @require_multi_device
 @slow
 class DeepSpeedIntegrationTest(TempDirTestCase):
-    test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
+    test_scripts_folder = Path(path_in_accelerate_package("test_utils", "scripts", "external_deps"))
 
     def setUp(self):
         super().setUp()
@@ -867,7 +867,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         self.n_val = 160
 
     def test_performance(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
+        self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
             "accelerate",
             "launch",
@@ -911,7 +911,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_checkpointing(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_checkpointing.py")
+        self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         cmd = [
             "accelerate",
             "launch",
@@ -965,7 +965,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_peak_memory_usage(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_peak_memory_usage.py")
+        self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
         cmd = [
             "accelerate",
             "launch",
@@ -1028,7 +1028,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_lr_scheduler(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
+        self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
             "accelerate",
             "launch",
