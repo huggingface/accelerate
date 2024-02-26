@@ -350,7 +350,7 @@ def recursive_getattr(obj, attr: str):
     return reduce(_getattr, [obj] + attr.split("."))
 
 
-def path_in_accelerate_package(*components: str) -> pathlib.Path:
+def path_in_accelerate_package(*components: str) -> str:
     """
     Get a path within the `accelerate` package's directory.
 
@@ -358,8 +358,8 @@ def path_in_accelerate_package(*components: str) -> pathlib.Path:
         *components: Components of the path to join after the package directory.
 
     Returns:
-        `pathlib.Path`: The path to the requested file or directory.
+        `str`: The path to the requested file or directory.
     """
 
     accelerate_package_dir = pathlib.Path(inspect.getfile(accelerate)).parent
-    return accelerate_package_dir.joinpath(*components)
+    return str(accelerate_package_dir.joinpath(*components))
