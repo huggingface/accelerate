@@ -80,6 +80,7 @@ class AccelerateLauncherTester(unittest.TestCase):
                 execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_invalid_keys(self):
+        config_path = Path(self.test_config_path) / "invalid_keys.yaml"
         with self.assertRaises(
             RuntimeError,
             msg="The config file at 'invalid_keys.yaml' had unknown keys ('another_invalid_key', 'invalid_key')",
@@ -88,7 +89,7 @@ class AccelerateLauncherTester(unittest.TestCase):
                 "accelerate",
                 "launch",
                 "--config_file",
-                Path(self.test_config_path) / "invalid_keys.yaml",
+                config_path,
                 self.test_file_path,
             ]
             execute_subprocess_async(cmd, env=os.environ.copy())
