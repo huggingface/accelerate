@@ -14,6 +14,7 @@
 
 import argparse
 import math
+import os
 from abc import ABC
 from functools import partial
 
@@ -43,11 +44,12 @@ if is_megatron_lm_available():
         get_tensorboard_writer,
         get_timers,
         get_tokenizer,
-        mpu,
         print_rank_0,
         print_rank_last,
     )
-    from megatron.arguments import _add_data_args, _add_validation_args, parse_args, validate_args
+    from megatron.core import mpu
+    from megatron.arguments import _add_data_args, _add_validation_args, parse_args, validate_args, \
+        core_transformer_config_from_args
     from megatron.checkpointing import load_args_from_checkpoint, load_checkpoint, save_checkpoint
     from megatron.data.data_samplers import MegatronPretrainingRandomSampler, MegatronPretrainingSampler
     from megatron.global_vars import set_global_variables
@@ -58,18 +60,19 @@ if is_megatron_lm_available():
         set_jit_fusion_options,
         write_args_to_tensorboard,
     )
-    from megatron.model import BertModel, Float16Module, GPTModel, ModelType, T5Model
-    from megatron.model import DistributedDataParallel as LocalDDP
+    from megatron.model import BertModel, Float16Module, GPTModel, T5Model
+    from megatron.core.enums import ModelType
+    from megatron.core.distributed import DistributedDataParallel as LocalDDP
     from megatron.model.classification import Classification
     from megatron.optimizer import get_megatron_optimizer
-    from megatron.schedules import get_forward_backward_func
+    from megatron.core.pipeline_parallel import get_forward_backward_func
     from megatron.text_generation.communication import broadcast_int_list, broadcast_tensor
     from megatron.text_generation.generation import (
         beam_search_and_return_on_first_stage,
         generate_tokens_probs_and_return_on_first_stage,
     )
     from megatron.tokenizer.tokenizer import _vocab_size_with_padding
-    from megatron.training import get_model, get_optimizer_param_scheduler, training_log
+    from megatron.training import get_model, get_optimizer_param_scheduler, training_log, num_floating_point_operations
     from megatron.utils import (
         average_losses_across_data_parallel_group,
         calc_params_l2_norm,
@@ -104,7 +107,9 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
                 num_classes=args.num_labels, num_tokentypes=2, pre_process=pre_process, post_process=post_process
             )
     elif args.model_type_name == "gpt":
-        model = GPTModel(num_tokentypes=0, parallel_output=True, pre_process=pre_process, post_process=post_process)
+        config = core_transformer_config_from_args(get_args())
+        model = GPTModel(num_tokentypes=0, parallel_output=True, pre_process=pre_process, post_process=post_process,
+                         config=config)
     elif args.model_type_name == "t5":
         model = T5Model(
             num_tokentypes=0,
@@ -675,7 +680,23 @@ class GPTTrainStep(AbstractTrainStep):
                 losses = output_tensor
             losses = losses.float()
             loss_mask = loss_mask.view(-1).float()
-            loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+            if args.context_parallel_size > 1:
+                loss = torch.cat(
+                    [torch.sum(losses.view(-1) * loss_mask).view(1),
+                     loss_mask.sum().view(1)])
+                torch.distributed.all_reduce(loss,
+                                             group=mpu.get_context_parallel_group())
+                loss = loss[0] / loss[1]
+            else:
+                loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+
+            # Check individual rank losses are not NaN prior to DP all-reduce.
+            if args.check_for_nan_in_loss_and_grad:
+                global_rank = torch.distributed.get_rank()
+                assert not loss.isnan(), (
+                    f'Rank {global_rank}: found NaN in local forward loss calculation. '
+                    f'Device: {torch.cuda.current_device()}, node: {os.uname()[1]}'
+                )
 
             # Reduce loss for logging.
             averaged_loss = average_losses_across_data_parallel_group([loss])
@@ -949,6 +970,7 @@ class MegatronEngine(torch.nn.Module):
         self.eval_total_loss_dict = {}
         self.iteration = 0
         self.report_memory_flag = True
+        self.num_floating_point_operations_so_far = 0
         if args.tensorboard_dir is not None:
             write_args_to_tensorboard()
 
@@ -995,19 +1017,20 @@ class MegatronEngine(torch.nn.Module):
             batch_data_iterator = iter(data_chunks) if len(batch_data) > 0 else None
 
         # Set grad to zero.
-        if args.DDP_impl == "local" and args.use_contiguous_buffers_in_local_ddp:
+        if args.DDP_impl == "local":
             for partition in self.module:
-                partition.zero_grad_buffer()
+                partition.zero_grad_buffer(zero_buffer=(not args.use_distributed_optimizer))
         self.optimizer.zero_grad()
 
         # Forward pass.
         forward_backward_func = get_forward_backward_func()
         losses_reduced = forward_backward_func(
-            self.train_step_handler.forward_step,
-            batch_data_iterator,
-            self.module,
-            self.optimizer,
-            None,
+            forward_step_func=self.train_step_handler.forward_step,
+            data_iterator=batch_data_iterator,
+            model=self.module,
+            num_microbatches=len(data_chunks),
+            seq_length=args.seq_length,
+            micro_batch_size=args.micro_batch_size,
             forward_only=False,
         )
 
@@ -1015,21 +1038,10 @@ class MegatronEngine(torch.nn.Module):
         if args.empty_unused_memory_level >= 1:
             torch.cuda.empty_cache()
 
-        # Reduce gradients.
-        timers("backward-reduce-model-grads").start()
-        self.optimizer.reduce_model_grads(args, timers)
-        timers("backward-reduce-model-grads").stop()
-
         # Update parameters.
         timers("optimizer").start()
         update_successful, grad_norm, num_zeros_in_grad = self.optimizer.step(args, timers)
         timers("optimizer").stop()
-
-        # Gather params.
-        if update_successful:
-            timers("backward-gather-model-params").start()
-            self.optimizer.gather_model_params(args, timers)
-            timers("backward-gather-model-params").stop()
 
         # Update learning rate.
         if update_successful:
@@ -1086,11 +1098,12 @@ class MegatronEngine(torch.nn.Module):
             batch_data_iterator = iter(data_chunks)
         forward_backward_func = get_forward_backward_func()
         loss_dicts = forward_backward_func(
-            self.train_step_handler.forward_step,
-            batch_data_iterator,
-            self.module,
-            optimizer=None,
-            timers=None,
+            forward_step_func=self.train_step_handler.forward_step,
+            data_iterator=batch_data_iterator,
+            model=self.module,
+            num_microbatches=len(data_chunks),
+            seq_length=args.seq_length,
+            micro_batch_size=args.micro_batch_size,
             forward_only=True,
         )
         # Empty unused memory
@@ -1133,6 +1146,8 @@ class MegatronEngine(torch.nn.Module):
         if self.module[0].training:
             loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = self.train_step(**batch_data)
             self.iteration += 1
+            batch_size = mpu.get_data_parallel_world_size() * args.micro_batch_size * get_num_microbatches()
+            self.num_floating_point_operations_so_far += num_floating_point_operations(args, batch_size)
             if args.tensorboard_dir is not None:
                 # Logging.
                 loss_scale = self.optimizer.get_loss_scale().item()
@@ -1206,7 +1221,8 @@ class MegatronEngine(torch.nn.Module):
         args = get_args()
         args.save = output_dir
         torch.distributed.barrier()
-        save_checkpoint(self.iteration, self.module, self.optimizer, self.scheduler)
+        save_checkpoint(self.iteration, self.module, self.optimizer, self.scheduler,
+                        num_floating_point_operations_so_far=self.num_floating_point_operations_so_far)
         torch.distributed.barrier()
 
     def load_checkpoint(self, input_dir):
@@ -1215,9 +1231,10 @@ class MegatronEngine(torch.nn.Module):
         args.consumed_train_samples = 0
         args.consumed_valid_samples = 0
         torch.distributed.barrier()
-        iteration = load_checkpoint(self.module, self.optimizer, self.scheduler)
+        iteration, num_floating_point_operations_so_far = load_checkpoint(self.module, self.optimizer, self.scheduler)
         torch.distributed.barrier()
         self.iteration = iteration
+        self.num_floating_point_operations_so_far = num_floating_point_operations_so_far
         if args.fp16 and self.iteration == 0:
             self.optimizer.reload_model_params()
 

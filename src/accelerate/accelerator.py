@@ -1739,12 +1739,9 @@ class Accelerator:
             else:
                 result.append(obj)
 
-        if model is not None:
-            model = megatron_lm_prepare_model(self)
-        if optimizer is not None:
-            optimizer = megatron_lm_prepare_optimizer(self, model)
-        if scheduler is not None:
-            scheduler = megatron_lm_prepare_scheduler(self, optimizer, scheduler)
+        model = megatron_lm_prepare_model(self)
+        optimizer = megatron_lm_prepare_optimizer(self, model)
+        scheduler = megatron_lm_prepare_scheduler(self, optimizer, scheduler)
 
         if model is not None:
             model = MegatronEngine(self, model, optimizer, scheduler)

@@ -37,6 +37,7 @@ from .dataclasses import (
     SageMakerDistributedType,
     TensorInformation,
     TorchDynamoPlugin,
+    add_model_config_to_megatron_parser,
 )
 from .environment import (
     are_libraries_initialized,
