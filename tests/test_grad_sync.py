@@ -19,13 +19,13 @@ from accelerate import debug_launcher
 from accelerate.test_utils import (
     device_count,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_cpu,
     require_multi_device,
     require_non_cpu,
     test_sync,
 )
 from accelerate.utils import patch_environment
-from accelerate.utils.other import path_in_accelerate_package
 
 
 class SyncScheduler(unittest.TestCase):
@@ -46,6 +46,6 @@ class SyncScheduler(unittest.TestCase):
     @require_multi_device
     def test_gradient_sync_gpu_multi(self):
         print(f"Found {device_count} devices.")
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", str(self.test_file_path)]
+        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())

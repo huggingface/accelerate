@@ -24,13 +24,13 @@ from accelerate.test_utils import (
     assert_exception,
     device_count,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_multi_device,
     require_multi_gpu,
     require_non_torch_xla,
     require_pippy,
 )
 from accelerate.utils import patch_environment
-from accelerate.utils.other import path_in_accelerate_package
 
 
 class MultiDeviceTester(unittest.TestCase):
@@ -84,7 +84,7 @@ class MultiDeviceTester(unittest.TestCase):
             "launch",
             "--multi_gpu",
             f"--num_processes={torch.cuda.device_count()}",
-            str(self.pippy_file_path),
+            self.pippy_file_path,
         ]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())

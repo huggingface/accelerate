@@ -4,6 +4,7 @@ from .testing import (
     device_count,
     execute_subprocess_async,
     memory_allocated_func,
+    path_in_accelerate_package,
     require_bnb,
     require_cpu,
     require_cuda,
