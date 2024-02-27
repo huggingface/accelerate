@@ -491,7 +491,7 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
 
 
 def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
-    # Cast everything in `cmd` to a string
+    # Cast every path in `cmd` to a string
     for i, c in enumerate(cmd):
         if isinstance(c, Path):
             cmd[i] = str(c)
@@ -520,8 +520,10 @@ def run_command(command: List[str], return_stdout=False, env=None):
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
     if an error occured while running `command`
     """
-    # Cast everything in `cmd` to a string
-    command = [str(c) for c in command]
+    # Cast every path in `command` to a string
+    for i, c in enumerate(command):
+        if isinstance(c, Path):
+            command[i] = str(c)
     if env is None:
         env = os.environ.copy()
     try:
