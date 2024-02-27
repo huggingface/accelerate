@@ -490,7 +490,7 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     return _RunOutput(await p.wait(), out, err)
 
 
-def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
+def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
     # Cast everything in `cmd` to a string
     for i, c in enumerate(cmd):
         if isinstance(c, Path):
