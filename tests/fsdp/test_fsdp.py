@@ -14,7 +14,6 @@
 
 
 import os
-from pathlib import Path
 
 import torch
 from transformers import AutoModel
@@ -27,6 +26,7 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_fsdp,
     require_multi_device,
     require_non_cpu,
@@ -40,7 +40,7 @@ from accelerate.utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
-from accelerate.utils.other import patch_environment, path_in_accelerate_package
+from accelerate.utils.other import patch_environment
 
 
 set_seed(42)
@@ -184,7 +184,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
 @require_multi_device
 @slow
 class FSDPIntegrationTest(TempDirTestCase):
-    test_scripts_folder = Path(path_in_accelerate_package("test_utils", "scripts", "external_deps"))
+    test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
 
     def setUp(self):
         super().setUp()
@@ -205,7 +205,7 @@ class FSDPIntegrationTest(TempDirTestCase):
         self.n_val = 160
 
     def test_performance(self):
-        self.test_file_path = str(self.test_scripts_folder / "test_performance.py")
+        self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = ["accelerate", "launch", "--num_processes=2", "--num_machines=1", "--machine_rank=0", "--use_fsdp"]
         for config in self.performance_configs:
             cmd_config = cmd.copy()
@@ -243,7 +243,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_config, env=os.environ.copy())
 
     def test_checkpointing(self):
-        self.test_file_path = str(self.test_scripts_folder / "test_checkpointing.py")
+        self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         cmd = [
             "accelerate",
             "launch",
@@ -290,7 +290,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                     execute_subprocess_async(cmd_config, env=os.environ.copy())
 
     def test_peak_memory_usage(self):
-        self.test_file_path = str(self.test_scripts_folder / "test_peak_memory_usage.py")
+        self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
         cmd = [
             "accelerate",
             "launch",

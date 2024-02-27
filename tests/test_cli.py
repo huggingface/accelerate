@@ -22,13 +22,13 @@ from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
+    path_in_accelerate_package,
     require_multi_device,
     require_timm,
     require_transformers,
     run_command,
 )
 from accelerate.utils import patch_environment
-from accelerate.utils.other import path_in_accelerate_package
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -74,13 +74,13 @@ class AccelerateLauncherTester(unittest.TestCase):
                     "accelerate",
                     "launch",
                     "--config_file",
-                    str(config),
+                    config,
                     self.test_file_path,
                 ]
                 execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_invalid_keys(self):
-        config_path = Path(self.test_config_path) / "invalid_keys.yaml"
+        config_path = self.test_config_path / "invalid_keys.yaml"
         with self.assertRaises(
             RuntimeError,
             msg="The config file at 'invalid_keys.yaml' had unknown keys ('another_invalid_key', 'invalid_key')",
@@ -89,7 +89,7 @@ class AccelerateLauncherTester(unittest.TestCase):
                 "accelerate",
                 "launch",
                 "--config_file",
-                str(config_path),
+                config_path,
                 self.test_file_path,
             ]
             execute_subprocess_async(cmd, env=os.environ.copy())

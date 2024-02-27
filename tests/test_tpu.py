@@ -16,8 +16,7 @@ import os
 import sys
 import unittest
 
-from accelerate.test_utils import execute_subprocess_async, require_tpu
-from accelerate.utils.other import path_in_accelerate_package
+from accelerate.test_utils import execute_subprocess_async, path_in_accelerate_package, require_tpu
 
 
 class MultiTPUTester(unittest.TestCase):
