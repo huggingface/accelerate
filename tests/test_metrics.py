@@ -19,13 +19,13 @@ from accelerate import debug_launcher
 from accelerate.test_utils import (
     device_count,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_cpu,
     require_huggingface_suite,
     require_multi_device,
     require_single_device,
 )
 from accelerate.utils import patch_environment
-from accelerate.utils.other import path_in_accelerate_package
 
 
 @require_huggingface_suite

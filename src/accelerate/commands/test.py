@@ -17,8 +17,7 @@
 import argparse
 import os
 
-from accelerate.test_utils import execute_subprocess_async
-from accelerate.utils.other import path_in_accelerate_package
+from accelerate.test_utils import execute_subprocess_async, path_in_accelerate_package
 
 
 def test_command_parser(subparsers=None):

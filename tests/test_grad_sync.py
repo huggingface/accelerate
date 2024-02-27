@@ -19,13 +19,13 @@ from accelerate import debug_launcher
 from accelerate.test_utils import (
     device_count,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_cpu,
     require_multi_device,
     require_non_cpu,
     test_sync,
 )
 from accelerate.utils import patch_environment
-from accelerate.utils.other import path_in_accelerate_package
 
 
 class SyncScheduler(unittest.TestCase):
