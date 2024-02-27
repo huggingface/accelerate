@@ -48,9 +48,9 @@ def test_command(args):
     if args.config_file is None:
         test_args = script_name
     else:
-        test_args = f"--config_file={args.config_file} {script_name}"
+        test_args = (f"--config_file={args.config_file} {script_name}").split()
 
-    cmd = ["accelerate-launch"] + test_args.split()
+    cmd = ["accelerate-launch"] + test_args
     result = execute_subprocess_async(cmd, env=os.environ.copy())
     if result.returncode == 0:
         print("Test is a success! You are ready for your distributed training!")
