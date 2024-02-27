@@ -46,7 +46,7 @@ def test_command(args):
     script_name = path_in_accelerate_package("test_utils", "scripts", "test_script.py")
 
     if args.config_file is None:
-        test_args = script_name
+        test_args = [script_name]
     else:
         test_args = (f"--config_file={args.config_file} {script_name}").split()
 
