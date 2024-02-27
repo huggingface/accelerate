@@ -143,9 +143,9 @@ class FeatureExamplesTests(TempDirTestCase, LaunchTestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls._tmpdir = tempfile.mkdtemp()
-        cls.configPath = Path(cls._tmpdir) / "default_config.yml"
+        cls.config_file = Path(cls._tmpdir) / "default_config.yml"
 
-        write_basic_config(save_location=cls.configPath)
+        write_basic_config(save_location=cls.config_file)
 
     @classmethod
     def tearDownClass(cls):
@@ -154,7 +154,7 @@ class FeatureExamplesTests(TempDirTestCase, LaunchTestCase):
 
     def setUp(self):
         super().setUp()
-        self.launch_args = self.get_launch_command(config_path=self.configPath)
+        self.launch_args = self.get_launch_command(config_file=self.config_file)
 
     def test_checkpointing_by_epoch(self):
         testargs = f"""
