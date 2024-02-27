@@ -52,6 +52,6 @@ class MetricTester(LaunchTestCase):
     @require_multi_device
     def test_metric_accelerator_multi(self):
         print(f"Found {device_count} devices.")
-        command = self.default_command + [self.test_file_path]
+        cmd = self.default_command + [self.test_file_path]
         with patch_environment(omp_num_threads=1, ACCELERATE_LOG_LEVEL="INFO"):
-            execute_subprocess_async(command, env=os.environ.copy())
+            execute_subprocess_async(cmd, env=os.environ.copy())
