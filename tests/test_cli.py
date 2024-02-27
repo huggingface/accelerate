@@ -22,6 +22,7 @@ from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
+    LaunchTestCase,
     path_in_accelerate_package,
     require_multi_device,
     require_timm,
@@ -31,7 +32,7 @@ from accelerate.test_utils.testing import (
 from accelerate.utils import patch_environment
 
 
-class AccelerateLauncherTester(unittest.TestCase):
+class AccelerateLauncherTester(LaunchTestCase):
     """
     Test case for verifying the `accelerate launch` CLI operates correctly.
     If a `default_config.yaml` file is located in the cache it will temporarily move it
@@ -59,9 +60,10 @@ class AccelerateLauncherTester(unittest.TestCase):
             cls.changed_path.rename(cls.config_path)
 
     def test_no_config(self):
-        cmd = ["accelerate", "launch"]
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
-            cmd += ["--multi_gpu"]
+            cmd = self.get_launch_command(multi_gpu=True)
+        else:
+            cmd = self.default_command
         cmd.append(self.test_file_path)
         execute_subprocess_async(cmd, env=os.environ.copy())
 
@@ -70,13 +72,7 @@ class AccelerateLauncherTester(unittest.TestCase):
             if "invalid" in str(config):
                 continue
             with self.subTest(config_file=config):
-                cmd = [
-                    "accelerate",
-                    "launch",
-                    "--config_file",
-                    config,
-                    self.test_file_path,
-                ]
+                cmd = self.get_launch_command(config_file=config) + [self.test_file_path]
                 execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_invalid_keys(self):
@@ -85,13 +81,7 @@ class AccelerateLauncherTester(unittest.TestCase):
             RuntimeError,
             msg="The config file at 'invalid_keys.yaml' had unknown keys ('another_invalid_key', 'invalid_key')",
         ):
-            cmd = [
-                "accelerate",
-                "launch",
-                "--config_file",
-                config_path,
-                self.test_file_path,
-            ]
+            cmd = self.get_launch_command(config_file=config_path) + [self.test_file_path]
             execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_accelerate_test(self):

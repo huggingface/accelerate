@@ -14,13 +14,13 @@
 
 import inspect
 import os
-import unittest
 
 import torch
 
 from accelerate import Accelerator
 from accelerate.big_modeling import dispatch_model
 from accelerate.test_utils import (
+    LaunchTestCase,
     assert_exception,
     device_count,
     execute_subprocess_async,
@@ -33,7 +33,7 @@ from accelerate.test_utils import (
 from accelerate.utils import patch_environment
 
 
-class MultiDeviceTester(unittest.TestCase):
+class MultiDeviceTester(LaunchTestCase):
     test_file_path = path_in_accelerate_package("test_utils", "scripts", "test_script.py")
     data_loop_file_path = path_in_accelerate_package("test_utils", "scripts", "test_distributed_data_loop.py")
     operation_file_path = path_in_accelerate_package("test_utils", "scripts", "test_ops.py")
@@ -42,23 +42,19 @@ class MultiDeviceTester(unittest.TestCase):
     @require_multi_device
     def test_multi_device(self):
         print(f"Found {device_count} devices.")
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.test_file_path]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(self.default_command + [self.test_file_path], env=os.environ.copy())
 
     @require_multi_device
     def test_multi_device_ops(self):
         print(f"Found {device_count} devices.")
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.operation_file_path]
-        print(f"Command: {cmd}")
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(self.default_command + [self.operation_file_path], env=os.environ.copy())
 
     @require_multi_device
     def test_pad_across_processes(self):
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(self.default_command + [inspect.getfile(self.__class__)], env=os.environ.copy())
 
     @require_non_torch_xla
     @require_multi_gpu
@@ -68,9 +64,8 @@ class MultiDeviceTester(unittest.TestCase):
         when the batch size does not evenly divide the dataset size.
         """
         print(f"Found {device_count} devices, using 2 devices only")
-        cmd = ["torchrun", "--nproc_per_node=2", self.data_loop_file_path]
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(self.default_command + [self.data_loop_file_path], env=os.environ.copy())
 
     @require_multi_gpu
     @require_pippy
@@ -78,16 +73,10 @@ class MultiDeviceTester(unittest.TestCase):
         """
         Checks the integration with the pippy framework
         """
-        print(f"Found {torch.cuda.device_count()} devices")
-        cmd = [
-            "accelerate",
-            "launch",
-            "--multi_gpu",
-            f"--num_processes={torch.cuda.device_count()}",
-            self.pippy_file_path,
-        ]
+        print(f"Found {device_count} devices")
+        command = self.get_launch_command(multi_gpu=None, num_processes=device_count)
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(command + [self.pippy_file_path], env=os.environ.copy())
 
 
 if __name__ == "__main__":

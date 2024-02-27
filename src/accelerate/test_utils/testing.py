@@ -389,6 +389,24 @@ class AccelerateTestCase(unittest.TestCase):
         PartialState._reset_state()
 
 
+class LaunchTestCase(unittest.TestCase):
+    """
+    A TestCase class that helps prepare and run a test with `accelerate.launch`.
+    """
+
+    def get_launch_command(self, **kwargs):
+        command = ["accelerate", "launch"]
+        for k, v in kwargs.items():
+            if v is not None:
+                command.append(f"--{k}={v}")
+            elif isinstance(v, bool) and v:
+                command.append(f"--{k}")
+        return command
+
+    def setUp(self):
+        self.default_command = self.get_launch_command(num_processes=device_count)
+
+
 class MockingTestCase(unittest.TestCase):
     """
     A TestCase class designed to dynamically add various mockers that should be used in every test, mimicking the

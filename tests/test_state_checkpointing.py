@@ -18,7 +18,6 @@ import os
 import random
 import shutil
 import tempfile
-import unittest
 import uuid
 from contextlib import contextmanager
 
@@ -29,7 +28,12 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.test_utils import device_count, execute_subprocess_async, require_non_cpu, require_non_torch_xla
+from accelerate.test_utils import (
+    LaunchTestCase,
+    execute_subprocess_async,
+    require_non_cpu,
+    require_non_torch_xla,
+)
 from accelerate.utils import DistributedType, ProjectConfiguration, set_seed
 
 
@@ -89,7 +93,7 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 @parameterized_class(("use_safetensors",), [[True], [False]], class_name_func=parameterized_custom_name_func)
-class CheckpointTest(unittest.TestCase):
+class CheckpointTest(LaunchTestCase):
     def check_adam_state(self, state1, state2, distributed_type):
         # For DistributedType.XLA, the `accelerator.save_state` function calls `xm._maybe_convert_to_cpu` before saving.
         # As a result, all tuple values are converted to lists. Therefore, we need to convert them back here.
@@ -373,7 +377,7 @@ class CheckpointTest(unittest.TestCase):
     @require_non_cpu
     @require_non_torch_xla
     def test_map_location(self):
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
+        cmd = self.default_command + [inspect.getfile(self.__class__)]
         env = os.environ.copy()
         env["USE_SAFETENSORS"] = str(self.use_safetensors)
         env["OMP_NUM_THREADS"] = "1"

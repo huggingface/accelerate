@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import os
-import unittest
 
 from accelerate import debug_launcher
 from accelerate.test_utils import (
+    LaunchTestCase,
     device_count,
     execute_subprocess_async,
     path_in_accelerate_package,
@@ -29,7 +29,7 @@ from accelerate.utils import patch_environment
 
 
 @require_huggingface_suite
-class MetricTester(unittest.TestCase):
+class MetricTester(LaunchTestCase):
     def setUp(self):
         self.test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_metrics.py")
 
@@ -52,6 +52,6 @@ class MetricTester(unittest.TestCase):
     @require_multi_device
     def test_metric_accelerator_multi(self):
         print(f"Found {device_count} devices.")
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.test_file_path]
+        command = self.default_command + [self.test_file_path]
         with patch_environment(omp_num_threads=1, ACCELERATE_LOG_LEVEL="INFO"):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(command, env=os.environ.copy())

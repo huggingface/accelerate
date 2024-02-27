@@ -25,6 +25,7 @@ import torch
 
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
+    LaunchTestCase,
     TempDirTestCase,
     require_multi_gpu,
     require_pippy,
@@ -135,7 +136,7 @@ class ExampleDifferenceTests(unittest.TestCase):
 
 
 @mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "1"})
-class FeatureExamplesTests(TempDirTestCase):
+class FeatureExamplesTests(TempDirTestCase, LaunchTestCase):
     clear_on_setup = False
 
     @classmethod
@@ -145,7 +146,7 @@ class FeatureExamplesTests(TempDirTestCase):
         cls.configPath = Path(cls._tmpdir) / "default_config.yml"
 
         write_basic_config(save_location=cls.configPath)
-        cls._launch_args = ["accelerate", "launch", "--config_file", cls.configPath]
+        cls._launch_args = cls.get_launch_command(config_file=cls.configPath)
 
     @classmethod
     def tearDownClass(cls):
