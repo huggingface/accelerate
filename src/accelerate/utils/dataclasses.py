@@ -587,7 +587,7 @@ class GradientAccumulationPlugin(KwargsHandler):
 
     Example:
 
-    ```py
+    ```python
     from accelerate.utils import GradientAccumulationPlugin
 
     gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=2)
