@@ -73,6 +73,28 @@ def get_backend():
 torch_device, device_count, memory_allocated_func = get_backend()
 
 
+def get_launch_command(**kwargs) -> list:
+    """
+    Wraps around `kwargs` to help simplify launching from `subprocess`.
+
+    Example:
+    ```python
+    # returns ['accelerate', 'launch', '--num_processes=2', '--device_count=2']
+    get_launch_command(num_processes=2, device_count=2)
+    ```
+    """
+    command = ["accelerate", "launch"]
+    for k, v in kwargs.items():
+        if v is not None:
+            command.append(f"--{k}={v}")
+        elif isinstance(v, bool) and v:
+            command.append(f"--{k}")
+    return command
+
+
+DEFAULT_LAUNCH_COMMAND = get_launch_command(num_processes=device_count)
+
+
 def parse_flag_from_env(key, default=False):
     try:
         value = os.environ[key]
@@ -387,24 +409,6 @@ class AccelerateTestCase(unittest.TestCase):
         # Reset the state of the AcceleratorState singleton.
         AcceleratorState._reset_state()
         PartialState._reset_state()
-
-
-class LaunchTestCase(unittest.TestCase):
-    """
-    A TestCase class that helps prepare and run a test with `accelerate.launch`.
-    """
-
-    def get_launch_command(self, **kwargs):
-        command = ["accelerate", "launch"]
-        for k, v in kwargs.items():
-            if v is not None:
-                command.append(f"--{k}={v}")
-            elif isinstance(v, bool) and v:
-                command.append(f"--{k}")
-        return command
-
-    def setUp(self):
-        self.default_command = self.get_launch_command(num_processes=device_count)
 
 
 class MockingTestCase(unittest.TestCase):

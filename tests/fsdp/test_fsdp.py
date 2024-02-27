@@ -24,9 +24,9 @@ from accelerate.accelerator import Accelerator
 from accelerate.state import AcceleratorState
 from accelerate.test_utils.testing import (
     AccelerateTestCase,
-    LaunchTestCase,
     TempDirTestCase,
     execute_subprocess_async,
+    get_launch_command,
     path_in_accelerate_package,
     require_fsdp,
     require_multi_device,
@@ -184,7 +184,7 @@ class FSDPPluginIntegration(AccelerateTestCase):
 @require_fsdp
 @require_multi_device
 @slow
-class FSDPIntegrationTest(TempDirTestCase, LaunchTestCase):
+class FSDPIntegrationTest(TempDirTestCase):
     test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
 
     def setUp(self):
@@ -207,7 +207,7 @@ class FSDPIntegrationTest(TempDirTestCase, LaunchTestCase):
 
     def test_performance(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
-        cmd = self.get_launch_command(num_processes=2, num_machines=1, machine_rank=0, use_fsdp=True)
+        cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0, use_fsdp=True)
         for config in self.performance_configs:
             cmd_config = cmd.copy()
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
@@ -245,7 +245,7 @@ class FSDPIntegrationTest(TempDirTestCase, LaunchTestCase):
 
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
-        cmd = self.get_launch_command(
+        cmd = get_launch_command(
             num_processes=2,
             num_machines=1,
             machine_rank=0,
@@ -290,7 +290,7 @@ class FSDPIntegrationTest(TempDirTestCase, LaunchTestCase):
 
     def test_peak_memory_usage(self):
         self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
-        cmd = self.get_launch_command(num_processes=2, num_machines=1, machine_rank=0)
+        cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0)
         for spec, peak_mem_upper_bound in self.peak_memory_usage_upper_bound.items():
             cmd_config = cmd.copy()
             if "fp16" in spec:

@@ -25,8 +25,8 @@ import torch
 
 from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
-    LaunchTestCase,
     TempDirTestCase,
+    get_launch_command,
     require_multi_gpu,
     require_pippy,
     require_trackers,
@@ -136,7 +136,7 @@ class ExampleDifferenceTests(unittest.TestCase):
 
 
 @mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "1"})
-class FeatureExamplesTests(TempDirTestCase, LaunchTestCase):
+class FeatureExamplesTests(TempDirTestCase):
     clear_on_setup = False
 
     @classmethod
@@ -154,7 +154,7 @@ class FeatureExamplesTests(TempDirTestCase, LaunchTestCase):
 
     def setUp(self):
         super().setUp()
-        self.launch_args = self.get_launch_command(config_file=self.config_file)
+        self.launch_args = get_launch_command(config_file=self.config_file)
 
     def test_checkpointing_by_epoch(self):
         testargs = f"""

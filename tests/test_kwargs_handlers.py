@@ -14,6 +14,7 @@
 
 import inspect
 import os
+import unittest
 from dataclasses import dataclass
 
 import torch
@@ -21,7 +22,7 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
-    LaunchTestCase,
+    DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
     require_multi_device,
     require_non_cpu,
@@ -38,7 +39,7 @@ class MockClass(KwargsHandler):
     c: float = 3.0
 
 
-class KwargsHandlerTester(LaunchTestCase):
+class KwargsHandlerTester(unittest.TestCase):
     def test_kwargs_handler(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
         assert MockClass().to_kwargs() == {}
@@ -67,7 +68,7 @@ class KwargsHandlerTester(LaunchTestCase):
 
     @require_multi_device
     def test_ddp_kwargs(self):
-        cmd = self.default_command + [inspect.getfile(self.__class__)]
+        cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_non_cpu

@@ -22,7 +22,8 @@ from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
-    LaunchTestCase,
+    DEFAULT_LAUNCH_COMMAND,
+    get_launch_command,
     path_in_accelerate_package,
     require_multi_device,
     require_timm,
@@ -32,7 +33,7 @@ from accelerate.test_utils.testing import (
 from accelerate.utils import patch_environment
 
 
-class AccelerateLauncherTester(LaunchTestCase):
+class AccelerateLauncherTester(unittest.TestCase):
     """
     Test case for verifying the `accelerate launch` CLI operates correctly.
     If a `default_config.yaml` file is located in the cache it will temporarily move it
@@ -61,9 +62,9 @@ class AccelerateLauncherTester(LaunchTestCase):
 
     def test_no_config(self):
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
-            cmd = self.get_launch_command(multi_gpu=True)
+            cmd = get_launch_command(multi_gpu=True)
         else:
-            cmd = self.default_command
+            cmd = DEFAULT_LAUNCH_COMMAND
         cmd.append(self.test_file_path)
         execute_subprocess_async(cmd, env=os.environ.copy())
 
@@ -72,7 +73,7 @@ class AccelerateLauncherTester(LaunchTestCase):
             if "invalid" in str(config):
                 continue
             with self.subTest(config_file=config):
-                cmd = self.get_launch_command(config_file=config) + [self.test_file_path]
+                cmd = get_launch_command(config_file=config) + [self.test_file_path]
                 execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_invalid_keys(self):
@@ -81,7 +82,7 @@ class AccelerateLauncherTester(LaunchTestCase):
             RuntimeError,
             msg="The config file at 'invalid_keys.yaml' had unknown keys ('another_invalid_key', 'invalid_key')",
         ):
-            cmd = self.get_launch_command(config_file=config_path) + [self.test_file_path]
+            cmd = get_launch_command(config_file=config_path) + [self.test_file_path]
             execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_accelerate_test(self):
