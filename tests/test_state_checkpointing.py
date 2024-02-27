@@ -29,7 +29,12 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.test_utils import device_count, execute_subprocess_async, require_non_cpu, require_non_torch_xla
+from accelerate.test_utils import (
+    DEFAULT_LAUNCH_COMMAND,
+    execute_subprocess_async,
+    require_non_cpu,
+    require_non_torch_xla,
+)
 from accelerate.utils import DistributedType, ProjectConfiguration, set_seed
 
 
@@ -373,7 +378,7 @@ class CheckpointTest(unittest.TestCase):
     @require_non_cpu
     @require_non_torch_xla
     def test_map_location(self):
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
+        cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         env = os.environ.copy()
         env["USE_SAFETENSORS"] = str(self.use_safetensors)
         env["OMP_NUM_THREADS"] = "1"

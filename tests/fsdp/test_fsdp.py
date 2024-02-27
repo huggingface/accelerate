@@ -26,6 +26,7 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
+    get_launch_command,
     path_in_accelerate_package,
     require_fsdp,
     require_multi_device,
@@ -206,7 +207,7 @@ class FSDPIntegrationTest(TempDirTestCase):
 
     def test_performance(self):
         self.test_file_path = self.test_scripts_folder / "test_performance.py"
-        cmd = ["accelerate", "launch", "--num_processes=2", "--num_machines=1", "--machine_rank=0", "--use_fsdp"]
+        cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0, use_fsdp=True)
         for config in self.performance_configs:
             cmd_config = cmd.copy()
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
@@ -244,16 +245,14 @@ class FSDPIntegrationTest(TempDirTestCase):
 
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
-        cmd = [
-            "accelerate",
-            "launch",
-            "--num_processes=2",
-            "--num_machines=1",
-            "--machine_rank=0",
-            "--use_fsdp",
-            "--mixed_precision=fp16",
-            "--fsdp_transformer_layer_cls_to_wrap=BertLayer",
-        ]
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            mixed_precision="fp16",
+            fsdp_transformer_layer_cls_to_wrap="BertLayer",
+        )
 
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             cmd_config = cmd.copy()
@@ -291,13 +290,7 @@ class FSDPIntegrationTest(TempDirTestCase):
 
     def test_peak_memory_usage(self):
         self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
-        cmd = [
-            "accelerate",
-            "launch",
-            "--num_processes=2",
-            "--num_machines=1",
-            "--machine_rank=0",
-        ]
+        cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0)
         for spec, peak_mem_upper_bound in self.peak_memory_usage_upper_bound.items():
             cmd_config = cmd.copy()
             if "fp16" in spec:
