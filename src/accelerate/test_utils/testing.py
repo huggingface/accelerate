@@ -85,10 +85,10 @@ def get_launch_command(**kwargs) -> list:
     """
     command = ["accelerate", "launch"]
     for k, v in kwargs.items():
-        if v is not None:
-            command.append(f"--{k}={v}")
-        elif isinstance(v, bool) and v:
+        if isinstance(v, bool) and v:
             command.append(f"--{k}")
+        elif v is not None:
+            command.append(f"--{k}={v}")
     return command
 
 
