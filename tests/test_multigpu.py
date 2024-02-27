@@ -42,19 +42,23 @@ class MultiDeviceTester(LaunchTestCase):
     @require_multi_device
     def test_multi_device(self):
         print(f"Found {device_count} devices.")
+        cmd = self.default_command + [self.test_file_path]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(self.default_command + [self.test_file_path], env=os.environ.copy())
+            execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_device
     def test_multi_device_ops(self):
         print(f"Found {device_count} devices.")
+        cmd = self.default_command + [self.operation_file_path]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(self.default_command + [self.operation_file_path], env=os.environ.copy())
+            execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_device
     def test_pad_across_processes(self):
+        print(f"Found {device_count} devices.")
+        cmd = self.default_command + [inspect.getfile(self.__class__)]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(self.default_command + [inspect.getfile(self.__class__)], env=os.environ.copy())
+            execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_non_torch_xla
     @require_multi_gpu
@@ -64,8 +68,9 @@ class MultiDeviceTester(LaunchTestCase):
         when the batch size does not evenly divide the dataset size.
         """
         print(f"Found {device_count} devices, using 2 devices only")
+        cmd = self.get_launch_command(num_processes=2) + [self.data_loop_file_path]
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
-            execute_subprocess_async(self.default_command + [self.data_loop_file_path], env=os.environ.copy())
+            execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_multi_gpu
     @require_pippy
@@ -74,9 +79,9 @@ class MultiDeviceTester(LaunchTestCase):
         Checks the integration with the pippy framework
         """
         print(f"Found {device_count} devices")
-        command = self.get_launch_command(multi_gpu=None, num_processes=device_count)
+        cmd = self.get_launch_command(multi_gpu=True, num_processes=device_count)
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(command + [self.pippy_file_path], env=os.environ.copy())
+            execute_subprocess_async(cmd + [self.pippy_file_path], env=os.environ.copy())
 
 
 if __name__ == "__main__":
