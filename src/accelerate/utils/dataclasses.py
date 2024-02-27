@@ -237,6 +237,7 @@ class DistributedType(str, enum.Enum):
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
         - **TPU** -- Distributed on TPUs.
+        - **AXONN** -- Using AxoNN
     """
 
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
@@ -249,6 +250,7 @@ class DistributedType(str, enum.Enum):
     FSDP = "FSDP"
     TPU = "TPU"
     MEGATRON_LM = "MEGATRON_LM"
+    AXONN = "AXONN"
 
 
 class SageMakerDistributedType(str, enum.Enum):
@@ -1400,6 +1402,35 @@ class MegatronLMPlugin:
             elif key.startswith("no_log_"):
                 self.megatron_lm_default_args[key.replace("no_", "")] = True
 
+
+
+@dataclass
+class AxoNNPlugin:
+    """
+    Plugin for AxoNN to enable 3D tensor parallelism
+    """
+
+    G_intra_row: int = field(default=None, metadata={"help": "row tensor parallelism degree."})
+    G_intra_col: int = field(default=None, metadata={"help": "column tensor parallelism degree."})
+    G_intra_depth: int = field(default=None, metadata={"help": "depth tensor parallelism degree."})
+    
+    overlap_all_reduce: bool = field(default=False, metadata={"help": "overlap all reduces in the backward pass of row/column tensor parallelism"})
+    overlap_reduce_scatter: bool = field(default=False, metadata={"help": "overlap all reduces in the backward pass of depth tensor parallelism"})
+
+    def __post_init__(self):
+        assert self.G_intra_row is not None
+        assert self.G_intra_col is not None
+        assert self.G_intra_depth is not None
+
+    def initialize(self):
+        from axonn import axonn as ax
+        ax.init(
+                    G_intra_r=self.G_intra_row,
+                    G_intra_c=self.G_intra_col,
+                    G_intra_d=self.G_intra_depth,
+                    G_inter=1,
+                    G_data=1
+                )
 
 @dataclass
 class BnbQuantizationConfig:

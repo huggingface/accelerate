@@ -747,6 +747,7 @@ class AcceleratorState:
         deepspeed_plugin=None,
         fsdp_plugin=None,
         megatron_lm_plugin=None,
+        axonn_plugin=None,
         _from_accelerator: bool = False,
         **kwargs,
     ):
@@ -797,6 +798,10 @@ class AcceleratorState:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
+                if os.environ.get("ACCELERATE_USE_AXONN", "false") == "true":
+                    self.distributed_type = DistributedType.AXONN
+                    axonn_plugin.initialize()
+                    self.axonn_plugin = axonn_plugin
             elif self.distributed_type == DistributedType.MULTI_NPU:
                 if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP

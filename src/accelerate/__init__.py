@@ -15,6 +15,7 @@ from .launchers import debug_launcher, notebook_launcher
 from .state import PartialState
 from .utils import (
     AutocastKwargs,
+    AxoNNPlugin,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,

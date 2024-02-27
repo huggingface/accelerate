@@ -109,6 +109,8 @@ def is_tpu_available(check_device=True):
 def is_deepspeed_available():
     return _is_package_available("deepspeed")
 
+def is_axonn_available():
+    return _is_package_available("axonn")
 
 def is_bf16_available(ignore_tpu=False):
     "Checks if bf16 is supported, optionally ignoring the TPU"

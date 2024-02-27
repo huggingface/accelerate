@@ -15,6 +15,7 @@ from .constants import (
 )
 from .dataclasses import (
     AutocastKwargs,
+    AxoNNPlugin,
     BnbQuantizationConfig,
     ComputeEnvironment,
     CustomDtype,
@@ -50,6 +51,7 @@ from .imports import (
     is_4bit_bnb_available,
     is_8bit_bnb_available,
     is_aim_available,
+    is_axonn_available,
     is_bf16_available,
     is_bnb_available,
     is_boto3_available,

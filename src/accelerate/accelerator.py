@@ -47,6 +47,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     AutocastKwargs,
+    AxoNNPlugin,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -76,6 +77,7 @@ from .utils import (
     has_transformer_engine_layers,
     is_bf16_available,
     is_deepspeed_available,
+    is_axonn_available,
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
@@ -251,6 +253,7 @@ class Accelerator:
         mixed_precision: PrecisionType | str | None = None,
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
+        axonn_plugin: AxoNNPlugin | None = None,
         deepspeed_plugin: DeepSpeedPlugin | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
@@ -330,6 +333,19 @@ class Accelerator:
             if not is_megatron_lm_available():
                 raise ImportError("Megatron is not installed. please build it from source.")
 
+        if axonn_plugin is None:
+            # TODO: initialize from env
+            axonn_plugin = (
+                AxoNNPlugin() if os.environ.get("ACCELERATE_USE_AXONN", "false") == "true" else None
+            )
+        else:
+            if not isinstance(axonn_plugin, AxoNNPlugin):
+                raise TypeError("`axonn_plugin` must be an AxoNNPlugin object.")
+            os.environ['ACCELERATE_USE_AXONN'] = "true"
+
+        if axonn_plugin:
+            if not is_axonn_available():
+                raise ImportError("AxoNN is not installed. please build it from source.")
         # Kwargs handlers
         self.ddp_handler = None
         self.scaler_handler = None
@@ -375,10 +391,10 @@ class Accelerator:
             deepspeed_plugin=deepspeed_plugin,
             fsdp_plugin=fsdp_plugin,
             megatron_lm_plugin=megatron_lm_plugin,
+            axonn_plugin=axonn_plugin,
             _from_accelerator=True,
             **kwargs,
         )
-
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
             warnings.warn(f"`log_with={log_with}` was passed but no supported trackers are currently installed.")
@@ -1150,8 +1166,8 @@ class Accelerator:
         """
         if device_placement is None:
             device_placement = [None for _ in args]
-        elif self.distributed_type in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM):
-            raise ValueError("You can't customize device placements with DeepSpeed or Megatron-LM.")
+        elif self.distributed_type in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM, DistributedType.AXONN):
+            raise ValueError("You can't customize device placements with DeepSpeed or Megatron-LM or AxoNN.")
         elif len(device_placement) != len(args):
             raise ValueError(
                 f"`device_placement` should be a list with {len(args)} elements (the number of objects passed)."
@@ -1397,6 +1413,7 @@ class Accelerator:
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
                     del self._models[-2]
                 self._models[-1] = model
+
             elif self.distributed_type == DistributedType.MULTI_CPU:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
@@ -1785,11 +1802,19 @@ class Accelerator:
             return data_loader
         if device_placement is None:
             device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
+        
+        num_processes = self.num_processes
+        process_index = self.process_index
+        if self.state.distributed_type == DistributedType.AXONN:
+            from axonn import axonn as ax
+            num_processes = ax.config.G_data
+            process_index = ax.config.data_parallel_rank
+
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
-            num_processes=self.num_processes,
-            process_index=self.process_index,
+            num_processes=num_processes,
+            process_index=process_index,
             split_batches=self.split_batches,
             put_on_device=device_placement,
             rng_types=self.rng_types.copy(),
@@ -1903,6 +1928,7 @@ class Accelerator:
             self.scaler.scale(loss).backward(**kwargs)
         else:
             loss.backward(**kwargs)
+
 
     def set_trigger(self):
         """

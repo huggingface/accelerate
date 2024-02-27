@@ -22,7 +22,9 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup, set_seed
 
 from accelerate import Accelerator, DistributedType
+from tqdm import tqdm
 
+from modify_opt import monkey_patch_opt_with_axonn
 
 ########################################################################
 # This is a fully working simple example to use Accelerate
@@ -45,7 +47,7 @@ MAX_GPU_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 
 
-def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
+def get_dataloaders(accelerator: Accelerator, args, batch_size: int = 16):
     """
     Creates a set of `DataLoader`s for the `glue` dataset,
     using "bert-base-cased" as the tokenizer.
@@ -56,7 +58,7 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
         batch_size (`int`, *optional*):
             The batch size for the train and validation DataLoaders.
     """
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
     datasets = load_dataset("glue", "mrpc")
 
     def tokenize_function(examples):
@@ -113,7 +115,20 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
 
 def training_function(config, args):
     # Initialize accelerator
-    accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    if args.parallelism == "ddp":
+        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision)
+    elif args.parallelism == "axonn":
+        from accelerate import AxoNNPlugin
+        axonn_plugin = AxoNNPlugin(G_intra_row=2, G_intra_col=1, G_intra_depth=1)
+        accelerator = Accelerator(cpu=args.cpu, mixed_precision=args.mixed_precision, axonn_plugin=axonn_plugin)
+        print("initialized accelerator with axonn")
+        assert "facebook/opt" in args.model, "this demo only runs for OPT models"
+        ## todo: these should be moved within axonn.transformers
+        monkey_patch_opt_with_axonn()
+        config["batch_size"] *= 2
+        #print(config["batch_size"])
+
+    
     # Sample hyper-parameters for learning rate, batch size, seed and a few other HPs
     lr = config["lr"]
     num_epochs = int(config["num_epochs"])
@@ -125,13 +140,18 @@ def training_function(config, args):
     # If the batch size is too big we use gradient accumulation
     gradient_accumulation_steps = 1
     if batch_size > MAX_GPU_BATCH_SIZE and accelerator.distributed_type != DistributedType.TPU:
+        assert batch_size % MAX_GPU_BATCH_SIZE == 0
         gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
         batch_size = MAX_GPU_BATCH_SIZE
 
     set_seed(seed)
-    train_dataloader, eval_dataloader = get_dataloaders(accelerator, batch_size)
+
+    model = AutoModelForSequenceClassification.from_pretrained(args.model, return_dict=True)
+    train_dataloader, eval_dataloader = get_dataloaders(accelerator, args, batch_size)
     # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", return_dict=True)
+
+    if args.activation_checkpointing:
+        model.gradient_checkpointing_enable()
 
     # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
     # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
@@ -150,15 +170,15 @@ def training_function(config, args):
     # Prepare everything
     # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
     # prepare method.
-
+    
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
-    )
+            model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+        )
 
     # Now we train the model
     for epoch in range(num_epochs):
         model.train()
-        for step, batch in enumerate(train_dataloader):
+        for step, batch in enumerate(tqdm(train_dataloader, disable = torch.distributed.get_rank()!=0)):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
             outputs = model(**batch)
@@ -191,7 +211,7 @@ def training_function(config, args):
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
     parser.add_argument(
-        "--mixed_precision",
+        "--mixed-precision",
         type=str,
         default=None,
         choices=["no", "fp16", "bf16", "fp8"],
@@ -200,6 +220,9 @@ def main():
         "and an Nvidia Ampere GPU.",
     )
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
+    parser.add_argument("--activation-checkpointing", action="store_true", help="If passed, will enable activation checkpointing.")
+    parser.add_argument("--model", type=str, default="bert-base-cased", help="name of the model")
+    parser.add_argument("--parallelism", type=str, default="ddp", help="parallelism to use", choices=["ddp", "fsdp", "zero", "axonn"])
     args = parser.parse_args()
     config = {"lr": 2e-5, "num_epochs": 3, "seed": 42, "batch_size": 16}
     training_function(config, args)
