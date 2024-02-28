@@ -29,8 +29,13 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from accelerate import Accelerator
-from accelerate.test_utils import device_count, execute_subprocess_async, require_non_cpu
-from accelerate.utils import ProjectConfiguration, set_seed
+from accelerate.test_utils import (
+    DEFAULT_LAUNCH_COMMAND,
+    execute_subprocess_async,
+    require_non_cpu,
+    require_non_torch_xla,
+)
+from accelerate.utils import DistributedType, ProjectConfiguration, set_seed
 
 
 logger = logging.getLogger(__name__)
@@ -90,6 +95,15 @@ def parameterized_custom_name_func(func, param_num, param):
 
 @parameterized_class(("use_safetensors",), [[True], [False]], class_name_func=parameterized_custom_name_func)
 class CheckpointTest(unittest.TestCase):
+    def check_adam_state(self, state1, state2, distributed_type):
+        # For DistributedType.XLA, the `accelerator.save_state` function calls `xm._maybe_convert_to_cpu` before saving.
+        # As a result, all tuple values are converted to lists. Therefore, we need to convert them back here.
+        # Remove this code once Torch XLA fixes this issue.
+        if distributed_type == DistributedType.XLA:
+            state1["param_groups"][0]["betas"] = tuple(state1["param_groups"][0]["betas"])
+            state2["param_groups"][0]["betas"] = tuple(state2["param_groups"][0]["betas"])
+        assert state1 == state2
+
     def test_with_save_limit(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             set_seed(42)
@@ -141,9 +155,11 @@ class CheckpointTest(unittest.TestCase):
             accelerator.load_state(initial)
             (a2, b2) = model.a.item(), model.b.item()
             opt_state2 = optimizer.state_dict()
+            self.assertEqual(a, a2)
+            self.assertEqual(b, b2)
             assert a == a2
             assert b == b2
-            assert opt_state == opt_state2
+            self.check_adam_state(opt_state, opt_state2, accelerator.distributed_type)
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
@@ -157,7 +173,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state3 = optimizer.state_dict()
             assert a1 == a3
             assert b1 == b3
-            assert opt_state1 == opt_state3
+            self.check_adam_state(opt_state1, opt_state3, accelerator.distributed_type)
             assert ground_truth_rands == test_rands
 
     def test_can_resume_training(self):
@@ -196,7 +212,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state2 = optimizer.state_dict()
             assert a == a2
             assert b == b2
-            assert opt_state == opt_state2
+            self.check_adam_state(opt_state, opt_state2, accelerator.distributed_type)
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
             # Save everything
@@ -209,7 +225,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state3 = optimizer.state_dict()
             assert a1 == a3
             assert b1 == b3
-            assert opt_state1 == opt_state3
+            self.check_adam_state(opt_state1, opt_state3, accelerator.distributed_type)
             assert ground_truth_rands == test_rands
 
     def test_can_resume_training_checkpoints_relative_path(self):
@@ -261,6 +277,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state2 = optimizer.state_dict()
             assert a == a2
             assert b == b2
+            self.check_adam_state(opt_state, opt_state2, accelerator.distributed_type)
             assert opt_state == opt_state2
 
             test_rands = train(2, model, train_dataloader, optimizer, accelerator)
@@ -274,7 +291,7 @@ class CheckpointTest(unittest.TestCase):
             opt_state3 = optimizer.state_dict()
             assert a1 == a3
             assert b1 == b3
-            assert opt_state1 == opt_state3
+            self.check_adam_state(opt_state1, opt_state3, accelerator.distributed_type)
             assert ground_truth_rands == test_rands
 
     def test_invalid_registration(self):
@@ -359,8 +376,9 @@ class CheckpointTest(unittest.TestCase):
             assert os.path.exists(os.path.join(tmpdir, "checkpoints", "checkpoint_10"))
 
     @require_non_cpu
+    @require_non_torch_xla
     def test_map_location(self):
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
+        cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         env = os.environ.copy()
         env["USE_SAFETENSORS"] = str(self.use_safetensors)
         env["OMP_NUM_THREADS"] = "1"

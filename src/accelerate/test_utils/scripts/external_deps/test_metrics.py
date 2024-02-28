@@ -25,10 +25,10 @@ from datasets import load_dataset
 from torch.utils.data import DataLoader, IterableDataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from accelerate import Accelerator
+from accelerate import Accelerator, DataLoaderConfiguration, DistributedType
 from accelerate.data_loader import DataLoaderDispatcher
 from accelerate.test_utils import RegressionDataset, RegressionModel, torch_device
-from accelerate.utils import set_seed
+from accelerate.utils import is_torch_xla_available, set_seed
 
 
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
@@ -36,7 +36,7 @@ os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
 
 class ListHandler(logging.Handler):
     def __init__(self, *args, **kwargs):
-        super(ListHandler, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.logs = []
 
     def emit(self, record):
@@ -81,7 +81,8 @@ def get_dataloader(accelerator: Accelerator, use_longest=False):
 
 
 def get_mrpc_setup(dispatch_batches, split_batches):
-    accelerator = Accelerator(dispatch_batches=dispatch_batches, split_batches=split_batches)
+    dataloader_config = DataLoaderConfiguration(dispatch_batches=dispatch_batches, split_batches=split_batches)
+    accelerator = Accelerator(dataloader_config=dataloader_config)
     dataloader = get_dataloader(accelerator, not dispatch_batches)
     model = AutoModelForSequenceClassification.from_pretrained(
         "hf-internal-testing/mrpc-bert-base-cased", return_dict=True
@@ -161,8 +162,7 @@ def test_gather_for_metrics_with_non_tensor_objects_iterable_dataset():
             return len(self.data)
 
         def __iter__(self):
-            for element in self.data:
-                yield element
+            yield from self.data
 
     iterable_dataset = DummyIterableDataset([n for n in range(30)])
     dataloader = DataLoader(iterable_dataset, batch_size=4)
@@ -194,8 +194,7 @@ def test_gather_for_metrics_with_iterable_dataset():
             return len(self.data)
 
         def __iter__(self):
-            for element in self.data:
-                yield element
+            yield from self.data
 
     iterable_dataset = DummyIterableDataset(torch.as_tensor(range(30)))
     dataloader = DataLoader(iterable_dataset, batch_size=4)
@@ -242,19 +241,26 @@ def test_gather_for_metrics_drop_last():
 
 
 def main():
-    accelerator = Accelerator(split_batches=False, dispatch_batches=False)
+    dataloader_config = DataLoaderConfiguration(split_batches=False, dispatch_batches=False)
+    accelerator = Accelerator(dataloader_config=dataloader_config)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_warning()
     else:
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
+    # TorchXLA does not support batch dispatching. 'put_on_device' is always False for
+    # TorchXLA, which can cause a value error in 'prepare_data_loader' function.
+    dispatch_batches_options = [False] if accelerator.state.distributed_type == DistributedType.XLA else [True, False]
+
+    # Temporarily close this test for TorchXLA due to the 'Cannot set version_counter for
+    # inference tensor' error in inference mode. Reopen it after TorchXLA fixes this bug.
     # These are a bit slower so they should only be ran on the GPU or TPU
-    if accelerator.device.type != "cpu":
+    if accelerator.device.type != "cpu" and not is_torch_xla_available():
         if accelerator.is_local_main_process:
             print("**Testing gather_for_metrics**")
         for split_batches in [True, False]:
-            for dispatch_batches in [True, False]:
+            for dispatch_batches in dispatch_batches_options:
                 if accelerator.is_local_main_process:
                     print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`")
                 test_mrpc(dispatch_batches, split_batches)
@@ -263,15 +269,23 @@ def main():
         test_gather_for_metrics_with_iterable_dataset()
         print("test gather_for_metrics_with_non_tensor_objects_iterable_dataset")
         test_gather_for_metrics_with_non_tensor_objects_iterable_dataset()
-    if accelerator.is_local_main_process:
-        print("**Test torch metrics**")
-    for split_batches in [True, False]:
-        for dispatch_batches in [True, False]:
-            accelerator = Accelerator(split_batches=split_batches, dispatch_batches=dispatch_batches)
-            if accelerator.is_local_main_process:
-                print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`, length=99")
-            test_torch_metrics(accelerator, 99)
-            accelerator.state._reset_state()
+
+    # MpDeviceLoader in TorchXLA is an asynchronous loader that preloads several batches into cache.
+    # This can cause the 'end_of_dataloader' of DataLoaderStateMixin to be set earlier than intended.
+    # Skip this test when TorchXLA is enabled.
+    if accelerator.state.distributed_type != DistributedType.XLA:
+        if accelerator.is_local_main_process:
+            print("**Test torch metrics**")
+        for split_batches in [True, False]:
+            for dispatch_batches in dispatch_batches_options:
+                dataloader_config = DataLoaderConfiguration(
+                    split_batches=split_batches, dispatch_batches=dispatch_batches
+                )
+                accelerator = Accelerator(dataloader_config=dataloader_config)
+                if accelerator.is_local_main_process:
+                    print(f"With: `split_batches={split_batches}`, `dispatch_batches={dispatch_batches}`, length=99")
+                test_torch_metrics(accelerator, 99)
+                accelerator.state._reset_state()
     if accelerator.is_local_main_process:
         print("**Test last batch is not dropped when perfectly divisible**")
     accelerator = Accelerator()

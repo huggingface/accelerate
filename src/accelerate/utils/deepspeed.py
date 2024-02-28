@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import base64
-import io
 import json
 import os
 from copy import deepcopy
@@ -45,7 +44,7 @@ class HfDeepSpeedConfig:
             # modified it, it will not be accepted here again, since `auto` values would have been overridden
             config = deepcopy(config_file_or_dict)
         elif os.path.exists(config_file_or_dict):
-            with io.open(config_file_or_dict, "r", encoding="utf-8") as f:
+            with open(config_file_or_dict, encoding="utf-8") as f:
                 config = json.load(f)
         else:
             try:

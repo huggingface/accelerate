@@ -52,7 +52,7 @@ will attempt to fill all the space in your GPU(s), then loading them to the CPU,
 
 <Tip>
 
-For more details on designing your own device map, see this section of the [concept guide](../concept_guide/big_model_inference#designing-a-device-map)
+For more details on designing your own device map, see this section of the [concept guide](../concept_guides/big_model_inference#designing-a-device-map)
 
 </Tip>
 

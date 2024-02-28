@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 A set of basic tensor ops compatible with tpu, gpu, and multigpu
 """
@@ -30,14 +29,13 @@ from .imports import (
     is_npu_available,
     is_torch_distributed_available,
     is_torch_version,
-    is_tpu_available,
+    is_torch_xla_available,
     is_xpu_available,
 )
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
-
 
 if is_torch_distributed_available():
     from torch.distributed import ReduceOp
@@ -66,17 +64,10 @@ def is_tensor_information(tensor_info):
 
 def is_namedtuple(data):
     """
-    Checks if `x` is a `namedtuple` or not. Can have false positives, but only if a user is trying to mimic a
+    Checks if `data` is a `namedtuple` or not. Can have false positives, but only if a user is trying to mimic a
     `namedtuple` perfectly.
     """
-    data_type = type(data)
-    bases = data_type.__bases__
-    if len(bases) != 1 or bases[0] != tuple:
-        return False
-    fields = getattr(data_type, "_fields", None)
-    if not isinstance(fields, tuple):
-        return False
-    return all(isinstance(member, str) for member in fields)
+    return isinstance(data, tuple) and hasattr(data, "_asdict") and hasattr(data, "_fields")
 
 
 def honor_type(obj, generator):
@@ -169,19 +160,30 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
                 for k, t in tensor.items()
             }
         )
-    elif hasattr(tensor, "to"):
-        if is_npu_available():
+    elif is_torch_tensor(tensor) or hasattr(tensor, "to"):
+        # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
+        if device == "npu":
+            device = "npu:0"
+        if device == "xpu":
+            device = "xpu:0"
+        try:
+            return tensor.to(device, non_blocking=non_blocking)
+        except TypeError:  # .to() doesn't accept non_blocking as kwarg
+            return tensor.to(device)
+        except AssertionError as error:
             # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-            if isinstance(device, int):
-                device = f"npu:{device}"
-            # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
-            elif device == torch.device("npu"):
-                device = "npu:0"
-        elif is_xpu_available():
-            if isinstance(device, int):
-                device = f"xpu:{device}"
-            elif device == torch.device("xpu"):
-                device = "xpu:0"
+            # This call is inside the try-block since is_npu_available is not supported by torch.compile.
+            if is_npu_available():
+                if isinstance(device, int):
+                    device = f"npu:{device}"
+            else:
+                raise error
+        except Exception as error:
+            if is_xpu_available():
+                if isinstance(device, int):
+                    device = f"xpu:{device}"
+            else:
+                raise error
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
@@ -431,7 +433,7 @@ def gather(tensor):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
-    if PartialState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.XLA:
         return _tpu_gather(tensor)
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_gather(tensor)
@@ -457,7 +459,7 @@ def gather_object(object: Any):
     Returns:
         The same data structure as `object` with all the objects sent to every device.
     """
-    if PartialState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.XLA:
         raise NotImplementedError("gather objects in TPU is not supported")
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_gather_object(object)
@@ -553,7 +555,7 @@ def broadcast(tensor, from_process: int = 0):
     Returns:
         The same data structure as `tensor` with all tensors broadcasted to the proper device.
     """
-    if PartialState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.XLA:
         return _tpu_broadcast(tensor, src=from_process, name="accelerate.utils.broadcast")
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
         return _gpu_broadcast(tensor, src=from_process)
@@ -574,7 +576,7 @@ def broadcast_object_list(object_list, from_process: int = 0):
     Returns:
         The same list containing the objects from process 0.
     """
-    if PartialState().distributed_type == DistributedType.TPU:
+    if PartialState().distributed_type == DistributedType.XLA:
         for i, obj in enumerate(object_list):
             object_list[i] = xm.mesh_reduce("accelerate.utils.broadcast_object_list", obj, lambda x: x[from_process])
     elif PartialState().distributed_type in TORCH_DISTRIBUTED_OPERATION_TYPES:
@@ -744,7 +746,7 @@ def reduce(tensor, reduction="mean", scale=1.0):
         cloned_tensor = tensor.clone()
         if state.distributed_type == DistributedType.NO:
             return cloned_tensor
-        if state.distributed_type == DistributedType.TPU:
+        if state.distributed_type == DistributedType.XLA:
             # Some processes may have different HLO graphs than other
             # processes, for example in the breakpoint API
             # accelerator.set_trigger(). Use mark_step to make HLOs
@@ -779,7 +781,10 @@ def convert_to_fp32(tensor):
         return tensor.float()
 
     def _is_fp16_bf16_tensor(tensor):
-        return hasattr(tensor, "dtype") and tensor.dtype in (torch.float16, torch.bfloat16)
+        return (is_torch_tensor(tensor) or hasattr(tensor, "dtype")) and tensor.dtype in (
+            torch.float16,
+            torch.bfloat16,
+        )
 
     return recursively_apply(_convert_to_fp32, tensor, test_type=_is_fp16_bf16_tensor)
 

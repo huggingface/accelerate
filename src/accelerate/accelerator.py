@@ -47,6 +47,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     AutocastKwargs,
+    DataLoaderConfiguration,
     DeepSpeedPlugin,
     DistributedDataParallelKwargs,
     DistributedType,
@@ -82,7 +83,7 @@ from .utils import (
     is_msamp_available,
     is_npu_available,
     is_torch_version,
-    is_tpu_available,
+    is_torch_xla_available,
     is_xpu_available,
     load_fsdp_model,
     load_fsdp_optimizer,
@@ -133,7 +134,8 @@ if is_megatron_lm_available():
 from torch.distributed.algorithms.join import Join
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
+    import torch_xla.amp as xamp
     import torch_xla.core.xla_model as xm
     import torch_xla.distributed.xla_multiprocessing as xmp
 
@@ -149,6 +151,12 @@ except ImportError:
 
 logger = get_logger(__name__)
 
+# Sentinel values for defaults
+_split_batches = object()
+_dispatch_batches = object()
+_even_batches = object()
+_use_seedable_sampler = object()
+
 
 class Accelerator:
     """
@@ -158,11 +166,6 @@ class Accelerator:
         device_placement (`bool`, *optional*, defaults to `True`):
             Whether or not the accelerator should put objects on device (tensors yielded by the dataloader, model,
             etc...).
-        split_batches (`bool`, *optional*, defaults to `False`):
-            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If
-            `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a
-            round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set
-            in your script multiplied by the number of processes.
         mixed_precision (`str`, *optional*):
             Whether or not to use mixed precision training. Choose from 'no','fp16','bf16 or 'fp8'. Will default to the
             value in the environment variable `ACCELERATE_MIXED_PRECISION`, which will use the default value in the
@@ -175,13 +178,15 @@ class Accelerator:
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
             the execution on one process only.
-        deepspeed_plugin (`DeepSpeedPlugin`, *optional*):
+        dataloader_config (`DataLoaderConfiguration`, *optional*):
+            A configuration for how the dataloaders should be handled in distributed scenarios.
+        deepspeed_plugin ([`~utils.DeepSpeedPlugin`], *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
-        fsdp_plugin (`FullyShardedDataParallelPlugin`, *optional*):
+        fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
-        megatron_lm_plugin (`MegatronLMPlugin`, *optional*):
+        megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
@@ -204,33 +209,20 @@ class Accelerator:
             - `"comet_ml"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
-        project_config (`ProjectConfiguration`, *optional*):
+        project_config ([`~utils.ProjectConfiguration`], *optional*):
             A configuration for how saving the state can be handled.
         project_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing data such as logs of locally-compatible loggers and potentially saved
             checkpoints.
-        dispatch_batches (`bool`, *optional*):
-            If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process
-            and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose
-            underlying dataset is an `IterableDataset`, `False` otherwise.
-        even_batches (`bool`, *optional*, defaults to `True`):
-            If set to `True`, in cases where the total batch size across all processes does not exactly divide the
-            dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among
-            all workers.
-        use_seedable_sampler (`bool`, *optional*, defaults to `False`):
-            Whether or not use a fully seedable random sampler ([`~data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducable using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
-            also be ran with [`~utils.set_seed`] each time for the best results.
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
-        kwargs_handlers (`list[KwargHandler]`, *optional*)
-            A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
-            are created. See [kwargs](kwargs) for more information.
-        dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
+        kwargs_handlers (list of [`~utils.KwargsHandler`], *optional*)
+            A list of [`~utils.KwargsHandler`] to customize how the objects related to distributed training or mixed
+            precision are created. See [kwargs](kwargs) for more information.
+        dynamo_backend (`str` or [`~utils.DynamoBackend`], *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
-        gradient_accumulation_plugin (`GradientAccumulationPlugin`, *optional*):
+        gradient_accumulation_plugin ([`~utils.GradientAccumulationPlugin`], *optional*):
             A configuration for how gradient accumulation should be handled, if more tweaking than just the
             `gradient_accumulation_steps` is needed.
 
@@ -253,10 +245,11 @@ class Accelerator:
     def __init__(
         self,
         device_placement: bool = True,
-        split_batches: bool = False,
+        split_batches: bool = _split_batches,
         mixed_precision: PrecisionType | str | None = None,
         gradient_accumulation_steps: int = 1,
         cpu: bool = False,
+        dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
@@ -265,9 +258,9 @@ class Accelerator:
         project_dir: str | os.PathLike | None = None,
         project_config: ProjectConfiguration | None = None,
         gradient_accumulation_plugin: GradientAccumulationPlugin | None = None,
-        dispatch_batches: bool | None = None,
-        even_batches: bool = True,
-        use_seedable_sampler: bool = False,
+        dispatch_batches: bool | None = _dispatch_batches,
+        even_batches: bool = _even_batches,
+        use_seedable_sampler: bool = _use_seedable_sampler,
         step_scheduler_with_optimizer: bool = True,
         kwargs_handlers: list[KwargsHandler] | None = None,
         dynamo_backend: DynamoBackend | str | None = None,
@@ -397,7 +390,7 @@ class Accelerator:
         if (
             (mixed_precision != "bf16")
             and getattr(self.state, "downcast_bfloat", False)
-            and (self.state.distributedType != DistributedType.TPU)
+            and (self.state.distributedType != DistributedType.XLA)
         ):
             raise ValueError("Can only use `downcast_bf16` when using `mixed_precision='bf16'` and on a TPU")
 
@@ -414,36 +407,56 @@ class Accelerator:
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
-        if self.state.distributed_type == DistributedType.TPU:
-            if self.gradient_state.num_steps != 1:
-                raise ValueError(
-                    "Gradient accumulation is not supported on TPU. Please set `gradient_accumulation_steps` to 1 and don't pass in a `GradientAccumulationPlugin` object."
-                )
 
         self.device_placement = device_placement
-        self.split_batches = split_batches
-        self.dispatch_batches = dispatch_batches
-        self.even_batches = even_batches
-        self.use_seedable_sampler = use_seedable_sampler
+        if dataloader_config is None:
+            dataloader_config = DataLoaderConfiguration()
+        self.dataloader_config = dataloader_config
+        # Deal with deprecated args
+        # TODO: Remove in v1.0.0
+        deprecated_dl_args = {}
+        if dispatch_batches is not _dispatch_batches:
+            deprecated_dl_args["dispatch_batches"] = dispatch_batches
+            self.dataloader_config.dispatch_batches = dispatch_batches
+        if split_batches is not _split_batches:
+            deprecated_dl_args["split_batches"] = split_batches
+            self.dataloader_config.split_batches = split_batches
+        if even_batches is not _even_batches:
+            deprecated_dl_args["even_batches"] = even_batches
+            self.dataloader_config.even_batches = even_batches
+        if use_seedable_sampler is not _use_seedable_sampler:
+            deprecated_dl_args["use_seedable_sampler"] = use_seedable_sampler
+            self.dataloader_config.use_seedable_sampler = use_seedable_sampler
+        if len(deprecated_dl_args) > 0:
+            values = ", ".join([f"{k}={v}" for k, v in deprecated_dl_args.items()])
+            warnings.warn(
+                f"Passing the following arguments to `Accelerator` is deprecated and will be removed in version 1.0 of Accelerate: {deprecated_dl_args.keys()}. "
+                "Please pass an `accelerate.DataLoaderConfiguration` instead: \n"
+                f"dataloader_config = DataLoaderConfiguration({values})",
+                FutureWarning,
+            )
         self.step_scheduler_with_optimizer = step_scheduler_with_optimizer
 
         # Mixed precision attributes
         self.scaler = None
         self.native_amp = False
-        err = "{mode} mixed precision requires {requirement}"
         if (
             self.state.mixed_precision == "fp16"
             and self.device.type != "cpu"
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("xpu", "cuda", "mps", "npu"):
-                raise ValueError(err.format(mode="fp16", requirement="a GPU"))
+            if self.device.type not in ("xpu", "cuda", "mps", "npu", "xla") or is_torch_xla_available(
+                check_is_tpu=True
+            ):
+                raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
             kwargs = self.scaler_handler.to_kwargs() if self.scaler_handler is not None else {}
             if self.distributed_type == DistributedType.FSDP:
                 from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
 
                 self.scaler = ShardedGradScaler(**kwargs)
+            elif is_torch_xla_available(check_is_gpu=True):
+                self.scaler = xamp.GradScaler(**kwargs)
             elif is_npu_available():
                 self.scaler = torch.npu.amp.GradScaler(**kwargs)
             else:
@@ -457,8 +470,8 @@ class Accelerator:
                 self.native_amp = True
             else:
                 self.native_amp = is_bf16_available(True)
-            if mixed_precision == "bf16" and not self.native_amp and not is_tpu_available():
-                raise ValueError(err.format(mode="bf16", requirement="PyTorch >= 1.10 and a supported device."))
+            if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available():
+                raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
 
         # Start of internal step tracking
         self.step = 0
@@ -510,6 +523,26 @@ class Accelerator:
     @property
     def device(self):
         return self.state.device
+
+    @property
+    def split_batches(self):
+        return self.dataloader_config.split_batches
+
+    @property
+    def dispatch_batches(self):
+        return self.dataloader_config.dispatch_batches
+
+    @property
+    def even_batches(self):
+        return self.dataloader_config.even_batches
+
+    @even_batches.setter
+    def even_batches(self, value: bool):
+        self.dataloader_config.even_batches = value
+
+    @property
+    def use_seedable_sampler(self):
+        return self.dataloader_config.use_seedable_sampler
 
     @property
     def project_dir(self):
@@ -1194,7 +1227,7 @@ class Accelerator:
         # On TPUs, putting the model on the XLA device will create new parameters, so the corresponding optimizer will
         # have parameters disconnected from the model (so no training :-( ).
         # If the model and optimizer have parameters on different devices we raise an error.
-        if self.distributed_type == DistributedType.TPU:
+        if self.distributed_type == DistributedType.XLA:
             model_device, optimizer_device = self._get_devices()
             if model_device is not None and optimizer_device is not None and model_device != optimizer_device:
                 raise ValueError(
@@ -1206,7 +1239,7 @@ class Accelerator:
                 )
 
         # If we're dealing with device placement, this deals with that by...
-        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.TPU
+        tpu_should_fix_optimizer = self.device_placement and self.distributed_type == DistributedType.XLA
         if tpu_should_fix_optimizer or (self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE"):
             # 1. grabbing old model parameters
             old_named_params = self._get_named_parameters(*args)
@@ -1245,7 +1278,7 @@ class Accelerator:
                 item in container
                 for container in (self._dataloaders, self._models, self._optimizers, self._schedulers)
             ):
-                setattr(item, "_is_accelerate_prepared", True)
+                item._is_accelerate_prepared = True
 
         return result if len(result) > 1 else result[0]
 
@@ -1407,7 +1440,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.MULTI_CPU:
                 kwargs = self.ddp_handler.to_kwargs() if self.ddp_handler is not None else {}
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
-            elif self.distributed_type == DistributedType.TPU and self.state.fork_launched:
+            elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
@@ -1844,7 +1877,7 @@ class Accelerator:
                 self._dataloaders.append(data_loader)
             return data_loader
         if device_placement is None:
-            device_placement = self.device_placement if self.distributed_type != DistributedType.TPU else False
+            device_placement = self.device_placement if self.distributed_type != DistributedType.XLA else False
         prepared_data_loader = prepare_data_loader(
             data_loader,
             self.device,
@@ -2057,10 +2090,6 @@ class Accelerator:
             for opt in optimizer:
                 while isinstance(opt, AcceleratedOptimizer):
                     opt = opt.optimizer
-                # Reduce gradients first for XLA
-                if self.distributed_type == DistributedType.TPU:
-                    gradients = xm._fetch_gradients(opt)
-                    self.reduce(gradients, scale=1.0 / self.num_processes)
                 self.scaler.unscale_(opt)
 
     def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
@@ -2098,6 +2127,19 @@ class Accelerator:
             # `accelerator.backward(loss)` is doing that automatically. Therefore, its implementation is not needed
             # We cannot return the gradient norm because DeepSpeed does it.
             return None
+        elif self.distributed_type == DistributedType.XLA:
+            # Reduce gradients first for XLA
+            for acc_opt in self._optimizers:
+                if not acc_opt.gradient_state.is_xla_gradients_synced:
+                    opt = acc_opt
+                    while isinstance(opt, AcceleratedOptimizer):
+                        opt = opt.optimizer
+                    gradients = xm._fetch_gradients(opt)
+                    # Use xm.all_reduce to perform an in-place all-reduce. Recusrsive all-reduce each tensor
+                    # one by one in self.reduce is non-inplace.
+                    xm.all_reduce("sum", gradients, scale=1.0 / self.num_processes)
+                    # Set is_xla_gradients_synced to True to avoid all-reduce twice in the AcceleratedOptimizer step.
+                    acc_opt.gradient_state.is_xla_gradients_synced = True
         self.unscale_gradients()
         return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type=norm_type)
 
@@ -2386,7 +2428,7 @@ class Accelerator:
                 self.trackers.append(tracker)
             else:
                 tracker_init = LOGGER_TYPE_TO_CLASS[str(tracker)]
-                if getattr(tracker_init, "requires_logging_directory"):
+                if tracker_init.requires_logging_directory:
                     # We can skip this check since it was done in `__init__`
                     self.trackers.append(
                         tracker_init(project_name, self.logging_dir, **init_kwargs.get(str(tracker), {}))
@@ -2715,7 +2757,7 @@ class Accelerator:
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving current state to {output_dir}")
 
-        if self.distributed_type == DistributedType.TPU:
+        if self.distributed_type == DistributedType.XLA:
             # Finish running the previous step before checkpointing
             xm.mark_step()
 
@@ -3139,6 +3181,7 @@ class Accelerator:
             autocast_handler = self.autocast_handler
         autocast_context = get_mixed_precision_context_manager(self.native_amp, autocast_handler)
         autocast_context.__enter__()
+        # TODO: should the `yield` be in a try/finally block?
         yield
         autocast_context.__exit__(*sys.exc_info())
 

@@ -17,7 +17,7 @@ import platform
 import subprocess
 import sys
 from shutil import which
-from typing import Dict
+from typing import List
 
 import torch
 
@@ -57,9 +57,9 @@ def parse_choice_from_env(key, default="no"):
     return value
 
 
-def are_libraries_initialized(*library_names: str) -> Dict[str, bool]:
+def are_libraries_initialized(*library_names: str) -> List[str]:
     """
-    Checks if any of `library_names` are imported in the environment. Will return results as a `key:bool` pair.
+    Checks if any of `library_names` are imported in the environment. Will return any names that are.
     """
     return [lib_name for lib_name in library_names if lib_name in sys.modules.keys()]
 

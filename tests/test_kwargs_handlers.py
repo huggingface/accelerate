@@ -22,13 +22,14 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
-    device_count,
+    DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
     require_multi_device,
     require_non_cpu,
     require_non_xpu,
 )
 from accelerate.utils import AutocastKwargs, KwargsHandler, TorchDynamoPlugin, clear_environment
+from accelerate.utils.dataclasses import DistributedType
 
 
 @dataclass
@@ -67,7 +68,7 @@ class KwargsHandlerTester(unittest.TestCase):
 
     @require_multi_device
     def test_ddp_kwargs(self):
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
+        cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     @require_non_cpu
@@ -104,11 +105,17 @@ class KwargsHandlerTester(unittest.TestCase):
 
             dynamo_plugin_kwargs = TorchDynamoPlugin().to_kwargs()
             assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
+        assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
 
-if __name__ == "__main__":
+def main():
     ddp_scaler = DistributedDataParallelKwargs(bucket_cap_mb=15, find_unused_parameters=True)
     accelerator = Accelerator(kwargs_handlers=[ddp_scaler])
+
+    # Skip this test due to TorchXLA not using torch.nn.parallel.DistributedDataParallel for model wrapping.
+    if accelerator.distributed_type == DistributedType.XLA:
+        return
+
     model = torch.nn.Linear(100, 200)
     model = accelerator.prepare(model)
 
@@ -131,3 +138,7 @@ if __name__ == "__main__":
     # Raise error at the end to make sure we don't stop at the first failure.
     if len(error_msg) > 0:
         raise ValueError(error_msg)
+
+
+if __name__ == "__main__":
+    main()

@@ -112,7 +112,7 @@ def tpu_command_launcher(args):
         raise ValueError("You must specify either a command file or a command to run on the pod.")
 
     if args.command_file:
-        with open(args.command_file, "r") as f:
+        with open(args.command_file) as f:
             args.command = [f.read().splitlines()]
 
     # To turn list of lists into list of strings

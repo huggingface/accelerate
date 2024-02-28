@@ -32,7 +32,7 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
-from .imports import is_mps_available, is_npu_available, is_peft_available, is_xpu_available
+from .imports import is_mps_available, is_npu_available, is_peft_available, is_torch_xla_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import compare_versions
@@ -409,7 +409,7 @@ def set_module_tensor_to_device(
 
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
-                setattr(module._parameters[tensor_name], "SCB", fp16_statistics.to(device))
+                module._parameters[tensor_name].SCB = fp16_statistics.to(device)
                 del fp16_statistics
             # as we put the weight to meta, it doesn't have SCB attr anymore. make sure that it is not a meta weight
             if (
@@ -474,8 +474,7 @@ def named_module_tensors(
             Whether or not to remove the non persistent buffer from the buffers. Useful only when include_buffers =
             True
     """
-    for named_parameter in module.named_parameters(recurse=recurse):
-        yield named_parameter
+    yield from module.named_parameters(recurse=recurse)
 
     if include_buffers:
         non_persistent_buffers = set()
@@ -1550,7 +1549,7 @@ def load_checkpoint_in_model(
 
     if index_filename is not None:
         checkpoint_folder = os.path.split(index_filename)[0]
-        with open(index_filename, "r") as f:
+        with open(index_filename) as f:
             index = json.loads(f.read())
 
         if "weight_map" in index:
@@ -1663,8 +1662,13 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
     else:
         autocast_kwargs = autocast_kwargs.to_kwargs()
     if native_amp:
+        device_type = (
+            "cuda"
+            if (state.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_gpu=True))
+            else state.device.type
+        )
         if state.mixed_precision == "fp16":
-            return torch.autocast(device_type=state.device.type, dtype=torch.float16, **autocast_kwargs)
+            return torch.autocast(device_type=device_type, dtype=torch.float16, **autocast_kwargs)
         elif state.mixed_precision == "bf16" and state.distributed_type in [
             DistributedType.NO,
             DistributedType.MULTI_CPU,
@@ -1672,9 +1676,10 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.FSDP,
+            DistributedType.XLA,
         ]:
-            return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, **autocast_kwargs)
+            return torch.autocast(device_type=device_type, dtype=torch.bfloat16, **autocast_kwargs)
         else:
-            return torch.autocast(device_type=state.device.type, **autocast_kwargs)
+            return torch.autocast(device_type=device_type, **autocast_kwargs)
     else:
         return contextlib.nullcontext()

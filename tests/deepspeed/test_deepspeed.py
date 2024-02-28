@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-import io
 import itertools
 import json
 import os
@@ -28,7 +27,6 @@ from transformers.testing_utils import mockenv_context
 from transformers.trainer_utils import set_seed
 from transformers.utils import is_torch_bf16_available
 
-import accelerate
 from accelerate.accelerator import Accelerator
 from accelerate.scheduler import AcceleratedScheduler
 from accelerate.state import AcceleratorState
@@ -36,6 +34,7 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_deepspeed,
     require_multi_device,
     require_non_cpu,
@@ -117,9 +116,9 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
 
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
-        with io.open(self.ds_config_file[ZERO2], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO2], encoding="utf-8") as f:
             config_zero2 = json.load(f)
-        with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+        with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
             config_zero3 = json.load(f)
             # The following setting slows things down, so don't enable it by default unless needed by a test.
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
@@ -813,10 +812,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
 
     def test_basic_run(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        test_file_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_performance.py"]
-        )
+        test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_performance.py")
         with tempfile.TemporaryDirectory() as dirpath:
             cmd = [
                 "accelerate",
@@ -843,6 +839,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 @require_multi_device
 @slow
 class DeepSpeedIntegrationTest(TempDirTestCase):
+    test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
+
     def setUp(self):
         super().setUp()
         self._test_file_path = inspect.getfile(self.__class__)
@@ -869,11 +867,8 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         self.n_train = 160
         self.n_val = 160
 
-        mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps"])
-
     def test_performance(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
+        self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
             "accelerate",
             "launch",
@@ -894,7 +889,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             cmd_stage.extend([f"--zero_stage={stage}"])
             cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
             if self.zero3_offload_config:
-                with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
                     ds_config = json.load(f)
                     del ds_config["bf16"]
                     del ds_config["optimizer"]["params"]["torch_adam"]
@@ -917,7 +912,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_checkpointing(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_checkpointing.py")
+        self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         cmd = [
             "accelerate",
             "launch",
@@ -938,7 +933,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             cmd_stage.extend([f"--zero_stage={stage}"])
             cmd_stage.extend(["--offload_optimizer_device=none", "--offload_param_device=none"])
             if self.zero3_offload_config:
-                with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
                     ds_config = json.load(f)
                     del ds_config["bf16"]
                     del ds_config["optimizer"]["params"]["torch_adam"]
@@ -971,7 +966,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_peak_memory_usage(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_peak_memory_usage.py")
+        self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
         cmd = [
             "accelerate",
             "launch",
@@ -1009,7 +1004,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                     ]
                 )
                 if "cpu_offload" in spec:
-                    with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+                    with open(self.ds_config_file[ZERO3], encoding="utf-8") as f:
                         ds_config = json.load(f)
                         del ds_config["bf16"]
                         del ds_config["fp16"]
@@ -1034,7 +1029,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_lr_scheduler(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
+        self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
             "accelerate",
             "launch",
