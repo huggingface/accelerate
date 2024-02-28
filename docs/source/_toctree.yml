@@ -72,7 +72,7 @@
   title: Concepts and fundamentals
 - sections: 
   - local: package_reference/accelerator
-    title: Main Accelerator class
+    title: Accelerator
   - local: package_reference/state
     title: Stateful configuration classes
   - local: package_reference/cli
