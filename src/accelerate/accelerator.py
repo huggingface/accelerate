@@ -1807,8 +1807,8 @@ class Accelerator:
         process_index = self.process_index
         if self.state.distributed_type == DistributedType.AXONN:
             from axonn import axonn as ax
-            num_processes = ax.config.G_data
-            process_index = ax.config.data_parallel_rank
+            num_processes = ax.config.G_intra_d
+            process_index = ax.config.intra_layer_depth_parallel_rank
 
         prepared_data_loader = prepare_data_loader(
             data_loader,
@@ -1929,6 +1929,11 @@ class Accelerator:
         else:
             loss.backward(**kwargs)
 
+        if self.distributed_type == DistributedType.AXONN and self.sync_gradients:
+            from axonn.intra_layer import sync_gradients
+            ## sync gradients of non-linear layers
+            for model in self._models:
+                sync_gradients(model)
 
     def set_trigger(self):
         """
