@@ -205,7 +205,7 @@ def require_huggingface_suite(test_case):
     )(test_case)
 
 
-def require_hub_online(test_case):
+def require_huggingface_online(test_case):
     """
     Decorator marking a test that requires the huggingface hub be online. These tests are skipped when it is not.
     """
