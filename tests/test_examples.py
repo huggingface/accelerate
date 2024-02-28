@@ -27,6 +27,7 @@ from accelerate.test_utils.examples import compare_against_test
 from accelerate.test_utils.testing import (
     TempDirTestCase,
     get_launch_command,
+    require_huggingface_suite,
     require_multi_gpu,
     require_pippy,
     require_trackers,
@@ -136,6 +137,7 @@ class ExampleDifferenceTests(unittest.TestCase):
 
 
 @mock.patch.dict(os.environ, {"TESTING_MOCKED_DATALOADERS": "1"})
+@require_huggingface_suite
 class FeatureExamplesTests(TempDirTestCase):
     clear_on_setup = False
 

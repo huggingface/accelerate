@@ -21,11 +21,12 @@ import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
-from functools import partial
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import List, Union
 from unittest import mock
 
+import requests
 import torch
 
 import accelerate
@@ -71,6 +72,21 @@ def get_backend():
 
 
 torch_device, device_count, memory_allocated_func = get_backend()
+
+
+@lru_cache
+def is_hub_online():
+    """
+    Checks if the huggingface_hub is online
+    """
+    response = requests.get("https://huggingface.co/api")
+    if response.status_code != 200:
+        return False
+    return True
+
+
+if not is_hub_online():
+    os.environ["HF_HUB_OFFLINE"] = "1"
 
 
 def get_launch_command(**kwargs) -> list:
@@ -184,7 +200,18 @@ def require_huggingface_suite(test_case):
     Decorator marking a test that requires transformers and datasets. These tests are skipped when they are not.
     """
     return unittest.skipUnless(
-        is_transformers_available() and is_datasets_available(), "test requires the Hugging Face suite"
+        is_transformers_available() and is_datasets_available() and is_hub_online(),
+        "test requires the Hugging Face suite",
+    )(test_case)
+
+
+def require_hub_online(test_case):
+    """
+    Decorator marking a test that requires the huggingface hub be online. These tests are skipped when it is not.
+    """
+    return unittest.skipUnless(
+        is_hub_online(),
+        "test requires Hub be online, currently it is down!",
     )(test_case)
 
 
