@@ -21,7 +21,7 @@ This tutorial will teach you how to execute a process on only one machine and ho
 
 ## Execute on one process
 
-Certain code only needs to be run once on a given machine, such as printing a log statement or only displaying one progress bar on the local main process. 
+Certain code only needs to be run once on a given machine, such as printing a log statement or only displaying one progress bar on the local main process.
 
 <hfoptions id="local-execution">
 <hfoption id="statements">
@@ -37,11 +37,11 @@ progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_loca
 You could also wrap a statement with `accelerator.is_local_main_process`.
 
 > [!TIP]
-> Replace `print` statements with Accelerate's [`~Accelerator.print`] method to only print once per process!
+> For standalone `print` statements that aren't wrapped in `accelerator.is_local_main_process`, replace `print` with Accelerate's [`~Accelerator.print`] method to only print once per process.
 
 ```py
 if accelerator.is_local_main_process:
-    accelerator.print("Accelerate is the best")
+    print("Accelerate is the best")
 ```
 
 </hfoption>

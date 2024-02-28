@@ -139,17 +139,13 @@ Mixed precision accelerates training by using a lower precision data type like f
 
 Set the mixed precision type to use in the [`Accelerator`], and then use the [`~Accelerator.autocast`] context manager to automatically cast the values to the specified data type.
 
+> [!WARNING]
+> Accelerate enables automatic mixed precision, so [`~Accelerator.autocast`] is only needed if there are other mixed precision operations besides those performed on loss by [`~Accelerator.backward`] which already handles the scaling.
+
 ```diff
 + accelerator = Accelerator(mixed_precision="fp16")
 + with accelerator.autocast():
       loss = complex_loss_function(outputs, target):
-```
-
-With mixed precision training, it may skip a few gradient updates at the beginning and during training because of the dynamic loss scaling strategy. This strategy reduces the loss scaling factor when gradients overflow during training to avoid it happening again at the next step. This means the learning rate scheduler may be updated even though there was no update, which can impact the training process when you have very little training data or if the first learning rate values of your scheduler are very important. You can prevent the learning rate scheduler from updating if the optimizer wasn't updated with the [`~Accelerator.optimizer_step_was_skipped`] method.
-
-```py
-if not accelerator.optimizer_step_was_skipped:
-    lr_scheduler.step()
 ```
 
 ## Save and load
@@ -158,7 +154,7 @@ Accelerate can also save and load a *model* once training is complete or you can
 
 ### Model
 
-Once all processes are complete, unwrap the model with the [`~Accelerator.unwrap_model`] method before saving it because the [`~Accelerator.prepare`] method may have placed your model inside a larger model for distributed training. If you don't unwrap the model, saving the model state dictionary also saves any potential extra layers from the larger model and you won't be able to load the weights back into your base model.
+Once all processes are complete, unwrap the model with the [`~Accelerator.unwrap_model`] method before saving it because the [`~Accelerator.prepare`] method wrapped your model into the proper interface for distributed training. If you don't unwrap the model, saving the model state dictionary also saves any potential extra layers from the larger model and you won't be able to load the weights back into your base model.
 
 You should use the [`~Accelerator.save_model`] method to unwrap and save the model state dictionary. This method can also save a model into sharded checkpoints or into the [safetensors](https://hf.co/docs/safetensors/index) format.
 

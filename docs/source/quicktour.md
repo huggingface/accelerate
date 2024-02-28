@@ -25,9 +25,9 @@ This quicktour introduces the three main features of Accelerate:
 
 ## Unified launch interface
 
-Accelerate automatically detects the training environment and adapts it to the distributed training framework you're using. This way, you can use the same command to launch your training script regardless of framework or hardware. From the command line, run the following command to answer a few questions about your training system.
+Accelerate automatically selects the appropriate configuration values for any given distributed training framework (DeepSpeed, FSDP, etc.) through a unified configuration file generated from the [`accelerate config`](../../docs/source/package_reference/cli#accelerate-config) command. You could also pass the configuration values explicitly to the command line which is helpful in certain situations like if you're using SLURM.
 
-You should always run [`accelerate config`](../../docs/source/package_reference/cli#accelerate-config) first to help Accelerate learn about your training setup!
+But in most cases, you should always run [`accelerate config`](../../docs/source/package_reference/cli#accelerate-config) first to help Accelerate learn about your training setup.
 
 ```bash
 accelerate config
@@ -56,7 +56,7 @@ To learn more, check out the [Launch distributed code](basic_tutorials/launch) t
 
 The next main feature of Accelerate is the [`Accelerator`] class which adapts your PyTorch code to run on different distributed setups.
 
-You only need to add several lines of code to your training script to enable it to run on multiple GPUs or TPUs.
+You only need to add a few lines of code to your training script to enable it to run on multiple GPUs or TPUs.
 
 ```diff
 + from accelerate import Accelerator
@@ -79,7 +79,7 @@ You only need to add several lines of code to your training script to enable it 
       scheduler.step()
 ```
 
-1. Import and instantiate the [`Accelerator`] class at the beginning of your training script. The [`Accelerator`] class initializes everything necessary for distributed training, and it automatically detects your training environment (a single machine with a GPU, a machine with several GPUs, several machines with multiple GPUs or a TPU, etc.) based on the default_config.yaml file you provided.
+1. Import and instantiate the [`Accelerator`] class at the beginning of your training script. The [`Accelerator`] class initializes everything necessary for distributed training, and it automatically detects your training environment (a single machine with a GPU, a machine with several GPUs, several machines with multiple GPUs or a TPU, etc.) based on how the code was launched.
 
 ```python
 from accelerate import Accelerator
@@ -136,7 +136,7 @@ for inputs, targets in validation_dataloader:
 
 ## Big Model Inference
 
-Accelerate's Big Model Inference has two main features to load and run inference with large models that typically don't fit into memory.
+Accelerate's Big Model Inference has two main features, [`~accelerate.init_empty_weights`] and [`~accelerate.load_checkpoint_and_dispatch`], to load large models for inference that typically don't fit into memory.
 
 > [!TIP]
 > Take a look at the [Handling big models for inference](../../docs/source/concept_guides/big_model_inference) guide for a better understanding of how Big Model Inference works under the hood.
@@ -145,7 +145,7 @@ Accelerate's Big Model Inference has two main features to load and run inference
 
 The [`~accelerate.init_empty_weights`] context manager initializes models of any size by creating a *model skeleton* and moving and placing parameters each time they're created to PyTorch's [**meta**](https://pytorch.org/docs/main/meta.html) device. This way, not all weights are immediately loaded and only a small part of the model is loaded into memory at a time.
 
-For example, you can load an empty [Mixtral-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) model like this:
+For example, loading an empty [Mixtral-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) model takes significantly less memory than fully loading the models and weights on the CPU.
 
 ```py
 from accelerate import init_empty_weights
