@@ -13,13 +13,16 @@
 # limitations under the License.
 
 import os
+import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
+from accelerate.commands.launch import _validate_launch_command, launch_command_parser
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
     require_multi_device,
@@ -28,6 +31,7 @@ from accelerate.test_utils.testing import (
     run_command,
 )
 from accelerate.utils import patch_environment
+from accelerate.utils.launch import prepare_simple_launcher_cmd_env
 from accelerate.utils.other import path_in_accelerate_package
 
 
@@ -105,6 +109,37 @@ class AccelerateLauncherTester(unittest.TestCase):
         cmd = ["python", self.notebook_launcher_path]
         with patch_environment(omp_num_threads=1, accelerate_num_processes=2):
             run_command(cmd, env=os.environ.copy())
+
+    def test_mpi_multicpu_config_cmd(self):
+        """
+        Parses a launch command with a test file and the 0_28_0_mpi.yaml config. Tests getting the command and
+        environment vars and verifies the mpirun command arg values.
+        """
+        mpi_config_path = str(self.test_config_path / "0_28_0_mpi.yaml")
+        test_file_arg = "--cpu"
+        sys.argv = ["accelerate", str(self.test_file_path), test_file_arg]
+
+        parser = launch_command_parser()
+        args = parser.parse_args()
+        args.config_file = mpi_config_path
+        args, _, _ = _validate_launch_command(args)
+
+        # Mock out the check for mpirun version to simulate Intel MPI
+        with patch("shutil.which", return_value=True):
+            with patch("subprocess.check_output", return_value=b"Intel MPI"):
+                cmd, current_env = prepare_simple_launcher_cmd_env(args)
+
+        # Verify the mpirun command args
+        expected_mpirun_cmd = ["mpirun", "-f", "/home/user/hostfile", "-ppn", "4", "-n", "16"]
+        self.assertGreater(len(cmd), len(expected_mpirun_cmd))
+        generated_mpirun_cmd = cmd[0 : len(expected_mpirun_cmd)]
+        self.assertEqual(expected_mpirun_cmd, generated_mpirun_cmd)
+
+        # Verify that the python script and arg
+        python_script_cmd = cmd[len(expected_mpirun_cmd) :]
+        self.assertEqual(len(python_script_cmd), 3)
+        self.assertEqual(python_script_cmd[1], str(self.test_file_path))
+        self.assertEqual(python_script_cmd[2], test_file_arg)
 
 
 class TpuConfigTester(unittest.TestCase):

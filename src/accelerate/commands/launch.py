@@ -625,6 +625,21 @@ def launch_command_parser(subparsers=None):
         ),
     )
 
+    # MPI arguments
+    mpirun_args = parser.add_argument_group("MPI Arguments", "Arguments related to mpirun for Multi-CPU")
+    mpirun_args.add_argument(
+        "--mpirun_hostfile",
+        type=str,
+        default=None,
+        help="Location for a hostfile for using Accelerate to launch a multi-CPU training job with mpirun.",
+    )
+    mpirun_args.add_argument(
+        "--mpirun_ccl",
+        type=int,
+        default=1,
+        help="The number of oneCCL worker threads when using Accelerate to launch multi-CPU training with mpirun.",
+    )
+
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
 
