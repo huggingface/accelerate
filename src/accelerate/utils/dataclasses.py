@@ -471,6 +471,7 @@ class CustomDtype(enum.Enum):
     INT4 = "int4"
     INT2 = "int2"
 
+
 # data classes
 
 
