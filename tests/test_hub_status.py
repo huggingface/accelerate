@@ -14,7 +14,7 @@
 
 import unittest
 
-from accelerate.test_utils import is_hub_online
+from accelerate.test_utils.testing import is_hub_online
 
 
 class HooksModelTester(unittest.TestCase):
