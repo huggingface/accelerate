@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import inspect
 import os
 import shutil
 import subprocess
@@ -26,6 +27,8 @@ from typing import List, Union
 from unittest import mock
 
 import torch
+
+import accelerate
 
 from ..state import AcceleratorState, PartialState
 from ..utils import (
@@ -68,6 +71,28 @@ def get_backend():
 
 
 torch_device, device_count, memory_allocated_func = get_backend()
+
+
+def get_launch_command(**kwargs) -> list:
+    """
+    Wraps around `kwargs` to help simplify launching from `subprocess`.
+
+    Example:
+    ```python
+    # returns ['accelerate', 'launch', '--num_processes=2', '--device_count=2']
+    get_launch_command(num_processes=2, device_count=2)
+    ```
+    """
+    command = ["accelerate", "launch"]
+    for k, v in kwargs.items():
+        if isinstance(v, bool) and v:
+            command.append(f"--{k}")
+        elif v is not None:
+            command.append(f"--{k}={v}")
+    return command
+
+
+DEFAULT_LAUNCH_COMMAND = get_launch_command(num_processes=device_count)
 
 
 def parse_flag_from_env(key, default=False):
@@ -354,7 +379,7 @@ class TempDirTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         "Creates a `tempfile.TemporaryDirectory` and stores it in `cls.tmpdir`"
-        cls.tmpdir = tempfile.mkdtemp()
+        cls.tmpdir = Path(tempfile.mkdtemp())
 
     @classmethod
     def tearDownClass(cls):
@@ -365,7 +390,7 @@ class TempDirTestCase(unittest.TestCase):
     def setUp(self):
         "Destroy all contents in `self.tmpdir`, but not `self.tmpdir`"
         if self.clear_on_setup:
-            for path in Path(self.tmpdir).glob("**/*"):
+            for path in self.tmpdir.glob("**/*"):
                 if path.is_file():
                     path.unlink()
                 elif path.is_dir():
@@ -487,7 +512,11 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     return _RunOutput(await p.wait(), out, err)
 
 
-def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
+def execute_subprocess_async(cmd: list, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
+    # Cast every path in `cmd` to a string
+    for i, c in enumerate(cmd):
+        if isinstance(c, Path):
+            cmd[i] = str(c)
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
         _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
@@ -513,6 +542,10 @@ def run_command(command: List[str], return_stdout=False, env=None):
     Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
     if an error occured while running `command`
     """
+    # Cast every path in `command` to a string
+    for i, c in enumerate(command):
+        if isinstance(c, Path):
+            command[i] = str(c)
     if env is None:
         env = os.environ.copy()
     try:
@@ -525,6 +558,21 @@ def run_command(command: List[str], return_stdout=False, env=None):
         raise SubprocessCallException(
             f"Command `{' '.join(command)}` failed with the following error:\n\n{e.output.decode()}"
         ) from e
+
+
+def path_in_accelerate_package(*components: str) -> Path:
+    """
+    Get a path within the `accelerate` package's directory.
+
+    Args:
+        *components: Components of the path to join after the package directory.
+
+    Returns:
+        `Path`: The path to the requested file or directory.
+    """
+
+    accelerate_package_dir = Path(inspect.getfile(accelerate)).parent
+    return accelerate_package_dir.joinpath(*components)
 
 
 @contextmanager

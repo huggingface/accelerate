@@ -25,6 +25,9 @@ from accelerate.commands.estimate import estimate_command, estimate_command_pars
 from accelerate.commands.launch import _validate_launch_command, launch_command_parser
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
+    DEFAULT_LAUNCH_COMMAND,
+    get_launch_command,
+    path_in_accelerate_package,
     require_multi_device,
     require_timm,
     require_transformers,
@@ -63,10 +66,11 @@ class AccelerateLauncherTester(unittest.TestCase):
             cls.changed_path.rename(cls.config_path)
 
     def test_no_config(self):
-        cmd = ["accelerate", "launch"]
         if torch.cuda.is_available() and (torch.cuda.device_count() > 1):
-            cmd += ["--multi_gpu"]
-        cmd.append(str(self.test_file_path))
+            cmd = get_launch_command(multi_gpu=True)
+        else:
+            cmd = DEFAULT_LAUNCH_COMMAND
+        cmd.append(self.test_file_path)
         execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_config_compatibility(self):
@@ -74,27 +78,16 @@ class AccelerateLauncherTester(unittest.TestCase):
             if "invalid" in str(config) or "mpi" in str(config):
                 continue
             with self.subTest(config_file=config):
-                cmd = [
-                    "accelerate",
-                    "launch",
-                    "--config_file",
-                    str(config),
-                    str(self.test_file_path),
-                ]
+                cmd = get_launch_command(config_file=config) + [self.test_file_path]
                 execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_invalid_keys(self):
+        config_path = self.test_config_path / "invalid_keys.yaml"
         with self.assertRaises(
             RuntimeError,
             msg="The config file at 'invalid_keys.yaml' had unknown keys ('another_invalid_key', 'invalid_key')",
         ):
-            cmd = [
-                "accelerate",
-                "launch",
-                "--config_file",
-                str(self.test_config_path / "invalid_keys.yaml"),
-                str(self.test_file_path),
-            ]
+            cmd = get_launch_command(config_file=config_path) + [self.test_file_path]
             execute_subprocess_async(cmd, env=os.environ.copy())
 
     def test_accelerate_test(self):
