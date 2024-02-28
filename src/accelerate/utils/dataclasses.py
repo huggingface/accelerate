@@ -469,7 +469,7 @@ class CustomDtype(enum.Enum):
 
     FP8 = "fp8"
     INT4 = "int4"
-
+    INT2 = "int2"
 
 # data classes
 
