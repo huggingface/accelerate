@@ -27,6 +27,7 @@ from accelerate.test_utils import (
     execute_subprocess_async,
     get_launch_command,
     path_in_accelerate_package,
+    require_huggingface_suite,
     require_multi_device,
     require_multi_gpu,
     require_non_torch_xla,
@@ -76,6 +77,7 @@ class MultiDeviceTester(unittest.TestCase):
 
     @require_multi_gpu
     @require_pippy
+    @require_huggingface_suite
     def test_pippy(self):
         """
         Checks the integration with the pippy framework
