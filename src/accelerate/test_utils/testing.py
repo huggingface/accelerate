@@ -86,7 +86,7 @@ def is_hub_online():
 
 
 if not is_hub_online():
-    os.environ["HF_HUB_OFFLINE"] = 1
+    os.environ["HF_HUB_OFFLINE"] = "1"
 
 
 def get_launch_command(**kwargs) -> list:
