@@ -205,6 +205,16 @@ def require_huggingface_suite(test_case):
     )(test_case)
 
 
+def require_hub_online(test_case):
+    """
+    Decorator marking a test that requires the huggingface hub be online. These tests are skipped when it is not.
+    """
+    return unittest.skipUnless(
+        is_hub_online(),
+        "test requires Hub be online, currently it is down!",
+    )(test_case)
+
+
 def require_transformers(test_case):
     """
     Decorator marking a test that requires transformers. These tests are skipped when they are not.
