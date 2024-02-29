@@ -79,10 +79,8 @@ def is_hub_online():
     """
     Checks if the huggingface_hub is online
     """
-    response = requests.get("https://huggingface.co/api")
-    if response.status_code != 200:
-        return False
-    return True
+    response = requests.get("https://huggingface.co/api/models/google-bert/bert-base-cased")
+    return response.ok
 
 
 if not is_hub_online():
