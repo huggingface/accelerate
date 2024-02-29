@@ -785,6 +785,8 @@ class DeepSpeedPlugin:
             }
             if self.gradient_clipping:
                 config["gradient_clipping"] = self.gradient_clipping
+            if compare_versions("deepspeed", ">=", DEEPSPEED_ZERO_DYNAMO_VERSION):
+                config["compile"] = {"enabled": "auto", "backend": "auto"}
             self.hf_ds_config = HfDeepSpeedConfig(config)
 
         self.deepspeed_config = self.hf_ds_config.config

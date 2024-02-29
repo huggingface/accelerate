@@ -35,6 +35,7 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
+    require_cuda,
     require_deepspeed,
     require_multi_device,
     require_non_cpu,
@@ -779,6 +780,30 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             deepspeed_plugin = accelerator.state.deepspeed_plugin
             assert deepspeed_plugin.deepspeed_config["gradient_accumulation_steps"] == 8
 
+        # filling the `auto`/empty dynamo config via Accelerator's value
+        AcceleratorState._reset_state(True)
+        del ds_config["compile"]
+        deepspeed_plugin = DeepSpeedPlugin(
+            hf_ds_config=ds_config,
+        )
+        with mockenv_context(**self.dist_env):
+            accelerator = Accelerator(
+                deepspeed_plugin=deepspeed_plugin, dynamo_backend='eager'
+            )
+            train_set = RegressionDataset(length=80)
+            eval_set = RegressionDataset(length=20)
+            train_dataloader = DataLoader(train_set, batch_size=16, shuffle=True)
+            eval_dataloader = DataLoader(eval_set, batch_size=32, shuffle=False)
+            model = AutoModelForCausalLM.from_pretrained("gpt2")
+            dummy_optimizer = DummyOptim(params=model.parameters(), lr=5e-5, weight_decay=1e-4)
+            dummy_lr_scheduler = DummyScheduler(dummy_optimizer, warmup_num_steps=10, total_num_steps=1000)
+            model, _, train_dataloader, eval_dataloader, _ = accelerator.prepare(
+                model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
+            )
+            deepspeed_plugin = accelerator.state.deepspeed_plugin
+            assert deepspeed_plugin.deepspeed_config["compile"]["enabled"] == True
+            assert deepspeed_plugin.deepspeed_config["compile"]["backend"] == "eager"
+
     def test_ds_config_assertions(self):
         ambiguous_env = self.dist_env.copy()
         ambiguous_env[
@@ -837,6 +862,40 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd, env=os.environ.copy())
 
+    @require_cuda
+    def test_basic_dynamo_run(self):
+        mod_file = inspect.getfile(accelerate.test_utils)
+        test_file_path = os.path.sep.join(
+            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_performance.py"]
+        )
+        with tempfile.TemporaryDirectory() as dirpath:
+            cmd = [
+                "accelerate",
+                "launch",
+                "--num_processes=1",
+                "--num_machines=1",
+                "--machine_rank=0",
+                "--mixed_precision=fp16",
+                "--use_deepspeed",
+                "--gradient_accumulation_steps=1",
+                "--zero_stage=3",
+                "--offload_optimizer_device=none",
+                "--offload_param_device=none",
+                "--dynamo_backend=eager",
+                test_file_path,
+                "--model_name_or_path=distilbert-base-uncased",
+                "--num_epochs=1",
+                f"--output_dir={dirpath}",
+            ]
+            with patch_environment(omp_num_threads=1):
+                with_dynamo = False
+                try:
+                    r = execute_subprocess_async(cmd, env={'TORCH_LOGS': 'dynamo', 'ACCELERATE_DYNAMO_BACKEND': 'eager', **os.environ})
+                    with_dynamo = 'torch._dynamo' in '\n'.join(r.stderr)
+                except RuntimeError as e:
+                    with_dynamo = 'torch._dynamo' in e.args[0]
+                finally:
+                    assert with_dynamo
 
 @require_deepspeed
 @require_multi_device
@@ -1055,7 +1114,3 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         ]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
-
-    def test_dynamo(self):
-        # TODO
-        pass
