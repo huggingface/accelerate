@@ -859,40 +859,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             with patch_environment(omp_num_threads=1):
                 execute_subprocess_async(cmd, env=os.environ.copy())
 
-    @require_cuda
-    def test_basic_dynamo_run(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        test_file_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_performance.py"]
-        )
-        with tempfile.TemporaryDirectory() as dirpath:
-            cmd = [
-                "accelerate",
-                "launch",
-                "--num_processes=1",
-                "--num_machines=1",
-                "--machine_rank=0",
-                "--mixed_precision=fp16",
-                "--use_deepspeed",
-                "--gradient_accumulation_steps=1",
-                "--zero_stage=3",
-                "--offload_optimizer_device=none",
-                "--offload_param_device=none",
-                "--dynamo_backend=eager",
-                test_file_path,
-                "--model_name_or_path=distilbert-base-uncased",
-                "--num_epochs=1",
-                f"--output_dir={dirpath}",
-            ]
-            with patch_environment(omp_num_threads=1):
-                with_dynamo = False
-                try:
-                    r = execute_subprocess_async(cmd, env={'TORCH_LOGS': 'dynamo', 'ACCELERATE_DYNAMO_BACKEND': 'eager', **os.environ})
-                    with_dynamo = 'torch._dynamo' in '\n'.join(r.stderr)
-                except RuntimeError as e:
-                    with_dynamo = 'torch._dynamo' in e.args[0]
-                finally:
-                    assert with_dynamo
 
 @require_deepspeed
 @require_multi_device
@@ -1110,3 +1076,38 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         ]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
+
+    @require_cuda
+    def test_basic_dynamo_run(self):
+        mod_file = inspect.getfile(accelerate.test_utils)
+        test_file_path = os.path.sep.join(
+            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_performance.py"]
+        )
+        with tempfile.TemporaryDirectory() as dirpath:
+            cmd = [
+                "accelerate",
+                "launch",
+                "--num_processes=1",
+                "--num_machines=1",
+                "--machine_rank=0",
+                "--mixed_precision=fp16",
+                "--use_deepspeed",
+                "--gradient_accumulation_steps=1",
+                "--zero_stage=3",
+                "--offload_optimizer_device=none",
+                "--offload_param_device=none",
+                "--dynamo_backend=eager",
+                test_file_path,
+                "--model_name_or_path=distilbert-base-uncased",
+                "--num_epochs=1",
+                f"--output_dir={dirpath}",
+            ]
+            with patch_environment(omp_num_threads=1):
+                with_dynamo = False
+                try:
+                    r = execute_subprocess_async(cmd, env={'TORCH_LOGS': 'dynamo', 'ACCELERATE_DYNAMO_BACKEND': 'eager', **os.environ})
+                    with_dynamo = 'torch._dynamo' in '\n'.join(r.stderr)
+                except RuntimeError as e:
+                    with_dynamo = 'torch._dynamo' in e.args[0]
+                finally:
+                    assert with_dynamo
