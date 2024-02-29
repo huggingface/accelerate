@@ -37,3 +37,7 @@ related to distributed training or mixed precision are created.
 ## InitProcessGroupKwargs
 
 [[autodoc]] InitProcessGroupKwargs
+
+## KwargsHandler
+
+[[autodoc]] utils.KwargsHandler

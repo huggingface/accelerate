@@ -13,22 +13,74 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Quick tour
+# Quicktour
 
-This guide aims to help you get started with 🤗 Accelerate quickly. It covers the essential steps you need to take to 
-enable distributed training, as well as the adjustments that you need to make in some common scenarios.
+There are many ways to launch and run your code depending on your training environment ([torchrun](https://pytorch.org/docs/stable/elastic/run.html), [DeepSpeed](https://www.deepspeed.ai/), etc.) and available hardware. Accelerate offers a unified interface for launching and training on different distributed setups, allowing you to focus on your PyTorch training code instead of the intricacies of adapting your code to these different setups. This allows you to easily scale your PyTorch code for training and inference on distributed setups with hardware like GPUs and TPUs. Accelerate also provides Big Model Inference to make loading and running inference with really large models that usually don't fit in memory more accessible.
 
-To help you navigate, the guide is split into two sections: 
-* [Getting Started with 🤗 Accelerate](#getting-started-with--accelerate): start here to learn how to modify your script to enable distributed training with 🤗 Accelerate
-* [Common adaptations to the base case](#common-adaptations-to-the-base-case): check out this section for common deviations from the baseline scenario and what adjustments may need to be made to support them.
+This quicktour introduces the three main features of Accelerate:
 
-## Getting started with 🤗 Accelerate
+* a unified command line launching interface for distributed training scripts
+* a training library for adapting PyTorch training code to run on different distributed setups
+* Big Model Inference
 
-### Enable distributed training in your script 
+## Unified launch interface
 
-To use 🤗 Accelerate in your own training script, you have to modify four things:
+Accelerate automatically selects the appropriate configuration values for any given distributed training framework (DeepSpeed, FSDP, etc.) through a unified configuration file generated from the [`accelerate config`](../../docs/source/package_reference/cli#accelerate-config) command. You could also pass the configuration values explicitly to the command line which is helpful in certain situations like if you're using SLURM.
 
-1. Import the [`Accelerator`] main class and instantiate one in an `accelerator` object.
+
+But in most cases, you should always run [`accelerate config`](../../docs/source/package_reference/cli#accelerate-config) first to help Accelerate learn about your training setup.
+
+```bash
+accelerate config
+```
+
+The [`accelerate config`](../../docs/source/package_reference/cli#accelerate-config) command creates and saves a default_config.yaml file in Accelerates cache folder. This file stores the configuration for your training environment, which helps Accelerate correctly launch your training script based on your machine.
+
+After you've configured your environment, you can test your setup with [`accelerate test`](../../docs/source/package_reference/cli#accelerate-test), which launches a short script to test the distributed environment.
+
+```bash
+accelerate test
+```
+
+> [!TIP]
+> Add `--config_file` to the `accelerate test` or `accelerate launch` command to specify the location of the configuration file if it is saved in a non-default location like the cache.
+
+Once your environment is setup, launch your training script with [`accelerate launch`](../../docs/source/package_reference/cli#accelerate-launch)!
+
+```bash
+accelerate launch path_to_script.py --args_for_the_script
+```
+
+To learn more, check out the [Launch distributed code](basic_tutorials/launch) tutorial for more information about launching your scripts.
+
+## Adapt training code
+
+The next main feature of Accelerate is the [`Accelerator`] class which adapts your PyTorch code to run on different distributed setups.
+
+You only need to add a few lines of code to your training script to enable it to run on multiple GPUs or TPUs.
+
+```diff
++ from accelerate import Accelerator
++ accelerator = Accelerator()
+
++ device = accelerator.device
++ model, optimizer, training_dataloader, scheduler = accelerator.prepare(
++     model, optimizer, training_dataloader, scheduler
++ )
+
+  for batch in training_dataloader:
+      optimizer.zero_grad()
+      inputs, targets = batch
+-     inputs = inputs.to(device)
+-     targets = targets.to(device)
+      outputs = model(inputs)
+      loss = loss_function(outputs, targets)
++     accelerator.backward(loss)
+      optimizer.step()
+      scheduler.step()
+```
+
+1. Import and instantiate the [`Accelerator`] class at the beginning of your training script. The [`Accelerator`] class initializes everything necessary for distributed training, and it automatically detects your training environment (a single machine with a GPU, a machine with several GPUs, several machines with multiple GPUs or a TPU, etc.) based on how the code was launched.
 
 ```python
 from accelerate import Accelerator
@@ -36,27 +88,16 @@ from accelerate import Accelerator
 accelerator = Accelerator()
 ```
 
-Add this at the beginning of your training script as it will initialize everything necessary for distributed training. 
-You don't need to indicate the kind of environment you are in (a single machine with a GPU, a machine with several GPUs, 
-or several machines with multiple GPUs or a TPU), the library will detect this automatically.
+2. Remove calls like `.cuda()` on your model and input data. The [`Accelerator`] class automatically places these objects on the appropriate device for you.
 
-2. Remove the `.to(device)` or `.cuda()` calls for your model and input data.
+> [!WARNING]
+> This step is *optional* but it is considered best practice to allow Accelerate to handle device placement. You could also deactivate automatic device placement by passing `device_placement=False` when initializing the [`Accelerator`]. If you want to explicitly place objects on a device with `.to(device)`, make sure you use `accelerator.device` instead. For example, if you create an optimizer before placing a model on `accelerator.device`, training fails on a TPU.
 
-The `accelerator` object will handle placing these objects on the right device for you. 
-If you choose to leave those `.to(device)` calls, make sure to use the device provided by the `accelerator` object: `accelerator.device`.
+```py
+device = accelerator.device
+```
 
-<Tip warning={true}>
-
-    You can fully deactivate the automatic device placement by passing along `device_placement=False` when 
-    initializing the [`Accelerator`].
-    However, if you place your objects manually on the proper device, be careful to create your optimizer after putting your
-    model on `accelerator.device` or your training will fail on TPU.
-
-</Tip>
-
-3. Pass all PyTorch objects relevant to training (optimizer, model, dataloader(s), learning rate scheduler) to the
-[`~Accelerator.prepare`] method as soon as these objects are created, before starting your actual
-training loop:
+3. Pass all relevant PyTorch objects for training (optimizer, model, dataloader(s), learning rate scheduler) to the [`~Accelerator.prepare`] method as soon as they're created. This method wraps the model in a container optimized for your distributed setup, uses Accelerates version of the optimizer and scheduler, and creates a sharded version of your dataloader for distribution across GPUs or TPUs.
 
 ```python
 model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
@@ -64,55 +105,23 @@ model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
 )
 ```
 
-**Important notes**:
+4. Replace `loss.backward()` with [`~Accelerator.backward`] to use the correct `backward()` method for your training setup.
 
-* You should always pass the learning rate scheduler to [`~Accelerator.prepare`], however if the scheduler should *not* be stepped at each optimization step, pass `step_with_optimizer=False` to the [`Accelerator`] init.
-* While you can send your dataloader to [`~Accelerator.prepare`] on its own (and there are cases for doing so, such as distributed inference), it's best to send it to [`~Accelerator.prepare`] together with the model and optimizer.
-* If you wish to run distributed evaluation, send your validation dataloader to [`~Accelerator.prepare`] as well. There are some nuances to distributed validation, check the [Distributed evaluation](#add-distributed-evaluation) section of the guide.
-* Any instruction using your training dataloader length (for instance if you want to log the number of total training
-steps) should go after the call to [`~Accelerator.prepare`].
+```py
+accelerator.backward(loss)
+```
 
-Passing `DataLoader` objects to the [`~Accelerator.prepare`] method ensures that your dataloader will be sharded across 
-all GPUs/TPU cores available so that each one sees a different portion of the training dataset. In other words, if there are 8 processes and a dataset of 64 items, each process will see 8 of these items per iteration. Also, the random states 
-of all processes will be synchronized at the beginning of each iteration through your dataloader, to make sure the data 
-is shuffled the same way (if you decided to use `shuffle=True` or any kind of random sampler).
+Read [Accelerate’s internal mechanisms](../../docs/source/concept_guides/internal_mechanism) guide to learn more details about how Accelerate adapts your code.
 
-<Tip>
+### Distributed evaluation
 
-    The actual batch size for your training will be the number of devices used multiplied by the batch size you set in
-    your script. For instance, training on 4 GPUs with a batch size of 16 set when creating the training dataloader will
-    train at an actual batch size of 64 (4 * 16).
-    If you want the batch size to remain the same regardless of how many GPUs the script is run on, you can use the 
-    option `split_batches=True` when creating and initializing [`Accelerator`] by passing in a [`utils.DataLoaderConfiguration`].
-    Your training dataloader may change length when going through this method: if you run on X GPUs, it will have its
-    length divided by X (since your actual batch size will be multiplied by X), unless you set
-    `split_batches=True`.
-
-</Tip>
-
-
-4. Replace the `loss.backward()` line with `accelerator.backward(loss)`.
-
-And you're all set! With all these changes, your script will run on your local machine as well as on multiple GPUs or a
-TPU! You can either use your favorite tool to launch the distributed training, or you can use the 🤗 Accelerate
-launcher.
-
-### Add distributed evaluation
-
-You can perform regular evaluation in your training script if you leave your validation dataloader out of the
-[`~Accelerator.prepare`] method. In this case, you will need to put the input data on the
-`accelerator.device` manually.
-
-To perform distributed evaluation, send along your validation dataloader to the [`~Accelerator.prepare`]
-method:
+To perform distributed evaluation, pass your validation dataloader to the [`~Accelerator.prepare`] method:
 
 ```python
 validation_dataloader = accelerator.prepare(validation_dataloader)
 ```
 
-Same as with your training dataloader, each device will only see part of the evaluation data should you run your script 
-on multiple devices. This means you will need to group your predictions together which you can do with 
-the [`~Accelerator.gather_for_metrics`] method.
+Each device in your distributed setup only receives a part of the evaluation data, which means you should group your predictions together with the [`~Accelerator.gather_for_metrics`] method. This method requires all tensors to be the same size on each process, so if your tensors have different sizes on each process (for instance when dynamically padding to the maximum length in a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad you tensor to the largest size across processes.
 
 ```python
 for inputs, targets in validation_dataloader:
@@ -123,319 +132,50 @@ for inputs, targets in validation_dataloader:
     metric.add_batch(all_predictions, all_targets)
 ```
 
-<Tip warning={true}>
+> [!TIP]
+> Data at the end of a dataset may be duplicated so the batch can be equally divided among all workers. The [`~Accelerator.gather_for_metrics`] method automatically removes the duplicated data to calculate a more accurate metric.
 
-    Similar to the training dataloader, passing your validation dataloader through
-    [`~Accelerator.prepare`] may change it: if you run on X GPUs, it will have its length divided by X
-    (since your actual batch size will be multiplied by X), unless you set `split_batches=True`.
+## Big Model Inference
 
-</Tip>
+Accelerate's Big Model Inference has two main features, [`~accelerate.init_empty_weights`] and [`~accelerate.load_checkpoint_and_dispatch`], to load large models for inference that typically don't fit into memory.
 
-Some data at the end of the dataset may be duplicated so the batch can be divided equally among all workers. As a result, 
-metrics should be calculated through the [`~Accelerator.gather_for_metrics`] method to automatically remove the duplicated 
-data while gathering and provide a more accurate metric.
+> [!TIP]
+> Take a look at the [Handling big models for inference](../../docs/source/concept_guides/big_model_inference) guide for a better understanding of how Big Model Inference works under the hood.
 
-<Tip>
+### Empty weights initialization
 
-    If for some reason you don't wish to have this automatically done, [`~Accelerator.gather`] can be used instead to gather 
-    the data across all processes and this can manually be done instead.
+The [`~accelerate.init_empty_weights`] context manager initializes models of any size by creating a *model skeleton* and moving and placing parameters each time they're created to PyTorch's [**meta**](https://pytorch.org/docs/main/meta.html) device. This way, not all weights are immediately loaded and only a small part of the model is loaded into memory at a time.
 
-</Tip>
+For example, loading an empty [Mixtral-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) model takes significantly less memory than fully loading the models and weights on the CPU.
 
+```py
+from accelerate import init_empty_weights
+from transformers import AutoConfig, AutoModelForCausalLM
 
-<Tip warning={true}>
-
-    The [`~Accelerator.gather`] and [`~Accelerator.gather_for_metrics`] methods require the tensors to be all the same size on each process. If
-    you have tensors of different sizes on each process (for instance when dynamically padding to the maximum length in
-    a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad your tensor to the
-    biggest size across processes.
-
-</Tip>
-
-### Launch your distributed script
-
-You can use the regular commands to launch your distributed training (like `torch.distributed.run` for
-PyTorch) - they are fully compatible with 🤗 Accelerate.
-
-Alternatively, 🤗 Accelerate provides a CLI tool that unifies all launchers, so you only have to remember one command. \
-To use it, run a quick configuration setup first on your machine and answer the questions:
-
-```bash
-accelerate config
+config = AutoConfig.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1")
+with init_empty_weights():
+    model = AutoModelForCausalLM.from_config(config)
 ```
 
-At the end of the setup, a *default_config.yaml* file will be saved in your cache folder for 🤗 Accelerate. That cache 
-folder is (with decreasing order of priority):
+### Load and dispatch weights
 
-- The content of your environment variable `HF_HOME` suffixed with *accelerate*.
-- If it does not exist, the content of your environment variable `XDG_CACHE_HOME` suffixed with
-  *huggingface/accelerate*.
-- If this does not exist either, the folder *~/.cache/huggingface/accelerate*.
+The [`~accelerate.load_checkpoint_and_dispatch`] function loads full or sharded checkpoints into the empty model, and automatically distribute weights across all available devices.
 
-By specifying the `--config_file`  flag you can specify an alternative location of the configuration file.
-Once the configuration setup is complete, you can test your setup by running:
+The `device_map` parameter determines where to place each model layer, and specifiying `"auto"` places them on the GPU first, then the CPU, and finally the hard drive as memory-mapped tensors if there's still not enough memory. Use the `no_split_module_classes` parameter to indicate which modules shouldn't be split across devices (typically those with a residual connection).
 
-```bash
-accelerate test
+```py
+from accelerate import load_checkpoint_and_dispatch
+
+model = load_checkpoint_and_dispatch(
+    model, checkpoint="mistralai/Mixtral-8x7B-Instruct-v0.1", device_map="auto", no_split_module_classes=['Block']
+)
 ```
 
-This will launch a short script that will test the distributed environment. If it runs without issues, you are ready for 
-the next step!
+## Next steps
 
-Note that if you specified a location for the config file in the previous step, you need to pass it here as well:
+Now that you've been introduced to the main Accelerate features, your next steps could include:
 
-```bash
-accelerate test --config_file path_to_config.yaml
-```
-
-Now that this is done, you can run your script with the following command:
-
-```bash
-accelerate launch path_to_script.py --args_for_the_script
-```
-
-If you stored the config file in a non-default location, you can indicate it to the launcher like this:
-
-```bash
-accelerate launch --config_file path_to_config.yaml path_to_script.py --args_for_the_script
-```
-
-You can override any of the arguments determined by your config file. To see the complete list of parameters that you 
-can pass in, run `accelerate launch -h`. (And further niche argument help by passing in partial commands, such as `accelerate launch --multi_gpu -h` for all `multi_gpu` args)
-
-Check out the [Launch tutorial](basic_tutorials/launch) for more information about launching your scripts.
-
-## Common modifications of the base case 
-
-The previous section covers the minimal essential steps to move a training script into a distributed setup with 🤗 Accelerate.
-Here we describe common modifications/deviations from the base case scenario and the adjustments you need to make to accommodate for them.
-
-### Launch distributed training from a notebook
-
-Accelerate has a [`notebook_launcher`] to help you launch your training function from a 
-notebook. This launcher supports launching a training with TPUs on Colab or Kaggle, as well as training on several GPUs and machines
-(if the machine on which you are running your notebook has them).
-
-Define a function responsible for your whole training and/or evaluation in a cell of the notebook, then execute a
-cell with the following code:
-
-```python
-from accelerate import notebook_launcher
-
-notebook_launcher(training_function)
-```
-
-<Tip warning={true}>
-
-    Your [`Accelerator`] object should only be defined inside the training function. This is because the
-    initialization should be done inside the launcher only.
-
-</Tip>
-
-Check out the [Notebook Launcher tutorial](basic_tutorials/notebook) for more information about training on TPUs.
-
-### Specifics of training on TPU
-
-If you want to launch your script on TPUs, there are a few caveats you should be aware of. Behind the scenes, the TPUs
-will create a graph of all the operations happening in your training step (forward pass, backward pass and optimizer
-step). This is why your first step of training will always be very long as building and compiling this graph for
-optimizations takes some time.
-
-The good news is that this compilation will be cached so the second step and all the following will be much faster. The
-bad news is that it only applies if all of your steps do exactly the same operations, which implies:
-
-- having all tensors of the same length in all your batches
-- having static code (i.e., not a for loop of length that could change from step to step)
-
-Having any of the things above change between two steps will trigger a new compilation which will, once again, take a
-lot of time. In practice, that means you must take special care to have all your tensors in your inputs of the same
-shape (so no dynamic padding for instance if you are in an NLP problem) and should not use layers with for loops that
-have different lengths depending on the inputs (such as an LSTM) or the training will be excruciatingly slow.
-
-To introduce special behavior in your script for TPUs you can check the `distributed_type` of your
-`accelerator`:
-
-```python docstyle-ignore
-from accelerate import DistributedType
-
-if accelerator.distributed_type == DistributedType.XLA:
-    # do something of static shape
-else:
-    # go crazy and be dynamic
-```
-
-The [NLP example](https://github.com/huggingface/accelerate/blob/main/examples/nlp_example.py) shows an example in a 
-situation with dynamic padding.
-
-One last thing to pay close attention to: if your model has tied weights (such as language models which tie the weights
-of the embedding matrix with the weights of the decoder), moving this model to the TPU (either yourself or after you
-passed your model to [`~Accelerator.prepare`]) will break the tying. You will need to retie the weights
-after. You can find an example of this in the [run_clm_no_trainer](https://github.com/huggingface/transformers/blob/master/examples/pytorch/language-modeling/run_clm.py) script in
-the Transformers repository.
-
-Check out the [TPU tutorial](concept_guides/training_tpu) for more information about training on TPUs.
-
-### Execute a statement only on one processes
-
-Some of your instructions only need to run for one process on a given server: for instance a data download or a log
-statement. To do this, wrap the statement in a test like this:
-
-```python docstyle-ignore
-if accelerator.is_local_main_process:
-    # Is executed once per server
-```
-
-Another example is progress bars: to avoid having multiple progress bars in your output, you should only display one on
-the local main process:
-
-```python
-from tqdm.auto import tqdm
-
-progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
-```
-
-The *local* means per machine: if you are running your training on two servers with several GPUs, the instruction will
-be executed once on each of those servers. If you need to execute something only once for all processes (and not per
-machine) for instance, uploading the final model to the 🤗 model hub, wrap it in a test like this:
-
-```python docstyle-ignore
-if accelerator.is_main_process:
-    # Is executed once only
-```
-
-For printing statements you only want executed once per machine, you can just replace the `print` function by
-`accelerator.print`.
-
-
-### Defer execution on multiple GPUs
-
-When you run your usual script, instructions are executed in order. Using 🤗 Accelerate to deploy your script on several
-GPUs at the same time introduces a complication: while each process executes all instructions in order, some may be
-faster than others.
-
-You might need to wait for all processes to have reached a certain point before executing a given instruction. For
-instance, you shouldn't save a model before making sure every process is done with training. To do this, add the
-following line in your code:
-
-```
-accelerator.wait_for_everyone()
-```
-
-This instruction will block all the processes that arrive first until all the other processes have reached that
-point (if you run your script on just one GPU or CPU, this won't do anything).
-
-
-### Save/load a model in a distributed setup
-
-Saving the model you trained might need a bit of adjustment: first you should wait for all processes to reach that
-point in the script as shown above, and then, you should unwrap your model before saving it. This is because when going
-through the [`~Accelerator.prepare`] method, your model may have been placed inside a bigger model,
-which deals with the distributed training. This in turn means that saving your model state dictionary without taking
-any precaution will take that potential extra layer into account, and you will end up with weights you can't load back
-in your base model. The [`~Accelerator.save_model`] method will help you to achieve that. It will unwrap your model and save
-the model state dictionary.
-
-Here is an example:
-
-```
-accelerator.wait_for_everyone()
-accelerator.save_model(model, save_directory)
-```
-
-The [`~Accelerator.save_model`] method can also save a model into sharded checkpoints or with safetensors format:
-
-```python
-accelerator.wait_for_everyone()
-accelerator.save_model(model, save_directory, max_shard_size="1GB", safe_serialization=True)
-```
-
-If your script contains logic to load a checkpoint, we also recommend you load your weights in the unwrapped model
-(this is only useful if you use the load function after making your model go through
-[`~Accelerator.prepare`]). Here is an example:
-
-```python
-unwrapped_model = accelerator.unwrap_model(model)
-path_to_checkpoint = os.path.join(save_directory,"pytorch_model.bin")
-unwrapped_model.load_state_dict(torch.load(path_to_checkpoint))
-```
-
-Note that since all the model parameters are references to tensors, this will load your weights inside `model`.
-
-If you want to load a sharded checkpoint or a checkpoint with safetensors format into the model with a specific `device`, 
-we recommend you to load it with [`~utils.load_checkpoint_in_model`] function. Here's an example:
-
-```python
-load_checkpoint_in_model(unwrapped_model, save_directory, device_map={"":device})
-```
-
-
-### Save/load entire states
-
-When training your model, you may want to save the current state of the model, optimizer, random generators, and potentially 
-learning rate schedulers to be restored in the _same script_.
-You can use [`~Accelerator.save_state`] and [`~Accelerator.load_state`] respectively to do so.
-
-To further customize where and how states saved through [`~Accelerator.save_state`] the [`~utils.ProjectConfiguration`] class can be used. For example 
-if `automatic_checkpoint_naming` is enabled each saved checkpoint will be located then at `Accelerator.project_dir/checkpoints/checkpoint_{checkpoint_number}`.
-
-If you have registered any other stateful items to be stored through [`~Accelerator.register_for_checkpointing`] they will also be saved and/or loaded.
-
-<Tip>
-
-    Every object passed to [`~Accelerator.register_for_checkpointing`] must have a `load_state_dict` and `state_dict` function to be stored
-
-</Tip>
-
-
-### Use gradient clipping
-
-If you are using gradient clipping in your script, you should replace the calls to
-`torch.nn.utils.clip_grad_norm_` or `torch.nn.utils.clip_grad_value_` with [`~Accelerator.clip_grad_norm_`]
-and [`~Accelerator.clip_grad_value_`] respectively.
-
-
-### Train with mixed precision
-
-If you are running your training in Mixed Precision with 🤗 Accelerate, you will get the best result with your loss being
-computed inside your model (like in Transformer models for instance). Every computation outside of the model will be
-executed in full precision (which is generally what you want for loss computation, especially if it involves a
-softmax). However, you might want to put your loss computation inside the [`~Accelerator.autocast`] context manager:
-
-```
-with accelerator.autocast():
-    loss = complex_loss_function(outputs, target):
-```
-
-Another caveat with Mixed Precision training is that the gradient will skip a few updates at the beginning and
-sometimes during training: because of the dynamic loss scaling strategy, there are points during training where the
-gradients have overflown, and the loss scaling factor is reduced to avoid this happening again at the next step.
-
-This means that you may update your learning rate scheduler when there was no update, which is fine in general, but may
-have an impact when you have very little training data, or if the first learning rate values of your scheduler are very
-important. In this case, you can skip the learning rate scheduler updates when the optimizer step was not done like
-this:
-
-```
-if not accelerator.optimizer_step_was_skipped:
-    lr_scheduler.step()
-```
-
-### Use gradient accumulation 
-
-To perform gradient accumulation use [`~Accelerator.accumulate`] and specify a `gradient_accumulation_steps`. 
-This will also automatically ensure the gradients are synced or unsynced when on multi-device training, check if the step should
-actually be performed, and auto-scale the loss:
-
-```python
-accelerator = Accelerator(gradient_accumulation_steps=2)
-model, optimizer, training_dataloader = accelerator.prepare(model, optimizer, training_dataloader)
-
-for input, label in training_dataloader:
-    with accelerator.accumulate(model):
-        predictions = model(input)
-        loss = loss_function(predictions, label)
-        accelerator.backward(loss)
-        optimizer.step()
-        scheduler.step()
-        optimizer.zero_grad()
-```
+* Check out the [tutorials](docs/source/basic_tutorials/overview) for a gentle walkthrough of Accelerate. This is especially useful if you're new to distributed training and the library.
+* Dive into the [guides](docs/source/usage_guides/explore) to see how to use Accelerate for specific use-cases.
+* Deepen your conceptual understanding of how Accelerate works internally by reading the [concept guides](docs/source/concept_guides/internal_mechanism).
+* Look up classes and commands in the [API reference](docs/source/package_reference/accelerator) to see what parameters and options are available.

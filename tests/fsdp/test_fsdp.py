@@ -26,6 +26,8 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
+    get_launch_command,
+    path_in_accelerate_package,
     require_fsdp,
     require_multi_device,
     require_non_cpu,
@@ -39,7 +41,7 @@ from accelerate.utils.constants import (
     FSDP_STATE_DICT_TYPE,
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin
-from accelerate.utils.other import patch_environment, path_in_accelerate_package
+from accelerate.utils.other import patch_environment
 
 
 set_seed(42)
@@ -204,8 +206,8 @@ class FSDPIntegrationTest(TempDirTestCase):
         self.n_val = 160
 
     def test_performance(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
-        cmd = ["accelerate", "launch", "--num_processes=2", "--num_machines=1", "--machine_rank=0", "--use_fsdp"]
+        self.test_file_path = self.test_scripts_folder / "test_performance.py"
+        cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0, use_fsdp=True)
         for config in self.performance_configs:
             cmd_config = cmd.copy()
             for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
@@ -242,17 +244,15 @@ class FSDPIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_config, env=os.environ.copy())
 
     def test_checkpointing(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_checkpointing.py")
-        cmd = [
-            "accelerate",
-            "launch",
-            "--num_processes=2",
-            "--num_machines=1",
-            "--machine_rank=0",
-            "--use_fsdp",
-            "--mixed_precision=fp16",
-            "--fsdp_transformer_layer_cls_to_wrap=BertLayer",
-        ]
+        self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
+        cmd = get_launch_command(
+            num_processes=2,
+            num_machines=1,
+            machine_rank=0,
+            use_fsdp=True,
+            mixed_precision="fp16",
+            fsdp_transformer_layer_cls_to_wrap="BertLayer",
+        )
 
         for i, strategy in enumerate(FSDP_SHARDING_STRATEGY):
             cmd_config = cmd.copy()
@@ -289,14 +289,8 @@ class FSDPIntegrationTest(TempDirTestCase):
                     execute_subprocess_async(cmd_config, env=os.environ.copy())
 
     def test_peak_memory_usage(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_peak_memory_usage.py")
-        cmd = [
-            "accelerate",
-            "launch",
-            "--num_processes=2",
-            "--num_machines=1",
-            "--machine_rank=0",
-        ]
+        self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
+        cmd = get_launch_command(num_processes=2, num_machines=1, machine_rank=0)
         for spec, peak_mem_upper_bound in self.peak_memory_usage_upper_bound.items():
             cmd_config = cmd.copy()
             if "fp16" in spec:

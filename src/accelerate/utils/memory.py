@@ -23,7 +23,7 @@ import inspect
 
 import torch
 
-from .imports import is_npu_available, is_xpu_available
+from .imports import is_mps_available, is_npu_available, is_xpu_available
 
 
 def release_memory(*objects):
@@ -57,6 +57,8 @@ def release_memory(*objects):
         torch.xpu.empty_cache()
     elif is_npu_available():
         torch.npu.empty_cache()
+    elif is_mps_available():
+        torch.mps.empty_cache()
     else:
         torch.cuda.empty_cache()
     return objects

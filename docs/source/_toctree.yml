@@ -10,7 +10,11 @@
   - local: basic_tutorials/overview
     title: Overview
   - local: basic_tutorials/migration
-    title: Migrating to 🤗 Accelerate
+    title: Add Accelerate to your code
+  - local: basic_tutorials/execution
+    title: Execution process
+  - local: basic_tutorials/tpu
+    title: TPU training
   - local: basic_tutorials/launch
     title: Launching distributed code
   - local: basic_tutorials/notebook
@@ -19,41 +23,50 @@
     title: Troubleshooting guide
   title: Tutorials
 - sections:
-  - local: usage_guides/explore
-    title: Start Here!
-  - local: usage_guides/training_zoo
-    title: Example Zoo
-  - local: usage_guides/big_modeling
-    title: How to perform inference on large models with small resources
-  - local: usage_guides/model_size_estimator
-    title: Knowing how big of a model you can fit into memory
-  - local: usage_guides/quantization
-    title: How to quantize model 
-  - local: usage_guides/distributed_inference
-    title: How to perform distributed inference with normal resources
-  - local: usage_guides/gradient_accumulation
-    title: Performing gradient accumulation
-  - local: usage_guides/local_sgd
-    title: Accelerating training with local SGD
-  - local: usage_guides/checkpoint
-    title: Saving and loading training states
-  - local: usage_guides/tracking
-    title: Using experiment trackers
-  - local: usage_guides/mps
-    title: How to use Apple Silicon M1 GPUs
-  - local: usage_guides/low_precision_training
-    title: How to train in low precision (FP8)
-  - local: usage_guides/deepspeed
-    title: How to use DeepSpeed
-  - local: usage_guides/fsdp
-    title: How to use Fully Sharded Data Parallelism
-  - local: usage_guides/megatron_lm
-    title: How to use Megatron-LM
-  - local: usage_guides/sagemaker
-    title: How to use 🤗 Accelerate with SageMaker
-  - local: usage_guides/ipex
-    title: How to use 🤗 Accelerate with Intel® Extension for PyTorch for cpu
-  title: How-To Guides
+  - isExpanded: true
+    sections:
+    - local: usage_guides/explore
+      title: Start Here!
+    - local: usage_guides/model_size_estimator
+      title: Model memory estimator
+    - local: usage_guides/quantization
+      title: Model quantization
+    - local: usage_guides/tracking
+      title: Experiment trackers
+    - local: usage_guides/checkpoint
+      title: Save and load training states
+    - local: usage_guides/training_zoo
+      title: Example Zoo
+    title: Accelerate
+  - isExpanded: true
+    sections:
+    - local: usage_guides/gradient_accumulation
+      title: Gradient accumulation
+    - local: usage_guides/local_sgd
+      title: Local SGD
+    - local: usage_guides/low_precision_training
+      title: Low precision (FP8) training
+    - local: usage_guides/deepspeed
+      title: DeepSpeed
+    - local: usage_guides/fsdp
+      title: Fully Sharded Data Parallelism
+    - local: usage_guides/megatron_lm
+      title: Megatron-LM
+    - local: usage_guides/sagemaker
+      title: Amazon SageMaker
+    - local: usage_guides/mps
+      title: Apple M1 GPUs
+    - local: usage_guides/ipex
+      title: IPEX training with CPU
+    title: Training
+  - isExpanded: true
+    sections:
+    - local: usage_guides/big_modeling
+      title: Big Model Inference
+    - local: usage_guides/distributed_inference
+      title: Distributed inference
+    title: Inference
+  title: How to guides
 - sections:
   - local: concept_guides/internal_mechanism
     title: 🤗 Accelerate's internal mechanism
@@ -72,7 +85,7 @@
   title: Concepts and fundamentals
 - sections: 
   - local: package_reference/accelerator
-    title: Main Accelerator class
+    title: Accelerator
   - local: package_reference/state
     title: Stateful configuration classes
   - local: package_reference/cli

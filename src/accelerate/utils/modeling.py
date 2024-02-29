@@ -100,7 +100,7 @@ def convert_file_size_to_int(size: Union[int, str]):
     1048576
     ```
     """
-    mem_size = 0
+    mem_size = -1
     err_msg = (
         f"`size` {size} is not in a valid format. Use an integer for bytes, or a string with an unit (like '5.0GB')."
     )
@@ -125,7 +125,7 @@ def convert_file_size_to_int(size: Union[int, str]):
     except ValueError:
         raise ValueError(err_msg)
 
-    if mem_size <= 0:
+    if mem_size < 0:
         raise ValueError(err_msg)
     return mem_size
 
@@ -143,6 +143,8 @@ def dtype_byte_size(dtype: torch.dtype):
     """
     if dtype == torch.bool:
         return 1 / 8
+    elif dtype == CustomDtype.INT2:
+        return 1 / 4
     elif dtype == CustomDtype.INT4:
         return 1 / 2
     elif dtype == CustomDtype.FP8:
@@ -402,6 +404,8 @@ def set_module_tensor_to_device(
                     new_value.SCB = new_value.SCB.to("cpu")
                 else:
                     new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+            elif param_cls.__name__ in ["QTensor"]:
+                new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
 
