@@ -1153,7 +1153,11 @@ def infer_auto_device_map(
         # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
-            modules_children = [] if isinstance(module, nn.Parameter) or isinstance(module, torch.Tensor) else list(module.named_children())
+            modules_children = (
+                []
+                if isinstance(module, nn.Parameter) or isinstance(module, torch.Tensor)
+                else list(module.named_children())
+            )
             if verbose:
                 print(
                     f"Not enough space on {devices[current_device]} to put {name} (space available "
