@@ -253,7 +253,10 @@ class PartialState:
                 if self.device is None:
                     self.device = torch.device("npu", self.local_process_index)
                 torch.npu.set_device(self.device)
-            elif get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1:
+            elif (
+                get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
+                or int(os.environ.get("LOCAL_RANK", -1)) != -1
+            ):
                 if not cpu and is_xpu_available():
                     self.distributed_type = DistributedType.MULTI_XPU
                 else:
@@ -338,7 +341,6 @@ class PartialState:
 
                 if self.device is None:
                     self.device = torch.device("cpu") if cpu else self.default_device
-
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
     def __repr__(self) -> str:
@@ -846,7 +848,6 @@ class AcceleratorState:
                         if self._mixed_precision != "no":
                             fsdp_plugin.set_mixed_precision(self._mixed_precision)
                         self.fsdp_plugin = fsdp_plugin
-
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"
@@ -1097,6 +1098,13 @@ class GradientState:
     def _set_sync_gradients(self, sync_gradients):
         "Private function that sets whether gradients should be synchronized. Users should not have to call this."
         self.sync_gradients = sync_gradients
+        # Allow grad-sync to automatically work on TPUs
+        if (
+            self.sync_gradients
+            and is_torch_xla_available(check_is_tpu=True)
+            and PartialState().distributed_type == DistributedType.XLA
+        ):
+            xm.mark_step()
 
     def _add_dataloader(self, dataloader):
         "Private function that adds a dataloader to `self.dataloader_references` and sets `in_dataloader` to `True`. Users should not have to call this."

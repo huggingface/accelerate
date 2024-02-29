@@ -16,6 +16,30 @@ env:
   IS_GITHUB_CI: "1"
 
 jobs:
+  check-hf-status:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3.1.0
+    - name: Set up python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.8
+    
+    - name: Install the library
+      run: |
+        pip install --upgrade pip
+        pip install -e .
+        pip install pytest-reportlog tabulate pytest
+
+    - name: Check status
+      run: |
+        make test_hub_status
+
+    - name: Generate Report
+      if: always()
+      run: |
+        python utils/log_reports.py >> $GITHUB_STEP_SUMMARY
+
   run-tests:
     runs-on: ubuntu-latest
     strategy:

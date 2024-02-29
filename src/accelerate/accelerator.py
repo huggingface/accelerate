@@ -180,13 +180,13 @@ class Accelerator:
             the execution on one process only.
         dataloader_config (`DataLoaderConfiguration`, *optional*):
             A configuration for how the dataloaders should be handled in distributed scenarios.
-        deepspeed_plugin (`DeepSpeedPlugin`, *optional*):
+        deepspeed_plugin ([`~utils.DeepSpeedPlugin`], *optional*):
             Tweak your DeepSpeed related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
-        fsdp_plugin (`FullyShardedDataParallelPlugin`, *optional*):
+        fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
-        megatron_lm_plugin (`MegatronLMPlugin`, *optional*):
+        megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
         rng_types (list of `str` or [`~utils.RNGType`]):
@@ -209,7 +209,7 @@ class Accelerator:
             - `"comet_ml"`
             If `"all"` is selected, will pick up all available trackers in the environment and initialize them. Can
             also accept implementations of `GeneralTracker` for custom trackers, and can be combined with `"all"`.
-        project_config (`ProjectConfiguration`, *optional*):
+        project_config ([`~utils.ProjectConfiguration`], *optional*):
             A configuration for how saving the state can be handled.
         project_dir (`str`, `os.PathLike`, *optional*):
             A path to a directory for storing data such as logs of locally-compatible loggers and potentially saved
@@ -217,12 +217,12 @@ class Accelerator:
         step_scheduler_with_optimizer (`bool`, *optional`, defaults to `True`):
             Set `True` if the learning rate scheduler is stepped at the same time as the optimizer, `False` if only
             done under certain circumstances (at the end of each epoch, for instance).
-        kwargs_handlers (`list[KwargHandler]`, *optional*)
-            A list of `KwargHandler` to customize how the objects related to distributed training or mixed precision
-            are created. See [kwargs](kwargs) for more information.
-        dynamo_backend (`str` or `DynamoBackend`, *optional*, defaults to `"no"`):
+        kwargs_handlers (list of [`~utils.KwargsHandler`], *optional*)
+            A list of [`~utils.KwargsHandler`] to customize how the objects related to distributed training or mixed
+            precision are created. See [kwargs](kwargs) for more information.
+        dynamo_backend (`str` or [`~utils.DynamoBackend`], *optional*, defaults to `"no"`):
             Set to one of the possible dynamo backends to optimize your training with torch dynamo.
-        gradient_accumulation_plugin (`GradientAccumulationPlugin`, *optional*):
+        gradient_accumulation_plugin ([`~utils.GradientAccumulationPlugin`], *optional*):
             A configuration for how gradient accumulation should be handled, if more tweaking than just the
             `gradient_accumulation_steps` is needed.
 
@@ -407,11 +407,6 @@ class Accelerator:
         self.gradient_state = GradientState(
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
-        if self.state.distributed_type == DistributedType.XLA:
-            if self.gradient_state.num_steps != 1:
-                raise ValueError(
-                    "Gradient accumulation is not supported on TPU. Please set `gradient_accumulation_steps` to 1 and don't pass in a `GradientAccumulationPlugin` object."
-                )
 
         self.device_placement = device_placement
         if dataloader_config is None:
@@ -475,7 +470,7 @@ class Accelerator:
                 self.native_amp = True
             else:
                 self.native_amp = is_bf16_available(True)
-            if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available(check_is_gpu=True):
+            if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available():
                 raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
 
         # Start of internal step tracking
@@ -3193,6 +3188,7 @@ class Accelerator:
             autocast_handler = self.autocast_handler
         autocast_context = get_mixed_precision_context_manager(self.native_amp, autocast_handler)
         autocast_context.__enter__()
+        # TODO: should the `yield` be in a try/finally block?
         yield
         autocast_context.__exit__(*sys.exc_info())
 

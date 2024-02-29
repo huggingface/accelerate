@@ -27,7 +27,6 @@ from transformers.testing_utils import mockenv_context
 from transformers.trainer_utils import set_seed
 from transformers.utils import is_torch_bf16_available
 
-import accelerate
 from accelerate.accelerator import Accelerator
 from accelerate.scheduler import AcceleratedScheduler
 from accelerate.state import AcceleratorState
@@ -35,6 +34,7 @@ from accelerate.test_utils.testing import (
     AccelerateTestCase,
     TempDirTestCase,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_cuda,
     require_deepspeed,
     require_multi_device,
@@ -837,10 +837,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
 
     def test_basic_run(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        test_file_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_performance.py"]
-        )
+        test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_performance.py")
         with tempfile.TemporaryDirectory() as dirpath:
             cmd = [
                 "accelerate",
@@ -901,6 +898,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
 @require_multi_device
 @slow
 class DeepSpeedIntegrationTest(TempDirTestCase):
+    test_scripts_folder = path_in_accelerate_package("test_utils", "scripts", "external_deps")
+
     def setUp(self):
         super().setUp()
         self._test_file_path = inspect.getfile(self.__class__)
@@ -927,11 +926,8 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         self.n_train = 160
         self.n_val = 160
 
-        mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_scripts_folder = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps"])
-
     def test_performance(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
+        self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
             "accelerate",
             "launch",
@@ -975,7 +971,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_checkpointing(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_checkpointing.py")
+        self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
         cmd = [
             "accelerate",
             "launch",
@@ -1029,7 +1025,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_peak_memory_usage(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_peak_memory_usage.py")
+        self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
         cmd = [
             "accelerate",
             "launch",
@@ -1092,7 +1088,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 execute_subprocess_async(cmd_stage, env=os.environ.copy())
 
     def test_lr_scheduler(self):
-        self.test_file_path = os.path.join(self.test_scripts_folder, "test_performance.py")
+        self.test_file_path = self.test_scripts_folder / "test_performance.py"
         cmd = [
             "accelerate",
             "launch",

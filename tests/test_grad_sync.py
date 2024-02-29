@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import os
 import unittest
 
-import accelerate
 from accelerate import debug_launcher
 from accelerate.test_utils import (
+    DEFAULT_LAUNCH_COMMAND,
     device_count,
     execute_subprocess_async,
+    path_in_accelerate_package,
     require_cpu,
     require_multi_device,
     require_non_cpu,
@@ -30,9 +30,7 @@ from accelerate.utils import patch_environment
 
 
 class SyncScheduler(unittest.TestCase):
-    def setUp(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_sync.py"])
+    test_file_path = path_in_accelerate_package("test_utils", "scripts", "test_sync.py")
 
     @require_cpu
     def test_gradient_sync_cpu_noop(self):
@@ -49,6 +47,6 @@ class SyncScheduler(unittest.TestCase):
     @require_multi_device
     def test_gradient_sync_gpu_multi(self):
         print(f"Found {device_count} devices.")
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.test_file_path]
+        cmd = DEFAULT_LAUNCH_COMMAND + [self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
