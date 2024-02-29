@@ -23,15 +23,12 @@ style:
 	doc-builder style src/accelerate docs/source --max_len 119
 	
 # Run tests for the library
-test_hub_status:
-	python -m pytest -s -v ./tests/test_hub_status.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_hub_status.log",)
-
 test_big_modeling:
 	python -m pytest -s -v ./tests/test_big_modeling.py ./tests/test_modeling_utils.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_big_modeling.log",)
 
 test_core:
 	python -m pytest -s -v ./tests/ --ignore=./tests/test_examples.py --ignore=./tests/deepspeed --ignore=./tests/test_big_modeling.py \
-	--ignore=./tests/fsdp --ignore=./tests/test_cli.py --ignore=./tests/test_hub_status.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_core.log",)
+	--ignore=./tests/fsdp --ignore=./tests/test_cli.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_core.log",)
 
 test_cli:
 	python -m pytest -s -v ./tests/test_cli.py $(if $(IS_GITHUB_CI),--report-log "$(PYTORCH_VERSION)_cli.log",)

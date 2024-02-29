@@ -10,7 +10,6 @@ from .testing import (
     require_bnb,
     require_cpu,
     require_cuda,
-    require_hub_online,
     require_huggingface_suite,
     require_mps,
     require_multi_device,

@@ -25,7 +25,6 @@ from accelerate.test_utils.testing import (
     DEFAULT_LAUNCH_COMMAND,
     get_launch_command,
     path_in_accelerate_package,
-    require_hub_online,
     require_multi_device,
     require_timm,
     require_transformers,
@@ -235,7 +234,6 @@ class TpuConfigTester(unittest.TestCase):
         )
 
 
-@require_hub_online
 class ModelEstimatorTester(unittest.TestCase):
     """
     Test case for checking the output of `accelerate estimate-memory` is correct.
