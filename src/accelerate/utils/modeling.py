@@ -100,7 +100,7 @@ def convert_file_size_to_int(size: Union[int, str]):
     1048576
     ```
     """
-    mem_size = 0
+    mem_size = -1
     err_msg = (
         f"`size` {size} is not in a valid format. Use an integer for bytes, or a string with an unit (like '5.0GB')."
     )
@@ -125,7 +125,7 @@ def convert_file_size_to_int(size: Union[int, str]):
     except ValueError:
         raise ValueError(err_msg)
 
-    if mem_size <= 0:
+    if mem_size < 0:
         raise ValueError(err_msg)
     return mem_size
 
