@@ -1055,3 +1055,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         ]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd, env=os.environ.copy())
+
+    def test_dynamo(self):
+        # TODO
+        pass
