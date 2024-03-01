@@ -35,7 +35,6 @@ from accelerate.test_utils.testing import (
 )
 from accelerate.utils import patch_environment
 from accelerate.utils.launch import prepare_simple_launcher_cmd_env
-from accelerate.utils.other import path_in_accelerate_package
 
 
 class AccelerateLauncherTester(unittest.TestCase):
