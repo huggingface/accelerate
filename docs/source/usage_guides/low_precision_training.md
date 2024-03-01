@@ -57,7 +57,7 @@ Of the two, `MS-AMP` is traditionally the easier one to configure as there is on
 Currently two levels of optimization are supported in the 🤗 Accelerate integration, `"O1"` and `"O2"` (using the letter 'o', not zero). 
 
 * `"O1"` will cast the weight gradients and `all_reduce` communications to happen in 8-bit, while the rest are done in 16 bit. This reduces the general GPU memory usage and speeds up communication bandwidths.
-* `"O2"` will also cast first-order optimizer states into 8 bit, while the second order states are in FP16. (Currently just the `Adam` optimizer is supported). This tries it's best to minimize final accuracy degradation and will save the highest potential memory.
+* `"O2"` will also cast first-order optimizer states into 8 bit, while the second order states are in FP16. (Currently just the `Adam` optimizer is supported). This tries its best to minimize final accuracy degradation and will save the highest potential memory.
 
 To specify an optimization level, pass it to the `FP8KwargsHandler` by setting the `optimization_level` argument:
 
@@ -70,7 +70,7 @@ accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
 
 ## Configuring TransformersEngine
 
-TransformersEngine has much more available for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convience. 
+TransformersEngine has much more available for customizing how and what FP8 calculations are performed. A full list of supported arguments and what they mean are available in [NVIDIA's documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/common.html), however they are restated as part of [`FP8KwargsHandler`]'s docstring for your convenience. 
 
 🤗 Accelerate tries to set sensible defaults, but exploring and tweaking the various parameters yourself can lead to better performance potentially.
 
@@ -83,7 +83,7 @@ kwargs = [FP8RecipeKwargs(backend="te", ...)]
 accelerator = Accelerator(mixed_precision="fp8", kwarg_handlers=kwargs)
 ```
 
-## Futher Reading
+## Further Reading
 
 To learn more about training in FP8 please check out the following resources:
 

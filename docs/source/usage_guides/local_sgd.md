@@ -88,7 +88,7 @@ achieved by adding one `with LocalSGD` statement and one call `local_sgd.step()`
 +           local_sgd.step()
 ```
 
-Under the hood, the Local SGD code **disables** automatic gradient synchornization (but accumulation still works as expected!). Instead it averages model parameters every `local_sgd_steps` steps (as well as in the end of the training loop).
+Under the hood, the Local SGD code **disables** automatic gradient synchronization (but accumulation still works as expected!). Instead it averages model parameters every `local_sgd_steps` steps (as well as at the end of the training loop).
 
 ## Limitations
 
