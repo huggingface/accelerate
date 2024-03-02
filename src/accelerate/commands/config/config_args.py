@@ -27,7 +27,7 @@ from ...utils.constants import SAGEMAKER_PYTHON_VERSION, SAGEMAKER_PYTORCH_VERSI
 
 
 hf_cache_home = os.path.expanduser(
-    os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
+    os.environ.get("HF_HOME", os.path.join(os.environ.get("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
 )
 cache_dir = os.path.join(hf_cache_home, "accelerate")
 default_json_config_file = os.path.join(cache_dir, "default_config.yaml")
@@ -45,7 +45,7 @@ def load_config_from_file(config_file):
         if not os.path.isfile(config_file):
             raise FileNotFoundError(
                 f"The passed configuration file `{config_file}` does not exist. "
-                "Please pass an existing file to `accelerate launch`, or use the the default one "
+                "Please pass an existing file to `accelerate launch`, or use the default one "
                 "created through `accelerate config` and run `accelerate launch` "
                 "without the `--config_file` argument."
             )

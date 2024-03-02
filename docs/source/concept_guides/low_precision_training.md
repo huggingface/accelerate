@@ -34,7 +34,7 @@ MS-AMP O3 | FP8 | FP8 | FP8 | FP16 | FP8 | FP8+FP16
 
 ## `TransformersEngine`
 
-`TransformersEngine` is the first solution to trying to train in 8-bit floating point. It works by using drop-in replacement layers for certain ones in a model that utilize their FP8-engine to reduce the number of bits (such as 32 to 8) without degrading the final accuracy of the model. 
+`TransformersEngine` is the first solution to trying to train in 8-bit floating point. It works by using drop-in replacement layers for certain ones in a model that utilizes their FP8-engine to reduce the number of bits (such as 32 to 8) without degrading the final accuracy of the model. 
 
 Specifically, 🤗 Accelerate will find and replace the following layers with `TransformersEngine` versions:
 

@@ -10,8 +10,9 @@ extend-select = [
     "E", # PEP8 errors
     "F", # PEP8 formatting
     "I", # Import sorting
-    "W", # PEP8 warnings
+    "TID251", # Banned API
     "UP", # Pyupgrade
+    "W", # PEP8 warnings
 ]
 ignore = [
     "E501", # Line length (handled by ruff-format)
@@ -34,3 +35,8 @@ known-first-party = ["accelerate"]
 exclude = [
     "manim_animations/*"
 ]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"os.getenv".msg = "Use os.environ instead"
+"os.putenv".msg = "Use os.environ instead"
+"os.unsetenv".msg = "Use os.environ instead"
