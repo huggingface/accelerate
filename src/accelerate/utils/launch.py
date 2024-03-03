@@ -136,7 +136,7 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     if need_port_check and is_port_in_use(main_process_port):
         raise ConnectionError(
             f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
-            "Please specify a different port (such as using the `----main_process_port` flag or specifying a different `main_process_port` in your config file)"
+            "Please specify a different port (such as using the `--main_process_port` flag or specifying a different `main_process_port` in your config file)"
             " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
         )
 
