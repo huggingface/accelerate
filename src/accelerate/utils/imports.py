@@ -98,7 +98,7 @@ def is_cuda_available():
     Checks if `cuda` is available via an `nvml-based` check which won't trigger the drivers and leave cuda
     uninitialized.
     """
-    pytorch_nvml_based_cuda_check_previous_value = os.getenv("PYTORCH_NVML_BASED_CUDA_CHECK")
+    pytorch_nvml_based_cuda_check_previous_value = os.environ.get("PYTORCH_NVML_BASED_CUDA_CHECK")
     try:
         os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = str(1)
         available = torch.cuda.is_available()
