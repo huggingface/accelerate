@@ -28,6 +28,7 @@ import torch
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.commands.config.config_utils import DYNAMO_BACKENDS
+from accelerate.commands.utils import ArgumentParserWithDashSupport
 from accelerate.state import get_int_from_env
 from accelerate.utils import (
     ComputeEnvironment,
@@ -130,7 +131,7 @@ def launch_command_parser(subparsers=None):
     if subparsers is not None:
         parser = subparsers.add_parser("launch", add_help=False, allow_abbrev=False)
     else:
-        parser = argparse.ArgumentParser("Accelerate launch command", add_help=False, allow_abbrev=False)
+        parser = ArgumentParserWithDashSupport("Accelerate launch command", add_help=False, allow_abbrev=False)
 
     parser.register("action", "help", _CustomHelpAction)
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
