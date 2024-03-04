@@ -354,10 +354,10 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 )
                 assert accelerator.deepspeed_config["zero_allow_untested_optimizer"]
                 assert accelerator.deepspeed_config["train_batch_size"], 16
-                assert type(model) == DeepSpeedEngine
-                assert type(optimizer) == DeepSpeedOptimizerWrapper
-                assert type(lr_scheduler) == AcceleratedScheduler
-                assert type(accelerator.deepspeed_engine_wrapped) == DeepSpeedEngineWrapper
+                assert type(model) is DeepSpeedEngine
+                assert type(optimizer) is DeepSpeedOptimizerWrapper
+                assert type(lr_scheduler) is AcceleratedScheduler
+                assert type(accelerator.deepspeed_engine_wrapped) is DeepSpeedEngineWrapper
 
         elif optim_type == DS_OPTIMIZER and scheduler_type == DS_SCHEDULER:
             # Test DeepSpeed optimizer + DeepSpeed scheduler
@@ -411,10 +411,10 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                     model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                 )
-                assert type(model) == DeepSpeedEngine
-                assert type(optimizer) == DeepSpeedOptimizerWrapper
-                assert type(lr_scheduler) == DeepSpeedSchedulerWrapper
-                assert type(accelerator.deepspeed_engine_wrapped) == DeepSpeedEngineWrapper
+                assert type(model) is DeepSpeedEngine
+                assert type(optimizer) is DeepSpeedOptimizerWrapper
+                assert type(lr_scheduler) is DeepSpeedSchedulerWrapper
+                assert type(accelerator.deepspeed_engine_wrapped) is DeepSpeedEngineWrapper
 
         elif optim_type == CUSTOM_OPTIMIZER and scheduler_type == DS_SCHEDULER:
             # Test custom optimizer + DeepSpeed scheduler
@@ -445,11 +445,11 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
                     model, optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
                 )
-                assert type(model) == DeepSpeedEngine
-                assert type(optimizer) == DeepSpeedOptimizerWrapper
-                assert type(lr_scheduler) == DeepSpeedSchedulerWrapper
-                assert type(accelerator.deepspeed_engine_wrapped) == DeepSpeedEngineWrapper
-        elif optim_type == DS_OPTIMIZER and scheduler_type == CUSTOM_SCHEDULER:
+                assert type(model) is DeepSpeedEngine
+                assert type(optimizer) is DeepSpeedOptimizerWrapper
+                assert type(lr_scheduler) is DeepSpeedSchedulerWrapper
+                assert type(accelerator.deepspeed_engine_wrapped) is DeepSpeedEngineWrapper
+        elif optim_type == DS_OPTIMIZER and scheduler_type is CUSTOM_SCHEDULER:
             # Test deepspeed optimizer + custom scheduler
             deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.ds_config_file[ZERO2])
             with mockenv_context(**self.dist_env):
@@ -992,8 +992,8 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                     ]
                 )
                 for i in range(3):
-                    if f"stage_{i+1}" in spec:
-                        cmd_stage.extend([f"--zero_stage={i+1}"])
+                    if f"stage_{i + 1}" in spec:
+                        cmd_stage.extend([f"--zero_stage={i + 1}"])
                         break
                 cmd_stage.extend(
                     [

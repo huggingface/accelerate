@@ -113,8 +113,8 @@ def generate_predictions(model, dataloader, accelerator):
 def test_torch_metrics(
     accelerator: Accelerator, num_samples=82, dispatch_batches=False, split_batches=False, batch_size=16
 ):
-    model, ddp_model, dataloader = get_basic_setup(accelerator, num_samples, batch_size)
-    logits, targs = generate_predictions(ddp_model, dataloader, accelerator)
+    _, ddp_model, dataloader = get_basic_setup(accelerator, num_samples, batch_size)
+    logits, _ = generate_predictions(ddp_model, dataloader, accelerator)
     assert (
         len(logits) == num_samples
     ), f"Unexpected number of inputs:\n    Expected: {num_samples}\n    Actual: {len(logits)}"
