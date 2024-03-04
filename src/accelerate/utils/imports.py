@@ -96,14 +96,10 @@ def is_fp8_available():
 def is_cuda_available():
     """
     Checks if `cuda` is available via an `nvml-based` check which won't trigger the drivers and leave cuda
-    uninitialized.
+    uninitialized. This is similar to setting the environment variable PYTORCH_NVML_BASED_CUDA_CHECK=1.
+    See: https://pytorch.org/docs/stable/notes/cuda.html#device-agnostic-code
     """
-    try:
-        os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = str(1)
-        available = torch.cuda.is_available()
-    finally:
-        os.environ.pop("PYTORCH_NVML_BASED_CUDA_CHECK", None)
-    return available
+    return torch.cuda._device_count_nvml() > 0
 
 
 @lru_cache
