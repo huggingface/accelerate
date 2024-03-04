@@ -12,9 +12,7 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
-
-from argparse import ArgumentParser
+# limitations under the License
 
 from accelerate.commands.config import get_config_parser
 from accelerate.commands.env import env_command_parser
@@ -22,10 +20,13 @@ from accelerate.commands.estimate import estimate_command_parser
 from accelerate.commands.launch import launch_command_parser
 from accelerate.commands.test import test_command_parser
 from accelerate.commands.tpu import tpu_command_parser
+from accelerate.commands.utils import ArgumentParserWithDashSupport
 
 
 def main():
-    parser = ArgumentParser("Accelerate CLI tool", usage="accelerate <command> [<args>]", allow_abbrev=False)
+    parser = ArgumentParserWithDashSupport(
+        "Accelerate CLI tool", usage="accelerate <command> [<args>]", allow_abbrev=False
+    )
     subparsers = parser.add_subparsers(help="accelerate command helpers")
 
     # Register commands

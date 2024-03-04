@@ -128,10 +128,13 @@ class _CustomHelpAction(argparse._HelpAction):
 
 
 def launch_command_parser(subparsers=None):
+    description = "Launch a python script in a distributed scenario. Arguments can be passed in with either hyphens (`a-b`) or underscores (`a_b`)"
     if subparsers is not None:
-        parser = subparsers.add_parser("launch", add_help=False, allow_abbrev=False)
+        parser = subparsers.add_parser("launch", description=description, add_help=False, allow_abbrev=False)
     else:
-        parser = ArgumentParserWithDashSupport("Accelerate launch command", add_help=False, allow_abbrev=False)
+        parser = ArgumentParserWithDashSupport(
+            "Accelerate launch command", description=description, add_help=False, allow_abbrev=False
+        )
 
     parser.register("action", "help", _CustomHelpAction)
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
