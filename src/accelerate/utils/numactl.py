@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-import sys
+import platform
 import subprocess
-import platform 
+import sys
 from shutil import which
+
 
 def _get_nvidia_smi():
     """
-    Returns the right nvidia-smi command based on the
-    system.
+    Returns the right nvidia-smi command based on the system.
     """
     if platform.system() == "Windows":
         # If platform is Windows and nvidia-smi can't be found in path
@@ -33,10 +33,9 @@ def _get_nvidia_smi():
     return command
 
 
-def get_bus_id(device_id:int=None):
+def get_bus_id(device_id: int = None):
     """
-    Gets the bus ID for `device_id`.
-    If not passed, will default to the local rank.
+    Gets the bus ID for `device_id`. If not passed, will default to the local rank.
     """
     if device_id is None:
         device_id = os.environ.get("LOCAL_RANK", 0)
@@ -46,33 +45,27 @@ def get_bus_id(device_id:int=None):
     )
     return output.strip()[4:]
 
-def get_numa_node_for_device(device_id:int=None):
+
+def get_numa_node_for_device(device_id: int = None):
     """
-    Gets the numa node for `device_id`.
-    If not passed, will default to the local rank.
+    Gets the numa node for `device_id`. If not passed, will default to the local rank.
     """
     bus_id = get_bus_id(device_id)
     if bus_id is None:
         bus_id = 4
-    return subprocess.check_output(
-        ["cat", f"/sys/bus/pci/devices/{bus_id}/numa_node"]
-    ).strip().decode()
+    return subprocess.check_output(["cat", f"/sys/bus/pci/devices/{bus_id}/numa_node"]).strip().decode()
+
 
 def launch():
     args = sys.argv
     script, *script_args = args[1:]
     node = get_numa_node_for_device()
-    cmd = [
-        "numactl", 
-        f"--cpunodebind={node}", 
-        f"--membind={node}",
-        "python3",
-        script
-    ] + script_args
+    cmd = ["numactl", f"--cpunodebind={node}", f"--membind={node}", "python3", script] + script_args
     process = subprocess.Popen(cmd, env=os.environ.copy())
     process.wait()
     if process.returncode != 0:
         raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
+
 
 if __name__ == "__main__":
     launch()

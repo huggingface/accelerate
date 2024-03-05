@@ -702,11 +702,12 @@ def multi_gpu_launcher(args):
         # When using numa, we launch via the `numactl.py` file in Accelerate
         original_training_script = args.training_script
         original_training_script_args = args.training_script_args
-        
+
         from accelerate.test_utils import path_in_accelerate_package
+
         args.training_script = f'{path_in_accelerate_package("utils", "numactl")}.py'
         args.training_script_args = [original_training_script] + original_training_script_args
-    
+
     args = _filter_args(
         args,
         distrib_run.get_args_parser(),

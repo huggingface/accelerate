@@ -63,10 +63,10 @@ def are_libraries_initialized(*library_names: str) -> List[str]:
     """
     return [lib_name for lib_name in library_names if lib_name in sys.modules.keys()]
 
+
 def _get_nvidia_smi():
     """
-    Returns the right nvidia-smi command based on the
-    system.
+    Returns the right nvidia-smi command based on the system.
     """
     if platform.system() == "Windows":
         # If platform is Windows and nvidia-smi can't be found in path
@@ -77,6 +77,7 @@ def _get_nvidia_smi():
     else:
         command = "nvidia-smi"
     return command
+
 
 def get_gpu_info():
     """
