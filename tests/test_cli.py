@@ -109,10 +109,10 @@ class AccelerateLauncherTester(unittest.TestCase):
         """
         mpi_config_path = str(self.test_config_path / "0_28_0_mpi.yaml")
         test_file_arg = "--cpu"
-        sys.argv = ["accelerate", str(self.test_file_path), test_file_arg]
 
-        parser = launch_command_parser()
-        args = parser.parse_args()
+        with patch("sys.argv", ["accelerate", str(self.test_file_path), test_file_arg]):
+            parser = launch_command_parser()
+            args = parser.parse_args()
         args.config_file = mpi_config_path
         args, _, _ = _validate_launch_command(args)
 
@@ -127,7 +127,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         generated_mpirun_cmd = cmd[0 : len(expected_mpirun_cmd)]
         self.assertEqual(expected_mpirun_cmd, generated_mpirun_cmd)
 
-        # Verify that the python script and arg
+        # Verify the python script and args in the mpirun command
         python_script_cmd = cmd[len(expected_mpirun_cmd) :]
         self.assertEqual(len(python_script_cmd), 3)
         self.assertEqual(python_script_cmd[1], str(self.test_file_path))
