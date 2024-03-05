@@ -63,12 +63,10 @@ def are_libraries_initialized(*library_names: str) -> List[str]:
     """
     return [lib_name for lib_name in library_names if lib_name in sys.modules.keys()]
 
-
-def get_gpu_info():
+def _get_nvidia_smi():
     """
-    Gets GPU count and names using `nvidia-smi` instead of torch to not initialize CUDA.
-
-    Largely based on the `gputil` library.
+    Returns the right nvidia-smi command based on the
+    system.
     """
     if platform.system() == "Windows":
         # If platform is Windows and nvidia-smi can't be found in path
@@ -78,6 +76,15 @@ def get_gpu_info():
             command = "%s\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe" % os.environ["systemdrive"]
     else:
         command = "nvidia-smi"
+    return command
+
+def get_gpu_info():
+    """
+    Gets GPU count and names using `nvidia-smi` instead of torch to not initialize CUDA.
+
+    Largely based on the `gputil` library.
+    """
+    command = _get_nvidia_smi()
     # Returns as list of `n` GPUs and their names
     output = subprocess.check_output(
         [command, "--query-gpu=count,name", "--format=csv,noheader"], universal_newlines=True

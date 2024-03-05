@@ -205,6 +205,12 @@ def launch_command_parser(subparsers=None):
         default=None,
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
     )
+    resource_args.add_argument(
+        "--enable_numa_affinity",
+        default=False,
+        action="store_true",
+        help="Whether or not NUMA affinity and balancing should be enabled.",
+    )
 
     # Dynamo arguments
     resource_args.add_argument(
@@ -692,11 +698,21 @@ def multi_gpu_launcher(args):
             logger.warning(message)
 
     debug = getattr(args, "debug", False)
+    if args.enable_numa_affinity:
+        # When using numa, we launch via the `numactl.py` file in Accelerate
+        original_training_script = args.training_script
+        original_training_script_args = args.training_script_args
+        
+        from accelerate.test_utils import path_in_accelerate_package
+        args.training_script = f'{path_in_accelerate_package("utils", "numactl")}.py'
+        args.training_script_args = [original_training_script] + original_training_script_args
+    
     args = _filter_args(
         args,
         distrib_run.get_args_parser(),
         ["--training_script", args.training_script, "--training_script_args", args.training_script_args],
     )
+
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)
