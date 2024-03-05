@@ -124,21 +124,24 @@ class _CustomHelpAction(argparse._HelpAction):
                 if all([arg.help == argparse.SUPPRESS for arg in group._group_actions]):
                     parser._action_groups.remove(group)
 
-        for i, opt in enumerate(parser._actions):
+        for i, opt in enumerate(opts):
             new_strings = []
-            for opt in opt.option_strings:
-                if "-" not in opt[2:]:
-                    new_strings.append(opt)
-            parser._actions[i].option_strings = new_strings
+            for option in opt.option_strings:
+                if "-" not in option[2:]:
+                    new_strings.append(option)
+            opts[i].option_strings = new_strings
 
         super().__call__(parser, namespace, values, option_string)
 
 
 def launch_command_parser(subparsers=None):
+    description = "Launch a python script in a distributed scenario. Arguments can be passed in with either hyphens (`--num-processes=2`) or underscores (`--num_processes=2`)"
     if subparsers is not None:
-        parser = subparsers.add_parser("launch", add_help=False, allow_abbrev=False)
+        parser = subparsers.add_parser("launch", description=description, add_help=False, allow_abbrev=False)
     else:
-        parser = CustomArgumentParser("Accelerate launch command", add_help=False, allow_abbrev=False)
+        parser = CustomArgumentParser(
+            "Accelerate launch command", description=description, add_help=False, allow_abbrev=False
+        )
 
     parser.register("action", "help", _CustomHelpAction)
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")

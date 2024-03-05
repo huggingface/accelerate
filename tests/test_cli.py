@@ -20,6 +20,7 @@ import torch
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
+from accelerate.commands.launch import launch_command_parser
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
     DEFAULT_LAUNCH_COMMAND,
@@ -97,6 +98,50 @@ class AccelerateLauncherTester(unittest.TestCase):
         cmd = ["python", self.notebook_launcher_path]
         with patch_environment(omp_num_threads=1, accelerate_num_processes=2):
             run_command(cmd, env=os.environ.copy())
+
+
+class LaunchArgTester(unittest.TestCase):
+    """
+    Test cases revolving around the CLI wrappers
+    """
+
+    def test_hyphen(self):
+        # Try a little from each cluster
+        parser = launch_command_parser()
+        args = ["--config-file", "test.yaml", "test.py"]
+        result = parser.parse_args(args)
+        assert result.config_file == "test.yaml"
+
+        args = ["--multi-gpu", "--num-processes", "4", "test.py"]
+        result = parser.parse_args(args)
+        assert result.multi_gpu is True
+        assert result.num_processes == 4
+        # And use a mix
+        args = ["--multi-gpu", "--use-deepspeed", "--use-fsdp", "--num_processes", "4", "test.py"]
+        result = parser.parse_args(args)
+        assert result.multi_gpu is True
+        assert result.use_deepspeed is True
+        assert result.use_fsdp is True
+        assert result.num_processes == 4
+
+    def test_underscore(self):
+        # Try a little from each cluster
+        parser = launch_command_parser()
+        args = ["--config_file", "test.yaml", "test.py"]
+        result = parser.parse_args(args)
+        assert result.config_file == "test.yaml"
+
+        args = ["--multi_gpu", "--num_processes", "4", "test.py"]
+        result = parser.parse_args(args)
+        assert result.multi_gpu is True
+        assert result.num_processes == 4
+        # And use a mix
+        args = ["--multi_gpu", "--use_deepspeed", "--use_fsdp", "--num-processes", "4", "test.py"]
+        result = parser.parse_args(args)
+        assert result.multi_gpu is True
+        assert result.use_deepspeed is True
+        assert result.use_fsdp is True
+        assert result.num_processes == 4
 
 
 class TpuConfigTester(unittest.TestCase):
