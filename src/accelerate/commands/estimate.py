@@ -13,12 +13,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import argparse
-
 from huggingface_hub import model_info
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 from accelerate import init_empty_weights
+from accelerate.commands.utils import CustomArgumentParser
 from accelerate.utils import (
     calculate_maximum_sizes,
     convert_bytes,
@@ -183,7 +182,7 @@ def estimate_command_parser(subparsers=None):
     if subparsers is not None:
         parser = subparsers.add_parser("estimate-memory")
     else:
-        parser = argparse.ArgumentParser(description="Model size estimator for fitting a model onto CUDA memory.")
+        parser = CustomArgumentParser(description="Model size estimator for fitting a model onto CUDA memory.")
 
     parser.add_argument("model_name", type=str, help="The model name on the Hugging Face Hub.")
     parser.add_argument(

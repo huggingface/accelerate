@@ -28,6 +28,7 @@ import torch
 from accelerate.commands.config import default_config_file, load_config_from_file
 from accelerate.commands.config.config_args import SageMakerConfig
 from accelerate.commands.config.config_utils import DYNAMO_BACKENDS
+from accelerate.commands.utils import CustomArgumentParser
 from accelerate.state import get_int_from_env
 from accelerate.utils import (
     ComputeEnvironment,
@@ -123,6 +124,13 @@ class _CustomHelpAction(argparse._HelpAction):
                 if all([arg.help == argparse.SUPPRESS for arg in group._group_actions]):
                     parser._action_groups.remove(group)
 
+        for i, opt in enumerate(parser._actions):
+            new_strings = []
+            for opt in opt.option_strings:
+                if "-" not in opt[2:]:
+                    new_strings.append(opt)
+            parser._actions[i].option_strings = new_strings
+
         super().__call__(parser, namespace, values, option_string)
 
 
@@ -130,13 +138,15 @@ def launch_command_parser(subparsers=None):
     if subparsers is not None:
         parser = subparsers.add_parser("launch", add_help=False, allow_abbrev=False)
     else:
-        parser = argparse.ArgumentParser("Accelerate launch command", add_help=False, allow_abbrev=False)
+        parser = CustomArgumentParser("Accelerate launch command", add_help=False, allow_abbrev=False)
 
     parser.register("action", "help", _CustomHelpAction)
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
 
     parser.add_argument(
-        "--config_file", default=None, help="The config file to use for the default values in the launching script."
+        "--config_file",
+        default=None,
+        help="The config file to use for the default values in the launching script.",
     )
     parser.add_argument(
         "--quiet",
