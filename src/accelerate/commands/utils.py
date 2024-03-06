@@ -39,7 +39,7 @@ class _StoreConstAction(_StoreAction):
     Same as `argparse._StoreConstAction` but uses the custom `_StoreAction`.
     """
 
-    def __init__(self, option_strings, dest, const, default=None, required=False, help=None, metavar=None):
+    def __init__(self, option_strings, dest, const, default=None, required=False, help=None):
         super().__init__(
             option_strings=option_strings,
             dest=dest,
@@ -49,9 +49,6 @@ class _StoreConstAction(_StoreAction):
             required=required,
             help=help,
         )
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        setattr(namespace, self.dest, self.const)
 
 
 class _StoreTrueAction(_StoreConstAction):
@@ -79,19 +76,7 @@ class CustomArgumentGroup(argparse._ArgumentGroup):
     """
 
     def _add_action(self, action):
-        attrs = [
-            "option_strings",
-            "dest",
-            "nargs",
-            "const",
-            "default",
-            "type",
-            "choices",
-            "required",
-            "help",
-            "metavar",
-        ]
-        args = {attr: getattr(action, attr) for attr in attrs}
+        args = vars(action)
         if isinstance(action, argparse._StoreTrueAction):
             action = _StoreTrueAction(
                 args["option_strings"], args["dest"], args["default"], args["required"], args["help"]
@@ -104,7 +89,6 @@ class CustomArgumentGroup(argparse._ArgumentGroup):
                 args["default"],
                 args["required"],
                 args["help"],
-                args["metavar"],
             )
         elif isinstance(action, argparse._StoreAction):
             action = _StoreAction(**args)
