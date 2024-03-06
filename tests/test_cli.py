@@ -112,6 +112,7 @@ class LaunchArgTester(unittest.TestCase):
         args = ["--config-file", "test.yaml", "test.py"]
         result = self.parser.parse_args(args)
         assert result.config_file == "test.yaml"
+        assert result.multi_gpu is False
 
         args = ["--multi-gpu", "--num-processes", "4", "test.py"]
         result = self.parser.parse_args(args)

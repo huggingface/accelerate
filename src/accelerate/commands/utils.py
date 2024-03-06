@@ -50,6 +50,9 @@ class _StoreConstAction(_StoreAction):
             help=help,
         )
 
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, self.const)
+
 
 class _StoreTrueAction(_StoreConstAction):
     """
