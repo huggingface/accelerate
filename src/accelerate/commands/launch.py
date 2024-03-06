@@ -632,7 +632,7 @@ def launch_command_parser(subparsers=None):
         type=str,
         default=None,
         help="Location for a hostfile for using Accelerate to launch a multi-CPU training job with mpirun. This will "
-             "get passed to the MPI --hostfile or -f parameter, depending on which MPI program is installed.",
+        "get passed to the MPI --hostfile or -f parameter, depending on which MPI program is installed.",
     )
     mpirun_args.add_argument(
         "--mpirun_ccl",

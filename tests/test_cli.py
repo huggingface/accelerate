@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -119,7 +118,7 @@ class AccelerateLauncherTester(unittest.TestCase):
         # Mock out the check for mpirun version to simulate Intel MPI
         with patch("accelerate.utils.launch.which", return_value=True):
             with patch("accelerate.utils.launch.subprocess.check_output", return_value=b"Intel MPI"):
-                cmd, current_env = prepare_simple_launcher_cmd_env(args)
+                cmd, _ = prepare_simple_launcher_cmd_env(args)
 
         # Verify the mpirun command args
         expected_mpirun_cmd = ["mpirun", "-f", "/home/user/hostfile", "-ppn", "4", "-n", "16"]
