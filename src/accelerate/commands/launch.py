@@ -120,12 +120,7 @@ class CustomHelpFormatter(argparse.HelpFormatter):
                 else:
                     action.help = action.help + " (currently selected)"
 
-        new_option_strings = []
-        for option in action.option_strings:
-            if "-" not in option[2:]:
-                new_option_strings.append(option)
-        action.option_strings = new_option_strings
-
+        action.option_strings = [s for s in action.option_strings if "-" not in s[2:]]
         super().add_argument(action)
 
     def end_section(self):
