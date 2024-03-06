@@ -66,6 +66,7 @@ if is_megatron_lm_available():
     from megatron.model.classification import Classification
     from megatron.optimizer import get_megatron_optimizer
     from megatron.core.pipeline_parallel import get_forward_backward_func
+    from megatron.core import tensor_parallel
     from megatron.text_generation.communication import broadcast_int_list, broadcast_tensor
     from megatron.text_generation.generation import (
         beam_search_and_return_on_first_stage,
@@ -92,10 +93,12 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
             "The Megatron LM model weights are initialized at random in `accelerator.prepare`. "
             "Please use `accelerator.load_checkpoint` to load a pre-trained checkpoint matching the distributed setup."
         )
+    config = core_transformer_config_from_args(get_args())
     if args.model_type_name == "bert":
         if args.pretraining_flag:
             num_tokentypes = 2 if args.bert_binary_head else 0
             model = BertModel(
+                config=config,
                 num_tokentypes=num_tokentypes,
                 add_binary_head=args.bert_binary_head,
                 parallel_output=True,
@@ -104,14 +107,15 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
             )
         else:
             model = Classification(
-                num_classes=args.num_labels, num_tokentypes=2, pre_process=pre_process, post_process=post_process
+                config=config, num_classes=args.num_labels, num_tokentypes=2, pre_process=pre_process,
+                post_process=post_process
             )
     elif args.model_type_name == "gpt":
-        config = core_transformer_config_from_args(get_args())
         model = GPTModel(num_tokentypes=0, parallel_output=True, pre_process=pre_process, post_process=post_process,
                          config=config)
     elif args.model_type_name == "t5":
         model = T5Model(
+            config=config,
             num_tokentypes=0,
             parallel_output=True,
             pre_process=pre_process,
@@ -135,9 +139,8 @@ def prepare_model(accelerator):
         custom_model_provider_func = accelerator.state.megatron_lm_plugin.custom_model_provider_function
         model = accelerator.state.megatron_lm_plugin.custom_prepare_model_function(custom_model_provider_func)
     else:
-        if args.model_type_name in ("bert", "gpt"):
-            model_type = ModelType.encoder_or_decoder
-        elif args.model_type_name == "t5":
+        model_type = ModelType.encoder_or_decoder
+        if args.model_type_name == "t5":
             model_type = ModelType.encoder_and_decoder
             if args.pipeline_model_parallel_split_rank is None and args.pipeline_model_parallel_size > 1:
                 args.pipeline_model_parallel_split_rank = args.pipeline_model_parallel_size // 2
@@ -173,11 +176,10 @@ class MegatronLMDummyDataLoader:
             """Build train, valid, and test datasets."""
             args = get_args()
             dataset_args = {
-                "data_prefix": args.data_path,
-                "data_impl": args.data_impl,
+                "data_prefix": args.data_path if isinstance(args.data_path, (list, tuple)) else [args.data_path],
                 "splits_string": args.split,
                 "train_valid_test_num_samples": train_val_test_num_samples,
-                "skip_warmup": (not args.mmap_warmup),
+                "skip_warmup": (not args.mmap_warmup) if hasattr(args, "mmap_warmup") else False,
                 "seed": args.seed,
             }
             if args.model_type_name == "bert":
@@ -500,7 +502,7 @@ class BertTrainStep(AbstractTrainStep):
                 data = next(data_iterator)
             else:
                 data = None
-            data_b = mpu.broadcast_data(keys, data, datatype)
+            data_b = tensor_parallel.broadcast_data(keys, data, datatype)
 
             # Unpack.
             tokens = data_b["text"].long()
@@ -635,7 +637,7 @@ class GPTTrainStep(AbstractTrainStep):
                 data = next(data_iterator)
             else:
                 data = None
-            data_b = mpu.broadcast_data(keys, data, datatype)
+            data_b = tensor_parallel.broadcast_data(keys, data, datatype)
 
             # Unpack.
             tokens_ = data_b["text"].long()
@@ -781,7 +783,7 @@ class T5TrainStep(AbstractTrainStep):
                 data = next(data_iterator)
             else:
                 data = None
-            data_b = mpu.broadcast_data(keys, data, datatype)
+            data_b = tensor_parallel.broadcast_data(keys, data, datatype)
 
             # Unpack.
             tokens_enc = data_b["text_enc"].long()
@@ -1028,7 +1030,7 @@ class MegatronEngine(torch.nn.Module):
             forward_step_func=self.train_step_handler.forward_step,
             data_iterator=batch_data_iterator,
             model=self.module,
-            num_microbatches=len(data_chunks),
+            num_microbatches=get_num_microbatches(),
             seq_length=args.seq_length,
             micro_batch_size=args.micro_batch_size,
             forward_only=False,
@@ -1101,7 +1103,7 @@ class MegatronEngine(torch.nn.Module):
             forward_step_func=self.train_step_handler.forward_step,
             data_iterator=batch_data_iterator,
             model=self.module,
-            num_microbatches=len(data_chunks),
+            num_microbatches=get_num_microbatches(),
             seq_length=args.seq_length,
             micro_batch_size=args.micro_batch_size,
             forward_only=True,
