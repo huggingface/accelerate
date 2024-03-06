@@ -241,7 +241,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                 ]
             )
             with patch_environment(omp_num_threads=1):
-                execute_subprocess_async(cmd_config, env=os.environ.copy())
+                execute_subprocess_async(cmd_config)
 
     def test_checkpointing(self):
         self.test_file_path = self.test_scripts_folder / "test_checkpointing.py"
@@ -276,7 +276,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                     ]
                 )
                 with patch_environment(omp_num_threads=1):
-                    execute_subprocess_async(cmd_config, env=os.environ.copy())
+                    execute_subprocess_async(cmd_config)
 
                 cmd_config = cmd_config[:-1]
                 resume_from_checkpoint = os.path.join(self.tmpdir, "epoch_0")
@@ -286,7 +286,7 @@ class FSDPIntegrationTest(TempDirTestCase):
                     ]
                 )
                 with patch_environment(omp_num_threads=1):
-                    execute_subprocess_async(cmd_config, env=os.environ.copy())
+                    execute_subprocess_async(cmd_config)
 
     def test_peak_memory_usage(self):
         self.test_file_path = self.test_scripts_folder / "test_peak_memory_usage.py"
@@ -330,4 +330,4 @@ class FSDPIntegrationTest(TempDirTestCase):
                 ]
             )
             with patch_environment(omp_num_threads=1):
-                execute_subprocess_async(cmd_config, env=os.environ.copy())
+                execute_subprocess_async(cmd_config)

@@ -15,12 +15,13 @@
 import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
-from accelerate.commands.launch import launch_command_parser
+from accelerate.commands.launch import _validate_launch_command, launch_command_parser
 from accelerate.test_utils import execute_subprocess_async
 from accelerate.test_utils.testing import (
     DEFAULT_LAUNCH_COMMAND,
@@ -32,6 +33,7 @@ from accelerate.test_utils.testing import (
     run_command,
 )
 from accelerate.utils import patch_environment
+from accelerate.utils.launch import prepare_simple_launcher_cmd_env
 
 
 class AccelerateLauncherTester(unittest.TestCase):
@@ -71,11 +73,11 @@ class AccelerateLauncherTester(unittest.TestCase):
 
     def test_config_compatibility(self):
         for config in sorted(self.test_config_path.glob("**/*.yaml")):
-            if "invalid" in str(config):
+            if "invalid" in str(config) or "mpi" in str(config):
                 continue
             with self.subTest(config_file=config):
                 cmd = get_launch_command(config_file=config) + [self.test_file_path]
-                execute_subprocess_async(cmd, env=os.environ.copy())
+                execute_subprocess_async(cmd)
 
     def test_invalid_keys(self):
         config_path = self.test_config_path / "invalid_keys.yaml"
@@ -84,10 +86,10 @@ class AccelerateLauncherTester(unittest.TestCase):
             msg="The config file at 'invalid_keys.yaml' had unknown keys ('another_invalid_key', 'invalid_key')",
         ):
             cmd = get_launch_command(config_file=config_path) + [self.test_file_path]
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
     def test_accelerate_test(self):
-        execute_subprocess_async(["accelerate", "test"], env=os.environ.copy())
+        execute_subprocess_async(["accelerate", "test"])
 
     @require_multi_device
     def test_notebook_launcher(self):
@@ -97,7 +99,38 @@ class AccelerateLauncherTester(unittest.TestCase):
         """
         cmd = ["python", self.notebook_launcher_path]
         with patch_environment(omp_num_threads=1, accelerate_num_processes=2):
-            run_command(cmd, env=os.environ.copy())
+            run_command(cmd)
+
+    def test_mpi_multicpu_config_cmd(self):
+        """
+        Parses a launch command with a test file and the 0_28_0_mpi.yaml config. Tests getting the command and
+        environment vars and verifies the mpirun command arg values.
+        """
+        mpi_config_path = str(self.test_config_path / "0_28_0_mpi.yaml")
+        test_file_arg = "--cpu"
+
+        with patch("sys.argv", ["accelerate", str(self.test_file_path), test_file_arg]):
+            parser = launch_command_parser()
+            args = parser.parse_args()
+        args.config_file = mpi_config_path
+        args, _, _ = _validate_launch_command(args)
+
+        # Mock out the check for mpirun version to simulate Intel MPI
+        with patch("accelerate.utils.launch.which", return_value=True):
+            with patch("accelerate.utils.launch.subprocess.check_output", return_value=b"Intel MPI"):
+                cmd, _ = prepare_simple_launcher_cmd_env(args)
+
+        # Verify the mpirun command args
+        expected_mpirun_cmd = ["mpirun", "-f", "/home/user/hostfile", "-ppn", "4", "-n", "16"]
+        self.assertGreater(len(cmd), len(expected_mpirun_cmd))
+        generated_mpirun_cmd = cmd[0 : len(expected_mpirun_cmd)]
+        self.assertEqual(expected_mpirun_cmd, generated_mpirun_cmd)
+
+        # Verify the python script and args in the mpirun command
+        python_script_cmd = cmd[len(expected_mpirun_cmd) :]
+        self.assertEqual(len(python_script_cmd), 3)
+        self.assertEqual(python_script_cmd[1], str(self.test_file_path))
+        self.assertEqual(python_script_cmd[2], test_file_arg)
 
 
 class LaunchArgTester(unittest.TestCase):

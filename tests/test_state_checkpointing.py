@@ -379,10 +379,14 @@ class CheckpointTest(unittest.TestCase):
     @require_non_torch_xla
     def test_map_location(self):
         cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
-        env = os.environ.copy()
-        env["USE_SAFETENSORS"] = str(self.use_safetensors)
-        env["OMP_NUM_THREADS"] = "1"
-        execute_subprocess_async(cmd, env=env)
+        execute_subprocess_async(
+            cmd,
+            env={
+                **os.environ,
+                "USE_SAFETENSORS": str(self.use_safetensors),
+                "OMP_NUM_THREADS": "1",
+            },
+        )
 
 
 if __name__ == "__main__":
