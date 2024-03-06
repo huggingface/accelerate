@@ -105,20 +105,21 @@ class LaunchArgTester(unittest.TestCase):
     Test cases revolving around the CLI wrappers
     """
 
+    parser = launch_command_parser()
+
     def test_hyphen(self):
         # Try a little from each cluster
-        parser = launch_command_parser()
         args = ["--config-file", "test.yaml", "test.py"]
-        result = parser.parse_args(args)
+        result = self.parser.parse_args(args)
         assert result.config_file == "test.yaml"
 
         args = ["--multi-gpu", "--num-processes", "4", "test.py"]
-        result = parser.parse_args(args)
+        result = self.parser.parse_args(args)
         assert result.multi_gpu is True
         assert result.num_processes == 4
         # And use a mix
         args = ["--multi-gpu", "--use-deepspeed", "--use-fsdp", "--num_processes", "4", "test.py"]
-        result = parser.parse_args(args)
+        result = self.parser.parse_args(args)
         assert result.multi_gpu is True
         assert result.use_deepspeed is True
         assert result.use_fsdp is True
@@ -126,22 +127,33 @@ class LaunchArgTester(unittest.TestCase):
 
     def test_underscore(self):
         # Try a little from each cluster
-        parser = launch_command_parser()
         args = ["--config_file", "test.yaml", "test.py"]
-        result = parser.parse_args(args)
+        result = self.parser.parse_args(args)
         assert result.config_file == "test.yaml"
 
         args = ["--multi_gpu", "--num_processes", "4", "test.py"]
-        result = parser.parse_args(args)
+        result = self.parser.parse_args(args)
         assert result.multi_gpu is True
         assert result.num_processes == 4
         # And use a mix
         args = ["--multi_gpu", "--use_deepspeed", "--use_fsdp", "--num-processes", "4", "test.py"]
-        result = parser.parse_args(args)
+        result = self.parser.parse_args(args)
         assert result.multi_gpu is True
         assert result.use_deepspeed is True
         assert result.use_fsdp is True
         assert result.num_processes == 4
+
+    def test_duplicate_entities(self):
+        help_return = self.parser.format_help()
+        args = self.parser.parse_args(["test.py"])
+        for arg in args.__dict__:
+            if "_" in arg:
+                bad_arg = f'--{arg.replace("_", "-")}'
+                # Need an exception for `num-processes` since it's in the docstring
+                if bad_arg == "--num-processes":
+                    assert help_return.count(bad_arg) == 1, f"Found {bad_arg} in `accelerate launch -h`"
+                else:
+                    assert bad_arg not in help_return, f"Found {bad_arg} in `accelerate launch -h`"
 
 
 class TpuConfigTester(unittest.TestCase):
