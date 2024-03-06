@@ -171,7 +171,15 @@ To learn more, check the CLI documentation available [here](https://huggingface.
 
 🤗 Here is another way to launch multi-CPU run using MPI. You can learn how to install Open MPI on [this page](https://www.open-mpi.org/faq/?category=building#easy-build). You can use Intel MPI or MVAPICH as well.
 Once you have MPI setup on your cluster, just run:
-
+```bash
+accelerate config
+```
+Answer the questions that are asked, selecting to run using multi-CPU, and answer "yes" when asked if you want accelerate to launch mpirun.
+Then, use `accelerate launch` with your script like:
+```bash
+accelerate launch examples/nlp_example.py
+```
+Alternatively, you can use mpirun directly, without using the CLI like:
 ```bash
 mpirun -np 2 python examples/nlp_example.py
 ```

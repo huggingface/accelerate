@@ -625,6 +625,22 @@ def launch_command_parser(subparsers=None):
         ),
     )
 
+    # MPI arguments
+    mpirun_args = parser.add_argument_group("MPI Arguments", "Arguments related to mpirun for Multi-CPU")
+    mpirun_args.add_argument(
+        "--mpirun_hostfile",
+        type=str,
+        default=None,
+        help="Location for a hostfile for using Accelerate to launch a multi-CPU training job with mpirun. This will "
+        "get passed to the MPI --hostfile or -f parameter, depending on which MPI program is installed.",
+    )
+    mpirun_args.add_argument(
+        "--mpirun_ccl",
+        type=int,
+        default=1,
+        help="The number of oneCCL worker threads when using Accelerate to launch multi-CPU training with mpirun.",
+    )
+
     # Other arguments of the training scripts
     parser.add_argument("training_script_args", nargs=argparse.REMAINDER, help="Arguments of the training script.")
 
@@ -906,6 +922,8 @@ def _validate_launch_command(args):
                         setattr(args, k, defaults.dynamo_config[k])
                     for k in defaults.ipex_config:
                         setattr(args, k, defaults.ipex_config[k])
+                    for k in defaults.mpirun_config:
+                        setattr(args, k, defaults.mpirun_config[k])
                     continue
 
                 # Those args are handled separately
