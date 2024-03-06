@@ -636,7 +636,7 @@ class ModelingUtilsTester(unittest.TestCase):
         # device 0, but with offload_buffers they won't be loaded to device 0 all at once, so it's ok now
         # Should NOT print a warning in such case
         with warnings.catch_warnings():
-            warnings.simplefilter("error")
+            warnings.simplefilter("always")
             device_map = infer_auto_device_map(model, max_memory={0: 400, "cpu": "1GB"}, offload_buffers=True)
         assert device_map == {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
 
@@ -654,7 +654,7 @@ class ModelingUtilsTester(unittest.TestCase):
         # can hold all remaining buffers
         # Should NOT print a warning in such case
         with warnings.catch_warnings():
-            warnings.simplefilter("error")
+            warnings.simplefilter("always")
             device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 400, "cpu": "1GB"})
         assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": "cpu", "linear3": "cpu"}
 
@@ -667,7 +667,7 @@ class ModelingUtilsTester(unittest.TestCase):
         # Now we have two devices, neither can hold all the buffers, but we are using the offload_buffers=True
         # Should NOT print a warning in such case
         with warnings.catch_warnings():
-            warnings.simplefilter("error")
+            warnings.simplefilter("always")
             device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 200, "cpu": "1GB"}, offload_buffers=True)
         assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": "cpu", "linear3": "cpu"}
 

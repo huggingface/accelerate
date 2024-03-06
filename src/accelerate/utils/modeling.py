@@ -1125,7 +1125,6 @@ def infer_auto_device_map(
     current_device = 0
     current_memory_used = 0
     device_memory_used = {}
-    device_memory_reserved = {}
     device_buffer_sizes = {}
 
     # Direct submodules and parameters
@@ -1176,10 +1175,11 @@ def infer_auto_device_map(
 
         device = devices[current_device]
         current_max_size = max_memory[device] if device != "disk" else None
+        current_memory_reserved = 0
         # Reduce max size available by the largest layer.
         if devices[current_device] in main_devices:
             current_max_size = current_max_size - max_layer_size
-            device_memory_reserved[current_device] = max_layer_size
+            current_memory_reserved = max_layer_size
         # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
@@ -1198,7 +1198,7 @@ def infer_auto_device_map(
                 if verbose:
                     print("This module cannot be split, going to the next device.")
 
-                device_memory_used[device] = current_memory_used
+                device_memory_used[device] = current_memory_used + current_memory_reserved
                 current_device += 1
                 modules_to_treat = [(name, module)] + modules_to_treat
                 current_memory_used = 0
@@ -1297,7 +1297,7 @@ def infer_auto_device_map(
                     if verbose:
                         print("None of the tied module can be split, going to the next device.")
 
-                    device_memory_used[device] = current_memory_used
+                    device_memory_used[device] = current_memory_used + current_memory_reserved
                     current_device += 1
                     modules_to_treat = [(name, module)] + modules_to_treat
                     current_memory_used = 0
@@ -1312,7 +1312,7 @@ def infer_auto_device_map(
                         f"(available={current_max_size - current_memory_used})."
                     )
             current_memory_used += module_size
-            device_memory_used[device] = current_memory_used
+            device_memory_used[device] = current_memory_used + current_memory_reserved
             device_map[name] = devices[current_device]
 
             if not offload_buffers and isinstance(module, nn.Module):
@@ -1324,16 +1324,15 @@ def infer_auto_device_map(
     if clean_result:
         device_map = clean_device_map(device_map)
 
-    if not offload_buffers:
-        non_gpu_buffer_size = device_buffer_sizes.get("cpu", 0) + device_buffer_sizes.get("disk", 0)
-
+    non_gpu_buffer_size = device_buffer_sizes.get("cpu", 0) + device_buffer_sizes.get("disk", 0)
+    if non_gpu_buffer_size > 0 and not offload_buffers:
         is_buffer_fit_any_gpu = False
         for gpu_device, gpu_max_memory in max_memory.items():
             if gpu_device == "cpu" or gpu_device == "disk":
                 continue
 
             if not is_buffer_fit_any_gpu:
-                gpu_memory_used = device_memory_used.get(gpu_device, 0) + device_memory_reserved.get(gpu_device, 0)
+                gpu_memory_used = device_memory_used.get(gpu_device, 0)
 
                 if gpu_max_memory >= non_gpu_buffer_size + gpu_memory_used:
                     is_buffer_fit_any_gpu = True
