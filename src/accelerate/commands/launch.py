@@ -79,59 +79,59 @@ def clean_option(option):
         return option[:3] + option[3:].replace("-", "_")
 
 
-class _CustomHelpAction(argparse._HelpAction):
+class CustomHelpFormatter(argparse.HelpFormatter):
     """
-    This is a custom help action that will hide all arguments that are not used in the command line when the help is
+    This is a custom help formatter that will hide all arguments that are not used in the command line when the help is
     called. This is useful for the case where the user is using a specific platform and only wants to see the arguments
     for that platform.
     """
 
-    def __call__(self, parser, namespace, values, option_string=None):
-        if "accelerate" in sys.argv[0] and "launch" in sys.argv[1:]:
-            args = sys.argv[2:]
-        else:
-            args = sys.argv[1:]
-        opts = parser._actions
-        titles = [
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.titles = [
             "Hardware Selection Arguments",
             "Resource Selection Arguments",
             "Training Paradigm Arguments",
             "positional arguments",
             "optional arguments",
         ]
+
+    def add_argument(self, action: argparse.Action):
+        if "accelerate" in sys.argv[0] and "launch" in sys.argv[1:]:
+            args = sys.argv[2:]
+        else:
+            args = sys.argv[1:]
+
         if len(args) > 1:
             used_platforms = [arg for arg in args if arg in options_to_group.keys()]
             args = list(map(clean_option, args))
             used_titles = [options_to_group[o] for o in used_platforms]
-            for i, arg in enumerate(opts):
-                # If the argument's container is outside of the used titles, hide it
-                if arg.container.title not in titles + used_titles:
-                    opts[i].help = argparse.SUPPRESS
-                # If the argument is hardware selection, but not being passed, hide it
-                elif arg.container.title == "Hardware Selection Arguments":
-                    if set(arg.option_strings).isdisjoint(set(args)):
-                        opts[i].help = argparse.SUPPRESS
-                    else:
-                        opts[i].help = arg.help + " (currently selected)"
-                # If the argument is a training paradigm, but not being passed, hide it
-                elif arg.container.title == "Training Paradigm Arguments":
-                    if set(arg.option_strings).isdisjoint(set(used_platforms)):
-                        opts[i].help = argparse.SUPPRESS
-                    else:
-                        opts[i].help = arg.help + " (currently selected)"
-            for i, group in enumerate(list(parser._action_groups)):
-                # If all arguments in the group are hidden, hide the group
-                if all([arg.help == argparse.SUPPRESS for arg in group._group_actions]):
-                    parser._action_groups.remove(group)
+            if action.container.title not in self.titles + used_titles:
+                action.help = argparse.SUPPRESS
+            elif action.container.title == "Hardware Selection Arguments":
+                if set(action.option_strings).isdisjoint(set(args)):
+                    action.help = argparse.SUPPRESS
+                else:
+                    action.help = action.help + " (currently selected)"
+            elif action.container.title == "Training Paradigm Arguments":
+                if set(action.option_strings).isdisjoint(set(args)):
+                    action.help = argparse.SUPPRESS
+                else:
+                    action.help = action.help + " (currently selected)"
 
-        for i, opt in enumerate(opts):
-            new_strings = []
-            for option in opt.option_strings:
-                if "-" not in option[2:]:
-                    new_strings.append(option)
-            opts[i].option_strings = new_strings
+        new_option_strings = []
+        for option in action.option_strings:
+            if "-" not in option[2:]:
+                new_option_strings.append(option)
+        action.option_strings = new_option_strings
 
-        super().__call__(parser, namespace, values, option_string)
+        super().add_argument(action)
+
+    def end_section(self):
+        if len(self._current_section.items) < 2:
+            self._current_section.items = []
+            self._current_section.heading = ""
+        super().end_section()
 
 
 def launch_command_parser(subparsers=None):
@@ -140,10 +140,14 @@ def launch_command_parser(subparsers=None):
         parser = subparsers.add_parser("launch", description=description, add_help=False, allow_abbrev=False)
     else:
         parser = CustomArgumentParser(
-            "Accelerate launch command", description=description, add_help=False, allow_abbrev=False
+            "Accelerate launch command",
+            description=description,
+            add_help=False,
+            allow_abbrev=False,
+            formatter_class=CustomHelpFormatter,
         )
 
-    parser.register("action", "help", _CustomHelpAction)
+    # parser.register("action", "help", _CustomHelpAction)
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
 
     parser.add_argument(
