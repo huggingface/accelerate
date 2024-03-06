@@ -64,19 +64,20 @@ if is_rich_available():
 
 logger = logging.getLogger(__name__)
 
+
 options_to_group = {
-    "--multi-gpu": "Distributed GPUs",
-    "--tpu": "TPU",
-    "--use_deepspeed": "DeepSpeed Arguments",
-    "--use_fsdp": "FSDP Arguments",
-    "--use_megatron_lm": "Megatron-LM Arguments",
+    "multi_gpu": "Distributed GPUs",
+    "tpu": "TPU",
+    "use_deepspeed": "DeepSpeed Arguments",
+    "use_fsdp": "FSDP Arguments",
+    "use_megatron_lm": "Megatron-LM Arguments",
 }
 
 
 def clean_option(option):
     "Finds all cases of - after the first two characters and changes them to _"
     if option.startswith("--"):
-        return option[:3] + option[3:].replace("-", "_")
+        return option[2:].replace("-", "_")
 
 
 class CustomHelpFormatter(argparse.HelpFormatter):
@@ -103,8 +104,8 @@ class CustomHelpFormatter(argparse.HelpFormatter):
             args = sys.argv[1:]
 
         if len(args) > 1:
-            used_platforms = [arg for arg in args if arg in options_to_group.keys()]
             args = list(map(clean_option, args))
+            used_platforms = [arg for arg in args if arg in options_to_group.keys()]
             used_titles = [options_to_group[o] for o in used_platforms]
             if action.container.title not in self.titles + used_titles:
                 action.help = argparse.SUPPRESS
@@ -137,7 +138,9 @@ class CustomHelpFormatter(argparse.HelpFormatter):
 def launch_command_parser(subparsers=None):
     description = "Launch a python script in a distributed scenario. Arguments can be passed in with either hyphens (`--num-processes=2`) or underscores (`--num_processes=2`)"
     if subparsers is not None:
-        parser = subparsers.add_parser("launch", description=description, add_help=False, allow_abbrev=False)
+        parser = subparsers.add_parser(
+            "launch", description=description, add_help=False, allow_abbrev=False, formatter_class=CustomHelpFormatter
+        )
     else:
         parser = CustomArgumentParser(
             "Accelerate launch command",
@@ -147,7 +150,6 @@ def launch_command_parser(subparsers=None):
             formatter_class=CustomHelpFormatter,
         )
 
-    # parser.register("action", "help", _CustomHelpAction)
     parser.add_argument("-h", "--help", action="help", help="Show this help message and exit.")
 
     parser.add_argument(
