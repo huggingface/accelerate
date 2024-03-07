@@ -1144,11 +1144,12 @@ class FullyShardedDataParallelPlugin:
                 ).split(",")
                 transformer_cls_to_wrap = set()
                 for layer_class in transformer_cls_names_to_wrap:
-                    transformer_cls = FullyShardedDataParallelPlugin.get_module_class_from_name(model, layer_class)
-                    if transformer_cls is None:
-                        raise Exception("Could not find the transformer layer class to wrap in the model.")
-                    else:
-                        transformer_cls_to_wrap.add(transformer_cls)
+                    if layer_class:
+                        transformer_cls = FullyShardedDataParallelPlugin.get_module_class_from_name(model, layer_class)
+                        if transformer_cls is None:
+                            raise Exception("Could not find the transformer layer class to wrap in the model.")
+                        else:
+                            transformer_cls_to_wrap.add(transformer_cls)
 
                 self.auto_wrap_policy = functools.partial(
                     transformer_auto_wrap_policy,
