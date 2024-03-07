@@ -20,7 +20,6 @@ ignore = [
     "E501", # Line length (handled by ruff-format)
     "E741", # Ambiguous variable name
     "W605", # Invalid escape sequence
-    "UP007", # X | Y type annotations
 ]
 
 [tool.ruff.lint.per-file-ignores]

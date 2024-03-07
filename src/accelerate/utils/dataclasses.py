@@ -561,7 +561,7 @@ class ProjectConfiguration:
         },
     )
 
-    def set_directories(self, project_dir: str = None):
+    def set_directories(self, project_dir: Optional[str] = None):
         "Sets `self.project_dir` and `self.logging_dir` to the appropriate values."
         self.project_dir = project_dir
         if self.logging_dir is None:

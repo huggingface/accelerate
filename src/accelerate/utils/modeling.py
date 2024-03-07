@@ -1454,7 +1454,7 @@ def load_checkpoint_in_model(
     dtype: Optional[Union[str, torch.dtype]] = None,
     offload_state_dict: bool = False,
     offload_buffers: bool = False,
-    keep_in_fp32_modules: List[str] = None,
+    keep_in_fp32_modules: Optional[List[str]] = None,
     offload_8bit_bnb: bool = False,
 ):
     """
@@ -1652,7 +1652,7 @@ def load_checkpoint_in_model(
     retie_parameters(model, tied_params)
 
 
-def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwargs: AutocastKwargs = None):
+def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwargs: Optional[AutocastKwargs] = None):
     """
     Return a context manager for autocasting mixed precision
 

@@ -140,9 +140,9 @@ class OffloadedWeightsLoader(Mapping):
 
     def __init__(
         self,
-        state_dict: Dict[str, torch.Tensor] = None,
+        state_dict: Optional[Dict[str, torch.Tensor]] = None,
         save_folder: Optional[Union[str, os.PathLike]] = None,
-        index: Mapping = None,
+        index: Optional[Mapping] = None,
         device=None,
     ):
         if state_dict is None and save_folder is None and index is None:

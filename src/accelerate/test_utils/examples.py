@@ -20,7 +20,7 @@ others are used to either get the code that matters, or to preprocess them (such
 """
 
 import os
-from typing import List
+from typing import List, Optional
 
 
 def get_function_contents_by_name(lines: List[str], name: str):
@@ -60,7 +60,9 @@ def clean_lines(lines: List[str]):
     return [line for line in lines if not line.lstrip().startswith("#") and line != "\n"]
 
 
-def compare_against_test(base_filename: str, feature_filename: str, parser_only: bool, secondary_filename: str = None):
+def compare_against_test(
+    base_filename: str, feature_filename: str, parser_only: bool, secondary_filename: Optional[str] = None
+):
     """
     Tests whether the additional code inside of `feature_filename` was implemented in `base_filename`. This should be
     used when testing to see if `complete_*_.py` examples have all of the implementations from each of the

@@ -530,7 +530,7 @@ def attach_align_device_hook_on_blocks(
     module: nn.Module,
     execution_device: Optional[Union[torch.device, Dict[str, torch.device]]] = None,
     offload: Union[bool, Dict[str, bool]] = False,
-    weights_map: Mapping = None,
+    weights_map: Optional[Mapping] = None,
     offload_buffers: bool = False,
     module_name: str = "",
     skip_keys: Optional[Union[str, List[str]]] = None,
