@@ -609,7 +609,12 @@ class GradientAccumulationPlugin(KwargsHandler):
             "help": "Whether to synchronize setting the gradients when at the end of the dataloader. Should only be set to `False` if you know what you're doing."
         },
     )
-
+    sync_each_batch: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to synchronize setting the gradients at each data batch. Seting to `True` may reduce memory requirements (especially with distributed training) at expense of speed."
+        },
+    )
 
 @dataclass
 class TorchDynamoPlugin(KwargsHandler):
