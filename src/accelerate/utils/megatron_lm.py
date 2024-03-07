@@ -47,10 +47,20 @@ if is_megatron_lm_available():
         print_rank_0,
         print_rank_last,
     )
-    from megatron.core import mpu
-    from megatron.arguments import _add_data_args, _add_validation_args, parse_args, validate_args, \
-        core_transformer_config_from_args
+    from megatron.arguments import (
+        _add_data_args,
+        _add_validation_args,
+        core_transformer_config_from_args,
+        parse_args,
+        validate_args,
+    )
     from megatron.checkpointing import load_args_from_checkpoint, load_checkpoint, save_checkpoint
+    from megatron.core import mpu, tensor_parallel
+    from megatron.core.distributed import DistributedDataParallel as LocalDDP
+    from megatron.core.distributed import finalize_model_grads
+    from megatron.core.enums import ModelType
+    from megatron.core.pipeline_parallel import get_forward_backward_func
+    from megatron.core.utils import get_model_config
     from megatron.data.data_samplers import MegatronPretrainingRandomSampler, MegatronPretrainingSampler
     from megatron.global_vars import set_global_variables
     from megatron.initialize import (
@@ -61,20 +71,15 @@ if is_megatron_lm_available():
         write_args_to_tensorboard,
     )
     from megatron.model import BertModel, Float16Module, GPTModel, T5Model
-    from megatron.core.enums import ModelType
-    from megatron.core.distributed import DistributedDataParallel as LocalDDP, finalize_model_grads
     from megatron.model.classification import Classification
     from megatron.optimizer import get_megatron_optimizer
-    from megatron.core.pipeline_parallel import get_forward_backward_func
-    from megatron.core import tensor_parallel
-    from megatron.core.utils import get_model_config
     from megatron.text_generation.communication import broadcast_int_list, broadcast_tensor
     from megatron.text_generation.generation import (
         beam_search_and_return_on_first_stage,
         generate_tokens_probs_and_return_on_first_stage,
     )
     from megatron.tokenizer.tokenizer import _vocab_size_with_padding
-    from megatron.training import get_model, get_optimizer_param_scheduler, training_log, num_floating_point_operations
+    from megatron.training import get_model, get_optimizer_param_scheduler, num_floating_point_operations, training_log
     from megatron.utils import (
         average_losses_across_data_parallel_group,
         calc_params_l2_norm,
@@ -1003,7 +1008,7 @@ class MegatronEngine(torch.nn.Module):
             if len(self.module) == 1:
                 config.param_sync_func = config.param_sync_func[0]
         config.finalize_model_grads_func = finalize_model_grads
-        
+
         self.log_eval_results()
 
     def eval(self):
