@@ -1480,12 +1480,14 @@ def add_model_config_to_megatron_parser(model_type: str):
     def add_model_config_parser_helper(func):
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
+
         MODEL_CONFIGS_TO_MEGATRON_PARSERS[model_type] = func
         return wrapper
+
     return add_model_config_parser_helper
 
 
-@add_model_config_to_megatron_parser('megatron-bert')
+@add_model_config_to_megatron_parser("megatron-bert")
 def parse_bert_config(megatron_lm_plugin, model, batch_data):
     model_type_name = "bert"
     num_layers = model.config.num_hidden_layers
@@ -1518,7 +1520,7 @@ def parse_bert_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["num_labels"] = num_labels
 
 
-@add_model_config_to_megatron_parser('gpt2')
+@add_model_config_to_megatron_parser("gpt2")
 def parse_gpt2_config(megatron_lm_plugin, model, batch_data):
     model_type_name = "gpt"
     num_layers = model.config.n_layer
@@ -1550,7 +1552,7 @@ def parse_gpt2_config(megatron_lm_plugin, model, batch_data):
     megatron_lm_plugin.megatron_lm_default_args["model_return_dict"] = model.config.return_dict
 
 
-@add_model_config_to_megatron_parser('t5')
+@add_model_config_to_megatron_parser("t5")
 def parse_t5_config(megatron_lm_plugin, model, batch_data):
     model_type_name = "t5"
     num_layers = model.config.num_layers

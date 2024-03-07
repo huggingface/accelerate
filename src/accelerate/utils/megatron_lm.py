@@ -113,12 +113,16 @@ def model_provider_func(pre_process=True, post_process=True, add_encoder=True, a
             )
         else:
             model = Classification(
-                config=config, num_classes=args.num_labels, num_tokentypes=2, pre_process=pre_process,
-                post_process=post_process
+                config=config,
+                num_classes=args.num_labels,
+                num_tokentypes=2,
+                pre_process=pre_process,
+                post_process=post_process,
             )
     elif args.model_type_name == "gpt":
-        model = GPTModel(num_tokentypes=0, parallel_output=True, pre_process=pre_process, post_process=post_process,
-                         config=config)
+        model = GPTModel(
+            num_tokentypes=0, parallel_output=True, pre_process=pre_process, post_process=post_process, config=config
+        )
     elif args.model_type_name == "t5":
         model = T5Model(
             config=config,
@@ -689,11 +693,8 @@ class GPTTrainStep(AbstractTrainStep):
             losses = losses.float()
             loss_mask = loss_mask.view(-1).float()
             if args.context_parallel_size > 1:
-                loss = torch.cat(
-                    [torch.sum(losses.view(-1) * loss_mask).view(1),
-                     loss_mask.sum().view(1)])
-                torch.distributed.all_reduce(loss,
-                                             group=mpu.get_context_parallel_group())
+                loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
+                torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
                 loss = loss[0] / loss[1]
             else:
                 loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
@@ -702,8 +703,8 @@ class GPTTrainStep(AbstractTrainStep):
             if args.check_for_nan_in_loss_and_grad:
                 global_rank = torch.distributed.get_rank()
                 assert not loss.isnan(), (
-                    f'Rank {global_rank}: found NaN in local forward loss calculation. '
-                    f'Device: {torch.cuda.current_device()}, node: {os.uname()[1]}'
+                    f"Rank {global_rank}: found NaN in local forward loss calculation. "
+                    f"Device: {torch.cuda.current_device()}, node: {os.uname()[1]}"
                 )
 
             # Reduce loss for logging.
@@ -992,9 +993,10 @@ class MegatronEngine(torch.nn.Module):
         # Setup some training config params
         config.grad_scale_func = self.optimizer.scale_loss
         if isinstance(self.module[0], LocalDDP) and args.overlap_grad_reduce:
-            assert config.no_sync_func is None, \
-                ('When overlap_grad_reduce is True, config.no_sync_func must be None; '
-                 'a custom no_sync_func is not supported when overlapping grad-reduce')
+            assert config.no_sync_func is None, (
+                "When overlap_grad_reduce is True, config.no_sync_func must be None; "
+                "a custom no_sync_func is not supported when overlapping grad-reduce"
+            )
             config.no_sync_func = [model_chunk.no_sync for model_chunk in self.module]
             if len(self.module) == 1:
                 config.no_sync_func = config.no_sync_func[0]
@@ -1003,8 +1005,9 @@ class MegatronEngine(torch.nn.Module):
                 if len(self.module) == 1:
                     config.grad_sync_func = config.grad_sync_func[0]
         if args.overlap_param_gather and args.delay_param_gather:
-            config.param_sync_func = [lambda x: self.optimizer.finish_param_sync(model_index, x)
-                                      for model_index in range(len(self.module))]
+            config.param_sync_func = [
+                lambda x: self.optimizer.finish_param_sync(model_index, x) for model_index in range(len(self.module))
+            ]
             if len(self.module) == 1:
                 config.param_sync_func = config.param_sync_func[0]
         config.finalize_model_grads_func = finalize_model_grads
@@ -1253,8 +1256,13 @@ class MegatronEngine(torch.nn.Module):
         args = get_args()
         args.save = output_dir
         torch.distributed.barrier()
-        save_checkpoint(self.iteration, self.module, self.optimizer, self.scheduler,
-                        num_floating_point_operations_so_far=self.num_floating_point_operations_so_far)
+        save_checkpoint(
+            self.iteration,
+            self.module,
+            self.optimizer,
+            self.scheduler,
+            num_floating_point_operations_so_far=self.num_floating_point_operations_so_far,
+        )
         torch.distributed.barrier()
 
     def load_checkpoint(self, input_dir):
