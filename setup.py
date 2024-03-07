@@ -54,7 +54,7 @@ setup(
     keywords="deep learning",
     license="Apache",
     author="The HuggingFace team",
-    author_email="sylvain@huggingface.co",
+    author_email="zach.mueller@huggingface.co",
     url="https://github.com/huggingface/accelerate",
     package_dir={"": "src"},
     packages=find_packages("src"),
