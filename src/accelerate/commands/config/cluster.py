@@ -547,6 +547,16 @@ def get_cluster_input():
             default="all",
         )
 
+    # NUMA is only supported on MULTI_GPU for now
+    enable_numa = False
+    if distributed_type == DistributedType.MULTI_GPU:
+        enable_numa = _ask_field(
+            "Would you like to enable numa efficiency? (Currently only supported on NVIDIA hardware). [yes/NO]: ",
+            _convert_yes_no_to_bool,
+            default=False,
+            error_message="Please enter yes or no.",
+        )
+
     if distributed_type == DistributedType.XLA:
         mixed_precision = "no"
         main_training_function = _ask_field(
@@ -673,4 +683,5 @@ def get_cluster_input():
         tpu_use_cluster=tpu_use_cluster,
         dynamo_config=dynamo_config,
         debug=debug,
+        enable_numa_affinity=enable_numa,
     )
