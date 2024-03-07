@@ -62,11 +62,12 @@ if is_megatron_lm_available():
     )
     from megatron.model import BertModel, Float16Module, GPTModel, T5Model
     from megatron.core.enums import ModelType
-    from megatron.core.distributed import DistributedDataParallel as LocalDDP
+    from megatron.core.distributed import DistributedDataParallel as LocalDDP, finalize_model_grads
     from megatron.model.classification import Classification
     from megatron.optimizer import get_megatron_optimizer
     from megatron.core.pipeline_parallel import get_forward_backward_func
     from megatron.core import tensor_parallel
+    from megatron.core.utils import get_model_config
     from megatron.text_generation.communication import broadcast_int_list, broadcast_tensor
     from megatron.text_generation.generation import (
         beam_search_and_return_on_first_stage,
@@ -927,7 +928,8 @@ def initialize(accelerator, extra_args_provider=None, args_defaults={}):
     # Set pytorch JIT layer fusion options and warmup JIT functions.
     set_jit_fusion_options()
     args = get_args()
-    args.padded_vocab_size = _vocab_size_with_padding(args.orig_vocab_size, args)
+    if getattr(args, "padded_vocab_size", None) is None:
+        args.padded_vocab_size = _vocab_size_with_padding(args.orig_vocab_size, args)
     if args.model_type_name == "bert" and args.pretraining_flag and args.num_labels == 2:
         args.bert_binary_head = True
     else:
@@ -979,6 +981,29 @@ class MegatronEngine(torch.nn.Module):
     def train(self):
         for model_module in self.module:
             model_module.train()
+
+        args = get_args()
+        config = get_model_config(self.module[0])
+        # Setup some training config params
+        config.grad_scale_func = self.optimizer.scale_loss
+        if isinstance(self.module[0], LocalDDP) and args.overlap_grad_reduce:
+            assert config.no_sync_func is None, \
+                ('When overlap_grad_reduce is True, config.no_sync_func must be None; '
+                 'a custom no_sync_func is not supported when overlapping grad-reduce')
+            config.no_sync_func = [model_chunk.no_sync for model_chunk in self.module]
+            if len(self.module) == 1:
+                config.no_sync_func = config.no_sync_func[0]
+            if args.delay_grad_reduce:
+                config.grad_sync_func = [model_chunk.start_grad_sync for model_chunk in self.module]
+                if len(self.module) == 1:
+                    config.grad_sync_func = config.grad_sync_func[0]
+        if args.overlap_param_gather and args.delay_param_gather:
+            config.param_sync_func = [lambda x: self.optimizer.finish_param_sync(model_index, x)
+                                      for model_index in range(len(self.module))]
+            if len(self.module) == 1:
+                config.param_sync_func = config.param_sync_func[0]
+        config.finalize_model_grads_func = finalize_model_grads
+        
         self.log_eval_results()
 
     def eval(self):
