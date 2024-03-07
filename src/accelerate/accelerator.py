@@ -979,9 +979,7 @@ class Accelerator:
             self.gradient_state._set_sync_gradients(True)
         else:
             self.step += 1
-            self.gradient_state._set_sync_gradients(
-                force or ((self.step % self.gradient_state.num_steps) == 0)
-            )
+            self.gradient_state._set_sync_gradients(force or ((self.step % self.gradient_state.num_steps) == 0))
 
     @property
     def sync_gradients(self):
@@ -1027,7 +1025,7 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        self._do_sync(force=self.gradient_state.plugin_kwargs.get('sync_each_batch', False))
+        self._do_sync(force=self.gradient_state.plugin_kwargs.get("sync_each_batch", False))
         with contextlib.ExitStack() as cm_stack:
             for m in models:
                 cm_stack.enter_context(contextlib.nullcontext() if self.sync_gradients else self.no_sync(m))
