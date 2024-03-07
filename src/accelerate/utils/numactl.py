@@ -12,36 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-import platform
 import subprocess
 import sys
-from shutil import which
 
+from accelerate.utils.environment import _get_nvidia_smi
 
-def _get_nvidia_smi():
+def get_query_command(device_id: int = None, backend: str = None):
     """
-    Returns the right nvidia-smi command based on the system.
+    Returns the right param args for `numa` support based on a `backend`.
+
+    Currently only supports `nvidia`.
     """
-    if platform.system() == "Windows":
-        # If platform is Windows and nvidia-smi can't be found in path
-        # try from systemd drive with default installation path
-        command = which("nvidia-smi")
-        if command is None:
-            command = "%s\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe" % os.environ["systemdrive"]
+    if backend == "nvidia":
+        return [_get_nvidia_smi(), "--query-gpu=pci.bus_id", "-i", str(device_id), "--format=csv,noheader"]
     else:
-        command = "nvidia-smi"
-    return command
+        # TODO: Add support for AMD and Gaudi2
+        raise ValueError(f"Backend {backend} is currently not supported through `accelerate launch`.")
 
 
-def get_bus_id(device_id: int = None):
+def get_bus_id(device_id: int = None, backend: str = None):
     """
     Gets the bus ID for `device_id`. If not passed, will default to the local rank.
     """
     if device_id is None:
         device_id = os.environ.get("LOCAL_RANK", 0)
-    command = _get_nvidia_smi()
-    output = subprocess.check_output(
-        [command, "--query-gpu=pci.bus_id", "-i", str(device_id), "--format=csv,noheader"], universal_newlines=True
+    command = get_query_command(device_id, backend)
+    output = subprocess.check_output(command, universal_newlines=True
     )
     return output.strip()[4:]
 
