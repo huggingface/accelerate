@@ -17,6 +17,7 @@ import sys
 
 from accelerate.utils.environment import _get_nvidia_smi
 
+
 def get_query_command(device_id: int = None, backend: str = None):
     """
     Returns the right param args for `numa` support based on a `backend`.
@@ -37,8 +38,7 @@ def get_bus_id(device_id: int = None, backend: str = None):
     if device_id is None:
         device_id = os.environ.get("LOCAL_RANK", 0)
     command = get_query_command(device_id, backend)
-    output = subprocess.check_output(command, universal_newlines=True
-    )
+    output = subprocess.check_output(command, universal_newlines=True)
     return output.strip()[4:]
 
 

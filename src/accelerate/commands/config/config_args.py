@@ -167,7 +167,7 @@ class BaseConfig:
                 self.distributed_type = SageMakerDistributedType(self.distributed_type)
             else:
                 self.distributed_type = DistributedType(self.distributed_type)
-        if self.dynamo_config is None:
+        if getattr(self, "dynamo_config", None) is None:
             self.dynamo_config = {}
 
 
