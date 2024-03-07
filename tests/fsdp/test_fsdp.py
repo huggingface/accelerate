@@ -140,6 +140,24 @@ class FSDPPluginIntegration(AccelerateTestCase):
             assert "Could not find the transformer layer class to wrap in the model." in str(cm.exception)
 
         env = self.dist_env.copy()
+        env["FSDP_AUTO_WRAP_POLICY"] = "TRANSFORMER_BASED_WRAP"
+        original_no_split_modules = model._no_split_modules
+        model._no_split_modules = []
+        with mockenv_context(**env):
+            fsdp_plugin = FullyShardedDataParallelPlugin()
+            fsdp_plugin.set_auto_wrap_policy(model)
+            assert fsdp_plugin.auto_wrap_policy is not None
+        model._no_split_modules = original_no_split_modules
+
+        env = self.dist_env.copy()
+        env["FSDP_AUTO_WRAP_POLICY"] = "TRANSFORMER_BASED_WRAP"
+        env["FSDP_TRANSFORMER_CLS_TO_WRAP"] = ""
+        with mockenv_context(**env):
+            fsdp_plugin = FullyShardedDataParallelPlugin()
+            fsdp_plugin.set_auto_wrap_policy(model)
+            assert fsdp_plugin.auto_wrap_policy is not None
+
+        env = self.dist_env.copy()
         env["FSDP_AUTO_WRAP_POLICY"] = "SIZE_BASED_WRAP"
         env["FSDP_MIN_NUM_PARAMS"] = "0"
         with mockenv_context(**env):
