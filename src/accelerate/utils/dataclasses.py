@@ -369,7 +369,7 @@ class ComputeEnvironment(str, enum.Enum):
 
 class DynamoBackend(str, BaseEnum):
     """
-    Represents a dynamo backend (see https://github.com/pytorch/torchdynamo).
+    Represents a dynamo backend (see https://pytorch.org/docs/stable/torch.compiler.html).
 
     Values:
 
