@@ -972,7 +972,7 @@ class Accelerator:
             model.require_backward_grad_sync = old_require_backward_grad_sync
             model.require_forward_param_sync = old_require_forward_param_sync
 
-    def _do_sync(self, force: bool = True):
+    def _do_sync(self, force: bool = False):
         "Sets the right `sync_gradients` context and either resets or increases `self.step`"
         if self.gradient_state.sync_with_dataloader and self.gradient_state.end_of_dataloader:
             self.step = 0
@@ -1025,6 +1025,8 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
+        # sync_each_batch=True will gaurantee below that self.sync_gradients=True, therefore
+        # resulting in the nullcontext always being selected.
         self._do_sync(force=self.gradient_state.plugin_kwargs.get("sync_each_batch", False))
         with contextlib.ExitStack() as cm_stack:
             for m in models:

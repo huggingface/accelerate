@@ -20,7 +20,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
-from accelerate.accelerator import Accelerator
+from accelerate.accelerator import Accelerator, GradientAccumulationPlugin
 from accelerate.state import GradientState
 from accelerate.test_utils import RegressionDataset, RegressionModel
 from accelerate.utils import DistributedType, set_seed
@@ -205,12 +205,11 @@ def test_distributed_sync_multiple_fwd(accelerator):
 
 
 def test_gradient_accumulation(split_batches=False, dispatch_batches=False, sync_each_batch=False):
-    from accelerate.accelerator import GradientAccumulationPlugin
-
+    gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=2, sync_each_batch=sync_each_batch)
     accelerator = Accelerator(
         split_batches=split_batches,
         dispatch_batches=dispatch_batches,
-        gradient_accumulation_plugin=GradientAccumulationPlugin(num_steps=2, sync_each_batch=sync_each_batch),
+        gradient_accumulation_plugin=gradient_accumulation_plugin,
     )
     # Test that context manager behaves properly
     model, ddp_model, dataloader = get_training_setup(accelerator)
@@ -249,12 +248,11 @@ def test_gradient_accumulation(split_batches=False, dispatch_batches=False, sync
 def test_gradient_accumulation_with_opt_and_scheduler(
     split_batches=False, dispatch_batches=False, sync_each_batch=False
 ):
-    from accelerate.accelerator import GradientAccumulationPlugin
-
+    gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=2, sync_each_batch=sync_each_batch)
     accelerator = Accelerator(
         split_batches=split_batches,
         dispatch_batches=dispatch_batches,
-        gradient_accumulation_plugin=GradientAccumulationPlugin(num_steps=2, sync_each_batch=sync_each_batch),
+        gradient_accumulation_plugin=gradient_accumulation_plugin,
     )
     # Test that context manager behaves properly
     model, opt, sched, dataloader, ddp_model, ddp_opt, ddp_sched = get_training_setup(accelerator, True)
@@ -264,7 +262,7 @@ def test_gradient_accumulation_with_opt_and_scheduler(
         input, target = accelerator.gather((ddp_input, ddp_target))
         input, target = input.to(accelerator.device), target.to(accelerator.device)
         # Perform our initial ground truth step in non "DDP"
-        model.train()  # is this needed?
+        model.train()
         ddp_model.train()
         step_model(model, input, target, accelerator, False)
         opt.step()
