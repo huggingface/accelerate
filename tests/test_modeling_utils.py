@@ -16,6 +16,7 @@ import json
 import os
 import tempfile
 import unittest
+import warnings
 from collections import OrderedDict
 
 import torch
@@ -28,6 +29,7 @@ from accelerate.utils.modeling import (
     check_device_map,
     clean_device_map,
     compute_module_sizes,
+    compute_module_total_buffer_size,
     convert_file_size_to_int,
     find_tied_parameters,
     get_balanced_memory,
@@ -296,6 +298,18 @@ class ModelingUtilsTester(unittest.TestCase):
 
         module_sizes = compute_module_sizes(model)
         assert module_sizes == expected_sizes
+
+    def test_compute_module_total_buffer_size(self):
+        model = ModelForTest()
+        model.linear1.register_buffer("test_buffer", torch.zeros(10, 10))
+        model.register_buffer("test_buffer2", torch.zeros(20, 10))
+
+        buffer_size = compute_module_total_buffer_size(model)
+        assert buffer_size == 1240
+
+        model.half()
+        buffer_size = compute_module_total_buffer_size(model)
+        assert buffer_size == 624
 
     def test_check_device_map(self):
         model = ModelForTest()
@@ -603,6 +617,62 @@ class ModelingUtilsTester(unittest.TestCase):
         assert device_map["shared"] == 0
         assert device_map["encoder.embed_tokens"] == 0
         assert device_map["decoder.embed_tokens"] == 0
+
+    def test_infer_auto_device_map_with_buffer_check(self):
+        model = ModelForTest()
+        model.linear1.register_buffer("test_buffer1", torch.zeros(10, 2))
+        model.batchnorm.register_buffer("test_buffer2", torch.zeros(10, 3))
+        model.linear2.register_buffer("test_buffer3", torch.zeros(10, 3))
+        # model has size 236(parameters) + 360(buffers): linear1 64 + 80, batchnorm 72 + 160, linear2 100 + 120
+
+        # Only linear1 (144) fits on device 0, and remaining buffers (batchnorm's 160 + linear2's 120 = 280) won't fit
+        # device 0, because they will also be loaded to device 0 all at once when inferencing without offload_buffers
+        # Should print a warning as intended in such case
+        with self.assertWarns(Warning):
+            device_map = infer_auto_device_map(model, max_memory={0: 400, "cpu": "1GB"})
+        assert device_map == {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
+
+        # Only linear1 (144) fits on device 0, and remaining buffers (batchnorm's 160 + linear2's 120 = 280) won't fit
+        # device 0, but with offload_buffers they won't be loaded to device 0 all at once, so it's ok now
+        # Should NOT print a warning in such case
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            device_map = infer_auto_device_map(model, max_memory={0: 400, "cpu": "1GB"}, offload_buffers=True)
+        assert len(w) == 0
+        assert device_map == {"linear1": 0, "batchnorm": "cpu", "linear2": "cpu"}
+
+    def test_infer_auto_device_map_with_buffer_check_and_multi_devices(self):
+        model = ModelForTest()
+        model.linear1.register_buffer("test_buffer1", torch.zeros(10, 2))
+        model.batchnorm.register_buffer("test_buffer2", torch.zeros(10, 3))
+        model.linear2.register_buffer("test_buffer3", torch.zeros(10, 3))
+        model.linear3 = nn.Linear(4, 5)
+        model.linear3.register_buffer("test_buffer4", torch.zeros(10, 2))
+        # model has size 336(parameters) + 440(buffers): linear1 64 + 80, batchnorm 72 + 160, linear2 100 + 120,
+        # linear3 100 + 80
+
+        # Now we have two devices, linear1 will fit on device 0, batchnorm will fit on device 1, and the second device
+        # can hold all remaining buffers
+        # Should NOT print a warning in such case
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 400, "cpu": "1GB"})
+        assert len(w) == 0
+        assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": "cpu", "linear3": "cpu"}
+
+        # Now we have two devices, but neither the first nor the second device can hold all remaining buffers
+        # Should print a warning as intended in such case
+        with self.assertWarns(Warning):
+            device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 200, "cpu": "1GB"})
+        assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": "cpu", "linear3": "cpu"}
+
+        # Now we have two devices, neither can hold all the buffers, but we are using the offload_buffers=True
+        # Should NOT print a warning in such case
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            device_map = infer_auto_device_map(model, max_memory={0: 400, 1: 200, "cpu": "1GB"}, offload_buffers=True)
+        assert len(w) == 0
+        assert device_map == {"linear1": 0, "batchnorm": 1, "linear2": "cpu", "linear3": "cpu"}
 
     @require_cuda
     def test_get_balanced_memory(self):
