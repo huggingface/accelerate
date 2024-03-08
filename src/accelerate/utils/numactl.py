@@ -48,8 +48,10 @@ def get_numa_node_for_device(device_id: int = None):
     """
     bus_id = get_bus_id(device_id)
     if bus_id is None:
-        bus_id = 4
-    return subprocess.check_output(["cat", f"/sys/bus/pci/devices/{bus_id}/numa_node"]).strip().decode()
+        raise ValueError(f"Could not find bus ID for device {device_id}.")
+
+    with open(f"/sys/bus/pci/devices/{bus_id}/numa_node") as f:
+        return f.read().strip()
 
 
 def launch():
