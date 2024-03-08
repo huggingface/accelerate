@@ -1,9 +1,23 @@
+# Copyright 2022 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import json
 import os
 import pickle
 import tempfile
 from unittest.mock import patch
 
+import pytest
 import torch
 from parameterized import parameterized
 from torch.utils.data import DataLoader, TensorDataset
@@ -12,7 +26,7 @@ from accelerate import DistributedType, infer_auto_device_map, init_empty_weight
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_device, require_non_cpu, slow, torch_device
-from accelerate.test_utils.testing import AccelerateTestCase
+from accelerate.test_utils.testing import AccelerateTestCase, require_non_torch_xla
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import load_checkpoint_in_model
 
@@ -55,11 +69,48 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 class AcceleratorTester(AccelerateTestCase):
+    # Should be removed after 1.0.0 release
+    def test_deprecated_values(self):
+        # Test defaults
+        accelerator = Accelerator()
+        assert accelerator.split_batches is False, "split_batches should be False by default"
+        assert accelerator.dispatch_batches is None, "dispatch_batches should be None by default"
+        assert accelerator.even_batches is True, "even_batches should be True by default"
+        assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
+
+        # Pass some arguments only
+        with pytest.warns(FutureWarning) as cm:
+            accelerator = Accelerator(
+                dispatch_batches=True,
+                split_batches=False,
+            )
+            deprecation_warning = str(cm.list[0].message)
+            assert accelerator.split_batches is False, "split_batches should be True"
+            assert accelerator.dispatch_batches is True, "dispatch_batches should be True"
+            assert accelerator.even_batches is True, "even_batches should be True by default"
+            assert accelerator.use_seedable_sampler is False, "use_seedable_sampler should be False by default"
+            assert "dispatch_batches" in deprecation_warning
+            assert "split_batches" in deprecation_warning
+            assert "even_batches" not in deprecation_warning
+            assert "use_seedable_sampler" not in deprecation_warning
+
+        # Pass in some arguments, but with their defaults
+        with pytest.warns(FutureWarning) as cm:
+            accelerator = Accelerator(
+                even_batches=True,
+                use_seedable_sampler=False,
+            )
+            deprecation_warning = str(cm.list[0].message)
+            assert "even_batches" in deprecation_warning
+            assert accelerator.even_batches is True
+            assert "use_seedable_sampler" in deprecation_warning
+            assert accelerator.use_seedable_sampler is False
+
     @require_non_cpu
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
         assert PartialState._shared_state["_cpu"] is False
-        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu"]
+        assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla"]
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
 
@@ -87,11 +138,11 @@ class AcceleratorTester(AccelerateTestCase):
             prepared_valid_dl,
         ) = accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
 
-        self.assertTrue(prepared_model in accelerator._models)
-        self.assertTrue(prepared_optimizer in accelerator._optimizers)
-        self.assertTrue(prepared_scheduler in accelerator._schedulers)
-        self.assertTrue(prepared_train_dl in accelerator._dataloaders)
-        self.assertTrue(prepared_valid_dl in accelerator._dataloaders)
+        assert prepared_model in accelerator._models
+        assert prepared_optimizer in accelerator._optimizers
+        assert prepared_scheduler in accelerator._schedulers
+        assert prepared_train_dl in accelerator._dataloaders
+        assert prepared_valid_dl in accelerator._dataloaders
 
     def test_free_memory_dereferences_prepared_components(self):
         accelerator = Accelerator()
@@ -99,11 +150,12 @@ class AcceleratorTester(AccelerateTestCase):
         accelerator.prepare(model, optimizer, scheduler, train_dl, valid_dl)
         accelerator.free_memory()
 
-        self.assertTrue(len(accelerator._models) == 0)
-        self.assertTrue(len(accelerator._optimizers) == 0)
-        self.assertTrue(len(accelerator._schedulers) == 0)
-        self.assertTrue(len(accelerator._dataloaders) == 0)
+        assert len(accelerator._models) == 0
+        assert len(accelerator._optimizers) == 0
+        assert len(accelerator._schedulers) == 0
+        assert len(accelerator._dataloaders) == 0
 
+    @require_non_torch_xla
     def test_env_var_device(self):
         """Tests that setting the torch device with ACCELERATE_TORCH_DEVICE overrides default device."""
         PartialState._reset_state()
@@ -114,7 +166,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         with patch("torch.cuda.set_device", noop), patch_environment(ACCELERATE_TORCH_DEVICE="cuda:64"):
             accelerator = Accelerator()
-            self.assertEqual(str(accelerator.state.device), "cuda:64")
+            assert str(accelerator.state.device) == "cuda:64"
 
     @parameterized.expand((True, False), name_func=parameterized_custom_name_func)
     def test_save_load_model(self, use_safetensors):
@@ -129,11 +181,11 @@ class AcceleratorTester(AccelerateTestCase):
 
             # make sure random weights don't match
             load_random_weights(model)
-            self.assertTrue(abs(model_signature - get_signature(model)) > 1e-3)
+            assert abs(model_signature - get_signature(model)) > 1e-3
 
             # make sure loaded weights match
             accelerator.load_state(tmpdirname)
-            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+            assert abs(model_signature - get_signature(model)) < 1e-3
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_model(self, use_safetensors):
@@ -145,7 +197,7 @@ class AcceleratorTester(AccelerateTestCase):
             accelerator.save_model(model, tmpdirname, safe_serialization=use_safetensors)
             # make sure loaded weights match
             load_checkpoint_in_model(model, tmpdirname)
-            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+            assert abs(model_signature - get_signature(model)) < 1e-3
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_model_offload(self, use_safetensors):
@@ -165,7 +217,7 @@ class AcceleratorTester(AccelerateTestCase):
             # load weights that were saved from the offloaded model
             load_checkpoint_and_dispatch(model, tmp_dir)
             output = model(inputs)
-        self.assertTrue(torch.allclose(expected, output, atol=1e-5))
+        assert torch.allclose(expected, output, atol=1e-5)
 
     @parameterized.expand([True, False], name_func=parameterized_custom_name_func)
     def test_save_load_model_with_hooks(self, use_safetensors):
@@ -184,7 +236,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         # loading hook
         def load_config(models, input_dir):
-            with open(os.path.join(input_dir, "data.json"), "r") as f:
+            with open(os.path.join(input_dir, "data.json")) as f:
                 config = json.load(f)
 
             models[0].class_name = config["class_name"]
@@ -197,17 +249,17 @@ class AcceleratorTester(AccelerateTestCase):
 
             # make sure random weights don't match with hooks
             load_random_weights(model)
-            self.assertTrue(abs(model_signature - get_signature(model)) > 1e-3)
+            assert abs(model_signature - get_signature(model)) > 1e-3
 
             # random class name to verify correct one is loaded
             model.class_name = "random"
 
             # make sure loaded weights match with hooks
             accelerator.load_state(tmpdirname)
-            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+            assert abs(model_signature - get_signature(model)) < 1e-3
 
             # mode.class_name is loaded from config
-            self.assertTrue(model.class_name == model.__class__.__name__)
+            assert model.class_name == model.__class__.__name__
 
         # remove hooks
         save_hook.remove()
@@ -218,17 +270,17 @@ class AcceleratorTester(AccelerateTestCase):
 
             # make sure random weights don't match with hooks removed
             load_random_weights(model)
-            self.assertTrue(abs(model_signature - get_signature(model)) > 1e-3)
+            assert abs(model_signature - get_signature(model)) > 1e-3
 
             # random class name to verify correct one is loaded
             model.class_name = "random"
 
             # make sure loaded weights match with hooks removed
             accelerator.load_state(tmpdirname)
-            self.assertTrue(abs(model_signature - get_signature(model)) < 1e-3)
+            assert abs(model_signature - get_signature(model)) < 1e-3
 
             # mode.class_name is NOT loaded from config
-            self.assertTrue(model.class_name != model.__class__.__name__)
+            assert model.class_name != model.__class__.__name__
 
     def test_accelerator_none(self):
         """Just test that passing None to accelerator.prepare() works."""
@@ -240,7 +292,7 @@ class AcceleratorTester(AccelerateTestCase):
         model, optimizer, scheduler, train_dl, valid_dl, dummy_obj = accelerator.prepare(
             model, optimizer, scheduler, train_dl, valid_dl, dummy_obj
         )
-        self.assertTrue(dummy_obj is None)
+        assert dummy_obj is None
 
     def test_is_accelerator_prepared(self):
         """Checks that `_is_accelerator_prepared` is set properly"""
@@ -252,37 +304,26 @@ class AcceleratorTester(AccelerateTestCase):
         model, optimizer, scheduler, train_dl, valid_dl, dummy_obj = accelerator.prepare(
             model, optimizer, scheduler, train_dl, valid_dl, dummy_obj
         )
-        self.assertEqual(
-            getattr(dummy_obj, "_is_accelerate_prepared", False),
-            False,
-            "Dummy object should have `_is_accelerate_prepared` set to `True`",
-        )
-        self.assertEqual(
-            getattr(model, "_is_accelerate_prepared", False),
-            True,
-            "Model is missing `_is_accelerator_prepared` or is set to `False`",
-        )
-        self.assertEqual(
-            getattr(optimizer, "_is_accelerate_prepared", False),
-            True,
-            "Optimizer is missing `_is_accelerator_prepared` or is set to `False`",
-        )
-        self.assertEqual(
-            getattr(scheduler, "_is_accelerate_prepared", False),
-            True,
-            "Scheduler is missing `_is_accelerator_prepared` or is set to `False`",
-        )
-        self.assertEqual(
-            getattr(train_dl, "_is_accelerate_prepared", False),
-            True,
-            "Train Dataloader is missing `_is_accelerator_prepared` or is set to `False`",
-        )
-        self.assertEqual(
-            getattr(valid_dl, "_is_accelerate_prepared", False),
-            True,
-            "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`",
-        )
+        assert (
+            getattr(dummy_obj, "_is_accelerate_prepared", False) is False
+        ), "Dummy object should have `_is_accelerate_prepared` set to `True`"
+        assert (
+            getattr(model, "_is_accelerate_prepared", False) is True
+        ), "Model is missing `_is_accelerator_prepared` or is set to `False`"
+        assert (
+            getattr(optimizer, "_is_accelerate_prepared", False) is True
+        ), "Optimizer is missing `_is_accelerator_prepared` or is set to `False`"
+        assert (
+            getattr(scheduler, "_is_accelerate_prepared", False) is True
+        ), "Scheduler is missing `_is_accelerator_prepared` or is set to `False`"
+        assert (
+            getattr(train_dl, "_is_accelerate_prepared", False) is True
+        ), "Train Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
+        assert (
+            getattr(valid_dl, "_is_accelerate_prepared", False) is True
+        ), "Valid Dataloader is missing `_is_accelerator_prepared` or is set to `False`"
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     def test_accelerator_bnb(self):
@@ -299,6 +340,7 @@ class AcceleratorTester(AccelerateTestCase):
         # This should work
         model = accelerator.prepare(model)
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     def test_accelerator_bnb_cpu_error(self):
@@ -324,6 +366,7 @@ class AcceleratorTester(AccelerateTestCase):
         with self.assertRaises(ValueError):
             model = accelerator.prepare(model)
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     @require_multi_device
@@ -359,6 +402,7 @@ class AcceleratorTester(AccelerateTestCase):
 
         PartialState._reset_state()
 
+    @require_non_torch_xla
     @slow
     @require_bnb
     @require_multi_device

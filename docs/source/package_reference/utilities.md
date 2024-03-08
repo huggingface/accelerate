@@ -62,9 +62,7 @@ These are standalone dataclasses used for checks, such as the type of distribute
 
 These are configurable arguments for specific interactions throughout the PyTorch ecosystem that Accelerate handles under the hood.
 
-
 [[autodoc]] utils.AutocastKwargs
-
 
 [[autodoc]] utils.DistributedDataParallelKwargs
 
@@ -73,6 +71,8 @@ These are configurable arguments for specific interactions throughout the PyTorc
 [[autodoc]] utils.GradScalerKwargs
 
 [[autodoc]] utils.InitProcessGroupKwargs
+
+[[autodoc]] utils.KwargsHandler
 
 ## Plugins
 
@@ -94,6 +94,8 @@ for convenience all of them are available to see here:
 These are classes which can be configured and passed through to the appropriate integration
 
 [[autodoc]] utils.BnbQuantizationConfig
+
+[[autodoc]] utils.DataLoaderConfiguration
 
 [[autodoc]] utils.ProjectConfiguration
 
@@ -150,7 +152,7 @@ These functionalities check the state of the current working environment includi
 
 [[autodoc]] utils.is_torch_version
 
-[[autodoc]] utils.is_tpu_available
+[[autodoc]] utils.is_torch_xla_available
 
 [[autodoc]] utils.is_xpu_available
 

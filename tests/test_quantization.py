@@ -20,7 +20,14 @@ import torch
 import torch.nn as nn
 
 from accelerate import Accelerator, init_empty_weights
-from accelerate.test_utils import require_bnb, require_cuda, require_huggingface_suite, require_multi_gpu, slow
+from accelerate.test_utils import (
+    require_bnb,
+    require_cuda,
+    require_huggingface_suite,
+    require_multi_gpu,
+    require_non_torch_xla,
+    slow,
+)
 from accelerate.utils.bnb import load_and_quantize_model
 from accelerate.utils.dataclasses import BnbQuantizationConfig
 
@@ -31,6 +38,7 @@ class BitsAndBytesConfigIntegration(unittest.TestCase):
             BnbQuantizationConfig(load_in_8bit=True, load_in_4bit=True)
 
 
+@require_non_torch_xla
 @slow
 @require_cuda
 @require_bnb
@@ -102,8 +110,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
         mem_fp16 = self.model_fp16.get_memory_footprint()
         mem_8bit = self.model_8bit.get_memory_footprint()
 
-        self.assertAlmostEqual(mem_fp16 / mem_8bit, self.EXPECTED_RELATIVE_DIFFERENCE)
-        self.assertTrue(self.model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        assert round((mem_fp16 / mem_8bit) - self.EXPECTED_RELATIVE_DIFFERENCE, 7) >= 0
+        assert self.model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params
 
     def test_linear_are_8bit(self):
         r"""
@@ -120,7 +128,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
                     self.bnb_quantization_config.keep_in_fp32_modules + self.bnb_quantization_config.skip_modules
                 )
                 if name not in modules_not_converted:
-                    self.assertTrue(module.weight.dtype == torch.int8)
+                    assert module.weight.dtype == torch.int8
 
     def test_llm_skip(self):
         r"""
@@ -145,10 +153,10 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             no_split_module_classes=["BloomBlock"],
         )
 
-        self.assertTrue(model.transformer.h[1].mlp.dense_4h_to_h.weight.dtype == torch.int8)
-        self.assertTrue(isinstance(model.transformer.h[1].mlp.dense_4h_to_h, bnb.nn.Linear8bitLt))
-        self.assertTrue(isinstance(model.lm_head, nn.Linear))
-        self.assertTrue(model.lm_head.weight.dtype != torch.int8)
+        assert model.transformer.h[1].mlp.dense_4h_to_h.weight.dtype == torch.int8
+        assert isinstance(model.transformer.h[1].mlp.dense_4h_to_h, bnb.nn.Linear8bitLt)
+        assert isinstance(model.lm_head, nn.Linear)
+        assert model.lm_head.weight.dtype != torch.int8
 
     def check_inference_correctness(self, model):
         r"""
@@ -164,7 +172,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
 
         # Get the generation
         output_text = self.tokenizer.decode(output_parallel[0], skip_special_tokens=True)
-        self.assertEqual(output_text, self.EXPECTED_OUTPUT)
+        assert output_text == self.EXPECTED_OUTPUT
 
     def test_generate_quality(self):
         self.check_inference_correctness(self.model_8bit)
@@ -188,7 +196,7 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             device_map="auto",
             no_split_module_classes=["BloomBlock"],
         )
-        self.assertTrue(model.lm_head.weight.dtype == torch.float32)
+        assert model.lm_head.weight.dtype == torch.float32
 
     @require_multi_gpu
     def test_cpu_gpu_loading_custom_device_map(self):
@@ -241,8 +249,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             device_map=device_map,
             no_split_module_classes=["BloomBlock"],
         )
-        self.assertTrue(model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-        self.assertTrue(model_8bit.transformer.h[1].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        assert model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params
+        assert model_8bit.transformer.h[1].mlp.dense_4h_to_h.weight.__class__ == Int8Params
         self.check_inference_correctness(model_8bit)
 
     @require_multi_gpu
@@ -298,8 +306,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
             no_split_module_classes=["BloomBlock"],
             offload_state_dict=True,
         )
-        self.assertTrue(model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-        self.assertTrue(model_8bit.transformer.h[1].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        assert model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params
+        assert model_8bit.transformer.h[1].mlp.dense_4h_to_h.weight.__class__ == Int8Params
         self.check_inference_correctness(model_8bit)
 
     @require_multi_gpu
@@ -357,8 +365,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
                 offload_folder=tmpdirname,
                 offload_state_dict=True,
             )
-            self.assertTrue(model_8bit.transformer.h[4].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-            self.assertTrue(model_8bit.transformer.h[5].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+            assert model_8bit.transformer.h[4].mlp.dense_4h_to_h.weight.__class__ == Int8Params
+            assert model_8bit.transformer.h[5].mlp.dense_4h_to_h.weight.__class__ == Int8Params
             self.check_inference_correctness(model_8bit)
 
     def test_int8_serialization(self):
@@ -387,9 +395,9 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
                 no_split_module_classes=["BloomBlock"],
             )
 
-            self.assertTrue(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-            self.assertTrue(hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
-            self.assertTrue(hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "CB"))
+            assert model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params
+            assert hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB")
+            assert hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "CB")
 
             self.check_inference_correctness(model_8bit_from_saved)
 
@@ -451,8 +459,8 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
                 offload_state_dict=True,
             )
 
-            self.assertTrue(model_8bit_from_saved.transformer.h[4].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-            self.assertTrue(model_8bit_from_saved.transformer.h[5].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+            assert model_8bit_from_saved.transformer.h[4].mlp.dense_4h_to_h.weight.__class__ == Int8Params
+            assert model_8bit_from_saved.transformer.h[5].mlp.dense_4h_to_h.weight.__class__ == Int8Params
             self.check_inference_correctness(model_8bit_from_saved)
 
     def test_int8_serialization_shard(self):
@@ -482,13 +490,14 @@ class MixedInt8EmptyModelTest(unittest.TestCase):
                 no_split_module_classes=["BloomBlock"],
             )
 
-            self.assertTrue(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-            self.assertTrue(hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
-            self.assertTrue(hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "CB"))
+            assert model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params
+            assert hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB")
+            assert hasattr(model_8bit_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "CB")
 
             self.check_inference_correctness(model_8bit_from_saved)
 
 
+@require_non_torch_xla
 @slow
 @require_cuda
 @require_bnb
@@ -547,8 +556,8 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
         mem_fp16 = self.model_fp16.get_memory_footprint()
         mem_8bit = self.model_8bit.get_memory_footprint()
 
-        self.assertAlmostEqual(mem_fp16 / mem_8bit, self.EXPECTED_RELATIVE_DIFFERENCE)
-        self.assertTrue(self.model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        assert round((mem_fp16 / mem_8bit) - self.EXPECTED_RELATIVE_DIFFERENCE, 7) >= 0
+        assert self.model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params
 
     def test_linear_are_8bit(self):
         r"""
@@ -565,7 +574,7 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
                     self.bnb_quantization_config.keep_in_fp32_modules + self.bnb_quantization_config.skip_modules
                 )
                 if name not in modules_not_converted:
-                    self.assertTrue(module.weight.dtype == torch.int8)
+                    assert module.weight.dtype == torch.int8
 
     def test_generate_quality(self):
         r"""
@@ -579,7 +588,7 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
             input_ids=encoded_input["input_ids"].to(self.model_8bit.device), max_new_tokens=10
         )
 
-        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        assert self.tokenizer.decode(output_sequences[0], skip_special_tokens=True) == self.EXPECTED_OUTPUT
 
     def test_fp32_8bit_conversion(self):
         r"""
@@ -591,9 +600,10 @@ class MixedInt8LoaddedModelTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
         model = load_and_quantize_model(model, bnb_quantization_config)
-        self.assertTrue(model.lm_head.weight.dtype == torch.float32)
+        assert model.lm_head.weight.dtype == torch.float32
 
 
+@require_non_torch_xla
 @slow
 @require_cuda
 @require_bnb
@@ -666,8 +676,8 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         mem_fp16 = self.model_fp16.get_memory_footprint()
         mem_4bit = self.model_4bit.get_memory_footprint()
 
-        self.assertAlmostEqual(mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE)
-        self.assertTrue(self.model_4bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Params4bit)
+        assert round((mem_fp16 / mem_4bit) - self.EXPECTED_RELATIVE_DIFFERENCE, 7) >= 0
+        assert self.model_4bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Params4bit
 
     def check_inference_correctness(self, model):
         r"""
@@ -681,7 +691,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
         # Check the exactness of the results
         output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        assert self.tokenizer.decode(output_sequences[0], skip_special_tokens=True) in self.EXPECTED_OUTPUTS
 
     def test_generate_quality(self):
         self.check_inference_correctness(self.model_4bit)
@@ -703,7 +713,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
                     + self.bnb_quantization_config.skip_modules
                 ):
                     # 4-bit parameters are packed in uint8 variables
-                    self.assertTrue(module.weight.dtype == torch.uint8)
+                    assert module.weight.dtype == torch.uint8
 
     def test_fp32_4bit_conversion(self):
         r"""
@@ -724,7 +734,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             device_map="auto",
             no_split_module_classes=["BloomBlock"],
         )
-        self.assertTrue(model.lm_head.weight.dtype == torch.float32)
+        assert model.lm_head.weight.dtype == torch.float32
 
     @require_multi_gpu
     def test_cpu_gpu_loading_random_device_map(self):
@@ -843,6 +853,7 @@ class Bnb4BitEmptyModelTest(unittest.TestCase):
             self.check_inference_correctness(model_4bit)
 
 
+@require_non_torch_xla
 @slow
 @require_cuda
 @require_bnb
@@ -906,8 +917,8 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
         mem_fp16 = self.model_fp16.get_memory_footprint()
         mem_4bit = self.model_4bit.get_memory_footprint()
 
-        self.assertAlmostEqual(mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE)
-        self.assertTrue(self.model_4bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Params4bit)
+        assert round((mem_fp16 / mem_4bit) - self.EXPECTED_RELATIVE_DIFFERENCE, 7) >= 0
+        assert self.model_4bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Params4bit
 
     def test_linear_are_4bit(self):
         r"""
@@ -926,7 +937,7 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
                     + self.bnb_quantization_config.skip_modules
                 ):
                     # 4-bit parameters are packed in uint8 variables
-                    self.assertTrue(module.weight.dtype == torch.uint8)
+                    assert module.weight.dtype == torch.uint8
 
     def test_generate_quality(self):
         r"""
@@ -940,7 +951,7 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
             input_ids=encoded_input["input_ids"].to(self.model_4bit.device), max_new_tokens=10
         )
 
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        assert self.tokenizer.decode(output_sequences[0], skip_special_tokens=True) in self.EXPECTED_OUTPUTS
 
     def test_fp32_4bit_conversion(self):
         r"""
@@ -952,4 +963,4 @@ class Bnb4BitTestLoadedModel(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
         model = load_and_quantize_model(model, bnb_quantization_config)
-        self.assertTrue(model.lm_head.weight.dtype == torch.float32)
+        assert model.lm_head.weight.dtype == torch.float32

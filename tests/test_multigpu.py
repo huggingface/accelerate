@@ -13,55 +13,56 @@
 # limitations under the License.
 
 import inspect
-import os
 import unittest
 
 import torch
 
-import accelerate
 from accelerate import Accelerator
 from accelerate.big_modeling import dispatch_model
 from accelerate.test_utils import (
+    DEFAULT_LAUNCH_COMMAND,
     assert_exception,
     device_count,
     execute_subprocess_async,
+    get_launch_command,
+    path_in_accelerate_package,
+    require_huggingface_suite,
     require_multi_device,
     require_multi_gpu,
+    require_non_torch_xla,
     require_pippy,
 )
 from accelerate.utils import patch_environment
 
 
 class MultiDeviceTester(unittest.TestCase):
-    def setUp(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        self.test_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_script.py"])
-        self.data_loop_file_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "test_distributed_data_loop.py"]
-        )
-        self.operation_file_path = os.path.sep.join(mod_file.split(os.path.sep)[:-1] + ["scripts", "test_ops.py"])
+    test_file_path = path_in_accelerate_package("test_utils", "scripts", "test_script.py")
+    data_loop_file_path = path_in_accelerate_package("test_utils", "scripts", "test_distributed_data_loop.py")
+    operation_file_path = path_in_accelerate_package("test_utils", "scripts", "test_ops.py")
+    pippy_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_pippy.py")
 
     @require_multi_device
     def test_multi_device(self):
         print(f"Found {device_count} devices.")
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.test_file_path]
+        cmd = DEFAULT_LAUNCH_COMMAND + [self.test_file_path]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
     @require_multi_device
     def test_multi_device_ops(self):
         print(f"Found {device_count} devices.")
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", self.operation_file_path]
-        print(f"Command: {cmd}")
+        cmd = DEFAULT_LAUNCH_COMMAND + [self.operation_file_path]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
     @require_multi_device
     def test_pad_across_processes(self):
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
+        print(f"Found {device_count} devices.")
+        cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
+    @require_non_torch_xla
     @require_multi_gpu
     def test_distributed_data_loop(self):
         """
@@ -69,26 +70,21 @@ class MultiDeviceTester(unittest.TestCase):
         when the batch size does not evenly divide the dataset size.
         """
         print(f"Found {device_count} devices, using 2 devices only")
-        cmd = ["torchrun", "--nproc_per_node=2", self.data_loop_file_path]
+        cmd = get_launch_command(num_processes=2) + [self.data_loop_file_path]
         with patch_environment(omp_num_threads=1, cuda_visible_devices="0,1"):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
     @require_multi_gpu
     @require_pippy
+    @require_huggingface_suite
     def test_pippy(self):
         """
         Checks the integration with the pippy framework
         """
-        print(f"Found {torch.cuda.device_count()} devices")
-        cmd = [
-            "accelerate",
-            "launch",
-            "--multi_gpu",
-            f"--num_processes={torch.cuda.device_count()}",
-            self.pippy_file_path,
-        ]
+        print(f"Found {device_count} devices")
+        cmd = get_launch_command(multi_gpu=True, num_processes=device_count) + [self.pippy_file_path]
         with patch_environment(omp_num_threads=1):
-            execute_subprocess_async(cmd, env=os.environ.copy())
+            execute_subprocess_async(cmd)
 
 
 if __name__ == "__main__":

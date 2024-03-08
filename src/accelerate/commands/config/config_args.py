@@ -27,7 +27,7 @@ from ...utils.constants import SAGEMAKER_PYTHON_VERSION, SAGEMAKER_PYTORCH_VERSI
 
 
 hf_cache_home = os.path.expanduser(
-    os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
+    os.environ.get("HF_HOME", os.path.join(os.environ.get("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
 )
 cache_dir = os.path.join(hf_cache_home, "accelerate")
 default_json_config_file = os.path.join(cache_dir, "default_config.yaml")
@@ -45,13 +45,13 @@ def load_config_from_file(config_file):
         if not os.path.isfile(config_file):
             raise FileNotFoundError(
                 f"The passed configuration file `{config_file}` does not exist. "
-                "Please pass an existing file to `accelerate launch`, or use the the default one "
+                "Please pass an existing file to `accelerate launch`, or use the default one "
                 "created through `accelerate config` and run `accelerate launch` "
                 "without the `--config_file` argument."
             )
     else:
         config_file = default_config_file
-    with open(config_file, "r", encoding="utf-8") as f:
+    with open(config_file, encoding="utf-8") as f:
         if config_file.endswith(".json"):
             if (
                 json.load(f).get("compute_environment", ComputeEnvironment.LOCAL_MACHINE)
@@ -94,7 +94,7 @@ class BaseConfig:
     @classmethod
     def from_json_file(cls, json_file=None):
         json_file = default_json_config_file if json_file is None else json_file
-        with open(json_file, "r", encoding="utf-8") as f:
+        with open(json_file, encoding="utf-8") as f:
             config_dict = json.load(f)
         if "compute_environment" not in config_dict:
             config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE
@@ -126,7 +126,7 @@ class BaseConfig:
     @classmethod
     def from_yaml_file(cls, yaml_file=None):
         yaml_file = default_yaml_config_file if yaml_file is None else yaml_file
-        with open(yaml_file, "r", encoding="utf-8") as f:
+        with open(yaml_file, encoding="utf-8") as f:
             config_dict = yaml.safe_load(f)
         if "compute_environment" not in config_dict:
             config_dict["compute_environment"] = ComputeEnvironment.LOCAL_MACHINE
@@ -187,6 +187,8 @@ class ClusterConfig(BaseConfig):
     megatron_lm_config: dict = None
     # args for ipex
     ipex_config: dict = None
+    # args for mpirun
+    mpirun_config: dict = None
     # args for TPU
     downcast_bf16: bool = False
 
@@ -212,6 +214,8 @@ class ClusterConfig(BaseConfig):
             self.megatron_lm_config = {}
         if self.ipex_config is None:
             self.ipex_config = {}
+        if self.mpirun_config is None:
+            self.mpirun_config = {}
         return super().__post_init__()
 
 

@@ -20,7 +20,7 @@ import torch
 from torch.utils.data import BatchSampler, DataLoader, IterableDataset, RandomSampler
 
 from .logging import get_logger
-from .state import AcceleratorState, DistributedType, GradientState, is_tpu_available
+from .state import AcceleratorState, DistributedType, GradientState, is_torch_xla_available
 from .utils import (
     RNGType,
     broadcast,
@@ -78,15 +78,16 @@ class SeedableRandomSampler(RandomSampler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epoch = 0
-        self.seed = torch.random.initial_seed()
+        self.initial_seed = torch.random.initial_seed()
 
     def __iter__(self):
         if self.generator is None:
             self.generator = torch.Generator()
-        else:
-            self.seed = self.generator.initial_seed()
+            self.generator.manual_seed(self.initial_seed)
+
         # Allow `self.epoch` to modify the seed of the generator
-        seed = self.epoch + self.seed
+        seed = self.epoch + self.initial_seed
+        # print("Setting seed at epoch", self.epoch, seed)
         self.generator.manual_seed(seed)
         yield from super().__iter__()
         self.set_epoch(self.epoch + 1)
@@ -500,7 +501,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             return len(self.dataset)
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.distributed.parallel_loader as xpl
 
     class MpDeviceLoaderWrapper(xpl.MpDeviceLoader):
@@ -809,7 +810,8 @@ def prepare_data_loader(
         use_seedable_sampler (`bool`, *optional*, defaults to `False`):
             Whether to use the [`~data_loader.SeedableRandomSampler`] instead of a `RandomSampler` for better
             reproducability. Comes at a cost of potentially different performances due to different shuffling
-            algorithms but ensures results will be the *exact* same.
+            algorithms but ensures results will be the *exact* same. Should be paired with `set_seed()` at every
+            `self.set_epoch`
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -927,11 +929,6 @@ def prepare_data_loader(
         kwargs["batch_size"] = (
             dataloader.batch_size // num_processes if split_batches and not dispatch_batches else dataloader.batch_size
         )
-    if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
-        if sampler_is_batch_sampler:
-            dataloader.sampler.sampler = sampler
-        else:
-            dataloader.batch_sampler.sampler = sampler
     if dispatch_batches:
         kwargs.pop("generator")
         dataloader = DataLoaderDispatcher(
@@ -945,7 +942,7 @@ def prepare_data_loader(
     elif sampler_is_batch_sampler:
         dataloader = DataLoaderShard(
             new_dataset,
-            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
+            device=device if put_on_device and state.distributed_type != DistributedType.XLA else None,
             sampler=new_batch_sampler,
             batch_size=dataloader.batch_size,
             rng_types=rng_types,
@@ -956,7 +953,7 @@ def prepare_data_loader(
     else:
         dataloader = DataLoaderShard(
             new_dataset,
-            device=device if put_on_device and state.distributed_type != DistributedType.TPU else None,
+            device=device if put_on_device and state.distributed_type != DistributedType.XLA else None,
             batch_sampler=new_batch_sampler,
             rng_types=rng_types,
             synchronized_generator=synchronized_generator,
@@ -964,7 +961,12 @@ def prepare_data_loader(
             **kwargs,
         )
 
-    if state.distributed_type == DistributedType.TPU:
+    if isinstance(sampler, SeedableRandomSampler) and use_seedable_sampler:
+        if sampler_is_batch_sampler:
+            dataloader.sampler.sampler = sampler
+        else:
+            dataloader.batch_sampler.sampler = sampler
+    if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader
 

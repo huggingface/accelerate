@@ -31,7 +31,7 @@ from ..logging import get_logger
 from ..state import PartialState
 from .constants import FSDP_PYTORCH_VERSION
 from .dataclasses import DistributedType
-from .imports import is_deepspeed_available, is_torch_distributed_available, is_tpu_available
+from .imports import is_deepspeed_available, is_torch_distributed_available, is_torch_xla_available
 from .modeling import id_tensor_storage
 from .transformer_engine import convert_model
 from .versions import is_torch_version
@@ -40,7 +40,7 @@ from .versions import is_torch_version
 logger = get_logger(__name__)
 
 
-if is_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
@@ -87,7 +87,7 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
         model = model.module
 
     if not keep_fp32_wrapper:
-        forward = getattr(model, "forward")
+        forward = model.forward
         original_forward = model.__dict__.pop("_original_forward", None)
         if original_forward is not None:
             while hasattr(forward, "__wrapped__"):
@@ -167,6 +167,12 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
         safe_serialization (`bool`, *optional*, defaults to `False`):
             Whether to save `obj` using `safetensors` or the traditional PyTorch way (that uses `pickle`).
     """
+    # When TorchXLA is enabled, it's necessary to transfer all data to the CPU before saving.
+    # Another issue arises with `id_tensor_storage`, which treats all XLA tensors as identical.
+    # If tensors remain on XLA, calling `clean_state_dict_for_safetensors` will result in only
+    # one XLA tensor remaining.
+    if PartialState().distributed_type == DistributedType.XLA:
+        obj = xm._maybe_convert_to_cpu(obj)
     # Check if it's a model and remove duplicates
     if safe_serialization:
         save_func = partial(safe_save_file, metadata={"format": "pt"})
@@ -175,9 +181,7 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
     else:
         save_func = torch.save
 
-    if PartialState().distributed_type == DistributedType.TPU:
-        xm.save(obj, f)
-    elif PartialState().is_main_process and not save_on_each_node:
+    if PartialState().is_main_process and not save_on_each_node:
         save_func(obj, f)
     elif PartialState().is_local_main_process and save_on_each_node:
         save_func(obj, f)
@@ -186,9 +190,9 @@ def save(obj, f, save_on_each_node: bool = False, safe_serialization: bool = Fal
 @contextmanager
 def clear_environment():
     """
-    A context manager that will cache origin `os.environ` and replace it with a empty dictionary in this context.
+    A context manager that will temporarily clear environment variables.
 
-    When this context exits, the cached `os.environ` will be back.
+    When this context exits, the previous environment variables will be back.
 
     Example:
 
@@ -208,12 +212,14 @@ def clear_environment():
     bar
     ```
     """
-    _old_os_environ = os.environ
-    os.environ = dict()
+    _old_os_environ = os.environ.copy()
+    os.environ.clear()
 
-    yield
-
-    os.environ = _old_os_environ
+    try:
+        yield
+    finally:
+        os.environ.clear()  # clear any added keys,
+        os.environ.update(_old_os_environ)  # then restore previous environment
 
 
 @contextmanager
@@ -241,15 +247,16 @@ def patch_environment(**kwargs):
             existing_vars[key] = os.environ[key]
         os.environ[key] = str(value)
 
-    yield
-
-    for key in kwargs:
-        key = key.upper()
-        if key in existing_vars:
-            # restore previous value
-            os.environ[key] = existing_vars[key]
-        else:
-            os.environ.pop(key, None)
+    try:
+        yield
+    finally:
+        for key in kwargs:
+            key = key.upper()
+            if key in existing_vars:
+                # restore previous value
+                os.environ[key] = existing_vars[key]
+            else:
+                os.environ.pop(key, None)
 
 
 def get_pretty_name(obj):

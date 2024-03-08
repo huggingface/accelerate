@@ -22,13 +22,14 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs, GradScalerKwargs
 from accelerate.state import AcceleratorState
 from accelerate.test_utils import (
-    device_count,
+    DEFAULT_LAUNCH_COMMAND,
     execute_subprocess_async,
     require_multi_device,
     require_non_cpu,
     require_non_xpu,
 )
 from accelerate.utils import AutocastKwargs, KwargsHandler, TorchDynamoPlugin, clear_environment
+from accelerate.utils.dataclasses import DistributedType
 
 
 @dataclass
@@ -41,10 +42,10 @@ class MockClass(KwargsHandler):
 class KwargsHandlerTester(unittest.TestCase):
     def test_kwargs_handler(self):
         # If no defaults are changed, `to_kwargs` returns an empty dict.
-        self.assertDictEqual(MockClass().to_kwargs(), {})
-        self.assertDictEqual(MockClass(a=2).to_kwargs(), {"a": 2})
-        self.assertDictEqual(MockClass(a=2, b=True).to_kwargs(), {"a": 2, "b": True})
-        self.assertDictEqual(MockClass(a=2, c=2.25).to_kwargs(), {"a": 2, "c": 2.25})
+        assert MockClass().to_kwargs() == {}
+        assert MockClass(a=2).to_kwargs() == {"a": 2}
+        assert MockClass(a=2, b=True).to_kwargs() == {"a": 2, "b": True}
+        assert MockClass(a=2, c=2.25).to_kwargs() == {"a": 2, "c": 2.25}
 
     @require_non_cpu
     @require_non_xpu
@@ -57,18 +58,18 @@ class KwargsHandlerTester(unittest.TestCase):
         scaler = accelerator.scaler
 
         # Check the kwargs have been applied
-        self.assertEqual(scaler._init_scale, 1024.0)
-        self.assertEqual(scaler._growth_factor, 2.0)
+        assert scaler._init_scale == 1024.0
+        assert scaler._growth_factor == 2.0
 
         # Check the other values are at the default
-        self.assertEqual(scaler._backoff_factor, 0.5)
-        self.assertEqual(scaler._growth_interval, 2000)
-        self.assertEqual(scaler._enabled, True)
+        assert scaler._backoff_factor == 0.5
+        assert scaler._growth_interval == 2000
+        assert scaler._enabled is True
 
     @require_multi_device
     def test_ddp_kwargs(self):
-        cmd = ["torchrun", f"--nproc_per_node={device_count}", inspect.getfile(self.__class__)]
-        execute_subprocess_async(cmd, env=os.environ.copy())
+        cmd = DEFAULT_LAUNCH_COMMAND + [inspect.getfile(self.__class__)]
+        execute_subprocess_async(cmd)
 
     @require_non_cpu
     def test_autocast_kwargs(self):
@@ -103,12 +104,18 @@ class KwargsHandlerTester(unittest.TestCase):
             os.environ[prefix + "MODE"] = "reduce-overhead"
 
             dynamo_plugin_kwargs = TorchDynamoPlugin().to_kwargs()
-            self.assertEqual(dynamo_plugin_kwargs, {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"})
+            assert dynamo_plugin_kwargs == {"backend": "aot_ts_nvfuser", "mode": "reduce-overhead"}
+        assert os.environ.get(prefix + "BACKEND") != "aot_ts_nvfuser"
 
 
-if __name__ == "__main__":
+def main():
     ddp_scaler = DistributedDataParallelKwargs(bucket_cap_mb=15, find_unused_parameters=True)
     accelerator = Accelerator(kwargs_handlers=[ddp_scaler])
+
+    # Skip this test due to TorchXLA not using torch.nn.parallel.DistributedDataParallel for model wrapping.
+    if accelerator.distributed_type == DistributedType.XLA:
+        return
+
     model = torch.nn.Linear(100, 200)
     model = accelerator.prepare(model)
 
@@ -131,3 +138,7 @@ if __name__ == "__main__":
     # Raise error at the end to make sure we don't stop at the first failure.
     if len(error_msg) > 0:
         raise ValueError(error_msg)
+
+
+if __name__ == "__main__":
+    main()

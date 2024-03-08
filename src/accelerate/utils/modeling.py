@@ -32,7 +32,7 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
-from .imports import is_mps_available, is_npu_available, is_peft_available, is_xpu_available
+from .imports import is_mps_available, is_npu_available, is_peft_available, is_torch_xla_available, is_xpu_available
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import compare_versions
@@ -100,7 +100,7 @@ def convert_file_size_to_int(size: Union[int, str]):
     1048576
     ```
     """
-    mem_size = 0
+    mem_size = -1
     err_msg = (
         f"`size` {size} is not in a valid format. Use an integer for bytes, or a string with an unit (like '5.0GB')."
     )
@@ -125,7 +125,7 @@ def convert_file_size_to_int(size: Union[int, str]):
     except ValueError:
         raise ValueError(err_msg)
 
-    if mem_size <= 0:
+    if mem_size < 0:
         raise ValueError(err_msg)
     return mem_size
 
@@ -143,6 +143,8 @@ def dtype_byte_size(dtype: torch.dtype):
     """
     if dtype == torch.bool:
         return 1 / 8
+    elif dtype == CustomDtype.INT2:
+        return 1 / 4
     elif dtype == CustomDtype.INT4:
         return 1 / 2
     elif dtype == CustomDtype.FP8:
@@ -402,12 +404,14 @@ def set_module_tensor_to_device(
                     new_value.SCB = new_value.SCB.to("cpu")
                 else:
                     new_value = param_cls(new_value, requires_grad=old_value.requires_grad, **kwargs).to(device)
+            elif param_cls.__name__ in ["QTensor", "QBitsTensor"]:
+                new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad).to(device)
             else:
                 new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
 
             module._parameters[tensor_name] = new_value
             if fp16_statistics is not None:
-                setattr(module._parameters[tensor_name], "SCB", fp16_statistics.to(device))
+                module._parameters[tensor_name].SCB = fp16_statistics.to(device)
                 del fp16_statistics
             # as we put the weight to meta, it doesn't have SCB attr anymore. make sure that it is not a meta weight
             if (
@@ -472,8 +476,7 @@ def named_module_tensors(
             Whether or not to remove the non persistent buffer from the buffers. Useful only when include_buffers =
             True
     """
-    for named_parameter in module.named_parameters(recurse=recurse):
-        yield named_parameter
+    yield from module.named_parameters(recurse=recurse)
 
     if include_buffers:
         non_persistent_buffers = set()
@@ -1150,7 +1153,11 @@ def infer_auto_device_map(
         # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
-            modules_children = [] if isinstance(module, nn.Parameter) else list(module.named_children())
+            modules_children = (
+                []
+                if isinstance(module, nn.Parameter) or isinstance(module, torch.Tensor)
+                else list(module.named_children())
+            )
             if verbose:
                 print(
                     f"Not enough space on {devices[current_device]} to put {name} (space available "
@@ -1548,7 +1555,7 @@ def load_checkpoint_in_model(
 
     if index_filename is not None:
         checkpoint_folder = os.path.split(index_filename)[0]
-        with open(index_filename, "r") as f:
+        with open(index_filename) as f:
             index = json.loads(f.read())
 
         if "weight_map" in index:
@@ -1661,8 +1668,13 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
     else:
         autocast_kwargs = autocast_kwargs.to_kwargs()
     if native_amp:
+        device_type = (
+            "cuda"
+            if (state.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_gpu=True))
+            else state.device.type
+        )
         if state.mixed_precision == "fp16":
-            return torch.autocast(device_type=state.device.type, dtype=torch.float16, **autocast_kwargs)
+            return torch.autocast(device_type=device_type, dtype=torch.float16, **autocast_kwargs)
         elif state.mixed_precision == "bf16" and state.distributed_type in [
             DistributedType.NO,
             DistributedType.MULTI_CPU,
@@ -1670,9 +1682,10 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.FSDP,
+            DistributedType.XLA,
         ]:
-            return torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, **autocast_kwargs)
+            return torch.autocast(device_type=device_type, dtype=torch.bfloat16, **autocast_kwargs)
         else:
-            return torch.autocast(device_type=state.device.type, **autocast_kwargs)
+            return torch.autocast(device_type=device_type, **autocast_kwargs)
     else:
         return contextlib.nullcontext()

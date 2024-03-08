@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
 
@@ -353,7 +353,7 @@ accelerate launch examples/by_feature/deepspeed_with_config_support.py \
 ```
 
 **ZeRO++ Config Example**
-You can use the the features of ZeRO++ by using the appropriate config parameters. Note that ZeRO++ is an extension for ZeRO Stage 3. Here is how the config file can be modified, from [DeepSpeed's ZeRO++ tutorial](https://www.deepspeed.ai/tutorials/zeropp/):
+You can use the features of ZeRO++ by using the appropriate config parameters. Note that ZeRO++ is an extension for ZeRO Stage 3. Here is how the config file can be modified, from [DeepSpeed's ZeRO++ tutorial](https://www.deepspeed.ai/tutorials/zeropp/):
 
 ```json
 {
@@ -519,7 +519,7 @@ ValueError: When using `deepspeed_config_file`, the following accelerate config 
 ['gradient_accumulation_steps', 'gradient_clipping', 'zero_stage', 'offload_optimizer_device', 'offload_param_device',
 'zero3_save_16bit_model', 'mixed_precision'].
 Please specify them appropriately in the DeepSpeed config file.
-If you are using an accelerate config file, remove others config variables mentioned in the above specified list.
+If you are using an accelerate config file, remove other config variables mentioned in the above specified list.
 The easiest method is to create a new config following the questionnaire via `accelerate config`.
 It will only ask for the necessary config variables when using `deepspeed_config_file`.
 ```
@@ -656,7 +656,7 @@ ZeRO Stage-3 has 2 options:
    Below is the snippet from `examples/by_feature/deepspeed_with_config_support.py` showing this:
    ```python
    success = model.save_checkpoint(PATH, ckpt_id, checkpoint_state_dict)
-   status_msg = "checkpointing: PATH={}, ckpt_id={}".format(PATH, ckpt_id)
+   status_msg = f"checkpointing: PATH={PATH}, ckpt_id={ckpt_id}"
    if success:
        logging.info(f"Success {status_msg}")
    else:

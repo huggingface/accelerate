@@ -1,3 +1,16 @@
+# Copyright 2024 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import math
 from types import MethodType
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -75,8 +88,10 @@ def build_pipeline(model, split_points, args, kwargs, num_chunks):
     annotate_split_points(model, {split_point: PipeSplitWrapper.SplitPoint.BEGINNING for split_point in split_points})
     found_batch_size = find_pippy_batch_size(args, kwargs)
     if found_batch_size != num_chunks:
-        args = pad_input_tensors(args, found_batch_size, num_chunks)
-        kwargs = pad_input_tensors(kwargs, found_batch_size, num_chunks)
+        if args is not None:
+            args = pad_input_tensors(args, found_batch_size, num_chunks)
+        if kwargs is not None:
+            kwargs = pad_input_tensors(kwargs, found_batch_size, num_chunks)
     pipe = Pipe.from_tracing(model, num_chunks=num_chunks, example_args=args, example_kwargs=kwargs)
     stage = PipelineStage(pipe, state.local_process_index, device=state.device)
 

@@ -282,6 +282,30 @@ class BaseEnum(enum.Enum, metaclass=EnumWithContains):
         return list(map(str, cls))
 
 
+class DeprecatedFieldDescriptor:
+    """
+    Descriptor for deprecated fields in an enum class.
+
+    Args:
+        field_name (`str`):
+            The name of the deprecated field.
+        replaced_with (`str`):
+            The name of the field that replaces the deprecated one.
+    """
+
+    def __init__(self, field_name, replaced_with):
+        self.field_name = field_name
+        self.replaced_with = replaced_with
+
+    def __get__(self, instance, owner):
+        warnings.warn(
+            f"The `{self.field_name}` of `{owner}` is deprecated and will be removed in v1.0.0. "
+            f"Please use the `{self.replaced_with}` instead.",
+            FutureWarning,
+        )
+        return getattr(owner, self.replaced_with)
+
+
 class DistributedType(str, enum.Enum):
     """
     Represents a type of distributed environment.
@@ -294,7 +318,8 @@ class DistributedType(str, enum.Enum):
         - **MULTI_NPU** -- Distributed on multiple NPUs.
         - **MULTI_XPU** -- Distributed on multiple XPUs.
         - **DEEPSPEED** -- Using DeepSpeed.
-        - **TPU** -- Distributed on TPUs.
+        - **XLA** -- Using TorchXLA.
+        - **TPU** -- This field will be deprecated in v0.27.0. Use XLA instead.
     """
 
     # Subclassing str as well as Enum allows the `DistributedType` to be JSON-serializable out of the box.
@@ -305,8 +330,9 @@ class DistributedType(str, enum.Enum):
     MULTI_XPU = "MULTI_XPU"
     DEEPSPEED = "DEEPSPEED"
     FSDP = "FSDP"
-    TPU = "TPU"
+    XLA = "XLA"
     MEGATRON_LM = "MEGATRON_LM"
+    TPU = DeprecatedFieldDescriptor("TPU", "XLA")
 
 
 class SageMakerDistributedType(str, enum.Enum):
@@ -343,7 +369,7 @@ class ComputeEnvironment(str, enum.Enum):
 
 class DynamoBackend(str, BaseEnum):
     """
-    Represents a dynamo backend (see https://github.com/pytorch/torchdynamo).
+    Represents a dynamo backend (see https://pytorch.org/docs/stable/torch.compiler.html).
 
     Values:
 
@@ -443,6 +469,7 @@ class CustomDtype(enum.Enum):
 
     FP8 = "fp8"
     INT4 = "int4"
+    INT2 = "int2"
 
 
 # data classes
@@ -452,6 +479,48 @@ class CustomDtype(enum.Enum):
 class TensorInformation:
     shape: torch.Size
     dtype: torch.dtype
+
+
+@dataclass
+class DataLoaderConfiguration:
+    """
+    Configuration for dataloader-related items when calling `accelerator.prepare`.
+    """
+
+    split_batches: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not the accelerator should split the batches yielded by the dataloaders across the devices. If"
+            " `True` the actual batch size used will be the same on any kind of distributed processes, but it must be a"
+            " round multiple of the `num_processes` you are using. If `False`, actual batch size used will be the one set"
+            " in your script multiplied by the number of processes."
+        },
+    )
+    dispatch_batches: bool = field(
+        default=None,
+        metadata={
+            "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
+            " and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
+            " underlying dataset is an `IterableDataslet`, `False` otherwise."
+        },
+    )
+    even_batches: bool = field(
+        default=True,
+        metadata={
+            "help": "If set to `True`, in cases where the total batch size across all processes does not exactly divide the"
+            " dataset, samples at the start of the dataset will be duplicated so the batch can be divided equally among"
+            " all workers."
+        },
+    )
+    use_seedable_sampler: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not use a fully seedable random sampler ([`data_loader.SeedableRandomSampler`])."
+            "Ensures training results are fully reproducable using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are neglible when using"
+            "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
+        },
+    )
 
 
 @dataclass
@@ -505,7 +574,26 @@ class ProjectConfiguration:
 @dataclass
 class GradientAccumulationPlugin(KwargsHandler):
     """
-    A plugin to configure gradient accumulation behavior.
+    A plugin to configure gradient accumulation behavior. You can only pass one of `gradient_accumulation_plugin` or
+    `gradient_accumulation_steps` to [`Accelerator`]. Passing both raises an error.
+
+    Parameters:
+        num_steps (`int`):
+            The number of steps to accumulate gradients for.
+        adjust_scheduler (`bool`, *optional*, defaults to `True`):
+            Whether to adjust the scheduler steps to account for the number of steps being accumulated. Should be
+            `True` if the used scheduler was not adjusted for gradient accumulation.
+        sync_with_dataloader (`bool`, *optional*, defaults to `True`):
+            Whether to synchronize setting the gradients when at the end of the dataloader.
+
+    Example:
+
+    ```python
+    from accelerate.utils import GradientAccumulationPlugin
+
+    gradient_accumulation_plugin = GradientAccumulationPlugin(num_steps=2)
+    accelerator = Accelerator(gradient_accumulation_plugin=gradient_accumulation_plugin)
+    ```
     """
 
     num_steps: int = field(default=None, metadata={"help": "The number of steps to accumulate gradients for."})
