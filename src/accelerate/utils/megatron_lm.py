@@ -1029,8 +1029,8 @@ class MegatronEngine(torch.nn.Module):
         args = get_args()
         timers = get_timers()
 
+        data_chunks = []
         if len(batch_data) > 0:
-            data_chunks = []
             if args.num_micro_batches > 1:
                 for i in range(0, args.num_micro_batches):
                     data_chunks.append(
