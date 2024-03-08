@@ -33,7 +33,7 @@
       title: Experiment trackers
     - local: usage_guides/checkpoint
       title: Save and load training states
-    - local: basic_tutorials/troubleshooting
+    - local: usage_guides/troubleshooting
       title: Troubleshoot
     - local: usage_guides/training_zoo
       title: Example Zoo
