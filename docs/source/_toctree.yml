@@ -19,8 +19,6 @@
     title: Launching distributed code
   - local: basic_tutorials/notebook
     title: Launching distributed training from Jupyter Notebooks
-  - local: basic_tutorials/troubleshooting
-    title: Troubleshooting guide
   title: Tutorials
 - sections:
   - isExpanded: true
@@ -35,6 +33,8 @@
       title: Experiment trackers
     - local: usage_guides/checkpoint
       title: Save and load training states
+    - local: basic_tutorials/troubleshooting
+      title: Troubleshoot
     - local: usage_guides/training_zoo
       title: Example Zoo
     title: Accelerate
