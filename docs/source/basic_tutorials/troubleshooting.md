@@ -67,7 +67,7 @@ accelerate launch --debug {my_script.py} --arg1 --arg2
 ```
 
 </hfoption>
-<hfoptions id="environment variable">
+<hfoption id="environment variable">
 
 If enabling debug mode as an environment variable, you don't need to call `accelerate launch`.
 
