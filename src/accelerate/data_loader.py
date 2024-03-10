@@ -823,10 +823,6 @@ def prepare_data_loader(
 
     </Tip>
     """
-    if getattr(dataloader, 'shuffle', False) and state.distributed_type == DistributedType.XLA:
-        seed=torch.Generator().manual_seed(42)
-        dataloader.generator=seed
-        dataloader.sampler.generator=seed
     if dispatch_batches is None:
         if not put_on_device:
             dispatch_batches = False
@@ -874,6 +870,10 @@ def prepare_data_loader(
         sampler = getattr(dataloader.sampler, "sampler", None)
     else:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
+    if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:
+        seed=torch.Generator().manual_seed(42)
+        dataloader.generator=seed
+        dataloader.sampler.generator=seed
     if isinstance(sampler, RandomSampler) and use_seedable_sampler:
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
