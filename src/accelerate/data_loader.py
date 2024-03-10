@@ -823,6 +823,10 @@ def prepare_data_loader(
 
     </Tip>
     """
+    if getattr(dataloader, 'shuffle', False) and state.distributed_type == DistributedType.XLA:
+        seed=torch.Generator().manual_seed(42)
+        dataloader.generator=seed
+        dataloader.sampler.generator=seed
     if dispatch_batches is None:
         if not put_on_device:
             dispatch_batches = False
@@ -967,6 +971,8 @@ def prepare_data_loader(
         else:
             dataloader.batch_sampler.sampler = sampler
     if state.distributed_type == DistributedType.XLA:
+        # dataloader.generator=torch.Generator().manual_seed(42)
+        # dataloader.batch_sampler
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader
 

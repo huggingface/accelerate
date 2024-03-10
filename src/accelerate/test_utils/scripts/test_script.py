@@ -211,7 +211,9 @@ def dl_preparation_check():
     if state.process_index == 0:
         print("Non-shuffled dataloader passing.")
 
+    # xw32: fails here.
     dl = DataLoader(range(length), batch_size=8, shuffle=True)
+    #dl = DataLoader(range(length), batch_size=8, shuffle=True, generator=torch.Generator().manual_seed(42))
     dl = prepare_data_loader(dl, state.device, state.num_processes, state.process_index, put_on_device=True)
     result = []
     for batch in dl:
