@@ -180,4 +180,5 @@ See the example below where we fine-tune Mixtral (47B parameters) on 8 A100-80GB
 | :-------------: | :-----------------: | :-----------------: | :-----------------: 
 mixtral 8x7B      | 69G                 | OOM                 | 69G
 
-Finally, note that disabling `no_sync` means there _will be slowdown_ due the extra data syncs, as explained by the earlier sections of this guide.
+> [!WARNING] 
+> Disabling `no_sync` means there _will be slowdown_ due the extra data syncs, as explained by the earlier sections of this guide.
