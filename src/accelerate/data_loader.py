@@ -870,11 +870,6 @@ def prepare_data_loader(
         sampler = getattr(dataloader.sampler, "sampler", None)
     else:
         sampler = getattr(dataloader.batch_sampler, "sampler", None)
-    if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:
-        # isinstance(dataloader.sampler, RandomSampler) indicates the original dataloader has `shuffle` enabled.
-        generator = torch.Generator().manual_seed(42)
-        dataloader.generator = generator
-        dataloader.sampler.generator = generator
     if isinstance(sampler, RandomSampler) and use_seedable_sampler:
         # When iterating through the dataloader during distributed processes
         # we want to ensure that on each process we are iterating through the same
@@ -887,6 +882,12 @@ def prepare_data_loader(
             generator=getattr(sampler, "generator", torch.Generator()),
         )
 
+    if isinstance(dataloader.sampler, RandomSampler) and state.distributed_type == DistributedType.XLA:
+        # isinstance(dataloader.sampler, RandomSampler) indicates the original dataloader has `shuffle` enabled.
+        generator = torch.Generator().manual_seed(42)
+        dataloader.generator = generator
+        dataloader.sampler.generator = generator
+        dataloader.batch_sampler.sampler = dataloader.sampler
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
