@@ -585,6 +585,9 @@ class GradientAccumulationPlugin(KwargsHandler):
             `True` if the used scheduler was not adjusted for gradient accumulation.
         sync_with_dataloader (`bool`, *optional*, defaults to `True`):
             Whether to synchronize setting the gradients when at the end of the dataloader.
+        sync_each_batch (`bool`, *optional*):
+                Whether to synchronize setting the gradients at each data batch. Seting to `True` may reduce memory
+                requirements when using gradient accumulation with distributed training, at expense of speed.
 
     Example:
 
@@ -607,6 +610,12 @@ class GradientAccumulationPlugin(KwargsHandler):
         default=True,
         metadata={
             "help": "Whether to synchronize setting the gradients when at the end of the dataloader. Should only be set to `False` if you know what you're doing."
+        },
+    )
+    sync_each_batch: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to synchronize setting the gradients at each data batch. Setting to `True` may reduce memory requirements when using gradient accumulation with distributed training, at expense of speed."
         },
     )
 
