@@ -9,6 +9,7 @@ on:
       - "examples/**"
       - "setup.py"
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 env:
   HF_HOME: ~/hf_cache
