@@ -1322,6 +1322,14 @@ class MegatronLMPlugin:
         default=None,
         metadata={"help": "Custom prepare model function."},
     )
+    custom_megatron_datasets_provider_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom megatron train_valid_test datasets provider function."},
+    )
+    custom_get_batch_function: Optional[Callable] = field(
+        default=None,
+        metadata={"help": "Custom get batch function."},
+    )
 
     # remaining args such as enabling Alibi/ROPE positional embeddings,
     # wandb logging, Multi-Query Attention, etc.
