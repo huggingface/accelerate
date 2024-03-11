@@ -32,24 +32,17 @@ jobs:
       with:
         python-version: 3.8
 
-    - name: Setup uv
-      run: | 
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv venv ~/.venv
-          echo "VIRTUAL_ENV=~/.venv" >> $GITHUB_ENV
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
-
     - name: Install Accelerate from source
       run: |
-        uv pip install setuptools
-        uv pip install -e .
+        pip install --upgrade pip
+        pip install -e .
     
     - name: Clone and install transformers
       run: |
         cd ..
         git clone https://github.com/huggingface/transformers
         cd transformers
-        uv pip install -e .[torch,testing]
+        pip install .[torch,testing]
 
     - name: Show installed libraries
       run: |
