@@ -54,12 +54,13 @@ jobs:
     
     - name: Install the library
       run: |
+        python -m venv /opt/venv && export PATH="/opt/venv/bin:$PATH"
         pip install --upgrade pip
-        if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
-        if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
-        if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
-        if [[ ${{ matrix.test-kind }} = minimum ]]; then pip install torch==1.10.0; fi
-        pip install pytest-reportlog tabulate
+        if [[ ${{ matrix.test-kind }} = test_prod ]]; then uv pip install -e .[test_prod]; fi
+        if [[ ${{ matrix.test-kind }} != test_prod ]]; then uv pip install -e .[testing,test_trackers]; fi
+        if [[ ${{ matrix.test-kind }} = test_rest ]]; then uv pip uninstall comet_ml -y; fi
+        if [[ ${{ matrix.test-kind }} = minimum ]]; then uv pip install torch==1.10.0; fi
+        uv pip install pytest-reportlog tabulate
     
     - name: Run Tests
       env: 
