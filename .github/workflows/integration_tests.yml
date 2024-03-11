@@ -35,8 +35,8 @@ jobs:
     - name: Setup uv
       run: | 
           curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv venv .venv
-          echo "VIRTUAL_ENV=.venv" >> $GITHUB_ENV
+          uv venv ~/.venv
+          echo "VIRTUAL_ENV=~/.venv" >> $GITHUB_ENV
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
     - name: Install Accelerate from source
