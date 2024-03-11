@@ -1025,7 +1025,7 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        # sync_each_batch=True will gaurantee below that self.sync_gradients=True, therefore
+        # sync_each_batch=True will guarantee below that self.sync_gradients=True, therefore
         # resulting in the nullcontext always being selected.
         self._do_sync(force=self.gradient_state.plugin_kwargs.get("sync_each_batch", False))
         with contextlib.ExitStack() as cm_stack:

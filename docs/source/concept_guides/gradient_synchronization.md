@@ -170,9 +170,9 @@ If you are worried about making sure everything is done properly, we highly reco
 
 ### `no_sync` requires additional GPU memory when using FSDP
 
-Be aware that not syncing gradients can have adverse effects while performing FSDP training. As it has been warned in `torch`, the [`no_sync` context manager for FSDP](https://pytorch.org/docs/stable/fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.no_sync) will incur additional memory.
+Be aware that not syncing gradients can have adverse effects while performing FSDP training. As it has been warned in `torch`, the [`no_sync` context manager for FSDP](https://pytorch.org/docs/stable/fsdp.html#torch.distributed.fsdp.FullyShardedDataParallel.no_sync) will require additional memory.
 
-Therefore in memory intensive situations while using FSDP, we recommend to set `sync_each_batch` to `False` in the [`~utils.GradientAccumulationPlugin`] to disable `no_sync`.
+Therefore in memory intensive situations while using FSDP, we recommend to set `sync_each_batch` to `True` in the [`~utils.GradientAccumulationPlugin`] to disable `no_sync`.
 
 See the example below where we fine-tune Mixtral (47B parameters) on 8 A100-80GB GPUs. We see that even for a modest `gradient_accumulation_steps=2` we quickly go out-of-memory (OOM) if `no_sync` is enabled. Again, this is due to additional memory overheads due to FSDP's `no_sync`. However, if `no_sync` is disabled via `sync_each_batch=True`, then the memory consumption for `gradient_accumulation_steps=16` reverts to that of `gradient_accumulation_steps=1`.
 
