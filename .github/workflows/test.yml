@@ -66,7 +66,7 @@ jobs:
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then uv pip install -e .[testing,test_trackers]; fi
         if [[ ${{ matrix.test-kind }} = test_rest ]]; then uv pip uninstall comet_ml -y; fi
         if [[ ${{ matrix.test-kind }} = minimum ]]; then uv pip install torch==1.10.0; fi
-        uv pip install pytest-reportlog tabulate
+        uv pip install pytest-reportlog tabulate setuptools
     
     - name: Run Tests
       env: 
