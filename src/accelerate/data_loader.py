@@ -887,7 +887,6 @@ def prepare_data_loader(
         generator = torch.Generator().manual_seed(42)
         dataloader.generator = generator
         dataloader.sampler.generator = generator
-        dataloader.batch_sampler.sampler = dataloader.sampler
     # No change if no multiprocess
     if (num_processes != 1 or state.distributed_type == DistributedType.MEGATRON_LM) and not dispatch_batches:
         if isinstance(new_dataset, IterableDataset):
