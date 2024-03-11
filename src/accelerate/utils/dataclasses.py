@@ -1163,7 +1163,7 @@ class FullyShardedDataParallelPlugin:
                     )
 
     def set_mixed_precision(self, mixed_precision, buffer_autocast=False, override=False):
-        if type(mixed_precision, str):
+        if isinstance(mixed_precision, str):
             if mixed_precision == "fp16":
                 dtype = torch.float16
             elif mixed_precision == "bf16":
