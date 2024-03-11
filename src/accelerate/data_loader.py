@@ -971,8 +971,6 @@ def prepare_data_loader(
         else:
             dataloader.batch_sampler.sampler = sampler
     if state.distributed_type == DistributedType.XLA:
-        # dataloader.generator=torch.Generator().manual_seed(42)
-        # dataloader.batch_sampler
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader
 
