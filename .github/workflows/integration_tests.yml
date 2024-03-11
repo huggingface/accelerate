@@ -49,7 +49,7 @@ jobs:
         cd ..
         git clone https://github.com/huggingface/transformers
         cd transformers
-        uv pip install .[torch,testing]
+        uv pip install -e .[torch,testing]
 
     - name: Show installed libraries
       run: |
