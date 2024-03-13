@@ -160,7 +160,7 @@ class PartialState:
             elif is_torch_xla_available() and not cpu:
                 self.distributed_type = DistributedType.XLA
                 self.device = xm.xla_device()
-                xm.set_replication(self.device, [self.device])
+                xm.set_replication(self.device, xm.get_xla_supported_devices())
                 self.num_processes = xm.xrt_world_size()
                 self.process_index = xm.get_ordinal()
                 if is_torch_xla_available(check_is_tpu=True):
