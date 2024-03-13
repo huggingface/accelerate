@@ -547,9 +547,9 @@ def get_cluster_input():
             default="all",
         )
 
-    # NUMA is only supported on MULTI_GPU for now
+    # NUMA is only supported on NVIDIA hardware for now
     enable_numa = False
-    if distributed_type == DistributedType.MULTI_GPU:
+    if distributed_type == (DistributedType.NO, DistributedType.MULTI_GPU) and not use_cpu and not use_mps:
         enable_numa = _ask_field(
             "Would you like to enable numa efficiency? (Currently only supported on NVIDIA hardware). [yes/NO]: ",
             _convert_yes_no_to_bool,
