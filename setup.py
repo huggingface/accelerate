@@ -23,19 +23,19 @@ extras["quality"] = [
 ]
 extras["docs"] = []
 extras["test_prod"] = ["pytest>=7.2.0,<=8.0.0", "pytest-xdist", "pytest-subtests", "parameterized"]
-extras["test_dev"] = [
+
+extras["test_integrations"] = [
     "datasets",
     "evaluate",
-    "torchpippy>=0.2.0",
     "transformers",
     "scipy",
     "scikit-learn",
-    "deepspeed<0.13.0",
     "tqdm",
-    "bitsandbytes",
-    "timm",
 ]
-extras["testing"] = extras["test_prod"] + extras["test_dev"]
+extras["test_plugins"] = ["torchpippy>=0.2.0", "deepspeed<0.13.0", "bitsandbytes", "timm"]
+extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard", "dvclive"]
+
+extras["testing"] = extras["test_prod"] + extras["test_plugins"] + extras["test_integrations"]
 extras["rich"] = ["rich"]
 
 extras["test_trackers"] = ["wandb", "comet-ml", "tensorboard", "dvclive"]
