@@ -234,13 +234,13 @@ class ClusterConfigTester(unittest.TestCase):
             mixed_precision="fp16",
             debug=False,
             num_processes=2,
-            enable_numa_affinity=True,
+            enable_cpu_affinity=True,
             use_cpu=False,
         )
 
         assert config.distributed_type == "MULTI_GPU"
         assert config.num_processes == 2
-        assert config.enable_numa_affinity is True
+        assert config.enable_cpu_affinity is True
 
     def test_sagemaker_config(self):
         config = SageMakerConfig(
