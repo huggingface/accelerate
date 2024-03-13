@@ -31,6 +31,7 @@ from .testing import (
     require_non_cpu,
     require_non_torch_xla,
     require_non_xpu,
+    require_mlu,
     require_npu,
     require_pippy,
     require_single_device,

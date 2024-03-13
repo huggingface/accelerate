@@ -21,6 +21,7 @@ from ...utils import (
     DistributedType,
     is_deepspeed_available,
     is_mps_available,
+    is_mlu_available,
     is_npu_available,
     is_transformers_available,
     is_xpu_available,
@@ -546,6 +547,8 @@ def get_cluster_input():
     ):
         if is_npu_available():
             machine_type = "NPU(s)"
+        elif is_mlu_available():
+            machine_type = "MLU(s)"
         else:
             machine_type = "GPU(s)"
         gpu_ids = _ask_field(

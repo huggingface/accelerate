@@ -339,14 +339,15 @@ def main():
         if state.local_process_index == 0:
             print("**Test NOOP `no_sync` context manager**")
         test_noop_sync(accelerator)
-    if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_CPU):
+    if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU,
+                                DistributedType.MULTI_MLU, DistributedType.MULTI_CPU):
         if state.local_process_index == 0:
             print("**Test Distributed `no_sync` context manager**")
         test_distributed_sync(accelerator)
         if state.local_process_index == 0:
             print("**Test Distributed `no_sync` context manager with multiple forwards**")
         test_distributed_sync_multiple_fwd(accelerator)
-    if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU):
+    if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_MLU):
         for split_batch in [True, False]:
             for dispatch_batches in [True, False]:
                 for sync_each_batch in [True, False]:
