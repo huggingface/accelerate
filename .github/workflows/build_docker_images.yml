@@ -64,4 +64,4 @@ jobs:
         with:
           file: docker/accelerate-gpu/Dockerfile          
           push: true
-          tags: huggingface/accelerate-gpu:xla-gpu
+          tags: huggingface/accelerate:xla-gpu-nightly-$(date +'%Y-%m-%d')
