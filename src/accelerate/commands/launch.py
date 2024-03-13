@@ -209,7 +209,7 @@ def launch_command_parser(subparsers=None):
         "--enable_cpu_affinity",
         default=False,
         action="store_true",
-        help="Whether or not NUMA affinity and balancing should be enabled.",
+        help="Whether or not CPU affinity and balancing should be enabled. Currently only supported on NVIDIA hardware.",
     )
 
     # Dynamo arguments
