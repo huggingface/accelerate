@@ -547,10 +547,10 @@ def get_cluster_input():
             default="all",
         )
 
-    # NUMA is only supported on NVIDIA hardware for now
-    enable_numa = False
+    # CPU affinity is only supported on NVIDIA hardware for now
+    enable_cpu_affinity = False
     if distributed_type == (DistributedType.NO, DistributedType.MULTI_GPU) and not use_cpu and not use_mps:
-        enable_numa = _ask_field(
+        enable_cpu_affinity = _ask_field(
             "Would you like to enable numa efficiency? (Currently only supported on NVIDIA hardware). [yes/NO]: ",
             _convert_yes_no_to_bool,
             default=False,
@@ -683,5 +683,5 @@ def get_cluster_input():
         tpu_use_cluster=tpu_use_cluster,
         dynamo_config=dynamo_config,
         debug=debug,
-        enable_numa_affinity=enable_numa,
+        enable_cpu_affinity=enable_cpu_affinity,
     )

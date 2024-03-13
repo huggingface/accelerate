@@ -206,7 +206,7 @@ def launch_command_parser(subparsers=None):
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
     )
     resource_args.add_argument(
-        "--enable_numa_affinity",
+        "--enable_cpu_affinity",
         default=False,
         action="store_true",
         help="Whether or not NUMA affinity and balancing should be enabled.",

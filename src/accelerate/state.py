@@ -343,7 +343,7 @@ class PartialState:
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
         # Set CPU affinity if enabled
-        if parse_flag_from_env("ACCELERATE_NUMA_AFFINITY", False):
+        if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
             # Eventually follow syntax here and update for other backends
             if self.device.type == "cuda":
                 numa_node = get_numa_node_for_device(self.local_process_index, backend="nvidia")
