@@ -25,7 +25,7 @@ jobs:
       - name: Get current date
         id: date
         run: |
-          echo "{date}={$(date + '%Y-%m-%d')}" >> $GITHUB_STATE
+          echo "{date}={$(date '+%Y-%m-%d')}" >> $GITHUB_STATE
       - name: Build and Push CPU
         uses: docker/build-push-action@v4
         with:
