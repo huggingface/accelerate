@@ -31,9 +31,9 @@ jobs:
         with:
           file: docker/accelerate-cpu/Dockerfile          
           push: true
-          tags: 
-            - huggingface/accelerate:cpu-nightly-${{ env.date }}
-            - huggingface/accelerate:cpu-nightly
+          tags: |
+            huggingface/accelerate:cpu-nightly
+            huggingface/accelerate:cpu-nightly-${{ env.date }}
 
   # latest-cuda:
   #   name: "Latest Accelerate GPU [dev]"
