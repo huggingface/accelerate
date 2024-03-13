@@ -56,6 +56,7 @@ from .environment import (
     check_cuda_p2p_ib_support,
     check_fp8_capability,
     get_int_from_env,
+    get_numa_node_for_device,
     parse_choice_from_env,
     parse_flag_from_env,
     str_to_bool,

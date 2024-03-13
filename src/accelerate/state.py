@@ -33,6 +33,7 @@ from .utils import (
     check_fp8_capability,
     get_ccl_version,
     get_int_from_env,
+    get_numa_node_for_device,
     is_ccl_available,
     is_deepspeed_available,
     is_fp8_available,
@@ -340,6 +341,13 @@ class PartialState:
                 if self.device is None:
                     self.device = torch.device("cpu") if cpu else self.default_device
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
+
+        # Set CPU affinity if enabled
+        if parse_flag_from_env("ACCELERATE_NUMA_AFFINITY", False):
+            # Eventually follow syntax here and update for other backends
+            if self.device.type == "cuda":
+                numa_node = get_numa_node_for_device(self.local_process_index, backend="nvidia")
+                os.sched_setaffinity(0, [numa_node])
 
     def __repr__(self) -> str:
         return (
