@@ -81,6 +81,7 @@ from .imports import (
     is_mlflow_available,
     is_mps_available,
     is_msamp_available,
+    is_mlu_available,
     is_npu_available,
     is_pandas_available,
     is_peft_available,

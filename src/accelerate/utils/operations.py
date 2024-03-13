@@ -26,6 +26,7 @@ from ..state import PartialState
 from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
 from .imports import (
+    is_mlu_available,
     is_npu_available,
     is_torch_distributed_available,
     is_torch_version,
