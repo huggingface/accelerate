@@ -11,42 +11,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  latest-cpu:
-    name: "Latest Accelerate CPU [dev]"
-    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Build and Push CPU
-        uses: docker/build-push-action@v4
-        with:
-          file: docker/accelerate-cpu/Dockerfile          
-          push: true
-          tags: huggingface/accelerate-cpu
+  # latest-cpu:
+  #   name: "Latest Accelerate CPU [dev]"
+  #   runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
+  #   steps:
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v2
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_PASSWORD }}
+  #     - name: Build and Push CPU
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         file: docker/accelerate-cpu/Dockerfile          
+  #         push: true
+  #         tags: huggingface/accelerate-cpu
 
-  latest-cuda:
-    name: "Latest Accelerate GPU [dev]"
-    runs-on: [self-hosted, nvidia-gpu, t4, ci]
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+  # latest-cuda:
+  #   name: "Latest Accelerate GPU [dev]"
+  #   runs-on: [self-hosted, nvidia-gpu, t4, ci]
+  #   steps:
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v2
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Build and Push GPU
-        uses: docker/build-push-action@v4
-        with:
-          file: docker/accelerate-gpu/Dockerfile          
-          push: true
-          tags: huggingface/accelerate-gpu
+  #     - name: Build and Push GPU
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         file: docker/accelerate-gpu/Dockerfile          
+  #         push: true
+  #         tags: huggingface/accelerate-gpu
 
   latest-gpu-xla:
     name: "Latest Accelerate GPU XLA [dev]"
@@ -59,9 +59,9 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Build and Push CPU
+      - name: Build and Push GPU XLA
         uses: docker/build-push-action@v4
         with:
-          file: docker/accelerate-gpu-xla/Dockerfile          
+          file: docker/accelerate-gpu/Dockerfile          
           push: true
-          tags: huggingface/accelerate-gpu-xla
+          tags: huggingface/accelerate-gpu:xla-gpu
