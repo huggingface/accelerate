@@ -260,6 +260,10 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env[prefix + "USE_DISTRIBUTED_OPTIMIZER"] = str(args.megatron_lm_use_distributed_optimizer)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
+
+    # Check for XLA and set PJRT device automatically to CUDA
+    if is_torch_xla_available(check_is_gpu=True):
+        current_env["PJRT_DEVICE"] = "CUDA"
     return current_env
 
 
