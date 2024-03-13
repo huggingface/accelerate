@@ -365,7 +365,7 @@ def main():
             "`split_batches=False`, `dispatch_batches=False`, `sync_each_batch=False`**",
         )
     test_gradient_accumulation_with_opt_and_scheduler()
-    if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU):
+    if state.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_MLU):
         for split_batch in [True, False]:
             for dispatch_batches in [True, False]:
                 for sync_each_batch in [True, False]:

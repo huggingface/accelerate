@@ -226,6 +226,19 @@ class PartialState:
                             "will do this automatically."
                         )
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
+            elif is_mlu_available() and not cpu and int(os.environ.get("LOCAL_RANK", -1)) != -1:
+                self.distributed_type = DistributedType.MULTI_MLU
+                if not torch.distributed.is_initialized():
+                    # Backend is not set by the user, we set it here
+                    kwargs.pop("backend", None)
+                    self.backend = "cncl"
+                    torch.distributed.init_process_group(backend=self.backend, **kwargs)
+                self.num_processes = torch.distributed.get_world_size()
+                self.process_index = torch.distributed.get_rank()
+                self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
+                if self.device is None:
+                    self.device = torch.device("mlu", self.local_process_index)
+                torch.mlu.set_device(self.device)
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu and torch.cuda.is_available():
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
@@ -247,19 +260,6 @@ class PartialState:
                 if self.device is None:
                     self.device = torch.device("cuda", self.local_process_index)
                 torch.cuda.set_device(self.device)
-            elif is_mlu_available() and not cpu and int(os.environ.get("LOCAL_RANK", -1)) != -1:
-                self.distributed_type = DistributedType.MULTI_MLU
-                if not torch.distributed.is_initialized():
-                    # Backend is not set by the user, we set it here
-                    kwargs.pop("backend", None)
-                    self.backend = "cncl"
-                    torch.distributed.init_process_group(backend=self.backend, **kwargs)
-                self.num_processes = torch.distributed.get_world_size()
-                self.process_index = torch.distributed.get_rank()
-                self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
-                if self.device is None:
-                    self.device = torch.device("mlu", self.local_process_index)
-                torch.mlu.set_device(self.device)
             elif is_npu_available() and not cpu and int(os.environ.get("LOCAL_RANK", -1)) != -1:
                 self.distributed_type = DistributedType.MULTI_NPU
                 if not torch.distributed.is_initialized():
@@ -434,6 +434,7 @@ class PartialState:
         """
         if self.distributed_type in (
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_MLU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
@@ -843,7 +844,7 @@ class AcceleratorState:
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
                 self.deepspeed_plugin = deepspeed_plugin
-            elif self.distributed_type == DistributedType.MULTI_GPU:
+            elif self.distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_MLU]:
                 if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP
                     if self._mixed_precision != "no":

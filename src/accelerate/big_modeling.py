@@ -36,6 +36,7 @@ from .utils import (
     find_tied_parameters,
     get_balanced_memory,
     infer_auto_device_map,
+    is_mlu_available,
     is_npu_available,
     is_torch_version,
     is_xpu_available,
@@ -458,6 +459,8 @@ def dispatch_model(
         model.to = add_warning(model.to, model)
         if is_npu_available():
             model.npu = add_warning(model.npu, model)
+        elif is_mlu_available():
+            model.mlu = add_warning(model.mlu, model)
         elif is_xpu_available():
             model.xpu = add_warning(model.xpu, model)
         else:
@@ -468,6 +471,8 @@ def dispatch_model(
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
         if is_npu_available() and isinstance(device, int):
             device = f"npu:{device}"
+        elif is_mlu_available() and isinstance(device, int):
+            device = f"mlu:{device}"
         elif is_xpu_available() and isinstance(device, int):
             device = f"xpu:{device}"
         if device != "disk":
