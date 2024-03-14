@@ -153,14 +153,7 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
 
 def is_deepspeed_available():
     if is_mlu_available():
-        package_exists = importlib.util.find_spec("deepspeed") is not None
-        if package_exists:
-            try:
-                # Some libraries have different names in the metadata
-                _ = importlib.metadata.metadata("deepspeed-mlu")
-                return True
-            except importlib.metadata.PackageNotFoundError:
-                return False
+        return _is_package_available("deepspeed", metadata_name="deepspeed-mlu")
     return _is_package_available("deepspeed")
 
 
