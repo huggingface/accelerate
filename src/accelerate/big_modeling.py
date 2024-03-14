@@ -467,9 +467,10 @@ def dispatch_model(
         # Check if we are using multi-gpus with RTX 4000 series
         use_multi_gpu = len([device for device in set(device_map.values()) if device not in ("cpu", "disk")]) > 1
         if use_multi_gpu and not check_cuda_p2p_ib_support():
-            logger.info("RTX 4000 series have issues with P2P. This can affect the multi-gpu inference when using accelerate device_map."
-                        "Please make sure to update your driver to the latest version"
-                        )
+            logger.info(
+                "RTX 4000 series have issues with P2P. This can affect the multi-gpu inference when using accelerate device_map."
+                "Please make sure to update your driver to the latest version"
+            )
     else:
         device = list(device_map.values())[0]
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
