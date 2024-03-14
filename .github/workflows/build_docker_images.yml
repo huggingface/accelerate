@@ -26,8 +26,7 @@ jobs:
         id: date
         # Get the current date and store it in the environment variable `date`
         run: |
-          echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
-          echo ${{ env.date }}
+          echo "date=$(date '+%Y-%m-%d')"
       # - name: Build and Push CPU
       #   uses: docker/build-push-action@v4
       #   with:
