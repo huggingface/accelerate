@@ -467,7 +467,7 @@ def dispatch_model(
         # Check if we are using multi-gpus with RTX 4000 series
         use_multi_gpu = len([device for device in set(device_map.values()) if device not in ("cpu", "disk")]) > 1
         if use_multi_gpu and not check_cuda_p2p_ib_support():
-            logger.info(
+            logger.warning(
                 "RTX 4000 series have issues with P2P. This can affect the multi-gpu inference when using accelerate device_map."
                 "Please make sure to update your driver to the latest version"
             )
