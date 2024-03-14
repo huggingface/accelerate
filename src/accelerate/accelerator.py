@@ -80,8 +80,8 @@ from .utils import (
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
-    is_msamp_available,
     is_mlu_available,
+    is_msamp_available,
     is_npu_available,
     is_torch_version,
     is_torch_xla_available,
@@ -1084,8 +1084,12 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU,
-                                    DistributedType.MULTI_MLU, DistributedType.MULTI_XPU):
+        if self.distributed_type in (
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_NPU,
+            DistributedType.MULTI_MLU,
+            DistributedType.MULTI_XPU,
+        ):
             dl_even_batches_values = []
 
             if even_batches is not None:

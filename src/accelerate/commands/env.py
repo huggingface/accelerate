@@ -25,7 +25,7 @@ import torch
 from accelerate import __version__ as version
 from accelerate.commands.config import default_config_file, load_config_from_file
 
-from ..utils import is_npu_available, is_mlu_available, is_xpu_available
+from ..utils import is_mlu_available, is_npu_available, is_xpu_available
 
 
 def env_command_parser(subparsers=None):

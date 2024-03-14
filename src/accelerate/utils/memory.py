@@ -23,7 +23,7 @@ import inspect
 
 import torch
 
-from .imports import is_mps_available, is_npu_available, is_mlu_available, is_xpu_available
+from .imports import is_mlu_available, is_mps_available, is_npu_available, is_xpu_available
 
 
 def release_memory(*objects):

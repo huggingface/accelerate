@@ -313,15 +313,14 @@ def is_ipex_available():
     return True
 
 
-@lru_cache()
+@lru_cache
 def is_mlu_available(check_device=False):
     "Checks if `torch_mlu` is installed and potentially if a MLU is in the environment"
-    if importlib.util.find_spec("torch") is None or importlib.util.find_spec("torch_mlu") is None:
+    if importlib.util.find_spec("torch_mlu") is None:
         return False
 
     import torch
     import torch_mlu  # noqa: F401
-    torch.cuda = torch.mlu
 
     if check_device:
         try:

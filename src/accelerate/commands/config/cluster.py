@@ -20,8 +20,8 @@ from ...utils import (
     ComputeEnvironment,
     DistributedType,
     is_deepspeed_available,
-    is_mps_available,
     is_mlu_available,
+    is_mps_available,
     is_npu_available,
     is_transformers_available,
     is_xpu_available,
@@ -144,8 +144,8 @@ def get_cluster_input():
     if (
         not use_cpu
         and is_xpu_available()
-        and distributed_type not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU,
-                                    DistributedType.MULTI_MLU, DistributedType.XLA]
+        and distributed_type
+        not in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_MLU, DistributedType.XLA]
     ):
         ipex_config["use_xpu"] = _ask_field(
             "Do you want to use XPU plugin to speed up training on XPU? [yes/NO]:",
@@ -200,8 +200,13 @@ def get_cluster_input():
     deepspeed_config = {}
     if (
         distributed_type
-        in [DistributedType.MULTI_GPU, DistributedType.MULTI_XPU, DistributedType.MULTI_NPU,
-            DistributedType.MULTI_MLU, DistributedType.NO]
+        in [
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_XPU,
+            DistributedType.MULTI_NPU,
+            DistributedType.MULTI_MLU,
+            DistributedType.NO,
+        ]
         and not use_mps
     ):
         use_deepspeed = _ask_field(
@@ -337,8 +342,12 @@ def get_cluster_input():
                         )
 
     fsdp_config = {}
-    if distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_NPU,
-                            DistributedType.MULTI_MLU, DistributedType.MULTI_XPU]:
+    if distributed_type in [
+        DistributedType.MULTI_GPU,
+        DistributedType.MULTI_NPU,
+        DistributedType.MULTI_MLU,
+        DistributedType.MULTI_XPU,
+    ]:
         use_fsdp = _ask_field(
             "Do you want to use FullyShardedDataParallel? [yes/NO]: ",
             _convert_yes_no_to_bool,

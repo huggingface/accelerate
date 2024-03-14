@@ -899,7 +899,12 @@ def _validate_launch_command(args):
             args.multi_gpu = (
                 True
                 if defaults.distributed_type
-                in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_MLU, DistributedType.MULTI_XPU)
+                in (
+                    DistributedType.MULTI_GPU,
+                    DistributedType.MULTI_NPU,
+                    DistributedType.MULTI_MLU,
+                    DistributedType.MULTI_XPU,
+                )
                 else False
             )
             args.tpu = defaults.distributed_type == DistributedType.XLA

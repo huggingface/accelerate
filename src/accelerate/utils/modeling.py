@@ -33,7 +33,14 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
-from .imports import is_mps_available, is_npu_available, is_mlu_available, is_peft_available, is_torch_xla_available, is_xpu_available
+from .imports import (
+    is_mlu_available,
+    is_mps_available,
+    is_npu_available,
+    is_peft_available,
+    is_torch_xla_available,
+    is_xpu_available,
+)
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import compare_versions
