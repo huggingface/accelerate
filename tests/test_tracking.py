@@ -175,9 +175,8 @@ class WandBTrackingTest(TempDirTestCase, MockingTestCase):
         # The latest offline log is stored at wandb/latest-run/*.wandb
         for child in Path(f"{self.tmpdir}/wandb/latest-run").glob("*"):
             if child.is_file() and child.suffix == ".wandb":
-                content = subprocess.check_output(
-                    ["wandb", "sync", "--view", "--verbose", str(child)], env=os.environ.copy()
-                ).decode("utf8", "ignore")
+                cmd = ["wandb", "sync", "--view", "--verbose", str(child)]
+                content = subprocess.check_output(cmd, encoding="utf8", errors="ignore")
                 break
 
         # Check HPS through careful parsing and cleaning

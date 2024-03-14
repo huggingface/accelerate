@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import argparse
-import os
 
 from accelerate.test_utils import execute_subprocess_async, path_in_accelerate_package
 
@@ -51,7 +50,7 @@ def test_command(args):
         test_args = f"--config_file={args.config_file} {script_name}".split()
 
     cmd = ["accelerate-launch"] + test_args
-    result = execute_subprocess_async(cmd, env=os.environ.copy())
+    result = execute_subprocess_async(cmd)
     if result.returncode == 0:
         print("Test is a success! You are ready for your distributed training!")
 

@@ -31,4 +31,4 @@ class MultiTPUTester(unittest.TestCase):
             {self.test_file_path}
         """.split()
         cmd = [sys.executable] + distributed_args
-        execute_subprocess_async(cmd, env=os.environ.copy())
+        execute_subprocess_async(cmd)

@@ -16,7 +16,6 @@
 Utilities relating to parsing raw characters from the keyboard, based on https://github.com/bchao1/bullet
 """
 
-
 import os
 import string
 import sys

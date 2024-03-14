@@ -3,10 +3,12 @@ line-length = 119
 target-version = "py38"
 
 [tool.ruff.lint]
+preview = true
 ignore-init-module-imports = true
 extend-select = [
     "B009", # static getattr
     "B010", # static setattr
+    "CPY", # Copyright
     "E", # PEP8 errors
     "F", # PEP8 formatting
     "I", # Import sorting
