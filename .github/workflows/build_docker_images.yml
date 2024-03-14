@@ -24,17 +24,16 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       - name: Get current date
         id: date
-        # Get the current date and store it in the environment variable `date`
         run: |
-          echo "date=$(date '+%Y-%m-%d')"
-      # - name: Build and Push CPU
-      #   uses: docker/build-push-action@v4
-      #   with:
-      #     file: docker/accelerate-cpu/Dockerfile          
-      #     push: true
-      #     tags: |
-      #       huggingface/accelerate:cpu-nightly
-      #       huggingface/accelerate:cpu-nightly-${{ env.date }}
+          echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
+      - name: Build and Push CPU
+        uses: docker/build-push-action@v4
+        with:
+          file: docker/accelerate-cpu/Dockerfile          
+          push: true
+          tags: |
+            huggingface/accelerate:cpu-nightly
+            huggingface/accelerate:cpu-nightly-${{ env.date }}
 
   # latest-cuda:
   #   name: "Latest Accelerate GPU [dev]"
