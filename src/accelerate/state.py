@@ -34,6 +34,7 @@ from .utils import (
     get_ccl_version,
     get_int_from_env,
     is_ccl_available,
+    is_datasets_available,
     is_deepspeed_available,
     is_fp8_available,
     is_ipex_available,
@@ -440,7 +441,7 @@ class PartialState:
         Note that when using a `dict`, all keys need to have the same number of elements.
 
         Args:
-            inputs (`list`, `tuple`, `torch.Tensor`, or `dict` of `list`/`tuple`/`torch.Tensor`):
+            inputs (`list`, `tuple`, `torch.Tensor`, `dict` of `list`/`tuple`/`torch.Tensor`, or `datasets.Dataset`):
                 The input to split between processes.
             apply_padding (`bool`, `optional`, defaults to `False`):
                 Whether to apply padding by repeating the last element of the input so that all processes have the same
@@ -506,6 +507,18 @@ class PartialState:
                     inputs[key] = _split_values(inputs[key], start_index, end_index)
                 return inputs
             else:
+                if is_datasets_available():
+                    from datasets import Dataset
+
+                    if isinstance(inputs, Dataset):
+                        if start_index >= len(inputs):
+                            start_index = len(inputs) - 1
+                        if end_index > len(inputs):
+                            end_index = len(inputs)
+                        result_idcs = list(range(start_index, end_index))
+                        if apply_padding:
+                            result_idcs += [end_index - 1] * (num_samples_per_process - len(result_idcs))
+                        return inputs.select(result_idcs)
                 return inputs
 
         yield _split_values(inputs, start_index, end_index)
