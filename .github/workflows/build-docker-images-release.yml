@@ -10,18 +10,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  update-readme:
-    name: "Update DockerHub README"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Update README
-        uses: peter-evans/dockerhub-description@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          repository: huggingface/accelerate
   get-version:
     runs-on: ubuntu-latest
     outputs:
