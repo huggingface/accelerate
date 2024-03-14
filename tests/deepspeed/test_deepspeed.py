@@ -787,9 +787,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             hf_ds_config=ds_config,
         )
         with mockenv_context(**self.dist_env):
-            accelerator = Accelerator(
-                deepspeed_plugin=deepspeed_plugin, dynamo_backend='eager'
-            )
+            accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, dynamo_backend="eager")
             train_set = RegressionDataset(length=80)
             eval_set = RegressionDataset(length=20)
             train_dataloader = DataLoader(train_set, batch_size=16, shuffle=True)
@@ -801,14 +799,14 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
                 model, dummy_optimizer, train_dataloader, eval_dataloader, dummy_lr_scheduler
             )
             deepspeed_plugin = accelerator.state.deepspeed_plugin
-            assert deepspeed_plugin.deepspeed_config["compile"]["enabled"] == True
+            assert deepspeed_plugin.deepspeed_config["compile"]["enabled"]
             assert deepspeed_plugin.deepspeed_config["compile"]["backend"] == "eager"
 
     def test_ds_config_assertions(self):
         ambiguous_env = self.dist_env.copy()
-        ambiguous_env[
-            "ACCELERATE_CONFIG_DS_FIELDS"
-        ] = "gradient_accumulation_steps,gradient_clipping,zero_stage,offload_optimizer_device,offload_param_device,zero3_save_16bit_model,mixed_precision"
+        ambiguous_env["ACCELERATE_CONFIG_DS_FIELDS"] = (
+            "gradient_accumulation_steps,gradient_clipping,zero_stage,offload_optimizer_device,offload_param_device,zero3_save_16bit_model,mixed_precision"
+        )
 
         with mockenv_context(**ambiguous_env):
             with self.assertRaises(ValueError) as cm:
@@ -1079,10 +1077,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
 
     @require_cuda
     def test_basic_dynamo_run(self):
-        mod_file = inspect.getfile(accelerate.test_utils)
-        test_file_path = os.path.sep.join(
-            mod_file.split(os.path.sep)[:-1] + ["scripts", "external_deps", "test_performance.py"]
-        )
+        self.test_file_path = self.test_scripts_folder / "test_performance.py"
         with tempfile.TemporaryDirectory() as dirpath:
             cmd = [
                 "accelerate",
@@ -1097,7 +1092,7 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 "--offload_optimizer_device=none",
                 "--offload_param_device=none",
                 "--dynamo_backend=eager",
-                test_file_path,
+                self.test_file_path,
                 "--model_name_or_path=distilbert-base-uncased",
                 "--num_epochs=1",
                 f"--output_dir={dirpath}",
@@ -1105,9 +1100,11 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             with patch_environment(omp_num_threads=1):
                 with_dynamo = False
                 try:
-                    r = execute_subprocess_async(cmd, env={'TORCH_LOGS': 'dynamo', 'ACCELERATE_DYNAMO_BACKEND': 'eager', **os.environ})
-                    with_dynamo = 'torch._dynamo' in '\n'.join(r.stderr)
+                    r = execute_subprocess_async(
+                        cmd, env={"TORCH_LOGS": "dynamo", "ACCELERATE_DYNAMO_BACKEND": "eager", **os.environ}
+                    )
+                    with_dynamo = "torch._dynamo" in "\n".join(r.stderr)
                 except RuntimeError as e:
-                    with_dynamo = 'torch._dynamo' in e.args[0]
+                    with_dynamo = "torch._dynamo" in e.args[0]
                 finally:
                     assert with_dynamo

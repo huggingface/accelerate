@@ -44,9 +44,7 @@ from .utils import (
     parse_choice_from_env,
     parse_flag_from_env,
 )
-from .utils.constants import DEEPSPEED_ZERO_DYNAMO_VERSION
 from .utils.dataclasses import SageMakerDistributedType
-from .utils.versions import compare_versions
 
 
 if is_torch_xla_available():
