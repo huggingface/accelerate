@@ -18,9 +18,9 @@ import subprocess
 import sys
 from shutil import which
 from typing import List
-from packaging.version import parse
 
 import torch
+from packaging.version import parse
 
 
 def str_to_bool(value) -> int:
@@ -64,6 +64,7 @@ def are_libraries_initialized(*library_names: str) -> List[str]:
     """
     return [lib_name for lib_name in library_names if lib_name in sys.modules.keys()]
 
+
 def _nvidia_smi():
     """
     Calls nvidia-smi
@@ -77,7 +78,8 @@ def _nvidia_smi():
     else:
         command = "nvidia-smi"
     return command
-    
+
+
 def get_gpu_info():
     """
     Gets GPU count and names using `nvidia-smi` instead of torch to not initialize CUDA.
@@ -94,6 +96,7 @@ def get_gpu_info():
     gpu_count = len(gpus)
     gpu_names = [gpu.split(",")[1].strip() for gpu in gpus]
     return gpu_names, gpu_count
+
 
 def get_driver_version():
     """
