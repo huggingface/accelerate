@@ -124,14 +124,14 @@ def notebook_launcher(
         launcher = PrepareForLaunch(function, distributed_type="TPU")
         print(f"Launching a training on {num_processes} TPU cores.")
         xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
-    elif in_colab:
-        # No need for a distributed launch otherwise as it's either CPU or one GPU.
-        if torch.cuda.is_available():
-            print("Launching training on one GPU.")
-        else:
-            print("Launching training on one CPU.")
-        function(*args)
     else:
+        if in_colab and num_processes is None:
+            # Previous Google Colab behavior assumed only 1 process could be available and ignored the num_processes
+            # parameter. To not break existing notebooks which have omitted this parameter, we can set it to 1 in
+            # this case.
+            num_processes = 1
+            print("Running in Colab and num_processes unspecified. Continuing assuming `num_processes=1`.")
+
         if num_processes is None:
             raise ValueError(
                 "You have to specify the number of GPUs you would like to use, add `num_processes=...` to your call."
