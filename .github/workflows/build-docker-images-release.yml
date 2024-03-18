@@ -37,7 +37,7 @@ jobs:
         with:
           file: docker/accelerate-cpu/Dockerfile
           push: true
-          tags: huggingface/accelerate-cpu:${{needs.get-version.outputs.version}}
+          tags: huggingface/accelerate:cpu-release-${{ needs.get-version.outputs.version }}
 
   version-cuda:
     name: "Latest Accelerate GPU [version]"
@@ -57,4 +57,4 @@ jobs:
         with:
           file: docker/accelerate-gpu/Dockerfile
           push: true
-          tags: huggingface/accelerate-gpu:${{needs.get-version.outputs.version}}
+          tags: huggingface/accelerate:gpu-release-${{needs.get-version.outputs.version}}
