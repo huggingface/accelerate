@@ -301,6 +301,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
             )
         else:
             cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+        if main_process_ip:
+            cmd.extend(["--master_addr", str(main_process_ip)])
         cmd.extend(["--master_port", str(main_process_port)])
         if args.module and args.no_python:
             raise ValueError("--module and --no_python cannot be used together")
@@ -333,7 +335,7 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     if need_port_check and is_port_in_use(main_process_port):
         raise ConnectionError(
             f"Tried to launch distributed communication on port `{main_process_port}`, but another process is utilizing it. "
-            "Please specify a different port (such as using the `----main_process_port` flag or specifying a different `main_process_port` in your config file)"
+            "Please specify a different port (such as using the `--main_process_port` flag or specifying a different `main_process_port` in your config file)"
             " and rerun your script. To automatically use the next open port (on a single node), you can set this to `0`."
         )
 

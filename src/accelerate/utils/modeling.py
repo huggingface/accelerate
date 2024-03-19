@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import tempfile
+import warnings
 from collections import OrderedDict, defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -690,6 +691,7 @@ def compute_module_sizes(
     model: nn.Module,
     dtype: Optional[Union[str, torch.device]] = None,
     special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
+    buffers_only: bool = False,
 ):
     """
     Compute the size of each submodule of a given model.
@@ -701,7 +703,15 @@ def compute_module_sizes(
         special_dtypes = {key: _get_proper_dtype(dtyp) for key, dtyp in special_dtypes.items()}
         special_dtypes_size = {key: dtype_byte_size(dtyp) for key, dtyp in special_dtypes.items()}
     module_sizes = defaultdict(int)
-    for name, tensor in named_module_tensors(model, recurse=True):
+
+    module_list = []
+
+    if not buffers_only:
+        module_list = named_module_tensors(model, recurse=True)
+    else:
+        module_list = model.named_buffers(recurse=True)
+
+    for name, tensor in module_list:
         if special_dtypes is not None and name in special_dtypes:
             size = tensor.numel() * special_dtypes_size[name]
         elif dtype is None:
@@ -717,6 +727,18 @@ def compute_module_sizes(
             module_sizes[".".join(name_parts[:idx])] += size
 
     return module_sizes
+
+
+def compute_module_total_buffer_size(
+    model: nn.Module,
+    dtype: Optional[Union[str, torch.device]] = None,
+    special_dtypes: Optional[Dict[str, Union[str, torch.device]]] = None,
+):
+    """
+    Compute the total size of buffers in each submodule of a given model.
+    """
+    module_sizes = compute_module_sizes(model, dtype=dtype, special_dtypes=special_dtypes, buffers_only=True)
+    return module_sizes.get("", 0)
 
 
 def get_max_layer_size(
@@ -1030,6 +1052,7 @@ def infer_auto_device_map(
     special_dtypes: Optional[Dict[str, Union[str, torch.dtype]]] = None,
     verbose: bool = False,
     clean_result: bool = True,
+    offload_buffers: bool = False,
 ):
     """
     Compute a device map for a given model giving priority to GPUs, then offload on CPU and finally offload to disk,
@@ -1066,6 +1089,9 @@ def infer_auto_device_map(
             Whether or not to provide debugging statements as the function builds the device_map.
         clean_result (`bool`, *optional*, defaults to `True`):
             Clean the resulting device_map by grouping all submodules that go on the same device together.
+        offload_buffers (`bool`, *optional*, defaults to `False`):
+            In the layers that are offloaded on the CPU or the hard drive, whether or not to offload the buffers as
+            well as the parameters.
     """
     # Get default / clean up max_memory
     max_memory = get_max_memory(max_memory)
@@ -1098,6 +1124,8 @@ def infer_auto_device_map(
     device_map = OrderedDict()
     current_device = 0
     current_memory_used = 0
+    device_memory_used = {}
+    device_buffer_sizes = {}
 
     # Direct submodules and parameters
     modules_to_treat = (
@@ -1147,9 +1175,11 @@ def infer_auto_device_map(
 
         device = devices[current_device]
         current_max_size = max_memory[device] if device != "disk" else None
+        current_memory_reserved = 0
         # Reduce max size available by the largest layer.
         if devices[current_device] in main_devices:
             current_max_size = current_max_size - max_layer_size
+            current_memory_reserved = max_layer_size
         # Case 1 -> We're too big!
         if current_max_size is not None and current_memory_used + module_size > current_max_size:
             # Split or not split?
@@ -1167,6 +1197,8 @@ def infer_auto_device_map(
                 # -> no split, we go to the next device
                 if verbose:
                     print("This module cannot be split, going to the next device.")
+
+                device_memory_used[device] = current_memory_used + current_memory_reserved
                 current_device += 1
                 modules_to_treat = [(name, module)] + modules_to_treat
                 current_memory_used = 0
@@ -1218,6 +1250,12 @@ def infer_auto_device_map(
                         modules_to_treat.pop(tied_module_index)
                     device_map[tied_module_name] = devices[current_device]
 
+                if not offload_buffers and isinstance(module, nn.Module):
+                    current_buffer_size = compute_module_total_buffer_size(
+                        module, dtype=dtype, special_dtypes=special_dtypes
+                    )
+                    device_buffer_sizes[device] = device_buffer_sizes.get(device, 0) + current_buffer_size
+
             else:
                 # We don't fit with the tied modules. Next question is: can we split one of the tied modules to make it
                 # smaller or do we need to go on the next device?
@@ -1258,6 +1296,8 @@ def infer_auto_device_map(
                     # If the tied module is not split, we go to the next device
                     if verbose:
                         print("None of the tied module can be split, going to the next device.")
+
+                    device_memory_used[device] = current_memory_used + current_memory_reserved
                     current_device += 1
                     modules_to_treat = [(name, module)] + modules_to_treat
                     current_memory_used = 0
@@ -1272,10 +1312,38 @@ def infer_auto_device_map(
                         f"(available={current_max_size - current_memory_used})."
                     )
             current_memory_used += module_size
+            device_memory_used[device] = current_memory_used + current_memory_reserved
             device_map[name] = devices[current_device]
+
+            if not offload_buffers and isinstance(module, nn.Module):
+                current_buffer_size = compute_module_total_buffer_size(
+                    module, dtype=dtype, special_dtypes=special_dtypes
+                )
+                device_buffer_sizes[device] = device_buffer_sizes.get(device, 0) + current_buffer_size
 
     if clean_result:
         device_map = clean_device_map(device_map)
+
+    non_gpu_buffer_size = device_buffer_sizes.get("cpu", 0) + device_buffer_sizes.get("disk", 0)
+    if non_gpu_buffer_size > 0 and not offload_buffers:
+        is_buffer_fit_any_gpu = False
+        for gpu_device, gpu_max_memory in max_memory.items():
+            if gpu_device == "cpu" or gpu_device == "disk":
+                continue
+
+            if not is_buffer_fit_any_gpu:
+                gpu_memory_used = device_memory_used.get(gpu_device, 0)
+
+                if gpu_max_memory >= non_gpu_buffer_size + gpu_memory_used:
+                    is_buffer_fit_any_gpu = True
+
+        if len(gpus) > 0 and not is_buffer_fit_any_gpu:
+            warnings.warn(
+                f"Current model requires {non_gpu_buffer_size} bytes of buffer for offloaded layers, which seems does "
+                f"not fit any GPU's remaining memory. If you are experiencing a OOM later, please consider using "
+                f"offload_buffers=True."
+            )
+
     return device_map
 
 

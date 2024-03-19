@@ -22,12 +22,18 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Get current date
+        id: date
+        run: |
+          echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
       - name: Build and Push CPU
         uses: docker/build-push-action@v4
         with:
           file: docker/accelerate-cpu/Dockerfile          
           push: true
-          tags: huggingface/accelerate-cpu
+          tags: |
+            huggingface/accelerate:cpu-nightly
+            huggingface/accelerate:cpu-nightly-${{ env.date }}
 
   latest-cuda:
     name: "Latest Accelerate GPU [dev]"
@@ -40,10 +46,15 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
+      - name: Get current date
+        id: date
+        run: |
+          echo "date=$(date '+%Y-%m-%d')" >> $GITHUB_ENV
       - name: Build and Push GPU
         uses: docker/build-push-action@v4
         with:
           file: docker/accelerate-gpu/Dockerfile          
           push: true
-          tags: huggingface/accelerate-gpu
+          tags: |
+            huggingface/accelerate:gpu-nightly
+            huggingface/accelerate:gpu-nightly-${{ env.date }}

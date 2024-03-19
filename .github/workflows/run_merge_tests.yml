@@ -14,7 +14,7 @@ jobs:
     env:
       CUDA_VISIBLE_DEVICES: "0"
     container:
-      image: huggingface/accelerate-gpu:latest
+      image: huggingface/accelerate:gpu-nightly
       options: --gpus all --shm-size "16gb"
     defaults:
       run:
@@ -61,7 +61,7 @@ jobs:
     env:
       CUDA_VISIBLE_DEVICES: 0,1
     container:
-      image: huggingface/accelerate-gpu:latest
+      image: huggingface/accelerate:gpu-nightly
       options: --gpus all --shm-size "16gb"
     defaults:
       run:

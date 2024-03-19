@@ -585,6 +585,9 @@ class GradientAccumulationPlugin(KwargsHandler):
             `True` if the used scheduler was not adjusted for gradient accumulation.
         sync_with_dataloader (`bool`, *optional*, defaults to `True`):
             Whether to synchronize setting the gradients when at the end of the dataloader.
+        sync_each_batch (`bool`, *optional*):
+                Whether to synchronize setting the gradients at each data batch. Seting to `True` may reduce memory
+                requirements when using gradient accumulation with distributed training, at expense of speed.
 
     Example:
 
@@ -607,6 +610,12 @@ class GradientAccumulationPlugin(KwargsHandler):
         default=True,
         metadata={
             "help": "Whether to synchronize setting the gradients when at the end of the dataloader. Should only be set to `False` if you know what you're doing."
+        },
+    )
+    sync_each_batch: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to synchronize setting the gradients at each data batch. Setting to `True` may reduce memory requirements when using gradient accumulation with distributed training, at expense of speed."
         },
     )
 
@@ -1162,17 +1171,26 @@ class FullyShardedDataParallelPlugin:
                         size_based_auto_wrap_policy, min_num_params=min_num_params
                     )
 
-    def set_mixed_precision(self, mixed_precision):
-        if mixed_precision == "fp16":
-            dtype = torch.float16
-        elif mixed_precision == "bf16":
-            dtype = torch.bfloat16
+    def set_mixed_precision(self, mixed_precision, buffer_autocast=False, override=False):
+        if isinstance(mixed_precision, str):
+            if mixed_precision == "fp16":
+                dtype = torch.float16
+            elif mixed_precision == "bf16":
+                dtype = torch.bfloat16
+            elif mixed_precision == "fp32":
+                dtype = torch.float32
+            else:
+                raise ValueError(f"Unknown mixed precision value: {mixed_precision}")
         else:
-            raise ValueError(f"Unknown mixed precision value: {mixed_precision}")
+            dtype = mixed_precision
+
+        buffer_dtype = torch.float32 if buffer_autocast else dtype
         from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
 
-        if self.mixed_precision_policy is None:
-            self.mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
+        if self.mixed_precision_policy is None or override:
+            self.mixed_precision_policy = MixedPrecision(
+                param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_dtype
+            )
 
     def set_state_dict_type(self, state_dict_type_policy):
         from torch.distributed.fsdp.fully_sharded_data_parallel import (

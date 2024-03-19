@@ -34,6 +34,7 @@ from accelerate.utils import (
     DistributedType,
     gather,
     is_bf16_available,
+    is_datasets_available,
     is_ipex_available,
     is_npu_available,
     is_xpu_available,
@@ -569,6 +570,39 @@ def training_check(use_seedable_sampler=False):
         assert torch.allclose(old_model.b, model.b), "Did not obtain the same model on XPU or distributed training."
 
 
+def test_split_between_processes_dataset(datasets_Dataset):
+    state = AcceleratorState()
+    data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes)])
+    with state.split_between_processes(data, apply_padding=False) as results:
+        assert (
+            len(results) == 2
+        ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+
+    data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes - 1)])
+    with state.split_between_processes(data, apply_padding=False) as results:
+        if state.is_last_process:
+            assert (
+                len(results) == 1
+            ), f"Last process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
+        else:
+            assert (
+                len(results) == 2
+            ), f"One of the intermediate processes did not receive two items. Process index: {state.process_index}; Length: {len(results)}"
+
+    data = datasets_Dataset.from_list([dict(k=v) for v in range(2 * state.num_processes - 1)])
+    with state.split_between_processes(data, apply_padding=True) as results:
+        if state.num_processes == 1:
+            assert (
+                len(results) == 1
+            ), f"Single process did not receive a single item. Process index: {state.process_index}; Length: {len(results)}"
+        else:
+            assert (
+                len(results) == 2
+            ), f"Each process did not have two items. Process index: {state.process_index}; Length: {len(results)}"
+
+    state.wait_for_everyone()
+
+
 def test_split_between_processes_list():
     state = AcceleratorState()
     data = list(range(0, 2 * state.num_processes))
@@ -685,6 +719,15 @@ def main():
         if state.process_index == 0:
             print("\n**Test split between processes as a tensor**")
         test_split_between_processes_tensor()
+
+        if state.process_index == 0:
+            print("\n**Test split between processes as a datasets.Dataset**")
+        if is_datasets_available():
+            from datasets import Dataset as datasets_Dataset
+
+            test_split_between_processes_dataset(datasets_Dataset)
+        else:
+            print("Skipped because Hugging Face datasets is not available")
 
     if state.local_process_index == 0:
         print("\n**Test random number generator synchronization**")

@@ -20,6 +20,7 @@ from shutil import which
 from typing import List
 
 import torch
+from packaging.version import parse
 
 
 def str_to_bool(value) -> int:
@@ -88,7 +89,7 @@ def get_gpu_info():
     command = _get_nvidia_smi()
     # Returns as list of `n` GPUs and their names
     output = subprocess.check_output(
-        [command, "--query-gpu=count,name", "--format=csv,noheader"], universal_newlines=True
+        [_nvidia_smi(), "--query-gpu=count,name", "--format=csv,noheader"], universal_newlines=True
     )
     output = output.strip()
     gpus = output.split(os.linesep)
@@ -96,6 +97,19 @@ def get_gpu_info():
     gpu_count = len(gpus)
     gpu_names = [gpu.split(",")[1].strip() for gpu in gpus]
     return gpu_names, gpu_count
+
+
+def get_driver_version():
+    """
+    Returns the driver version
+
+    In the case of multiple GPUs, will return the first.
+    """
+    output = subprocess.check_output(
+        [_nvidia_smi(), "--query-gpu=driver_version", "--format=csv,noheader"], universal_newlines=True
+    )
+    output = output.strip()
+    return output.split(os.linesep)[0]
 
 
 def check_cuda_p2p_ib_support():
@@ -115,7 +129,12 @@ def check_cuda_p2p_ib_support():
                 for device_name in device_names
                 for unsupported_device in unsupported_devices
             ):
-                return False
+                # Check if they have the right driver version
+                acceptable_driver_version = "550.40.07"
+                current_driver_version = get_driver_version()
+                if parse(current_driver_version) < parse(acceptable_driver_version):
+                    return False
+                return True
     except Exception:
         pass
     return True
