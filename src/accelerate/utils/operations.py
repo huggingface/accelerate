@@ -153,7 +153,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
         if device == "xpu":
             device = "xpu:0"
         # TODO: torch_mlu LongTensor.to(<int num>) has bugs, we will fix this later.
-        if tensor.dtype in [torch.int64] and is_mlu_available():
+        if is_mlu_available() and is_torch_tensor(tensor) and tensor.dtype in [torch.int64]:
             tensor = tensor.cpu()
         try:
             return tensor.to(device, non_blocking=non_blocking)
