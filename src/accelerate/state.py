@@ -352,6 +352,7 @@ class PartialState:
             if self.device.type == "cuda":
                 if not is_pynvml_available():
                     raise ImportError("To set CPU affinity on CUDA GPUs the pynvml package must be installed.")
+                # The below code is based on https://github.com/NVIDIA/DeepLearningExamples/blob/master/TensorFlow2/LanguageModeling/BERT/gpu_affinity.py
                 nvml.nvmlInit()
                 num_elements = math.ceil(os.cpu_count() / 64)
                 handle = nvml.nvmlDeviceGetHandleByIndex(self.local_process_index)
