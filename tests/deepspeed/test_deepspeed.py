@@ -1101,10 +1101,11 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 with_dynamo = False
                 try:
                     r = execute_subprocess_async(
-                        cmd, env={"TORCH_LOGS": "dynamo", "ACCELERATE_DYNAMO_BACKEND": "eager", **os.environ}
+                        cmd, env={"TORCH_LOGS": "dynamo", "TORCHDYNAMO_DEBUG_FUNCTION": "forward", **os.environ}
                     )
                     with_dynamo = "torch._dynamo" in "\n".join(r.stderr)
                 except RuntimeError as e:
+                    # It's possible that the run fail, but we focus on if dynamo is enabled via deepspeed.
                     with_dynamo = "torch._dynamo" in e.args[0]
                 finally:
                     assert with_dynamo
