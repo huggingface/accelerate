@@ -25,7 +25,7 @@ from torch.utils.data import BatchSampler, DataLoader, RandomSampler, Sequential
 from transformers import AutoConfig, AutoModel, AutoModelForCausalLM, get_scheduler
 from transformers.testing_utils import mockenv_context
 from transformers.trainer_utils import set_seed
-from transformers.utils import is_torch_bf16_available
+from transformers.utils import is_torch_bf16_gpu_available
 
 from accelerate.accelerator import Accelerator
 from accelerate.scheduler import AcceleratedScheduler
@@ -78,7 +78,7 @@ stages = [ZERO2, ZERO3]
 optims = [CUSTOM_OPTIMIZER, DS_OPTIMIZER]
 schedulers = [CUSTOM_SCHEDULER, DS_SCHEDULER]
 model_types = [NO_CONFIG, CONFIG_WITH_NO_HIDDEN_SIZE, CONFIG_WITH_HIDDEN_SIZE, CONFIG_WITH_HIDDEN_SIZES]
-if is_torch_bf16_available():
+if is_torch_bf16_gpu_available():
     dtypes = [FP16, BF16]
 else:
     dtypes = [FP16]
