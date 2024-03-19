@@ -1101,7 +1101,15 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
                 with_dynamo = False
                 try:
                     r = execute_subprocess_async(
-                        cmd, env={"TORCH_LOGS": "dynamo", "TORCHDYNAMO_DEBUG_FUNCTION": "forward", **os.environ}
+                        cmd,
+                        env={
+                            "TORCH_LOGS": "dynamo",
+                            # dynamo itself has some issue, use below to only compile `forward` for testing.
+                            # On deepspeed side, `deepspeed.util.z3_leaf_module.[un]set_z3_leaf_modules` is used for similar issue
+                            # that user want to compile/skip specific module.
+                            "TORCHDYNAMO_DEBUG_FUNCTION": "forward",
+                            **os.environ,
+                        },
                     )
                     with_dynamo = "torch._dynamo" in "\n".join(r.stderr)
                 except RuntimeError as e:
