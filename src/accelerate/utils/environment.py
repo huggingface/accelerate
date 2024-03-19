@@ -65,7 +65,7 @@ def are_libraries_initialized(*library_names: str) -> List[str]:
     return [lib_name for lib_name in library_names if lib_name in sys.modules.keys()]
 
 
-def _get_nvidia_smi():
+def _nvidia_smi():
     """
     Returns the right nvidia-smi command based on the system.
     """
@@ -86,7 +86,6 @@ def get_gpu_info():
 
     Largely based on the `gputil` library.
     """
-    command = _get_nvidia_smi()
     # Returns as list of `n` GPUs and their names
     output = subprocess.check_output(
         [_nvidia_smi(), "--query-gpu=count,name", "--format=csv,noheader"], universal_newlines=True
