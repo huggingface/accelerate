@@ -26,7 +26,6 @@ from ..state import PartialState
 from .constants import TORCH_DISTRIBUTED_OPERATION_TYPES
 from .dataclasses import DistributedType, TensorInformation
 from .imports import (
-    is_mlu_available,
     is_npu_available,
     is_torch_distributed_available,
     is_torch_version,
@@ -153,7 +152,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
         if device == "xpu":
             device = "xpu:0"
         # TODO: torch_mlu LongTensor.to(<int num>) has bugs, we will fix this later.
-        if is_mlu_available() and is_torch_tensor(tensor) and tensor.dtype in [torch.int64]:
+        if is_torch_tensor(tensor) and tensor.device.type in ["mlu"] and tensor.dtype in [torch.int64]:
             tensor = tensor.cpu()
         try:
             return tensor.to(device, non_blocking=non_blocking)
