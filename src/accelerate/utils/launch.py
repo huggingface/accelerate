@@ -28,6 +28,7 @@ from ..utils import (
     DynamoBackend,
     PrecisionType,
     is_ipex_available,
+    is_mlu_available,
     is_npu_available,
     is_torch_xla_available,
     is_xpu_available,
@@ -103,6 +104,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if args.gpu_ids != "all" and args.gpu_ids is not None:
         if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = args.gpu_ids
+        elif is_mlu_available():
+            current_env["MLU_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
         else:
@@ -193,6 +196,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     if gpu_ids != "all" and args.gpu_ids is not None:
         if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
+        elif is_mlu_available():
+            current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         else:
@@ -349,6 +354,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     if gpu_ids != "all" and args.gpu_ids is not None:
         if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
+        elif is_mlu_available():
+            current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         else:
@@ -596,6 +603,7 @@ class PrepareForLaunch:
             )
         elif self.distributed_type in (
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_MLU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,

@@ -38,6 +38,7 @@ from accelerate.utils import (
     check_cuda_p2p_ib_support,
     is_bf16_available,
     is_deepspeed_available,
+    is_mlu_available,
     is_npu_available,
     is_rich_available,
     is_sagemaker_available,
@@ -898,7 +899,12 @@ def _validate_launch_command(args):
             args.multi_gpu = (
                 True
                 if defaults.distributed_type
-                in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_XPU)
+                in (
+                    DistributedType.MULTI_GPU,
+                    DistributedType.MULTI_NPU,
+                    DistributedType.MULTI_MLU,
+                    DistributedType.MULTI_XPU,
+                )
                 else False
             )
             args.tpu = defaults.distributed_type == DistributedType.XLA
@@ -974,6 +980,8 @@ def _validate_launch_command(args):
         if args.num_processes is None:
             if args.use_xpu and is_xpu_available():
                 args.num_processes = torch.xpu.device_count()
+            elif is_mlu_available():
+                args.num_processes = torch.mlu.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
             else:
@@ -983,6 +991,7 @@ def _validate_launch_command(args):
             args.debug = False
         if not args.multi_gpu and (
             (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
+            or (is_mlu_available() and torch.mlu.device_count() > 1)
             or (is_npu_available() and torch.npu.device_count() > 1)
             or (torch.cuda.device_count() > 1)
         ):
