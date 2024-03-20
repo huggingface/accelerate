@@ -740,7 +740,7 @@ def deepspeed_launcher(args):
             logger.warning(message)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-        with open(".deepspeed_env", "a") as f:
+        with open(DEEPSPEED_ENVIRONMENT_NAME, "a") as f:
             valid_env_items = convert_dict_to_env_variables(current_env)
             if len(valid_env_items) > 1:
                 f.writelines(valid_env_items)
