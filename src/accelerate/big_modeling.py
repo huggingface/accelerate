@@ -31,6 +31,7 @@ from .hooks import (
 )
 from .utils import (
     OffloadedWeightsLoader,
+    check_cuda_p2p_ib_support,
     check_device_map,
     extract_submodules_state_dict,
     find_tied_parameters,
@@ -466,6 +467,14 @@ def dispatch_model(
         else:
             model.cuda = add_warning(model.cuda, model)
 
+        # Check if we are using multi-gpus with RTX 4000 series
+        use_multi_gpu = len([device for device in set(device_map.values()) if device not in ("cpu", "disk")]) > 1
+        if use_multi_gpu and not check_cuda_p2p_ib_support():
+            logger.warning(
+                "We've detected an older driver with an RTX 4000 series GPU. These drivers have issues with P2P. "
+                "This can affect the multi-gpu inference when using accelerate device_map."
+                "Please make sure to update your driver to the latest version which resolves this."
+            )
     else:
         device = list(device_map.values())[0]
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
