@@ -36,6 +36,7 @@ from accelerate.utils import (
     PrepareForLaunch,
     _filter_args,
     check_cuda_p2p_ib_support,
+    convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
     is_mlu_available,
@@ -738,10 +739,9 @@ def deepspeed_launcher(args):
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         with open(".deepspeed_env", "a") as f:
-            for key, value in current_env.items():
-                if ";" in value or " " in value:
-                    continue
-                f.write(f"{key}={value}\n")
+            valid_env_items = convert_dict_to_env_variables(current_env)
+            if len(valid_env_items) > 1:
+                f.writelines(valid_env_items)
 
         process = subprocess.Popen(cmd, env=current_env)
         process.wait()
