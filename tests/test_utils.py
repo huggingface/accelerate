@@ -31,6 +31,7 @@ from accelerate.utils import (
     CannotPadNestedTensorWarning,
     check_os_kernel,
     clear_environment,
+    convert_dict_to_env_variables,
     convert_outputs_to_fp32,
     convert_to_fp32,
     extract_model_from_parallel,
@@ -355,3 +356,9 @@ class UtilsTester(unittest.TestCase):
         self.assertFalse(is_namedtuple((1, 2)))
         self.assertFalse(is_namedtuple("hey"))
         self.assertFalse(is_namedtuple(object()))
+
+    def test_convert_dict_to_env_variables(self):
+        env = {"ACCELERATE_DEBUG_MODE": "1", "BAD_ENV_NAME": "<mything", "OTHER_ENV": "2"}
+        with self.assertLogs("accelerate.utils.environment", level="WARNING"):
+            valid_env_items = convert_dict_to_env_variables(env)
+        assert valid_env_items == ["ACCELERATE_DEBUG_MODE=1\n", "OTHER_ENV=2\n"]
