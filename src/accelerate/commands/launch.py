@@ -206,6 +206,12 @@ def launch_command_parser(subparsers=None):
         default=None,
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
     )
+    resource_args.add_argument(
+        "--enable_cpu_affinity",
+        default=False,
+        action="store_true",
+        help="Whether or not CPU affinity and balancing should be enabled. Currently only supported on NVIDIA hardware.",
+    )
 
     # Dynamo arguments
     resource_args.add_argument(
@@ -698,6 +704,7 @@ def multi_gpu_launcher(args):
         distrib_run.get_args_parser(),
         ["--training_script", args.training_script, "--training_script_args", args.training_script_args],
     )
+
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)

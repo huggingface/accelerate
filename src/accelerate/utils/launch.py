@@ -144,6 +144,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if is_ipex_available():
         current_env["ACCELERATE_USE_IPEX"] = str(args.ipex).lower()
         current_env["ACCELERATE_USE_XPU"] = str(args.use_xpu).lower()
+    if args.enable_cpu_affinity:
+        current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     return cmd, current_env
 
 
@@ -265,6 +267,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env[prefix + "USE_DISTRIBUTED_OPTIMIZER"] = str(args.megatron_lm_use_distributed_optimizer)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
+    if args.enable_cpu_affinity:
+        current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     return current_env
 
 
@@ -387,6 +391,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         current_env["ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
     if args.deepspeed_config_file is not None:
         current_env["ACCELERATE_DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file)
+    if args.enable_cpu_affinity:
+        current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     return cmd, current_env
 
 

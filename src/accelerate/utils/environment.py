@@ -67,7 +67,7 @@ def are_libraries_initialized(*library_names: str) -> List[str]:
 
 def _nvidia_smi():
     """
-    Calls nvidia-smi
+    Returns the right nvidia-smi command based on the system.
     """
     if platform.system() == "Windows":
         # If platform is Windows and nvidia-smi can't be found in path
