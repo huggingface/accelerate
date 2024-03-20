@@ -722,6 +722,8 @@ def deepspeed_launcher(args):
 
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
+    else:
+        from deepspeed.launcher.runner import DEEPSPEED_ENVIRONMENT_NAME
 
     cmd, current_env = prepare_deepspeed_cmd_env(args)
     if not check_cuda_p2p_ib_support():
@@ -737,7 +739,7 @@ def deepspeed_launcher(args):
             logger.warning(message)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-        with open(".deepspeed_env", "a") as f:
+        with open(DEEPSPEED_ENVIRONMENT_NAME, "a") as f:
             for key, value in current_env.items():
                 if ";" in value or " " in value:
                     continue
