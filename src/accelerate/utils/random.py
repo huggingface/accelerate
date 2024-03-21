@@ -28,7 +28,7 @@ if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
-def set_seed(seed: int, device_specific: bool = False, determinsitic: bool = False):
+def set_seed(seed: int, device_specific: bool = False, deterministic: bool = False):
     """
     Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch`.
 
@@ -37,7 +37,7 @@ def set_seed(seed: int, device_specific: bool = False, determinsitic: bool = Fal
             The seed to set.
         device_specific (`bool`, *optional*, defaults to `False`):
             Whether to differ the seed on each device slightly with `self.process_index`.
-        determinsitic (`bool`, *optional*, defaults to `False`):
+        deterministic (`bool`, *optional*, defaults to `False`):
             Whether to use deterministic algorithms where available. Can slow down training.
     """
     if device_specific:
@@ -57,7 +57,7 @@ def set_seed(seed: int, device_specific: bool = False, determinsitic: bool = Fal
     if is_torch_xla_available():
         xm.set_rng_state(seed)
 
-    if determinsitic:
+    if deterministic:
         torch.use_deterministic_algorithms(True)
 
 
