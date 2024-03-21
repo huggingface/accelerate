@@ -25,18 +25,18 @@ from typing import Any, Callable, Optional
 
 import torch
 
-from accelerate.utils.imports import is_deepspeed_available
-
 from .utils import (
     DistributedType,
     DynamoBackend,
     GradientAccumulationPlugin,
+    check_cuda_p2p_ib_support,
     check_fp8_capability,
     get_ccl_version,
     get_cpu_distributed_information,
     get_int_from_env,
     is_ccl_available,
     is_datasets_available,
+    is_deepspeed_available,
     is_fp8_available,
     is_ipex_available,
     is_mlu_available,
@@ -262,6 +262,15 @@ class PartialState:
             self.set_device()
 
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
+
+        # Check for old RTX 4000's that can't use P2P or IB and are on old drivers
+        if self.device.type == "cuda" and not check_cuda_p2p_ib_support():
+            if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
+                raise NotImplementedError(
+                    "Using RTX 4000 series doesn't support faster communication broadband via P2P or IB. "
+                    'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
+                    "will do this automatically."
+                )
 
         # Set CPU affinity if enabled
         if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
