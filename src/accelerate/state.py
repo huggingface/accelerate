@@ -65,13 +65,6 @@ if is_pynvml_available():
 
 logger = logging.getLogger(__name__)
 
-# List of flags set from env variables
-DISTRIBUTED_CPU = get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
-DISTRIBUTED_LOCAL_RANK = int(os.environ.get("LOCAL_RANK", -1))
-USE_DEEPSPEED = os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true"
-USE_FSDP = os.environ.get("ACCELERATE_USE_FSDP", "false") == "true"
-USE_MEGATRON_LM = os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true"
-
 
 def is_initialized() -> bool:
     """
@@ -173,8 +166,8 @@ class PartialState:
                         self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                     self.distributed_type = DistributedType.XLA
                 if not torch.distributed.is_initialized():
-                    if DISTRIBUTED_LOCAL_RANK != -1:
-                        if USE_DEEPSPEED:
+                    if int(os.environ.get("LOCAL_RANK", -1)) != -1:
+                        if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
                             if not is_deepspeed_available():
                                 raise ImportError(
                                     "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
@@ -194,6 +187,7 @@ class PartialState:
             # XPU and CPU require special env configs to be set
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                 if not torch.distributed.is_initialized():
+                    raise ValueError()
                     dist_information = get_cpu_distributed_information()
                     os.environ["RANK"] = str(dist_information["rank"])
                     os.environ["WORLD_SIZE"] = str(dist_information["world_size"])
@@ -246,7 +240,9 @@ class PartialState:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = (
-                    DISTRIBUTED_LOCAL_RANK if dist_information is None else dist_information["local_rank"]
+                    int(os.environ.get("LOCAL_RANK", -1))
+                    if dist_information is None
+                    else dist_information["local_rank"]
                 )
             self.set_device()
 
@@ -279,6 +275,7 @@ class PartialState:
                 affinity_list.reverse()  # so core 0 is the 0th element
                 affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
                 os.sched_setaffinity(0, affinity_to_set)
+        raise ValueError(self.backend, self.distributed_type, self.device)
 
     def __repr__(self) -> str:
         return (
@@ -692,13 +689,12 @@ class PartialState:
 
     def _prepare_backend(self, cpu: bool = False, sagemaker_dp=False, backend: str = None):
         "Prepares any imports needed before initializing the distributed backend and sets `self.backend` properly"
-        global DISTRIBUTED_LOCAL_RANK
         if sagemaker_dp:
             import smdistributed.dataparallel.torch.torch_smddp  # noqa
 
             self.backend = "smddp"
             self.distributed_type = DistributedType.MULTI_GPU
-        elif DISTRIBUTED_LOCAL_RANK != -1:
+        elif int(os.environ.get("LOCAL_RANK", -1)) != -1:
             if not cpu:
                 if is_mlu_available():
                     self.backend = "cncl"
@@ -709,25 +705,30 @@ class PartialState:
                 elif is_npu_available():
                     self.backend = "hccl"
                     self.distributed_type = DistributedType.MULTI_NPU
-        if self.backend == None and (DISTRIBUTED_LOCAL_RANK != -1 or DISTRIBUTED_CPU):
+        if self.backend is None and (
+            int(os.environ.get("LOCAL_RANK", -1)) != -1
+            or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
+        ):
             if not cpu and is_xpu_available():
                 self.distributed_type = DistributedType.MULTI_XPU
             else:
                 self.distributed_type = DistributedType.MULTI_CPU
-            if is_xpu_available() and is_ccl_available():
+            if is_ccl_available() and (
+                get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or self.distributed_type == DistributedType.MULTI_XPU
+            ):
                 if get_ccl_version() >= "1.12":
                     import oneccl_bindings_for_pytorch  # noqa: F401
                 else:
                     import torch_ccl  # noqa: F401
 
                 self.backend = "ccl"
-                self.distributed_type = DistributedType.MULTI_XPU
             elif torch.distributed.is_mpi_available():
                 self.backend = "mpi"
             else:
                 self.backend = "gloo"
         else:
             self.distributed_type = DistributedType.NO
+        raise ValueError(self.backend, self.distributed_type, self.device)
 
     def set_device(self):
         """
@@ -836,7 +837,7 @@ class AcceleratorState:
                         os.environ["XLA_USE_BF16"] = str(1)
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
-            elif USE_DEEPSPEED and not cpu:
+            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
                 self.deepspeed_plugin = deepspeed_plugin
             elif self.distributed_type in [
                 DistributedType.MULTI_GPU,
@@ -844,12 +845,12 @@ class AcceleratorState:
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
             ]:
-                if USE_FSDP:
+                if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP
                     if self._mixed_precision != "no":
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
-                if USE_MEGATRON_LM and self.distributed_type not in [
+                if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true" and self.distributed_type not in [
                     DistributedType.MULTI_NPU,
                     DistributedType.MULTI_XPU,
                 ]:
