@@ -69,6 +69,8 @@ logger = logging.getLogger(__name__)
 DISTRIBUTED_CPU = get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
 DISTRIBUTED_LOCAL_RANK = int(os.environ.get("LOCAL_RANK", -1)) != -1
 USE_DEEPSPEED = os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true"
+USE_FSDP = os.environ.get("ACCELERATE_USE_FSDP", "false") == "true"
+USE_MEGATRON_LM = os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true"
 
 
 def is_initialized() -> bool:
@@ -846,36 +848,32 @@ class AcceleratorState:
                         os.environ["XLA_USE_BF16"] = str(1)
                         os.environ["XLA_DOWNCAST_BF16"] = str(0)
                         self.downcast_bfloat = False
-            elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
+            elif USE_DEEPSPEED and not cpu:
                 self.deepspeed_plugin = deepspeed_plugin
-            elif self.distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_MLU]:
-                if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
+            elif self.distributed_type in [
+                DistributedType.MULTI_GPU,
+                DistributedType.MULTI_MLU,
+                DistributedType.MULTI_NPU,
+                DistributedType.MULTI_XPU,
+            ]:
+                if USE_FSDP:
                     self.distributed_type = DistributedType.FSDP
                     if self._mixed_precision != "no":
                         fsdp_plugin.set_mixed_precision(self._mixed_precision)
                     self.fsdp_plugin = fsdp_plugin
-                if os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true":
+                if USE_MEGATRON_LM and self.distributed_type not in [
+                    DistributedType.MULTI_NPU,
+                    DistributedType.MULTI_XPU,
+                ]:
                     self.distributed_type = DistributedType.MEGATRON_LM
                     megatron_lm_plugin.set_mixed_precision(self._mixed_precision)
                     self.megatron_lm_plugin = megatron_lm_plugin
-            elif self.distributed_type == DistributedType.MULTI_NPU:
-                if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
-                    self.distributed_type = DistributedType.FSDP
-                    if self._mixed_precision != "no":
-                        fsdp_plugin.set_mixed_precision(self._mixed_precision)
-                    self.fsdp_plugin = fsdp_plugin
             elif self.distributed_type in [DistributedType.MULTI_CPU, DistributedType.MULTI_XPU, DistributedType.NO]:
                 if is_ipex_available():
-                    "check if user disables it explicitly"
+                    # check if user disables it explicitly
                     self.use_ipex = parse_flag_from_env("ACCELERATE_USE_IPEX", default=True)
                 else:
                     self.use_ipex = False
-                if self.distributed_type == DistributedType.MULTI_XPU:
-                    if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
-                        self.distributed_type = DistributedType.FSDP
-                        if self._mixed_precision != "no":
-                            fsdp_plugin.set_mixed_precision(self._mixed_precision)
-                        self.fsdp_plugin = fsdp_plugin
             if (
                 self.dynamo_plugin.backend != DynamoBackend.NO
                 and self._mixed_precision == "no"
