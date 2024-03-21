@@ -708,6 +708,7 @@ class PartialState:
 
     def _prepare_backend(self, cpu: bool = False, sagemaker_dp=False, backend: str = None):
         "Prepares any imports needed before initializing the distributed backend and sets `self.backend` properly"
+        global DISTRIBUTED_LOCAL_RANK
         if sagemaker_dp:
             import smdistributed.dataparallel.torch.torch_smddp  # noqa
 
@@ -745,6 +746,8 @@ class PartialState:
                     self.backend = "mpi"
                 else:
                     self.backend = "gloo"
+        else:
+            self.distributed_type = DistributedType.NO
 
     def set_device(self):
         """
@@ -754,11 +757,13 @@ class PartialState:
             if self.num_processes == 1:
                 self.device = torch.device("cpu") if self._cpu else self.default_device
             else:
-                device = str(self.distributed_type).replace("MULTI_", "").lower()
+                device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
                 if device not in ("gpu", "mlu", "npu", "xpu"):
                     raise ValueError(
-                        f"Can't set device for {self.distributed_type}, verify we should be calling `_set_device()` for it!"
+                        f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
                     )
+                if device == "gpu":
+                    device = "cuda"
                 self.device = torch.device(device, self.local_process_index)
                 if self.device is not None:
                     if device == "xpu":
