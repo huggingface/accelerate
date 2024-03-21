@@ -28,7 +28,7 @@ if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 
-def set_seed(seed: int, device_specific: bool = False):
+def set_seed(seed: int, device_specific: bool = False, determinsitic: bool = False):
     """
     Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch`.
 
@@ -37,6 +37,8 @@ def set_seed(seed: int, device_specific: bool = False):
             The seed to set.
         device_specific (`bool`, *optional*, defaults to `False`):
             Whether to differ the seed on each device slightly with `self.process_index`.
+        determinsitic (`bool`, *optional*, defaults to `False`):
+            Whether to use deterministic algorithms where available.
     """
     if device_specific:
         seed += AcceleratorState().process_index
@@ -54,6 +56,9 @@ def set_seed(seed: int, device_specific: bool = False):
     # ^^ safe to call this function even if cuda is not available
     if is_torch_xla_available():
         xm.set_rng_state(seed)
+
+    if determinsitic:
+        torch.use_deterministic_algorithms(True)
 
 
 def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optional[torch.Generator] = None):
