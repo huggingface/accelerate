@@ -22,6 +22,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -690,6 +691,18 @@ def test_trigger():
     assert accelerator.check_trigger() is False
 
 
+def test_reinstantiated_state():
+    AcceleratorState._reset_state()
+    simple_model = torch.nn.Linear(1, 1)
+    # First define an accelerator
+    accelerator = Accelerator()
+    # Then call `reset_state`, breaking the state existing in the accelerator
+    AcceleratorState._reset_state()
+    # Now try and prepare a simple model, should raise the custom error early
+    with pytest.raises(AttributeError, match="This can happen if the state was reset and using an old reference."):
+        accelerator.prepare(simple_model)
+
+
 def main():
     accelerator = Accelerator()
     state = accelerator.state
@@ -754,6 +767,10 @@ def main():
     if state.local_process_index == 0:
         print("\n**Breakpoint trigger test**")
     test_trigger()
+
+    if state.local_process_index == 0:
+        print("\n**Test reinstantiated state**")
+    test_reinstantiated_state()
 
 
 if __name__ == "__main__":
