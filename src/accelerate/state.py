@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 
 # List of flags set from env variables
 DISTRIBUTED_CPU = get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
-DISTRIBUTED_LOCAL_RANK = int(os.environ.get("LOCAL_RANK", -1)) != -1
+DISTRIBUTED_LOCAL_RANK = int(os.environ.get("LOCAL_RANK", -1))
 USE_DEEPSPEED = os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true"
 USE_FSDP = os.environ.get("ACCELERATE_USE_FSDP", "false") == "true"
 USE_MEGATRON_LM = os.environ.get("ACCELERATE_USE_MEGATRON_LM", "false") == "true"
@@ -173,7 +173,7 @@ class PartialState:
                         self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                     self.distributed_type = DistributedType.XLA
                 if not torch.distributed.is_initialized():
-                    if DISTRIBUTED_LOCAL_RANK:
+                    if DISTRIBUTED_LOCAL_RANK != -1:
                         if USE_DEEPSPEED:
                             if not is_deepspeed_available():
                                 raise ImportError(
@@ -182,13 +182,9 @@ class PartialState:
                             from deepspeed import comm as dist
 
                             if is_xpu_available and is_ccl_available():
-                                os.environ.update(
-                                    {
-                                        "CCL_PROCESS_LAUNCHER": "none",
-                                        "CCL_LOCAL_SIZE": os.environ.get("LOCAL_WORLD_SIZE", "1"),
-                                        "CCL_LOCAL_RANK": os.environ.get("LOCAL_RANK", "0"),
-                                    }
-                                )
+                                os.environ["CCL_PROCESS_LAUNCHER"] = "none"
+                                os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
+                                os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                             self.set_device()
                             self.distributed_type = DistributedType.DEEPSPEED
@@ -199,22 +195,14 @@ class PartialState:
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                 if not torch.distributed.is_initialized():
                     dist_information = get_cpu_distributed_information()
-                    os.environ.update(
-                        {
-                            "RANK": str(dist_information["rank"]),
-                            "WORLD_SIZE": str(dist_information["world_size"]),
-                            "LOCAL_RANK": str(dist_information["local_rank"]),
-                            "LOCAL_WORLD_SIZE": str(dist_information["local_world_size"]),
-                        }
-                    )
+                    os.environ["RANK"] = str(dist_information["rank"])
+                    os.environ["WORLD_SIZE"] = str(dist_information["world_size"])
+                    os.environ["LOCAL_RANK"] = str(dist_information["local_rank"])
+                    os.environ["LOCAL_WORLD_SIZE"] = str(dist_information["local_world_size"])
                     if self.backend == "ccl" and self.distributed_type == DistributedType.MULTI_XPU:
-                        os.environ.update(
-                            {
-                                "CCL_PROCESS_LAUNCHER": "none",
-                                "CCL_LOCAL_SIZE": os.environ["LOCAL_WORLD_SIZE"],
-                                "CCL_LOCAL_RANK": os.environ["LOCAL_RANK"],
-                            }
-                        )
+                        os.environ["CCL_PROCESS_LAUNCHER"] = "none"
+                        os.environ["CCL_LOCAL_SIZE"] = os.environ["LOCAL_WORLD_SIZE"]
+                        os.environ["CCL_LOCAL_RANK"] = os.environ["LOCAL_RANK"]
                     if not os.environ.get("MASTER_PORT", None):
                         os.environ["MASTER_PORT"] = "29500"
                     if (
@@ -226,12 +214,8 @@ class PartialState:
                             "Tried to launch on distributed with multinode, but `MASTER_ADDR` env was not set, "
                             "please try exporting rank 0's hostname as `MASTER_ADDR`"
                         )
-                    kwargs.update(
-                        {
-                            "rank": dist_information["rank"],
-                            "world_size": dist_information["world_size"],
-                        }
-                    )
+                    kwargs["rank"] = dist_information["rank"]
+                    kwargs["world_size"] = dist_information["world_size"]
 
                     if (
                         self.distributed_type == DistributedType.MULTI_CPU
@@ -714,7 +698,7 @@ class PartialState:
 
             self.backend = "smddp"
             self.distributed_type = DistributedType.MULTI_GPU
-        elif DISTRIBUTED_LOCAL_RANK:
+        elif DISTRIBUTED_LOCAL_RANK != -1:
             if not cpu:
                 if is_mlu_available():
                     self.backend = "cncl"
