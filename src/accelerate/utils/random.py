@@ -38,7 +38,7 @@ def set_seed(seed: int, device_specific: bool = False, determinsitic: bool = Fal
         device_specific (`bool`, *optional*, defaults to `False`):
             Whether to differ the seed on each device slightly with `self.process_index`.
         determinsitic (`bool`, *optional*, defaults to `False`):
-            Whether to use deterministic algorithms where available.
+            Whether to use deterministic algorithms where available. Can slow down training.
     """
     if device_specific:
         seed += AcceleratorState().process_index
