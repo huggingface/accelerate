@@ -797,6 +797,18 @@ class PartialState:
         else:
             return torch.device("cpu")
 
+    def __getattr__(self, name: str):
+        try:
+            # First try the normal way
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            # If not found, give a more contextualized answer
+            raise AttributeError(
+                f"`PartialState` object has no attribute `{name}`. "
+                "This can happen if the state was reset and using an old reference. "
+                "If you are using an `Accelerator`, make sure to re-initialize it."
+            )
+
 
 class AcceleratorState:
     """
@@ -1059,6 +1071,19 @@ class AcceleratorState:
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
+
+    def __getattr__(self, name: str):
+        try:
+            # First try the normal way
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            # If not found, give a more contextualized answer
+            # adjust err message
+            raise AttributeError(
+                f"`AcceleratorState` object has no attribute `{name}`. "
+                "This can happen if the state was reset and using an old reference. "
+                "If you are using an `Accelerator`, make sure to re-initialize it."
+            )
 
 
 class GradientState:
