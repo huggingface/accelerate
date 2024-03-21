@@ -186,48 +186,47 @@ class PartialState:
                             torch.distributed.init_process_group(backend=self.backend, **kwargs)
             # XPU and CPU require special env configs to be set
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
+                dist_information = get_cpu_distributed_information()
+                os.environ["RANK"] = str(dist_information["rank"])
+                os.environ["WORLD_SIZE"] = str(dist_information["world_size"])
+                os.environ["LOCAL_RANK"] = str(dist_information["local_rank"])
+                os.environ["LOCAL_WORLD_SIZE"] = str(dist_information["local_world_size"])
+                if self.backend == "ccl" and self.distributed_type == DistributedType.MULTI_XPU:
+                    os.environ["CCL_PROCESS_LAUNCHER"] = "none"
+                    os.environ["CCL_LOCAL_SIZE"] = os.environ["LOCAL_WORLD_SIZE"]
+                    os.environ["CCL_LOCAL_RANK"] = os.environ["LOCAL_RANK"]
+                if not os.environ.get("MASTER_PORT", None):
+                    os.environ["MASTER_PORT"] = "29500"
+                if (
+                    not os.environ.get("MASTER_ADDR", None)
+                    and dist_information["local_world_size"] != dist_information["world_size"]
+                    and self.backend != "mpi"
+                ):
+                    raise ValueError(
+                        "Tried to launch on distributed with multinode, but `MASTER_ADDR` env was not set, "
+                        "please try exporting rank 0's hostname as `MASTER_ADDR`"
+                    )
+                kwargs["rank"] = dist_information["rank"]
+                kwargs["world_size"] = dist_information["world_size"]
+
+                if (
+                    self.distributed_type == DistributedType.MULTI_CPU
+                    and get_int_from_env(["OMP_NUM_THREADS", "OMP_NUM_THREADS"], 0) > 0
+                ):
+                    import psutil
+
+                    num_cpu_threads_per_process = int(
+                        psutil.cpu_count(logical=False) / dist_information["local_world_size"]
+                    )
+                    if num_cpu_threads_per_process == 0:
+                        num_cpu_threads_per_process = 1
+                    torch.set_num_threads(num_cpu_threads_per_process)
+                    warnings.warn(
+                        f"OMP_NUM_THREADS/MKL_NUM_THREADS unset, we set it at {num_cpu_threads_per_process} to improve oob"
+                        " performance."
+                    )
+
                 if not torch.distributed.is_initialized():
-                    raise ValueError()
-                    dist_information = get_cpu_distributed_information()
-                    os.environ["RANK"] = str(dist_information["rank"])
-                    os.environ["WORLD_SIZE"] = str(dist_information["world_size"])
-                    os.environ["LOCAL_RANK"] = str(dist_information["local_rank"])
-                    os.environ["LOCAL_WORLD_SIZE"] = str(dist_information["local_world_size"])
-                    if self.backend == "ccl" and self.distributed_type == DistributedType.MULTI_XPU:
-                        os.environ["CCL_PROCESS_LAUNCHER"] = "none"
-                        os.environ["CCL_LOCAL_SIZE"] = os.environ["LOCAL_WORLD_SIZE"]
-                        os.environ["CCL_LOCAL_RANK"] = os.environ["LOCAL_RANK"]
-                    if not os.environ.get("MASTER_PORT", None):
-                        os.environ["MASTER_PORT"] = "29500"
-                    if (
-                        not os.environ.get("MASTER_ADDR", None)
-                        and dist_information["local_world_size"] != dist_information["world_size"]
-                        and self.backend != "mpi"
-                    ):
-                        raise ValueError(
-                            "Tried to launch on distributed with multinode, but `MASTER_ADDR` env was not set, "
-                            "please try exporting rank 0's hostname as `MASTER_ADDR`"
-                        )
-                    kwargs["rank"] = dist_information["rank"]
-                    kwargs["world_size"] = dist_information["world_size"]
-
-                    if (
-                        self.distributed_type == DistributedType.MULTI_CPU
-                        and get_int_from_env(["OMP_NUM_THREADS", "OMP_NUM_THREADS"], 0) > 0
-                    ):
-                        import psutil
-
-                        num_cpu_threads_per_process = int(
-                            psutil.cpu_count(logical=False) / dist_information["local_world_size"]
-                        )
-                        if num_cpu_threads_per_process == 0:
-                            num_cpu_threads_per_process = 1
-                        torch.set_num_threads(num_cpu_threads_per_process)
-                        warnings.warn(
-                            f"OMP_NUM_THREADS/MKL_NUM_THREADS unset, we set it at {num_cpu_threads_per_process} to improve oob"
-                            " performance."
-                        )
-
                     torch.distributed.init_process_group(backend=self.backend, **kwargs)
 
             # No backend == no distributed training
@@ -275,7 +274,6 @@ class PartialState:
                 affinity_list.reverse()  # so core 0 is the 0th element
                 affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
                 os.sched_setaffinity(0, affinity_to_set)
-        raise ValueError(self.backend, self.distributed_type, self.device)
 
     def __repr__(self) -> str:
         return (
@@ -728,7 +726,6 @@ class PartialState:
                 self.backend = "gloo"
         else:
             self.distributed_type = DistributedType.NO
-        raise ValueError(self.backend, self.distributed_type, self.device)
 
     def set_device(self):
         """
