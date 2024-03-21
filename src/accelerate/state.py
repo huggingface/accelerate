@@ -151,6 +151,7 @@ class PartialState:
             self.device = torch.device(env_device) if env_device is not None else None
             self.debug = parse_flag_from_env("ACCELERATE_DEBUG_MODE")
             use_sagemaker_dp = kwargs.pop("_use_sagemaker_dp", None)
+            dist_information = None
             if use_sagemaker_dp is None:
                 use_sagemaker_dp = (
                     os.environ.get("ACCELERATE_USE_SAGEMAKER", "false") == "true"
@@ -198,8 +199,6 @@ class PartialState:
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                 if not torch.distributed.is_initialized():
                     dist_information = get_cpu_distributed_information()
-                    global DISTRIBUTED_LOCAL_RANK
-                    DISTRIBUTED_LOCAL_RANK = dist_information["local_rank"]
                     os.environ.update(
                         {
                             "RANK": str(dist_information["rank"]),
@@ -262,7 +261,9 @@ class PartialState:
             else:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
-                self.local_process_index = DISTRIBUTED_LOCAL_RANK
+                self.local_process_index = (
+                    DISTRIBUTED_LOCAL_RANK if dist_information is None else dist_information["local_rank"]
+                )
             self.set_device()
 
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
