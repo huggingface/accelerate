@@ -25,6 +25,8 @@ from typing import Any, Callable, Optional
 
 import torch
 
+from accelerate.utils.imports import is_deepspeed_available
+
 from .utils import (
     DistributedType,
     DynamoBackend,
@@ -158,6 +160,8 @@ class PartialState:
             if not cpu:
                 # Deal with XLA
                 if is_torch_xla_available():
+                    self.device = xm.xla_device()
+                    xm.set_replication(self.device, xm.get_xla_supported_devices())
                     self.num_processes = xm.xrt_world_size()
                     self.process_index = xm.get_ordinal()
                     if is_torch_xla_available(check_is_tpu=True):
@@ -168,6 +172,10 @@ class PartialState:
                 if not torch.distributed.is_initialized():
                     if DISTRIBUTED_LOCAL_RANK:
                         if USE_DEEPSPEED:
+                            if not is_deepspeed_available():
+                                raise ImportError(
+                                    "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
+                                )
                             from deepspeed import comm as dist
 
                             if is_xpu_available and is_ccl_available():
@@ -179,6 +187,7 @@ class PartialState:
                                     }
                                 )
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
+                            self.set_device()
                             self.distributed_type = DistributedType.DEEPSPEED
                         # Deal with all backends but XPU and CPU, that gets handled special later
                         elif self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
@@ -250,6 +259,7 @@ class PartialState:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = DISTRIBUTED_LOCAL_RANK
+            self.set_device()
 
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
@@ -721,6 +731,30 @@ class PartialState:
                     self.backend = "mpi"
                 else:
                     self.backend = "gloo"
+
+    def set_device(self):
+        """
+        Sets the device in `self.device` to the current distributed environment.
+        """
+        if self.device is None:
+            if self.num_processes == 1:
+                self.device = torch.device("cpu") if self._cpu else self.default_device
+            else:
+                device = str(self.distributed_type).replace("MULTI_", "").lower()
+                if device not in ("gpu", "mlu", "npu", "xpu"):
+                    raise ValueError(
+                        f"Can't set device for {self.distributed_type}, verify we should be calling `_set_device()` for it!"
+                    )
+                self.device = torch.device(device, self.local_process_index)
+                if self.device is not None:
+                    if device == "xpu":
+                        torch.xpu.set_device(self.device)
+                    elif device == "mlu":
+                        torch.mlu.set_device(self.device)
+                    elif device == "npu":
+                        torch.npu.set_device(self.device)
+                    else:
+                        torch.cuda.set_device(self.device)
 
 
 class AcceleratorState:
