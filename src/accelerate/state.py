@@ -198,6 +198,8 @@ class PartialState:
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                 if not torch.distributed.is_initialized():
                     dist_information = get_cpu_distributed_information()
+                    global DISTRIBUTED_LOCAL_RANK
+                    DISTRIBUTED_LOCAL_RANK = dist_information["local_rank"]
                     os.environ.update(
                         {
                             "RANK": str(dist_information["rank"]),
