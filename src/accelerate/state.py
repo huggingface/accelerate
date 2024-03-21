@@ -709,27 +709,23 @@ class PartialState:
                 elif is_npu_available():
                     self.backend = "hccl"
                     self.distributed_type = DistributedType.MULTI_NPU
-                elif is_xpu_available() and is_ccl_available():
-                    if get_ccl_version() >= "1.12":
-                        import oneccl_bindings_for_pytorch  # noqa: F401
-                    else:
-                        import torch_ccl  # noqa: F401
+        if self.backend == None and (DISTRIBUTED_LOCAL_RANK != -1 or DISTRIBUTED_CPU):
+            if not cpu and is_xpu_available():
+                self.distributed_type = DistributedType.MULTI_XPU
+            else:
+                self.distributed_type = DistributedType.MULTI_CPU
+            if is_xpu_available() and is_ccl_available():
+                if get_ccl_version() >= "1.12":
+                    import oneccl_bindings_for_pytorch  # noqa: F401
+                else:
+                    import torch_ccl  # noqa: F401
 
-                    self.backend = "ccl"
-                    self.distributed_type = DistributedType.MULTI_XPU
-                else:
-                    self.backend = "nccl"
-            elif DISTRIBUTED_CPU:
-                if is_ccl_available() and get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0:
-                    if get_ccl_version() >= "1.12":
-                        import oneccl_bindings_for_pytorch  # noqa: F401
-                    else:
-                        import torch_ccl  # noqa: F401
-                    self.backend = "ccl"
-                elif torch.distributed.is_mpi_available():
-                    self.backend = "mpi"
-                else:
-                    self.backend = "gloo"
+                self.backend = "ccl"
+                self.distributed_type = DistributedType.MULTI_XPU
+            elif torch.distributed.is_mpi_available():
+                self.backend = "mpi"
+            else:
+                self.backend = "gloo"
         else:
             self.distributed_type = DistributedType.NO
 
