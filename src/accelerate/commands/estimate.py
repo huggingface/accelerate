@@ -225,7 +225,7 @@ def estimate_training_usage(bytes: int, mixed_precision: str, msamp_config: str 
         msamp_config (`str`):
             The msamp config to estimate the training memory for if `mixed_precision` is set to `"fp8"`.
     """
-    memory_sizes = {"model": None, "optimizer": None, "gradients": None, "step": None}
+    memory_sizes = {"model": -1, "optimizer": -1, "gradients": -1, "step": -1}
     fp32_size = bytes
     fp16_size = bytes // 2
 
@@ -288,7 +288,8 @@ def estimate_command(args):
             if isinstance(item, (int, float)):
                 row[i] = convert_bytes(item)
             elif isinstance(item, dict):
-                row[i] = convert_bytes(max(item.values()))
+                training_usage = convert_bytes(max(item.values()))
+                row[i] = training_usage if training_usage != -1 else "N/A"
 
     headers = ["dtype", "Largest Layer", "Total Size", "Training using Adam"]
 
