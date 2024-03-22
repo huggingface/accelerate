@@ -151,8 +151,11 @@ class PartialState:
                     and os.environ.get("ACCELERATE_SAGEMAKER_DISTRIBUTED_TYPE") != SageMakerDistributedType.NO
                 )
 
-            # Setups up self.backend + imports
-            self._prepare_backend(cpu, use_sagemaker_dp, kwargs.pop("backend", None))
+            # Sets up self.backend + imports
+            backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, kwargs.pop("backend", None))
+            self.backend = backend
+            self.distributed_type = distributed_type
+
             if not cpu:
                 # Deal with XLA
                 if is_torch_xla_available():
@@ -688,47 +691,51 @@ class PartialState:
         else:
             return torch.device("cpu")
 
-    def _prepare_backend(self, cpu: bool = False, sagemaker_dp=False, backend: str = None):
+    def _prepare_backend(
+        self, cpu: bool = False, sagemaker_dp=False, backend: str = None
+    ) -> tuple[str, DistributedType]:
         "Prepares any imports needed before initializing the distributed backend and sets `self.backend` properly"
         if sagemaker_dp:
             import smdistributed.dataparallel.torch.torch_smddp  # noqa
 
-            self.backend = "smddp"
-            self.distributed_type = DistributedType.MULTI_GPU
+            backend = "smddp"
+            distributed_type = DistributedType.MULTI_GPU
         elif int(os.environ.get("LOCAL_RANK", -1)) != -1:
             if not cpu:
                 if is_mlu_available():
-                    self.backend = "cncl"
-                    self.distributed_type = DistributedType.MULTI_MLU
+                    backend = "cncl"
+                    distributed_type = DistributedType.MULTI_MLU
                 elif torch.cuda.is_available():
-                    self.backend = backend if backend is not None else "nccl"
-                    self.distributed_type = DistributedType.MULTI_GPU
+                    if backend is None:
+                        backend = "nccl"
+                    distributed_type = DistributedType.MULTI_GPU
                 elif is_npu_available():
-                    self.backend = "hccl"
-                    self.distributed_type = DistributedType.MULTI_NPU
-        if self.backend is None and (
+                    backend = "hccl"
+                    distributed_type = DistributedType.MULTI_NPU
+        if backend is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1
             or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
         ):
             if not cpu and is_xpu_available():
-                self.distributed_type = DistributedType.MULTI_XPU
+                distributed_type = DistributedType.MULTI_XPU
             else:
-                self.distributed_type = DistributedType.MULTI_CPU
+                distributed_type = DistributedType.MULTI_CPU
             if is_ccl_available() and (
-                get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or self.distributed_type == DistributedType.MULTI_XPU
+                get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU
             ):
                 if get_ccl_version() >= "1.12":
                     import oneccl_bindings_for_pytorch  # noqa: F401
                 else:
                     import torch_ccl  # noqa: F401
 
-                self.backend = "ccl"
+                backend = "ccl"
             elif torch.distributed.is_mpi_available():
-                self.backend = "mpi"
+                backend = "mpi"
             else:
-                self.backend = "gloo"
+                backend = "gloo"
         else:
-            self.distributed_type = DistributedType.NO
+            distributed_type = DistributedType.NO
+        return backend, distributed_type
 
     def set_device(self):
         """
