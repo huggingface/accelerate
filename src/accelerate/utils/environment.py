@@ -13,10 +13,12 @@
 # limitations under the License.
 
 import logging
+import math
 import os
 import platform
 import subprocess
 import sys
+from functools import lru_cache
 from shutil import which
 from typing import List
 
@@ -176,3 +178,49 @@ def check_fp8_capability():
     """
     cuda_device_capacity = torch.cuda.get_device_capability()
     return cuda_device_capacity >= (8, 9)
+
+
+def override_numa_affinity(local_process_index: int):
+    """
+    Overrides whatever NUMA affinity is set for the current process. This is very taxing and requires recalculating the
+    affinity to set, ideally you should use `utils.environment.set_numa_affinity` instead.
+
+    Args:
+        local_process_index (int):
+            The index of the current process on the current server.
+    """
+    if torch.cuda.is_available():
+        from accelerate.utils import is_pynvml_available
+
+        if not is_pynvml_available():
+            raise ImportError("To set CPU affinity on CUDA GPUs the pynvml package must be installed.")
+        import pynvml as nvml
+
+        # The below code is based on https://github.com/NVIDIA/DeepLearningExamples/blob/master/TensorFlow2/LanguageModeling/BERT/gpu_affinity.py
+        nvml.nvmlInit()
+        num_elements = math.ceil(os.cpu_count() / 64)
+        handle = nvml.nvmlDeviceGetHandleByIndex(local_process_index)
+        affinity_string = ""
+        for j in nvml.nvmlDeviceGetCpuAffinity(handle, num_elements):
+            # assume nvml returns list of 64 bit ints
+            affinity_string = f"{j:064b}{affinity_string}"
+        affinity_list = [int(x) for x in affinity_string]
+        affinity_list.reverse()  # so core 0 is the 0th element
+        affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
+        # Check if we've already optimized or not
+        os.sched_setaffinity(0, affinity_to_set)
+
+
+@lru_cache
+def set_numa_affinity(local_process_index: int):
+    """
+    Assigns the current process to a specific NUMA node. Ideally most efficient when having at least 2 cpus per node.
+
+    This result is cached between calls. If you want to override it, please use
+    `accelerate.utils.environment.override_numa_afifnity`.
+
+    Args:
+        local_process_index (int):
+            The index of the current process on the current server.
+    """
+    override_numa_affinity(local_process_index=local_process_index)

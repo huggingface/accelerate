@@ -59,6 +59,7 @@ from .environment import (
     get_int_from_env,
     parse_choice_from_env,
     parse_flag_from_env,
+    set_numa_affinity,
     str_to_bool,
 )
 from .imports import (

@@ -46,6 +46,7 @@ from .utils import (
     is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
+    set_numa_affinity,
 )
 from .utils.dataclasses import SageMakerDistributedType
 
@@ -60,7 +61,7 @@ if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
 
 if is_pynvml_available():
-    import pynvml as nvml
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -368,22 +369,7 @@ class PartialState:
                     self.device = torch.device("cpu") if cpu else self.default_device
             # Set CPU affinity if enabled, should be part of the state/done once only
             if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
-                # Eventually follow syntax here and update for other backends
-                if self.device.type == "cuda":
-                    if not is_pynvml_available():
-                        raise ImportError("To set CPU affinity on CUDA GPUs the pynvml package must be installed.")
-                    # The below code is based on https://github.com/NVIDIA/DeepLearningExamples/blob/master/TensorFlow2/LanguageModeling/BERT/gpu_affinity.py
-                    nvml.nvmlInit()
-                    num_elements = math.ceil(os.cpu_count() / 64)
-                    handle = nvml.nvmlDeviceGetHandleByIndex(self.local_process_index)
-                    affinity_string = ""
-                    for j in nvml.nvmlDeviceGetCpuAffinity(handle, num_elements):
-                        # assume nvml returns list of 64 bit ints
-                        affinity_string = f"{j:064b}{affinity_string}"
-                    affinity_list = [int(x) for x in affinity_string]
-                    affinity_list.reverse()  # so core 0 is the 0th element
-                    affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
-                    os.sched_setaffinity(0, affinity_to_set)
+                set_numa_affinity()
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
     def __repr__(self) -> str:
