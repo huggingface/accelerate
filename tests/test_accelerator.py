@@ -26,7 +26,7 @@ from accelerate import DistributedType, infer_auto_device_map, init_empty_weight
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_device, require_non_cpu, slow, torch_device
-from accelerate.test_utils.testing import AccelerateTestCase, require_non_torch_xla
+from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, require_non_torch_xla
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import load_checkpoint_in_model
 
@@ -113,6 +113,14 @@ class AcceleratorTester(AccelerateTestCase):
         assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla"]
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
+
+    @require_cuda
+    def test_setting_cpu_affinity(self):
+        with patch_environment(accelerate_cpu_affinity=1, accelerate_debug_mode=1):
+            with self.assertLogs("accelerate.utils.environment", level="INFO") as cm:
+                _ = Accelerator()
+                assert any("Assigning" in log for log in cm.output)
+                assert any("cpu cores to process" in log for log in cm.output)
 
     def test_mutable_states(self):
         accelerator = Accelerator()
