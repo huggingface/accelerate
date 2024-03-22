@@ -212,7 +212,7 @@ def estimate_command_parser(subparsers=None):
     return parser
 
 
-def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str=None) -> dict:
+def estimate_training_usage(bytes: int, mixed_precision: str, msamp_config: str = None) -> dict:
     """
     Given an amount of `bytes` and `mixed_precision`, calculates how much training
     memory is needed for a batch size of 1.
@@ -226,7 +226,7 @@ def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str=Non
             The msamp config to estimate the training memory for if `mixed_precision`
             is set to `"fp8"`.
     """
-    memory_sizes = {"model":None, "optimizer":None, "gradients":None, "step": None}
+    memory_sizes = {"model": None, "optimizer": None, "gradients": None, "step": None}
     fp32_size = bytes
     fp16_size = bytes // 2
     fp8_size = bytes // 4
@@ -236,15 +236,14 @@ def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str=Non
         memory_sizes["gradients"] = fp32_size
         memory_sizes["optimizer"] = fp32_size * 2
         memory_sizes["step"] = fp32_size * 4
-    elif mixed_precision in ("float16", "bfloat16"):
+    elif mixed_precision in ("float16", "bfloat16") or mixed_precision == "fp8" and msamp_config is None:
         # With mixed precision training, the model has weights stored
         # in FP16 and FP32
         memory_sizes["model"] = fp32_size
         # 1.5 from weight gradient + computation (GEMM)
-        # memory_sizes["gradients"] = bytes * 1.5
         memory_sizes["gradients"] = fp32_size + fp16_size
         # 2x from optimizer states
-        memory_sizes["optimizer"] = fp32_size * 2 # Optimizer states
+        memory_sizes["optimizer"] = fp32_size * 2  # Optimizer states
         memory_sizes["step"] = memory_sizes["optimizer"]
     # elif mixed_precision == "fp8":
     #     # All are based on https://azure.github.io/MS-AMP/docs/user-tutorial/optimization-level
