@@ -231,6 +231,6 @@ def set_numa_affinity(local_process_index: int, verbose: Optional[bool] = None) 
         local_process_index (int):
             The index of the current process on the current server.
         verbose (bool, *optional*):
-            Whether to log out the assignment of each CPU. If `ACCELERATE_DEBUG_MODE` is enabled, will default to True.
+            Whether to print the new cpu cores assignment for each process. If `ACCELERATE_DEBUG_MODE` is enabled, will default to True.
     """
     override_numa_affinity(local_process_index=local_process_index, verbose=verbose)
