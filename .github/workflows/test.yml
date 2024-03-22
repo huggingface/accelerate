@@ -44,20 +44,13 @@ jobs:
       with:
         python-version: 3.8
     
-    - name: Setup uv
-      run: | 
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          uv venv .venv
-          echo "VIRTUAL_ENV=.venv" >> $GITHUB_ENV
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
-    
     - name: Install the library
       run: |
-        if [[ ${{ matrix.test-kind }} = test_prod ]]; then uv pip install -e .[test_prod]; fi
-        if [[ ${{ matrix.test-kind }} != test_prod ]]; then uv pip install -e .[testing,test_trackers]; fi
-        if [[ ${{ matrix.test-kind }} = test_rest ]]; then uv pip uninstall comet_ml; fi
-        if [[ ${{ matrix.test-kind }} = minimum ]]; then uv pip install torch==1.10.0; fi
-        uv pip install pytest-reportlog tabulate setuptools
+        if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
+        if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
+        if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
+        if [[ ${{ matrix.test-kind }} = minimum ]]; then pip install torch==1.10.0; fi
+        pip install pytest-reportlog tabulate setuptools
     
     - name: Run Tests
       env: 
