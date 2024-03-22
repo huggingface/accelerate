@@ -229,7 +229,7 @@ def estimate_training_usage(bytes: int, mixed_precision: str, msamp_config: str 
     fp32_size = bytes
     fp16_size = bytes // 2
 
-    if mixed_precision == "fp32":
+    if mixed_precision == "float32":
         memory_sizes["model"] = fp32_size
         memory_sizes["gradients"] = fp32_size
         memory_sizes["optimizer"] = fp32_size * 2
