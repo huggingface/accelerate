@@ -180,7 +180,7 @@ def check_fp8_capability():
 
 def get_cpu_distributed_information():
     """
-    Attempts to return various information about the environment in relation to CPU distributed training
+    Returns various information about the environment in relation to CPU distributed training
     """
     information = {}
     information["rank"] = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
