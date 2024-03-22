@@ -288,8 +288,8 @@ def estimate_command(args):
             if isinstance(item, (int, float)):
                 row[i] = convert_bytes(item)
             elif isinstance(item, dict):
-                training_usage = convert_bytes(max(item.values()))
-                row[i] = training_usage if training_usage != -1 else "N/A"
+                training_usage = max(item.values())
+                row[i] = convert_bytes(training_usage) if training_usage != -1 else "N/A"
 
     headers = ["dtype", "Largest Layer", "Total Size", "Training using Adam"]
 
