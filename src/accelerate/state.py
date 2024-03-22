@@ -733,27 +733,28 @@ class PartialState:
         """
         Sets the device in `self.device` to the current distributed environment.
         """
-        if self.device is None:
-            if self.num_processes == 1:
-                self.device = torch.device("cpu") if self._cpu else self.default_device
-            else:
-                device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
-                if device not in ("cpu", "gpu", "mlu", "npu", "xpu"):
-                    raise ValueError(
-                        f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
-                    )
-                if device == "gpu":
-                    device = "cuda"
-                self.device = torch.device(device, self.local_process_index)
-                if self.device is not None:
-                    if device == "xpu":
-                        torch.xpu.set_device(self.device)
-                    elif device == "mlu":
-                        torch.mlu.set_device(self.device)
-                    elif device == "npu":
-                        torch.npu.set_device(self.device)
-                    elif device == "cuda":
-                        torch.cuda.set_device(self.device)
+        if self.device is not None:
+            return
+        if self.num_processes == 1:
+            self.device = torch.device("cpu") if self._cpu else self.default_device
+            return
+        device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
+        if device not in ("cpu", "gpu", "mlu", "npu", "xpu"):
+            raise ValueError(
+                f"Can't set device for {self.distributed_type} ({device}), verify we should be calling `_set_device()` for it!"
+            )
+        if device == "gpu":
+            device = "cuda"
+        self.device = torch.device(device, self.local_process_index)
+        if self.device is not None:
+            if device == "xpu":
+                torch.xpu.set_device(self.device)
+            elif device == "mlu":
+                torch.mlu.set_device(self.device)
+            elif device == "npu":
+                torch.npu.set_device(self.device)
+            elif device == "cuda":
+                torch.cuda.set_device(self.device)
 
 
 class AcceleratorState:
