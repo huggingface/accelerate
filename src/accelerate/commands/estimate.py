@@ -226,7 +226,7 @@ def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str) ->
             The msamp config to estimate the training memory for if `mixed_precision`
             is set to `"fp8"`.
     """
-    memory_sizes = {"model":None, "optimizer":None, "gradients":None}
+    memory_sizes = {"model":None, "optimizer":None, "gradients":None, "step": None}
 
         # if dtype == "float16":
         #     dtype_total_size /= 2
@@ -243,7 +243,8 @@ def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str) ->
         # in FP16 and FP32
         memory_sizes["model"] = bytes
         memory_sizes["gradients"] = bytes * 1.5
-        memory_sizes["optimizer"] = 
+        memory_sizes["optimizer"] = memory_sizes["gradients"] * 2
+        memory_sizes[]
 
 def gather_data(args):
     "Creates an empty model and gathers the data for the sizes"
