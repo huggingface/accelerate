@@ -227,40 +227,33 @@ def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str=Non
             is set to `"fp8"`.
     """
     memory_sizes = {"model":None, "optimizer":None, "gradients":None, "step": None}
+    fp32_size = bytes
+    fp16_size = bytes // 2
+    fp8_size = bytes // 4
 
-        # if dtype == "float16":
-        #     dtype_total_size /= 2
-        #     dtype_largest_layer /= 2
-        # elif dtype == "int8":
-        #     dtype_total_size /= 4
-        #     dtype_largest_layer /= 4
-        # elif dtype == "int4":
-        #     dtype_total_size /= 8
-        #     dtype_largest_layer /= 8
-        # dtype_training_size = dtype_total_size * 4
     if mixed_precision == "fp32":
-        memory_sizes["model"] = bytes
-        memory_sizes["gradients"] = bytes
-        memory_sizes["optimizer"] = bytes * 2
-        memory_sizes["step"] = bytes * 4
-    elif mixed_precision in ("fp16", "bf16"):
+        memory_sizes["model"] = fp32_size
+        memory_sizes["gradients"] = fp32_size
+        memory_sizes["optimizer"] = fp32_size * 2
+        memory_sizes["step"] = fp32_size * 4
+    elif mixed_precision in ("float16", "bfloat16"):
         # With mixed precision training, the model has weights stored
         # in FP16 and FP32
-        memory_sizes["model"] = bytes
+        memory_sizes["model"] = fp32_size
         # 1.5 from weight gradient + computation (GEMM)
-        memory_sizes["gradients"] = bytes * 1.5
+        # memory_sizes["gradients"] = bytes * 1.5
+        memory_sizes["gradients"] = fp32_size + fp16_size
         # 2x from optimizer states
-        memory_sizes["optimizer"] = memory_sizes["model"] * 3 # Optimizer states + Computation
-        memory_sizes["step"] = (bytes // 2) * 4 
-    elif mixed_precision == "fp8":
-        # All are based on https://azure.github.io/MS-AMP/docs/user-tutorial/optimization-level
-        if msamp_config is None:
-            fp32_size = bytes 
-            fp16_size = bytes // 2
-            memory_sizes["model"] = fp32_size
-            memory_sizes["gradients"] = fp32_size * 1.25
-            memory_sizes["optimizer"] = memory_sizes["gradients"] * 2
-            memory_sizes["step"] = (fp32_size // 2) * 4
+        memory_sizes["optimizer"] = fp32_size * 2 # Optimizer states
+        memory_sizes["step"] = memory_sizes["optimizer"]
+    # elif mixed_precision == "fp8":
+    #     # All are based on https://azure.github.io/MS-AMP/docs/user-tutorial/optimization-level
+    #     if msamp_config is None:
+    #         memory_sizes["model"] = fp32_size
+    #         memory_sizes["gradients"] = fp32_size + fp8_size
+    #         memory_sizes["optimizer"] = memory_sizes["gradients"] * 2
+    #         memory_sizes["step"] = (fp32_size // 2) * 4
+    return memory_sizes
 
 
 def gather_data(args):
@@ -284,6 +277,7 @@ def gather_data(args):
     for dtype in args.dtypes:
         dtype_total_size = total_size
         dtype_largest_layer = largest_layer[0]
+        dtype_training_size = estimate_training_usage(dtype_total_size, dtype)
         if dtype == "float16":
             dtype_total_size /= 2
             dtype_largest_layer /= 2
@@ -293,7 +287,6 @@ def gather_data(args):
         elif dtype == "int4":
             dtype_total_size /= 8
             dtype_largest_layer /= 8
-        dtype_training_size = dtype_total_size * 4
         data.append([dtype, dtype_largest_layer, dtype_total_size, dtype_training_size])
     return data
 
@@ -304,6 +297,8 @@ def estimate_command(args):
         for i, item in enumerate(row):
             if isinstance(item, (int, float)):
                 row[i] = convert_bytes(item)
+            elif isinstance(item, dict):
+                row[i] = convert_bytes(max(item.values()))
 
     headers = ["dtype", "Largest Layer", "Total Size", "Training using Adam"]
 
