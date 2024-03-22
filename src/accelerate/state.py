@@ -41,7 +41,6 @@ from .utils import (
     is_mlu_available,
     is_mps_available,
     is_npu_available,
-    is_pynvml_available,
     is_torch_xla_available,
     is_xpu_available,
     parse_choice_from_env,
@@ -59,9 +58,6 @@ if is_mlu_available(check_device=False):
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
-
-if is_pynvml_available():
-    pass
 
 logger = logging.getLogger(__name__)
 
