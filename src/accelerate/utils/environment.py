@@ -20,7 +20,7 @@ import subprocess
 import sys
 from functools import lru_cache
 from shutil import which
-from typing import List
+from typing import List, Optional
 
 import torch
 from packaging.version import parse
@@ -189,8 +189,7 @@ def override_numa_affinity(local_process_index: int, verbose: Optional[bool] = N
         local_process_index (int):
             The index of the current process on the current server.
         verbose (bool, *optional*):
-            Whether to print out the assignment of each CPU. If `ACCELERATE_DEBUG_MODE` is enabled, will default to
-            True.
+            Whether to log out the assignment of each CPU. If `ACCELERATE_DEBUG_MODE` is enabled, will default to True.
     """
     if verbose is None:
         verbose = parse_flag_from_env("ACCELERATE_DEBUG_MODE", False)
@@ -198,7 +197,9 @@ def override_numa_affinity(local_process_index: int, verbose: Optional[bool] = N
         from accelerate.utils import is_pynvml_available
 
         if not is_pynvml_available():
-            raise ImportError("To set CPU affinity on CUDA GPUs the pynvml package must be installed.")
+            raise ImportError(
+                "To set CPU affinity on CUDA GPUs the `pynvml` package must be available. (`pip install pynvml`)"
+            )
         import pynvml as nvml
 
         # The below code is based on https://github.com/NVIDIA/DeepLearningExamples/blob/master/TensorFlow2/LanguageModeling/BERT/gpu_affinity.py
@@ -230,7 +231,6 @@ def set_numa_affinity(local_process_index: int, verbose: Optional[bool] = None) 
         local_process_index (int):
             The index of the current process on the current server.
         verbose (bool, *optional*):
-            Whether to print out the assignment of each CPU. If `ACCELERATE_DEBUG_MODE` is enabled, will default to
-            True.
+            Whether to log out the assignment of each CPU. If `ACCELERATE_DEBUG_MODE` is enabled, will default to True.
     """
     override_numa_affinity(local_process_index=local_process_index, verbose=verbose)
