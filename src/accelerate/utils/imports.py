@@ -81,6 +81,10 @@ def get_ccl_version():
     return importlib.metadata.version("oneccl_bind_pt")
 
 
+def is_pynvml_available():
+    return _is_package_available("pynvml")
+
+
 def is_msamp_available():
     return _is_package_available("msamp", "ms-amp")
 
@@ -152,6 +156,8 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
 
 
 def is_deepspeed_available():
+    if is_mlu_available():
+        return _is_package_available("deepspeed", metadata_name="deepspeed-mlu")
     return _is_package_available("deepspeed")
 
 
@@ -309,6 +315,25 @@ def is_ipex_available():
         )
         return False
     return True
+
+
+@lru_cache
+def is_mlu_available(check_device=False):
+    "Checks if `torch_mlu` is installed and potentially if a MLU is in the environment"
+    if importlib.util.find_spec("torch_mlu") is None:
+        return False
+
+    import torch
+    import torch_mlu  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MLU is found
+            _ = torch.mlu.device_count()
+            return torch.mlu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "mlu") and torch.mlu.is_available()
 
 
 @lru_cache

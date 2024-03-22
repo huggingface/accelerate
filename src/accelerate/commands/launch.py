@@ -36,8 +36,10 @@ from accelerate.utils import (
     PrepareForLaunch,
     _filter_args,
     check_cuda_p2p_ib_support,
+    convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
+    is_mlu_available,
     is_npu_available,
     is_rich_available,
     is_sagemaker_available,
@@ -204,6 +206,12 @@ def launch_command_parser(subparsers=None):
         type=int,
         default=None,
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
+    )
+    resource_args.add_argument(
+        "--enable_cpu_affinity",
+        default=False,
+        action="store_true",
+        help="Whether or not CPU affinity and balancing should be enabled. Currently only supported on NVIDIA hardware.",
     )
 
     # Dynamo arguments
@@ -697,6 +705,7 @@ def multi_gpu_launcher(args):
         distrib_run.get_args_parser(),
         ["--training_script", args.training_script, "--training_script_args", args.training_script_args],
     )
+
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)
@@ -730,10 +739,9 @@ def deepspeed_launcher(args):
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         with open(".deepspeed_env", "a") as f:
-            for key, value in current_env.items():
-                if ";" in value or " " in value:
-                    continue
-                f.write(f"{key}={value}\n")
+            valid_env_items = convert_dict_to_env_variables(current_env)
+            if len(valid_env_items) > 1:
+                f.writelines(valid_env_items)
 
         process = subprocess.Popen(cmd, env=current_env)
         process.wait()
@@ -898,7 +906,12 @@ def _validate_launch_command(args):
             args.multi_gpu = (
                 True
                 if defaults.distributed_type
-                in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_XPU)
+                in (
+                    DistributedType.MULTI_GPU,
+                    DistributedType.MULTI_NPU,
+                    DistributedType.MULTI_MLU,
+                    DistributedType.MULTI_XPU,
+                )
                 else False
             )
             args.tpu = defaults.distributed_type == DistributedType.XLA
@@ -974,6 +987,8 @@ def _validate_launch_command(args):
         if args.num_processes is None:
             if args.use_xpu and is_xpu_available():
                 args.num_processes = torch.xpu.device_count()
+            elif is_mlu_available():
+                args.num_processes = torch.mlu.device_count()
             elif is_npu_available():
                 args.num_processes = torch.npu.device_count()
             else:
@@ -983,6 +998,7 @@ def _validate_launch_command(args):
             args.debug = False
         if not args.multi_gpu and (
             (args.use_xpu and is_xpu_available() and torch.xpu.device_count() > 1)
+            or (is_mlu_available() and torch.mlu.device_count() > 1)
             or (is_npu_available() and torch.npu.device_count() > 1)
             or (torch.cuda.device_count() > 1)
         ):

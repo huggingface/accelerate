@@ -33,7 +33,14 @@ import torch.nn as nn
 from ..state import AcceleratorState
 from .constants import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from .dataclasses import AutocastKwargs, CustomDtype, DistributedType
-from .imports import is_mps_available, is_npu_available, is_peft_available, is_torch_xla_available, is_xpu_available
+from .imports import (
+    is_mlu_available,
+    is_mps_available,
+    is_npu_available,
+    is_peft_available,
+    is_torch_xla_available,
+    is_xpu_available,
+)
 from .offload import load_offloaded_weight, offload_weight, save_offload_index
 from .tqdm import is_tqdm_available, tqdm
 from .versions import compare_versions
@@ -41,6 +48,9 @@ from .versions import compare_versions
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
+
+if is_mlu_available(check_device=False):
+    import torch_mlu  # noqa: F401
 
 from safetensors import safe_open
 from safetensors.torch import load_file as safe_load_file
@@ -373,6 +383,8 @@ def set_module_tensor_to_device(
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
         if is_npu_available() and isinstance(device, int):
             device = f"npu:{device}"
+        elif is_mlu_available() and isinstance(device, int):
+            device = f"mlu:{device}"
         if is_xpu_available() and isinstance(device, int):
             device = f"xpu:{device}"
         if value is None:
@@ -437,6 +449,8 @@ def set_module_tensor_to_device(
     # clean pre and post foward hook
     if is_npu_available():
         torch.npu.empty_cache()
+    elif is_mlu_available():
+        torch.mlu.empty_cache()
     elif is_xpu_available():
         torch.xpu.empty_cache()
     else:
@@ -787,7 +801,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     import psutil
 
     if max_memory is None:
-        if not (torch.cuda.is_available() or is_npu_available() or is_xpu_available()):
+        if not (torch.cuda.is_available() or is_npu_available() or is_mlu_available() or is_xpu_available()):
             max_memory = {}
 
         else:
@@ -796,6 +810,10 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
                 for i in range(torch.npu.device_count()):
                     _ = torch.tensor(0, device=torch.device("npu", i))
                 max_memory = {i: torch.npu.mem_get_info(i)[0] for i in range(torch.npu.device_count())}
+            elif is_mlu_available():
+                for i in range(torch.mlu.device_count()):
+                    _ = torch.tensor(0, device=torch.device("mlu", i))
+                max_memory = {i: torch.mlu.mem_get_info(i)[0] for i in range(torch.mlu.device_count())}
             elif is_xpu_available():
                 for i in range(torch.xpu.device_count()):
                     _ = torch.tensor(0, device=torch.device("xpu", i))
@@ -822,6 +840,8 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     # check if gpu/npu/xpu devices are available and if not, throw a warning
     if is_npu_available():
         num_devices = torch.npu.device_count()
+    elif is_mlu_available():
+        num_devices = torch.mlu.device_count()
     elif is_xpu_available():
         num_devices = torch.xpu.device_count()
     else:
@@ -936,6 +956,8 @@ def get_balanced_memory(
 
     if is_npu_available():
         num_devices = len([d for d in max_memory if torch.device(d).type == "npu" and max_memory[d] > 0])
+    elif is_mlu_available():
+        num_devices = len([d for d in max_memory if torch.device(d).type == "mlu" and max_memory[d] > 0])
     elif is_xpu_available():
         num_devices = len(
             [
@@ -1747,6 +1769,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
             DistributedType.NO,
             DistributedType.MULTI_CPU,
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_MLU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.FSDP,
