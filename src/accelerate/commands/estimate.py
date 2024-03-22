@@ -212,6 +212,39 @@ def estimate_command_parser(subparsers=None):
     return parser
 
 
+def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str) -> dict:
+    """
+    Given an amount of `bytes` and `mixed_precision`, calculates how much training
+    memory is needed for a batch size of 1.
+
+    Args:
+        bytes (`int`):
+            The size of the model being trained.
+        mixed_precision (`str`):
+            The mixed precision that would be ran.
+        msamp_config (`str`):
+            The msamp config to estimate the training memory for if `mixed_precision`
+            is set to `"fp8"`.
+    """
+    memory_sizes = {"model":None, "optimizer":None, "gradients":None}
+
+        # if dtype == "float16":
+        #     dtype_total_size /= 2
+        #     dtype_largest_layer /= 2
+        # elif dtype == "int8":
+        #     dtype_total_size /= 4
+        #     dtype_largest_layer /= 4
+        # elif dtype == "int4":
+        #     dtype_total_size /= 8
+        #     dtype_largest_layer /= 8
+        # dtype_training_size = dtype_total_size * 4
+    if mixed_precision in ("fp16", "bf16"):
+        # With mixed precision training, the model has weights stored
+        # in FP16 and FP32
+        memory_sizes["model"] = bytes
+        memory_sizes["gradients"] = bytes * 1.5
+        memory_sizes["optimizer"] = 
+
 def gather_data(args):
     "Creates an empty model and gathers the data for the sizes"
     try:
