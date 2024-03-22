@@ -1051,3 +1051,9 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
         ]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
+
+    def test_zero3_integration(self):
+        self.test_file_path = self.test_scripts_folder / "test_zero3_integration.py"
+        cmd = ["torchrun", "--standalone", "--nnodes=1", "--nproc-per-node=2", self.test_file_path]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd)
