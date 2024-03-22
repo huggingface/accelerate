@@ -212,7 +212,7 @@ def estimate_command_parser(subparsers=None):
     return parser
 
 
-def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str) -> dict:
+def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str=None) -> dict:
     """
     Given an amount of `bytes` and `mixed_precision`, calculates how much training
     memory is needed for a batch size of 1.
@@ -238,13 +238,30 @@ def estimate_training_usage(bytes:int, mixed_precision:str, msamp_config:str) ->
         #     dtype_total_size /= 8
         #     dtype_largest_layer /= 8
         # dtype_training_size = dtype_total_size * 4
-    if mixed_precision in ("fp16", "bf16"):
+    if mixed_precision == "fp32":
+        memory_sizes["model"] = bytes
+        memory_sizes["gradients"] = bytes
+        memory_sizes["optimizer"] = bytes * 2
+        memory_sizes["step"] = bytes * 4
+    elif mixed_precision in ("fp16", "bf16"):
         # With mixed precision training, the model has weights stored
         # in FP16 and FP32
         memory_sizes["model"] = bytes
+        # 1.5 from weight gradient + computation (GEMM)
         memory_sizes["gradients"] = bytes * 1.5
-        memory_sizes["optimizer"] = memory_sizes["gradients"] * 2
-        memory_sizes[]
+        # 2x from optimizer states
+        memory_sizes["optimizer"] = memory_sizes["model"] * 3 # Optimizer states + Computation
+        memory_sizes["step"] = (bytes // 2) * 4 
+    elif mixed_precision == "fp8":
+        # All are based on https://azure.github.io/MS-AMP/docs/user-tutorial/optimization-level
+        if msamp_config is None:
+            fp32_size = bytes 
+            fp16_size = bytes // 2
+            memory_sizes["model"] = fp32_size
+            memory_sizes["gradients"] = fp32_size * 1.25
+            memory_sizes["optimizer"] = memory_sizes["gradients"] * 2
+            memory_sizes["step"] = (fp32_size // 2) * 4
+
 
 def gather_data(args):
     "Creates an empty model and gathers the data for the sizes"
