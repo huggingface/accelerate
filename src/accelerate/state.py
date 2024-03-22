@@ -179,6 +179,8 @@ class PartialState:
                                 os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
                                 os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
+                            # Call now before setting `distributed_type` so it knows what device to set.
+                            # The second call will do nothing.
                             self.set_device()
                             self.distributed_type = DistributedType.DEEPSPEED
                         # Deal with all backends but XPU and CPU, that gets handled special later
