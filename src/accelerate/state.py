@@ -366,9 +366,7 @@ class PartialState:
 
                 if self.device is None:
                     self.device = torch.device("cpu") if cpu else self.default_device
-        self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
-
-        # Set CPU affinity if enabled
+        # Set CPU affinity if enabled, should be part of the state/done once only
         if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
             # Eventually follow syntax here and update for other backends
             if self.device.type == "cuda":
@@ -386,6 +384,7 @@ class PartialState:
                 affinity_list.reverse()  # so core 0 is the 0th element
                 affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
                 os.sched_setaffinity(0, affinity_to_set)
+        self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
     def __repr__(self) -> str:
         return (
