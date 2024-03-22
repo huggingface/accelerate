@@ -180,7 +180,7 @@ def check_fp8_capability():
     return cuda_device_capacity >= (8, 9)
 
 
-def override_numa_affinity(local_process_index: int, verbose: bool = None):
+def override_numa_affinity(local_process_index: int, verbose: Optional[bool] = None) -> None:
     """
     Overrides whatever NUMA affinity is set for the current process. This is very taxing and requires recalculating the
     affinity to set, ideally you should use `utils.environment.set_numa_affinity` instead.
@@ -219,7 +219,7 @@ def override_numa_affinity(local_process_index: int, verbose: bool = None):
 
 
 @lru_cache
-def set_numa_affinity(local_process_index: int, verbose: bool = None):
+def set_numa_affinity(local_process_index: int, verbose: Optional[bool] = None) -> None:
     """
     Assigns the current process to a specific NUMA node. Ideally most efficient when having at least 2 cpus per node.
 
