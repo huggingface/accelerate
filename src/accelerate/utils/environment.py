@@ -180,7 +180,7 @@ def check_fp8_capability():
     return cuda_device_capacity >= (8, 9)
 
 
-def override_numa_affinity(local_process_index: int):
+def override_numa_affinity(local_process_index: int, verbose: bool = None):
     """
     Overrides whatever NUMA affinity is set for the current process. This is very taxing and requires recalculating the
     affinity to set, ideally you should use `utils.environment.set_numa_affinity` instead.
@@ -188,7 +188,12 @@ def override_numa_affinity(local_process_index: int):
     Args:
         local_process_index (int):
             The index of the current process on the current server.
+        verbose (bool, *optional*):
+            Whether to print out the assignment of each CPU. If `ACCELERATE_DEBUG_MODE` is enabled, will default to
+            True.
     """
+    if verbose is None:
+        verbose = parse_flag_from_env("ACCELERATE_DEBUG_MODE", False)
     if torch.cuda.is_available():
         from accelerate.utils import is_pynvml_available
 
@@ -207,12 +212,14 @@ def override_numa_affinity(local_process_index: int):
         affinity_list = [int(x) for x in affinity_string]
         affinity_list.reverse()  # so core 0 is the 0th element
         affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
-        # Check if we've already optimized or not
         os.sched_setaffinity(0, affinity_to_set)
+        if verbose:
+            cpu_cores = os.sched_getaffinity(0)
+            logger.info(f"Assigning {len(cpu_cores)} cpu cores to process {local_process_index}: {cpu_cores}")
 
 
 @lru_cache
-def set_numa_affinity(local_process_index: int):
+def set_numa_affinity(local_process_index: int, verbose: bool = None):
     """
     Assigns the current process to a specific NUMA node. Ideally most efficient when having at least 2 cpus per node.
 
@@ -222,5 +229,8 @@ def set_numa_affinity(local_process_index: int):
     Args:
         local_process_index (int):
             The index of the current process on the current server.
+        verbose (bool, *optional*):
+            Whether to print out the assignment of each CPU. If `ACCELERATE_DEBUG_MODE` is enabled, will default to
+            True.
     """
-    override_numa_affinity(local_process_index=local_process_index)
+    override_numa_affinity(local_process_index=local_process_index, verbose=verbose)
