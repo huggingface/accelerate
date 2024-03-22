@@ -167,6 +167,7 @@ class PartialState:
                     self.distributed_type = DistributedType.XLA
                 if not torch.distributed.is_initialized():
                     if int(os.environ.get("LOCAL_RANK", -1)) != -1:
+                        # Deal with spawning deepspeed
                         if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
                             if not is_deepspeed_available():
                                 raise ImportError(
@@ -183,7 +184,7 @@ class PartialState:
                             # The second call will do nothing.
                             self.set_device()
                             self.distributed_type = DistributedType.DEEPSPEED
-                        # Deal with all backends but XPU and CPU, that gets handled special later
+                        # Deal with all other backends but XPU and CPU, that gets handled special later
                         elif self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                             torch.distributed.init_process_group(backend=self.backend, **kwargs)
             # XPU and CPU require special env configs to be set
