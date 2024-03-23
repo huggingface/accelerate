@@ -1,4 +1,4 @@
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,12 +13,19 @@
 # limitations under the License.
 
 import torch.distributed
-from transformers import AutoModel, TrainingArguments
+
+from accelerate.test_utils import require_huggingface_suite
+from accelerate.utils import is_transformers_available
+
+
+if is_transformers_available():
+    from transformers import AutoModel, TrainingArguments
 
 
 GPT2_TINY = "sshleifer/tiny-gpt2"
 
 
+@require_huggingface_suite
 def init_torch_dist_then_launch_deepspeed():
     torch.distributed.init_process_group(backend="nccl")
     deepspeed_config = {
