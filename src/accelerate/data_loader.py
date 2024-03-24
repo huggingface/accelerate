@@ -971,7 +971,7 @@ def prepare_data_loader(
             dataloader.sampler.sampler = sampler
         else:
             dataloader.batch_sampler.sampler = sampler
-            if hasattr(dataloader.batch_sampler, 'batch_sampler'):
+            if hasattr(dataloader.batch_sampler, "batch_sampler"):
                 dataloader.batch_sampler.batch_sampler.sampler = sampler
     if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
