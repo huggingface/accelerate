@@ -247,7 +247,7 @@ class PartialState:
                 self.local_process_index = (
                     int(os.environ.get("LOCAL_RANK", -1))
                     if dist_information is None
-                    else dist_information["local_rank"]
+                    else dist_information.local_rank
                 )
             self.set_device()
 
