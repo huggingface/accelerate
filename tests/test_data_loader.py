@@ -23,8 +23,10 @@ from accelerate.data_loader import (
     DataLoaderDispatcher,
     DataLoaderShard,
     IterableDatasetShard,
+    SeedableRandomSampler,
     SkipBatchSampler,
     SkipDataLoader,
+    prepare_data_loader,
     skip_first_batches,
 )
 
@@ -396,3 +398,15 @@ class DataLoaderTester(unittest.TestCase):
         # Test it also works on the second iteration
         for idx, _ in enumerate(dataloader):
             assert dataloader.end_of_dataloader == (idx == 3)
+
+    def test_seedable_random_sampler_is_fully_applied(self):
+        dataloader = DataLoader(list(range(10)), batch_size=1, shuffle=True)
+        prepared_data_loader = prepare_data_loader(
+            dataloader=dataloader,
+            num_processes=2,
+            process_index=0,
+            use_seedable_sampler=True,
+        )
+        batch_sampler = prepared_data_loader.batch_sampler
+        assert isinstance(batch_sampler, BatchSamplerShard)
+        assert isinstance(batch_sampler.batch_sampler.sampler, SeedableRandomSampler)
