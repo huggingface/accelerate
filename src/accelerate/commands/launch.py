@@ -36,6 +36,7 @@ from accelerate.utils import (
     PrepareForLaunch,
     _filter_args,
     check_cuda_p2p_ib_support,
+    convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
     is_mlu_available,
@@ -205,6 +206,12 @@ def launch_command_parser(subparsers=None):
         type=int,
         default=None,
         help="The number of CPU threads per process. Can be tuned for optimal performance.",
+    )
+    resource_args.add_argument(
+        "--enable_cpu_affinity",
+        default=False,
+        action="store_true",
+        help="Whether or not CPU affinity and balancing should be enabled. Currently only supported on NVIDIA hardware.",
     )
 
     # Dynamo arguments
@@ -698,6 +705,7 @@ def multi_gpu_launcher(args):
         distrib_run.get_args_parser(),
         ["--training_script", args.training_script, "--training_script_args", args.training_script_args],
     )
+
     with patch_environment(**current_env):
         try:
             distrib_run.run(args)
@@ -715,6 +723,8 @@ def deepspeed_launcher(args):
 
     if not is_deepspeed_available():
         raise ImportError("DeepSpeed is not installed => run `pip3 install deepspeed` or build it from source.")
+    else:
+        from deepspeed.launcher.runner import DEEPSPEED_ENVIRONMENT_NAME
 
     cmd, current_env = prepare_deepspeed_cmd_env(args)
     if not check_cuda_p2p_ib_support():
@@ -730,11 +740,10 @@ def deepspeed_launcher(args):
             logger.warning(message)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
-        with open(".deepspeed_env", "a") as f:
-            for key, value in current_env.items():
-                if ";" in value or " " in value:
-                    continue
-                f.write(f"{key}={value}\n")
+        with open(DEEPSPEED_ENVIRONMENT_NAME, "a") as f:
+            valid_env_items = convert_dict_to_env_variables(current_env)
+            if len(valid_env_items) > 1:
+                f.writelines(valid_env_items)
 
         process = subprocess.Popen(cmd, env=current_env)
         process.wait()

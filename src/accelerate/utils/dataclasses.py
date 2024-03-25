@@ -1174,17 +1174,26 @@ class FullyShardedDataParallelPlugin:
                         size_based_auto_wrap_policy, min_num_params=min_num_params
                     )
 
-    def set_mixed_precision(self, mixed_precision):
-        if mixed_precision == "fp16":
-            dtype = torch.float16
-        elif mixed_precision == "bf16":
-            dtype = torch.bfloat16
+    def set_mixed_precision(self, mixed_precision, buffer_autocast=False, override=False):
+        if isinstance(mixed_precision, str):
+            if mixed_precision == "fp16":
+                dtype = torch.float16
+            elif mixed_precision == "bf16":
+                dtype = torch.bfloat16
+            elif mixed_precision == "fp32":
+                dtype = torch.float32
+            else:
+                raise ValueError(f"Unknown mixed precision value: {mixed_precision}")
         else:
-            raise ValueError(f"Unknown mixed precision value: {mixed_precision}")
+            dtype = mixed_precision
+
+        buffer_dtype = torch.float32 if buffer_autocast else dtype
         from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
 
-        if self.mixed_precision_policy is None:
-            self.mixed_precision_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=dtype)
+        if self.mixed_precision_policy is None or override:
+            self.mixed_precision_policy = MixedPrecision(
+                param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=buffer_dtype
+            )
 
     def set_state_dict_type(self, state_dict_type_policy):
         from torch.distributed.fsdp.fully_sharded_data_parallel import (

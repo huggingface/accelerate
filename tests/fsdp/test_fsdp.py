@@ -168,6 +168,28 @@ class FSDPPluginIntegration(AccelerateTestCase):
                     assert accelerator.scaler is None
                 AcceleratorState._reset_state(True)
 
+    def test_mixed_precision_buffer_autocast_override(self):
+        from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
+        from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+
+        for mp_dtype in dtypes:
+            env = self.dist_env.copy()
+            env["ACCELERATE_MIXED_PRECISION"] = mp_dtype
+            with mockenv_context(**env):
+                accelerator = Accelerator()
+                if mp_dtype == "fp16":
+                    dtype = torch.float16
+                elif mp_dtype == "bf16":
+                    dtype = torch.bfloat16
+                mp_policy = MixedPrecision(param_dtype=dtype, reduce_dtype=dtype, buffer_dtype=torch.float32)
+                accelerator.state.fsdp_plugin.set_mixed_precision(dtype, buffer_autocast=True, override=True)
+                assert accelerator.state.fsdp_plugin.mixed_precision_policy == mp_policy
+                if mp_dtype == FP16:
+                    assert isinstance(accelerator.scaler, ShardedGradScaler)
+                elif mp_dtype == BF16:
+                    assert accelerator.scaler is None
+                AcceleratorState._reset_state(True)
+
     def test_cpu_offload(self):
         from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
 

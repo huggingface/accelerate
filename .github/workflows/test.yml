@@ -44,22 +44,13 @@ jobs:
       with:
         python-version: 3.8
     
-    - name: Activate python cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          ${{ env.pythonLocation }}
-          ${{ env.HF_HOME }}
-        key: ${{ env.pythonLocation }}-${{ matrix.pytorch-version }}-${{ matrix.test-kind }}-${{ hashFiles('setup.py') }}
-    
     - name: Install the library
       run: |
-        pip install --upgrade pip
         if [[ ${{ matrix.test-kind }} = test_prod ]]; then pip install -e .[test_prod]; fi
         if [[ ${{ matrix.test-kind }} != test_prod ]]; then pip install -e .[testing,test_trackers]; fi
         if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
         if [[ ${{ matrix.test-kind }} = minimum ]]; then pip install torch==1.10.0; fi
-        pip install pytest-reportlog tabulate
+        pip install pytest-reportlog tabulate setuptools
     
     - name: Run Tests
       env: 

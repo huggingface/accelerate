@@ -20,3 +20,7 @@ The [`Accelerator`] is the main class for enabling distributed training on any t
 ## Accelerator[[api]]
 
 [[autodoc]] Accelerator
+
+## Utilities
+
+[[autodoc]] accelerate.utils.gather_object
