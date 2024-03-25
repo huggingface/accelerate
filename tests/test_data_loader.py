@@ -400,6 +400,7 @@ class DataLoaderTester(unittest.TestCase):
             assert dataloader.end_of_dataloader == (idx == 3)
 
     def test_seedable_random_sampler_is_fully_applied(self):
+        Accelerator()
         dataloader = DataLoader(list(range(10)), batch_size=1, shuffle=True)
         prepared_data_loader = prepare_data_loader(
             dataloader=dataloader,
