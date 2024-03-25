@@ -245,9 +245,7 @@ class PartialState:
                 self.num_processes = torch.distributed.get_world_size()
                 self.process_index = torch.distributed.get_rank()
                 self.local_process_index = (
-                    int(os.environ.get("LOCAL_RANK", -1))
-                    if dist_information is None
-                    else dist_information.local_rank
+                    int(os.environ.get("LOCAL_RANK", -1)) if dist_information is None else dist_information.local_rank
                 )
             self.set_device()
 
