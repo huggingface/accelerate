@@ -176,3 +176,22 @@ def check_fp8_capability():
     """
     cuda_device_capacity = torch.cuda.get_device_capability()
     return cuda_device_capacity >= (8, 9)
+
+
+def get_cpu_distributed_information():
+    """
+    Returns various information about the environment in relation to CPU distributed training
+    """
+    information = {}
+    information["rank"] = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
+    information["world_size"] = get_int_from_env(
+        ["WORLD_SIZE", "PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE"], 1
+    )
+    information["local_rank"] = get_int_from_env(
+        ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"], 0
+    )
+    information["local_world_size"] = get_int_from_env(
+        ["LOCAL_WORLD_SIZE", "MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"],
+        1,
+    )
+    return information

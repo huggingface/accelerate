@@ -56,6 +56,7 @@ from .environment import (
     check_cuda_p2p_ib_support,
     check_fp8_capability,
     convert_dict_to_env_variables,
+    get_cpu_distributed_information,
     get_int_from_env,
     parse_choice_from_env,
     parse_flag_from_env,
