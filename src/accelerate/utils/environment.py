@@ -17,6 +17,7 @@ import os
 import platform
 import subprocess
 import sys
+from dataclasses import dataclass, field
 from shutil import which
 from typing import List
 
@@ -178,9 +179,26 @@ def check_fp8_capability():
     return cuda_device_capacity >= (8, 9)
 
 
-def get_cpu_distributed_information():
+@dataclass
+class CPUInformation:
     """
-    Returns various information about the environment in relation to CPU distributed training
+    Stores information about the CPU in a distributed environment. It contains the following attributes:
+    - rank: The rank of the current process.
+    - world_size: The total number of processes in the world.
+    - local_rank: The rank of the current process on the local node.
+    - local_world_size: The total number of processes on the local node.
+    """
+
+    rank: int = field(default=0, metadata={"help": "The rank of the current process."})
+    world_size: int = field(default=1, metadata={"help": "The total number of processes in the world."})
+    local_rank: int = field(default=0, metadata={"help": "The rank of the current process on the local node."})
+    local_world_size: int = field(default=1, metadata={"help": "The total number of processes on the local node."})
+
+
+def get_cpu_distributed_information() -> CPUInformation:
+    """
+    Returns various information about the environment in relation to CPU distributed training as a `CPUInformation`
+    dataclass.
     """
     information = {}
     information["rank"] = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
@@ -194,4 +212,4 @@ def get_cpu_distributed_information():
         ["LOCAL_WORLD_SIZE", "MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"],
         1,
     )
-    return information
+    return CPUInformation(**information)

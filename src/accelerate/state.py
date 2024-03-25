@@ -193,10 +193,10 @@ class PartialState:
             # XPU and CPU require special env configs to be set
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                 dist_information = get_cpu_distributed_information()
-                os.environ["RANK"] = str(dist_information["rank"])
-                os.environ["WORLD_SIZE"] = str(dist_information["world_size"])
-                os.environ["LOCAL_RANK"] = str(dist_information["local_rank"])
-                os.environ["LOCAL_WORLD_SIZE"] = str(dist_information["local_world_size"])
+                os.environ["RANK"] = str(dist_information.rank)
+                os.environ["WORLD_SIZE"] = str(dist_information.world_size)
+                os.environ["LOCAL_RANK"] = str(dist_information.local_rank)
+                os.environ["LOCAL_WORLD_SIZE"] = str(dist_information.local_world_size)
                 if self.backend == "ccl" and self.distributed_type == DistributedType.MULTI_XPU:
                     os.environ["CCL_PROCESS_LAUNCHER"] = "none"
                     os.environ["CCL_LOCAL_SIZE"] = os.environ["LOCAL_WORLD_SIZE"]
@@ -205,15 +205,15 @@ class PartialState:
                     os.environ["MASTER_PORT"] = "29500"
                 if (
                     not os.environ.get("MASTER_ADDR", None)
-                    and dist_information["local_world_size"] != dist_information["world_size"]
+                    and dist_information.local_world_size != dist_information.world_size
                     and self.backend != "mpi"
                 ):
                     raise ValueError(
                         "Tried to launch on distributed with multinode, but `MASTER_ADDR` env was not set, "
                         "please try exporting rank 0's hostname as `MASTER_ADDR`"
                     )
-                kwargs["rank"] = dist_information["rank"]
-                kwargs["world_size"] = dist_information["world_size"]
+                kwargs["rank"] = dist_information.rank
+                kwargs["world_size"] = dist_information.world_size
 
                 if (
                     self.distributed_type == DistributedType.MULTI_CPU
@@ -222,7 +222,7 @@ class PartialState:
                     import psutil
 
                     num_cpu_threads_per_process = int(
-                        psutil.cpu_count(logical=False) / dist_information["local_world_size"]
+                        psutil.cpu_count(logical=False) / dist_information.local_world_size
                     )
                     if num_cpu_threads_per_process == 0:
                         num_cpu_threads_per_process = 1
