@@ -695,6 +695,7 @@ class PartialState:
         self, cpu: bool = False, sagemaker_dp=False, backend: str = None
     ) -> tuple[str, DistributedType]:
         "Prepares any imports needed before initializing the distributed backend and sets `self.backend` properly"
+        distributed_type = None
         if sagemaker_dp:
             import smdistributed.dataparallel.torch.torch_smddp  # noqa
 
@@ -733,7 +734,7 @@ class PartialState:
                 backend = "mpi"
             else:
                 backend = "gloo"
-        else:
+        if distributed_type is None:
             distributed_type = DistributedType.NO
         return backend, distributed_type
 
