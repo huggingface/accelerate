@@ -1585,7 +1585,8 @@ def load_checkpoint_in_model(
         offload_8bit_bnb (`bool`, *optional*):
             Whether or not to enable offload of 8-bit modules on cpu/disk.
         strict (`bool`, *optional*, defaults to `False`):
-            Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's state_dict.
+            Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
+            state_dict.
 
     """
     if offload_8bit_bnb:
