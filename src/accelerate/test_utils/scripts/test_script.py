@@ -699,8 +699,10 @@ def test_reinstantiated_state():
     # Then call `reset_state`, breaking the state existing in the accelerator
     AcceleratorState._reset_state()
     # Now try and prepare a simple model, should raise the custom error early
-    with pytest.raises(AttributeError, match="This can happen if the state was reset and using an old reference."):
+    with pytest.raises(AttributeError) as cm:
         accelerator.prepare(simple_model)
+    assert "`AcceleratorState` object has no attribute" in str(cm.value.args[0])
+    assert "This happens if `AcceleratorState._reset_state()`" in str(cm.value.args[0])
 
 
 def main():
