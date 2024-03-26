@@ -118,13 +118,7 @@ class PartialState:
             Whether or not to force the script to execute on CPU. Will ignore any accelerators available if set to
             `True` and force the execution on the CPU.
         **kwargs:
-            Additional keyword arguments to pass to the relevent `init_process_group` function. Generally should be
-            passed in as:
-            ```python
-            from accelerate.utils import InitProcessGroupKwargs
-
-            state = PartialState(**InitProcessGroupKwargs(...).to_kwargs())
-            ```
+            Additional keyword arguments to pass to the relevent `init_process_group` function.
 
     **Available attributes:**
 
@@ -140,6 +134,15 @@ class PartialState:
         - **is_main_process** (`bool`) -- Whether or not the current process is the main one.
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
         - **debug** (`bool`) -- Whether or not the current script is being run in debug mode.
+
+    Example:
+    ```python
+    from accelerate.utils import InitProcessGroupKwargs
+
+    # To include `InitProcessGroupKwargs`, init then call `.to_kwargs()`
+    kwargs = InitProcessGroupKwargs(...).to_kwargs()
+    state = PartialState(**kwargs)
+    ```
     """
 
     _shared_state = SharedDict()
