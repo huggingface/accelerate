@@ -116,8 +116,7 @@ class PartialState:
     Args:
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore any accelerators available if set to
-            `True`
-             and force the execution on the CPU.
+            `True` and force the execution on the CPU.
         **kwargs:
             Additional keyword arguments to pass to the relevent `init_process_group` function. Generally should be
             passed in as:
