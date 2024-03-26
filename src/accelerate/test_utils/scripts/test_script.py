@@ -36,6 +36,7 @@ from accelerate.utils import (
     is_bf16_available,
     is_datasets_available,
     is_ipex_available,
+    is_mlu_available,
     is_npu_available,
     is_xpu_available,
     set_seed,
@@ -378,6 +379,25 @@ def check_seedable_sampler():
     assert torch.allclose(original_items, new_items), "Did not obtain the same items with the same seed and epoch."
 
 
+def check_seedable_sampler_in_batch_sampler_shard():
+    set_seed(42)
+
+    config = DataLoaderConfiguration(use_seedable_sampler=True)
+    accelerator = Accelerator(dataloader_config=config)
+    assert accelerator.num_processes > 1, "This test requires more than one process."
+
+    dataloader = DataLoader(list(range(10)), batch_size=1, shuffle=True)
+    prepared_data_loader = prepare_data_loader(
+        dataloader=dataloader,
+        use_seedable_sampler=True,
+    )
+
+    target_sampler = prepared_data_loader.batch_sampler.batch_sampler.sampler
+    assert isinstance(
+        target_sampler, SeedableRandomSampler
+    ), "Sampler in BatchSamplerShard is not SeedableRandomSampler."
+
+
 def mock_training(length, batch_size, generator, use_seedable_sampler=False):
     set_seed(42)
     generator.manual_seed(42)
@@ -453,7 +473,7 @@ def training_check(use_seedable_sampler=False):
 
     accelerator.print("Training yielded the same results on one CPU or distributes setup with batch split.")
 
-    if torch.cuda.is_available() or is_npu_available():
+    if torch.cuda.is_available() or is_npu_available() or is_mlu_available():
         # Mostly a test that FP16 doesn't crash as the operation inside the model is not converted to FP16
         print("FP16 training check.")
         AcceleratorState._reset_state()
@@ -740,6 +760,9 @@ def main():
         central_dl_preparation_check()
         custom_sampler_check()
         check_seedable_sampler()
+
+    if state.num_processes > 1:
+        check_seedable_sampler_in_batch_sampler_shard()
 
     # Trainings are not exactly the same in DeepSpeed and CPU mode
     if state.distributed_type == DistributedType.DEEPSPEED:

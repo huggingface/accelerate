@@ -38,8 +38,10 @@ from .utils import (
     is_deepspeed_available,
     is_fp8_available,
     is_ipex_available,
+    is_mlu_available,
     is_mps_available,
     is_npu_available,
+    is_pynvml_available,
     is_torch_xla_available,
     is_xpu_available,
     parse_choice_from_env,
@@ -51,9 +53,14 @@ from .utils.dataclasses import SageMakerDistributedType
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
+if is_mlu_available(check_device=False):
+    import torch_mlu  # noqa: F401
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
+
+if is_pynvml_available():
+    import pynvml as nvml
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +195,8 @@ class PartialState:
                         os.environ["CCL_PROCESS_LAUNCHER"] = "none"
                         os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
                         os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
+                    elif is_mlu_available():
+                        self.backend = "cncl"
                     elif is_npu_available():
                         self.backend = "hccl"
                     else:
@@ -202,6 +211,10 @@ class PartialState:
                         self.device = torch.device("xpu", self.local_process_index)
                         if self.device is not None:
                             torch.xpu.set_device(self.device)
+                    elif is_mlu_available():
+                        self.device = torch.device("mlu", self.local_process_index)
+                        if self.device is not None:
+                            torch.mlu.set_device(self.device)
                     elif is_npu_available():
                         self.device = torch.device("npu", self.local_process_index)
                         if self.device is not None:
@@ -218,6 +231,19 @@ class PartialState:
                             "will do this automatically."
                         )
                 self._mixed_precision = "no"  # deepspeed handles mixed_precision using deepspeed_config
+            elif is_mlu_available() and not cpu and int(os.environ.get("LOCAL_RANK", -1)) != -1:
+                self.distributed_type = DistributedType.MULTI_MLU
+                if not torch.distributed.is_initialized():
+                    # Backend is not set by the user, we set it here
+                    kwargs.pop("backend", None)
+                    self.backend = "cncl"
+                    torch.distributed.init_process_group(backend=self.backend, **kwargs)
+                self.num_processes = torch.distributed.get_world_size()
+                self.process_index = torch.distributed.get_rank()
+                self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
+                if self.device is None:
+                    self.device = torch.device("mlu", self.local_process_index)
+                torch.mlu.set_device(self.device)
             elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu and torch.cuda.is_available():
                 self.distributed_type = DistributedType.MULTI_GPU
                 if not torch.distributed.is_initialized():
@@ -342,6 +368,25 @@ class PartialState:
                     self.device = torch.device("cpu") if cpu else self.default_device
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
+        # Set CPU affinity if enabled
+        if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
+            # Eventually follow syntax here and update for other backends
+            if self.device.type == "cuda":
+                if not is_pynvml_available():
+                    raise ImportError("To set CPU affinity on CUDA GPUs the pynvml package must be installed.")
+                # The below code is based on https://github.com/NVIDIA/DeepLearningExamples/blob/master/TensorFlow2/LanguageModeling/BERT/gpu_affinity.py
+                nvml.nvmlInit()
+                num_elements = math.ceil(os.cpu_count() / 64)
+                handle = nvml.nvmlDeviceGetHandleByIndex(self.local_process_index)
+                affinity_string = ""
+                for j in nvml.nvmlDeviceGetCpuAffinity(handle, num_elements):
+                    # assume nvml returns list of 64 bit ints
+                    affinity_string = f"{j:064b}{affinity_string}"
+                affinity_list = [int(x) for x in affinity_string]
+                affinity_list.reverse()  # so core 0 is the 0th element
+                affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
+                os.sched_setaffinity(0, affinity_to_set)
+
     def __repr__(self) -> str:
         return (
             f"Distributed environment: {self.distributed_type}{('  Backend: ' + self.backend) if self.backend else ''}\n"
@@ -413,6 +458,7 @@ class PartialState:
         """
         if self.distributed_type in (
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_MLU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,
@@ -733,12 +779,15 @@ class PartialState:
         Returns the default device which is:
         - MPS if `torch.backends.mps.is_available()` and `torch.backends.mps.is_built()` both return True.
         - CUDA if `torch.cuda.is_available()`
+        - MLU if `is_mlu_available()`
         - NPU if `is_npu_available()`
         - CPU otherwise
         """
         if is_mps_available():
             os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
             return torch.device("mps")
+        elif is_mlu_available():
+            return torch.device("mlu")
         elif torch.cuda.is_available():
             return torch.device("cuda")
         elif is_xpu_available():
@@ -831,7 +880,7 @@ class AcceleratorState:
                         self.downcast_bfloat = False
             elif os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true" and not cpu:
                 self.deepspeed_plugin = deepspeed_plugin
-            elif self.distributed_type == DistributedType.MULTI_GPU:
+            elif self.distributed_type in [DistributedType.MULTI_GPU, DistributedType.MULTI_MLU]:
                 if os.environ.get("ACCELERATE_USE_FSDP", "false") == "true":
                     self.distributed_type = DistributedType.FSDP
                     if self._mixed_precision != "no":

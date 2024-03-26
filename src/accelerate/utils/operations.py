@@ -151,6 +151,9 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             device = "npu:0"
         if device == "xpu":
             device = "xpu:0"
+        # TODO: torch_mlu LongTensor.to(<int num>) has bugs, we will fix this later.
+        if is_torch_tensor(tensor) and tensor.device.type in ["mlu"] and tensor.dtype in [torch.int64]:
+            tensor = tensor.cpu()
         try:
             return tensor.to(device, non_blocking=non_blocking)
         except TypeError:  # .to() doesn't accept non_blocking as kwarg
