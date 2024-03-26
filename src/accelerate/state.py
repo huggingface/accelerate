@@ -119,7 +119,7 @@ class PartialState:
             `True` and force the execution on the CPU.
         **kwargs:
             Additional keyword arguments to pass to the relevent `init_process_group` function. See the example section
-            for detailed usage.
+            for detailed usage. Valid `kwargs` can be found in [`utils.InitProcessGroupKwargs`].
 
     **Available attributes:**
 
