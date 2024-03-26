@@ -810,20 +810,17 @@ class PartialState:
         else:
             return torch.device("cpu")
 
-    def __getattribute__(self, name: str):
-        obj_getattr = object.__getattribute__
-        if name not in obj_getattr(self, "_known_attrs"):
-            return obj_getattr(self, name)
-        else:
-            try:
-                return obj_getattr(self, name)
-            except AttributeError:
-                # If not found, give a more contextualized answer
-                raise AttributeError(
-                    f"`PartialState` object has no attribute `{name}`. "
-                    "This happens if `PartialState._reset_state()` was called and "
-                    "an `Accelerator` or `PartialState` was not reinitialized."
-                )
+    def __getattr__(self, name: str):
+        # By this point we know that no attributes of `self` contain `name`,
+        # so we just modify the error message
+        if name in self._known_attrs:
+            raise AttributeError(
+                f"`PartialState` object has no attribute `{name}`. "
+                "This happens if `PartialState._reset_state()` was called and "
+                "an `Accelerator` or `PartialState` was not reinitialized."
+            )
+        # Raise a typical AttributeError
+        raise AttributeError(f"'PartialState' object has no attribute '{name}'")
 
 
 class AcceleratorState:
@@ -1095,20 +1092,17 @@ class AcceleratorState:
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
 
-    def __getattribute__(self, name: str):
-        obj_getattr = object.__getattribute__
-        if name not in obj_getattr(self, "_known_attrs"):
-            return obj_getattr(self, name)
-        else:
-            try:
-                return obj_getattr(self, name)
-            except AttributeError:
-                # If not found, give a more contextualized answer
-                raise AttributeError(
-                    f"`AcceleratorState` object has no attribute `{name}`. "
-                    "This happens if `AcceleratorState._reset_state()` was called and "
-                    "an `Accelerator` or `PartialState` was not reinitialized."
-                )
+    def __getattr__(self, name: str):
+        # By this point we know that no attributes of `self` contain `name`,
+        # so we just modify the error message
+        if name in self._known_attrs:
+            raise AttributeError(
+                f"`AcceleratorState` object has no attribute `{name}`. "
+                "This happens if `AcceleratorState._reset_state()` was called and "
+                "an `Accelerator` or `PartialState` was not reinitialized."
+            )
+        # Raise a typical AttributeError
+        raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
 
 
 class GradientState:
