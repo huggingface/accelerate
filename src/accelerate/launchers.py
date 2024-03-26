@@ -24,9 +24,9 @@ from .utils import (
     PrepareForLaunch,
     are_libraries_initialized,
     check_cuda_p2p_ib_support,
+    get_gpu_info,
     is_mps_available,
     patch_environment,
-    get_gpu_info,
 )
 
 
