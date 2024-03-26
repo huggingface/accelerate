@@ -130,6 +130,19 @@ class PartialState:
     """
 
     _shared_state = SharedDict()
+    _known_attrs = [
+        "_cpu",
+        "_mixed_precision",
+        "_shared_state",
+        "backend",
+        "debug",
+        "device",
+        "distributed_type",
+        "fork_launched",
+        "local_process_index",
+        "num_processes",
+        "process_index",
+    ]
 
     def __init__(self, cpu: bool = False, **kwargs):
         self.__dict__ = self._shared_state
@@ -778,6 +791,18 @@ class PartialState:
         else:
             return torch.device("cpu")
 
+    def __getattr__(self, name: str):
+        # By this point we know that no attributes of `self` contain `name`,
+        # so we just modify the error message
+        if name in self._known_attrs:
+            raise AttributeError(
+                f"`PartialState` object has no attribute `{name}`. "
+                "This happens if `PartialState._reset_state()` was called and "
+                "an `Accelerator` or `PartialState` was not reinitialized."
+            )
+        # Raise a typical AttributeError
+        raise AttributeError(f"'PartialState' object has no attribute '{name}'")
+
 
 class AcceleratorState:
     """
@@ -801,6 +826,13 @@ class AcceleratorState:
     """
 
     _shared_state = SharedDict()
+    _known_attrs = PartialState._known_attrs + [
+        "deepspeed_plugin",
+        "use_ipex",
+        "fsdp_plugin",
+        "megatron_lm_plugin",
+        "dynamo_plugin",
+    ]
 
     def __init__(
         self,
@@ -1040,6 +1072,18 @@ class AcceleratorState:
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
+
+    def __getattr__(self, name: str):
+        # By this point we know that no attributes of `self` contain `name`,
+        # so we just modify the error message
+        if name in self._known_attrs:
+            raise AttributeError(
+                f"`AcceleratorState` object has no attribute `{name}`. "
+                "This happens if `AcceleratorState._reset_state()` was called and "
+                "an `Accelerator` or `PartialState` was not reinitialized."
+            )
+        # Raise a typical AttributeError
+        raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
 
 
 class GradientState:

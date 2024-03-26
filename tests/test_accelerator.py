@@ -106,6 +106,48 @@ class AcceleratorTester(AccelerateTestCase):
             assert "use_seedable_sampler" in deprecation_warning
             assert accelerator.use_seedable_sampler is False
 
+    def test_partial_state_after_reset(self):
+        # Verifies that custom getattr errors will be thrown
+        # if the state is reset, but only if trying to
+        # get expected attributes
+        state = PartialState()
+        assert state.num_processes > 0
+
+        with self.assertRaises(AttributeError) as cm:
+            state.someotherthing
+        assert "'PartialState' object has no attribute" in str(cm.exception)
+        assert "This happens if `PartialState._reset_state()`" not in str(cm.exception)
+
+        with self.assertRaises(AttributeError) as cm:
+            state._reset_state()
+            state.num_processes
+        assert "`PartialState` object has no attribute" in str(cm.exception)
+        assert "This happens if `PartialState._reset_state()`" in str(cm.exception)
+
+        state.someotherthing = "MyValue"
+        assert state.someotherthing == "MyValue"
+
+    def test_accelerator_state_after_reset(self):
+        # Verifies that custom getattr errors will be thrown
+        # if the state is reset, but only if trying to
+        # get expected attributes
+        accelerator = Accelerator()
+        assert accelerator.num_processes > 0
+
+        with self.assertRaises(AttributeError) as cm:
+            accelerator.state.someotherthing
+        assert "'AcceleratorState' object has no attribute" in str(cm.exception)
+        assert "This happens if `AcceleratorState._reset_state()`" not in str(cm.exception)
+
+        with self.assertRaises(AttributeError) as cm:
+            accelerator.state._reset_state()
+            accelerator.num_processes
+        assert "`AcceleratorState` object has no attribute" in str(cm.exception)
+        assert "This happens if `AcceleratorState._reset_state()`" in str(cm.exception)
+
+        accelerator.state.someotherthing = "MyValue"
+        assert accelerator.state.someotherthing == "MyValue"
+
     @require_non_cpu
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
