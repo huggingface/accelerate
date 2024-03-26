@@ -117,7 +117,7 @@ class PartialState:
         cpu (`bool`, *optional*):
             Whether or not to force the script to execute on CPU. Will ignore any accelerators available if set to
             `True` and force the execution on the CPU.
-        **kwargs:
+        kwargs:
             Additional keyword arguments to pass to the relevent `init_process_group` function. Valid `kwargs` can be
             found in [`utils.InitProcessGroupKwargs`]. See the example section for detailed usage.
 
