@@ -133,6 +133,18 @@ class PartialState:
     """
 
     _shared_state = SharedDict()
+    _known_attrs = [
+        "_cpu",
+        "_mixed_precision",
+        "backend",
+        "debug",
+        "device",
+        "distributed_type",
+        "fork_launched",
+        "local_process_index",
+        "num_processes",
+        "process_index",
+    ]
 
     def __init__(self, cpu: bool = False, **kwargs):
         self.__dict__ = self._shared_state
@@ -805,8 +817,8 @@ class PartialState:
             # If not found, give a more contextualized answer
             raise AttributeError(
                 f"`PartialState` object has no attribute `{name}`. "
-                "This can happen if the state was reset and using an old reference. "
-                "If you are using an `Accelerator`, make sure to re-initialize it."
+                "This can happen if `PartialState._reset_state()` was called and "
+                "an `Accelerator` or `PartialState` was not reinitialized."
             )
 
 

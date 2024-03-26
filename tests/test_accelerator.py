@@ -106,6 +106,16 @@ class AcceleratorTester(AccelerateTestCase):
             assert "use_seedable_sampler" in deprecation_warning
             assert accelerator.use_seedable_sampler is False
 
+    def test_state_after_reset(self):
+        state = PartialState()
+        assert state.num_processes > 0
+        state._reset_state()
+        with self.assertRaises(AttributeError) as cm:
+            state._reset_state()
+            state.num_processes
+        assert "`PartialState` object has no attribute" in str(cm.exception)
+        assert "This can happen if `PartialState._reset_state()`" in str(cm.exception)
+
     @require_non_cpu
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
