@@ -811,11 +811,12 @@ class PartialState:
             return torch.device("cpu")
 
     def __getattribute__(self, name: str):
-        if name not in self._known_attrs:
-            return object.__getattribute__(self, name)
+        obj_getattr = object.__getattribute__
+        if name not in obj_getattr(self, "_known_attrs"):
+            return obj_getattr(self, name)
         else:
             try:
-                return object.__getattribute__(self, name)
+                return obj_getattr(self, name)
             except AttributeError:
                 # If not found, give a more contextualized answer
                 raise AttributeError(
@@ -1095,11 +1096,12 @@ class AcceleratorState:
         PartialState().print(*args, **kwargs)
 
     def __getattribute__(self, name: str):
-        if name not in self._known_attrs:
-            return object.__getattribute__(self, name)
+        obj_getattr = object.__getattribute__
+        if name not in obj_getattr(self, "_known_attrs"):
+            return obj_getattr(self, name)
         else:
             try:
-                return object.__getattribute__(self, name)
+                return obj_getattr(self, name)
             except AttributeError:
                 # If not found, give a more contextualized answer
                 raise AttributeError(
