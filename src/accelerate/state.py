@@ -136,6 +136,7 @@ class PartialState:
     _known_attrs = [
         "_cpu",
         "_mixed_precision",
+        "_shared_state",
         "backend",
         "debug",
         "device",
@@ -809,20 +810,20 @@ class PartialState:
         else:
             return torch.device("cpu")
 
-    def __getattr__(self, name: str):
-        try:
-            # First try the normal way
+    def __getattribute__(self, name: str):
+        if name not in self._known_attrs:
             return object.__getattribute__(self, name)
-        except AttributeError as e:
-            if name in self._known_attrs:
+        else:
+            try:
+                attr = object.__getattribute__(self, name)
+            except AttributeError:
                 # If not found, give a more contextualized answer
                 raise AttributeError(
                     f"`PartialState` object has no attribute `{name}`. "
                     "This happens if `PartialState._reset_state()` was called and "
                     "an `Accelerator` or `PartialState` was not reinitialized."
                 )
-            else:
-                raise e
+        return attr
 
 
 class AcceleratorState:
@@ -847,6 +848,13 @@ class AcceleratorState:
     """
 
     _shared_state = SharedDict()
+    _known_attrs = PartialState._known_attrs + [
+        "deepspeed_plugin",
+        "use_ipex",
+        "fsdp_plugin",
+        "megatron_lm_plugin",
+        "dynamo_plugin",
+    ]
 
     def __init__(
         self,
@@ -1087,18 +1095,20 @@ class AcceleratorState:
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
 
-    def __getattr__(self, name: str):
-        try:
-            # First try the normal way
+    def __getattribute__(self, name: str):
+        if name not in self._known_attrs:
             return object.__getattribute__(self, name)
-        except AttributeError:
-            # If not found, give a more contextualized answer
-            # adjust err message
-            raise AttributeError(
-                f"`AcceleratorState` object has no attribute `{name}`. "
-                "This can happen if the state was reset and using an old reference. "
-                "If you are using an `Accelerator`, make sure to re-initialize it."
-            )
+        else:
+            try:
+                attr = object.__getattribute__(self, name)
+            except AttributeError:
+                # If not found, give a more contextualized answer
+                raise AttributeError(
+                    f"`AcceleratorState` object has no attribute `{name}`. "
+                    "This happens if `AcceleratorState._reset_state()` was called and "
+                    "an `Accelerator` or `PartialState` was not reinitialized."
+                )
+        return attr
 
 
 class GradientState:
