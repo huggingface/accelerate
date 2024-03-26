@@ -813,13 +813,16 @@ class PartialState:
         try:
             # First try the normal way
             return object.__getattribute__(self, name)
-        except AttributeError:
-            # If not found, give a more contextualized answer
-            raise AttributeError(
-                f"`PartialState` object has no attribute `{name}`. "
-                "This can happen if `PartialState._reset_state()` was called and "
-                "an `Accelerator` or `PartialState` was not reinitialized."
-            )
+        except AttributeError as e:
+            if name in self._known_attrs:
+                # If not found, give a more contextualized answer
+                raise AttributeError(
+                    f"`PartialState` object has no attribute `{name}`. "
+                    "This happens if `PartialState._reset_state()` was called and "
+                    "an `Accelerator` or `PartialState` was not reinitialized."
+                )
+            else:
+                raise e
 
 
 class AcceleratorState:
