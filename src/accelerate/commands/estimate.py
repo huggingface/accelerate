@@ -234,7 +234,8 @@ def estimate_training_usage(bytes: int, mixed_precision: str, msamp_config: str 
         memory_sizes["gradients"] = fp32_size
         memory_sizes["optimizer"] = fp32_size * 2
         memory_sizes["step"] = fp32_size * 4
-    elif mixed_precision in ("float16", "bfloat16") or mixed_precision == "fp8" and msamp_config is None:
+    elif mixed_precision in ("float16", "bfloat16") or (mixed_precision == "fp8" and msamp_config is None):
+        # With native `TransformersEngine`, there is no memory savings with FP8
         # With mixed precision training, the model has weights stored
         # in FP16 and FP32
         memory_sizes["model"] = fp32_size
