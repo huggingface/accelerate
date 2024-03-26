@@ -1546,6 +1546,7 @@ def load_checkpoint_in_model(
     offload_buffers: bool = False,
     keep_in_fp32_modules: List[str] = None,
     offload_8bit_bnb: bool = False,
+    strict: bool = False,
 ):
     """
     Loads a (potentially sharded) checkpoint inside a model, potentially sending weights to a given device as they are
@@ -1583,6 +1584,9 @@ def load_checkpoint_in_model(
             A list of the modules that we keep in `torch.float32` dtype.
         offload_8bit_bnb (`bool`, *optional*):
             Whether or not to enable offload of 8-bit modules on cpu/disk.
+        strict (`bool`, *optional*, defaults to `False`):
+            Whether to strictly enforce that the keys in the checkpoint state_dict match the keys of the model's
+            state_dict.
 
     """
     if offload_8bit_bnb:
@@ -1660,16 +1664,24 @@ def load_checkpoint_in_model(
         state_dict_folder = tempfile.mkdtemp()
         state_dict_index = {}
 
+    unexpected_keys = set()
+    model_keys = set(model.state_dict().keys())
     buffer_names = [name for name, _ in model.named_buffers()]
     for checkpoint_file in checkpoint_files:
-        checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
+        loaded_checkpoint = load_state_dict(checkpoint_file, device_map=device_map)
         if device_map is None:
-            model.load_state_dict(checkpoint, strict=False)
+            model.load_state_dict(loaded_checkpoint, strict=strict)
+            unexpected_keys.update(set(loaded_checkpoint.keys()) - model_keys)
         else:
-            for param_name, param in checkpoint.items():
+            for param_name, param in loaded_checkpoint.items():
                 # skip SCB parameter (for 8-bit serialization)
                 if "SCB" in param_name:
                     continue
+
+                if param_name not in model_keys:
+                    unexpected_keys.add(param_name)
+                    if not strict:
+                        continue  # Skip loading this parameter.
 
                 module_name = param_name
 
@@ -1690,9 +1702,9 @@ def load_checkpoint_in_model(
                         if proceed:
                             new_dtype = torch.float32
 
-                if "weight" in param_name and param_name.replace("weight", "SCB") in checkpoint.keys():
+                if "weight" in param_name and param_name.replace("weight", "SCB") in loaded_checkpoint.keys():
                     if param.dtype == torch.int8:
-                        fp16_statistics = checkpoint[param_name.replace("weight", "SCB")]
+                        fp16_statistics = loaded_checkpoint[param_name.replace("weight", "SCB")]
                 else:
                     fp16_statistics = None
 
@@ -1729,8 +1741,14 @@ def load_checkpoint_in_model(
                     )
 
         # Force Python to clean up.
-        del checkpoint
+        del loaded_checkpoint
         gc.collect()
+
+    if not strict:
+        logger.warning(
+            f"Some weights of the model checkpoint at {checkpoint} were not used when"
+            f" initializing {model.__class__.__name__}: {unexpected_keys}. This may or may not be an issue - make sure that the checkpoint does not have unnecessary parameters, or that the model definition correctly corresponds to the checkpoint."
+        )
 
     save_offload_index(offload_index, offload_folder)
 
