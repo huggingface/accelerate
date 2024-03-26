@@ -97,7 +97,7 @@ def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_oth
         error_on_other_type (`bool`, *optional*, defaults to `False`):
             Whether to return an error or not if after unpacking `data`, we get on an object that is not of type
             `main_type`. If `False`, the function will leave objects of types different than `main_type` unchanged.
-        **kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             Keyword arguments that will be passed to `func` when applied on the unpacked data.
 
     Returns:

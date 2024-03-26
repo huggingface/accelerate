@@ -409,7 +409,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             A random number generator to keep synchronized across processes.
         skip_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
-        kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             All other keyword arguments to pass to the regular `DataLoader` initialization.
 
     **Available attributes:**
