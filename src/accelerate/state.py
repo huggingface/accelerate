@@ -815,7 +815,7 @@ class PartialState:
             return object.__getattribute__(self, name)
         else:
             try:
-                attr = object.__getattribute__(self, name)
+                return object.__getattribute__(self, name)
             except AttributeError:
                 # If not found, give a more contextualized answer
                 raise AttributeError(
@@ -823,7 +823,6 @@ class PartialState:
                     "This happens if `PartialState._reset_state()` was called and "
                     "an `Accelerator` or `PartialState` was not reinitialized."
                 )
-        return attr
 
 
 class AcceleratorState:
@@ -1100,7 +1099,7 @@ class AcceleratorState:
             return object.__getattribute__(self, name)
         else:
             try:
-                attr = object.__getattribute__(self, name)
+                return object.__getattribute__(self, name)
             except AttributeError:
                 # If not found, give a more contextualized answer
                 raise AttributeError(
@@ -1108,7 +1107,6 @@ class AcceleratorState:
                     "This happens if `AcceleratorState._reset_state()` was called and "
                     "an `Accelerator` or `PartialState` was not reinitialized."
                 )
-        return attr
 
 
 class GradientState:
