@@ -212,6 +212,41 @@ def estimate_command_parser(subparsers=None):
     return parser
 
 
+def estimate_training_usage(bytes: int, mixed_precision: str, msamp_config: str = None) -> dict:
+    """
+    Given an amount of `bytes` and `mixed_precision`, calculates how much training memory is needed for a batch size of
+    1.
+
+    Args:
+        bytes (`int`):
+            The size of the model being trained.
+        mixed_precision (`str`):
+            The mixed precision that would be ran.
+        msamp_config (`str`):
+            The msamp config to estimate the training memory for if `mixed_precision` is set to `"fp8"`.
+    """
+    memory_sizes = {"model": -1, "optimizer": -1, "gradients": -1, "step": -1}
+    fp32_size = bytes
+    fp16_size = bytes // 2
+
+    if mixed_precision == "float32":
+        memory_sizes["model"] = fp32_size
+        memory_sizes["gradients"] = fp32_size
+        memory_sizes["optimizer"] = fp32_size * 2
+        memory_sizes["step"] = fp32_size * 4
+    elif mixed_precision in ("float16", "bfloat16") or (mixed_precision == "fp8" and msamp_config is None):
+        # With native `TransformersEngine`, there is no memory savings with FP8
+        # With mixed precision training, the model has weights stored
+        # in FP16 and FP32
+        memory_sizes["model"] = fp32_size
+        # 1.5 from weight gradient + computation (GEMM)
+        memory_sizes["gradients"] = fp32_size + fp16_size
+        # 2x from optimizer states
+        memory_sizes["optimizer"] = fp32_size * 2  # Optimizer states
+        memory_sizes["step"] = memory_sizes["optimizer"]
+    return memory_sizes
+
+
 def gather_data(args):
     "Creates an empty model and gathers the data for the sizes"
     try:
@@ -233,6 +268,7 @@ def gather_data(args):
     for dtype in args.dtypes:
         dtype_total_size = total_size
         dtype_largest_layer = largest_layer[0]
+        dtype_training_size = estimate_training_usage(dtype_total_size, dtype)
         if dtype == "float16":
             dtype_total_size /= 2
             dtype_largest_layer /= 2
@@ -242,7 +278,6 @@ def gather_data(args):
         elif dtype == "int4":
             dtype_total_size /= 8
             dtype_largest_layer /= 8
-        dtype_training_size = dtype_total_size * 4
         data.append([dtype, dtype_largest_layer, dtype_total_size, dtype_training_size])
     return data
 
@@ -253,6 +288,9 @@ def estimate_command(args):
         for i, item in enumerate(row):
             if isinstance(item, (int, float)):
                 row[i] = convert_bytes(item)
+            elif isinstance(item, dict):
+                training_usage = max(item.values())
+                row[i] = convert_bytes(training_usage) if training_usage != -1 else "N/A"
 
     headers = ["dtype", "Largest Layer", "Total Size", "Training using Adam"]
 
