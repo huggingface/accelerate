@@ -113,6 +113,19 @@ class PartialState:
     control. Designed to be used when only process control and device execution states are needed. Does *not* need to
     be initialized from `Accelerator`.
 
+    Args:
+        cpu (`bool`, *optional*):
+            Whether or not to force the script to execute on CPU. Will ignore GPU available if set to `True` and force
+            the execution on one process only.
+        **kwargs:
+            Additional keyword arguments to pass to the relevent `init_process_group` function. Generally should be
+            passed in as:
+            ```python
+            from accelerate.utils import InitProcessGroupKwargs
+
+            state = PartialState(**InitProcessGroupKwargs(...).to_kwargs())
+            ```
+
     **Available attributes:**
 
         - **device** (`torch.device`) -- The device to use.
