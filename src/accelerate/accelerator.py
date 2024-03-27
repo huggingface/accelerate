@@ -99,7 +99,7 @@ from .utils import (
     shard_checkpoint,
     wait_for_everyone,
 )
-from .utils.constants import FSDP_PYTORCH_VERSION
+from .utils.constants import DEEPSPEED_ZERO_DYNAMO_VERSION, FSDP_PYTORCH_VERSION
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
@@ -1628,6 +1628,13 @@ class Accelerator:
                         if not self.split_batches
                         else scheduler.total_num_steps
                     )
+            if compare_versions("deepspeed", ">=", DEEPSPEED_ZERO_DYNAMO_VERSION):
+                config_kwargs.update(
+                    {
+                        "compile.enabled": self.state.dynamo_plugin.backend != DynamoBackend.NO,
+                        "compile.backend": self.state.dynamo_plugin.backend.value.lower(),
+                    }
+                )
             deepspeed_plugin.deepspeed_config_process(must_match=False, **config_kwargs)
             self.deepspeed_config = deepspeed_plugin.deepspeed_config
             kwargs = dict(model=model, config_params=self.deepspeed_config)
