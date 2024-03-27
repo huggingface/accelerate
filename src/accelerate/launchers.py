@@ -24,6 +24,7 @@ from .utils import (
     PrepareForLaunch,
     are_libraries_initialized,
     check_cuda_p2p_ib_support,
+    get_gpu_info,
     is_mps_available,
     patch_environment,
 )
@@ -124,7 +125,7 @@ def notebook_launcher(
         launcher = PrepareForLaunch(function, distributed_type="TPU")
         print(f"Launching a training on {num_processes} TPU cores.")
         xmp.spawn(launcher, args=args, nprocs=num_processes, start_method="fork")
-    elif in_colab:
+    elif in_colab and get_gpu_info()[1] < 2:
         # No need for a distributed launch otherwise as it's either CPU or one GPU.
         if torch.cuda.is_available():
             print("Launching training on one GPU.")
