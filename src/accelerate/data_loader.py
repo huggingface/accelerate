@@ -409,7 +409,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             A random number generator to keep synchronized across processes.
         skip_batches (`int`, *optional*, defaults to 0):
             The number of batches to skip at the beginning.
-        kwargs:
+        **kwargs (additional keyword arguments, *optional*):
             All other keyword arguments to pass to the regular `DataLoader` initialization.
 
     **Available attributes:**
@@ -971,6 +971,8 @@ def prepare_data_loader(
             dataloader.sampler.sampler = sampler
         else:
             dataloader.batch_sampler.sampler = sampler
+            if hasattr(dataloader.batch_sampler, "batch_sampler"):
+                dataloader.batch_sampler.batch_sampler.sampler = sampler
     if state.distributed_type == DistributedType.XLA:
         return MpDeviceLoaderWrapper(dataloader, device)
     return dataloader

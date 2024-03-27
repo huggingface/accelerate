@@ -42,11 +42,11 @@ from .utils import (
     is_mlu_available,
     is_mps_available,
     is_npu_available,
-    is_pynvml_available,
     is_torch_xla_available,
     is_xpu_available,
     parse_choice_from_env,
     parse_flag_from_env,
+    set_numa_affinity,
 )
 from .utils.dataclasses import SageMakerDistributedType
 
@@ -59,9 +59,6 @@ if is_mlu_available(check_device=False):
 
 if is_npu_available(check_device=False):
     import torch_npu  # noqa: F401
-
-if is_pynvml_available():
-    import pynvml as nvml
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +114,14 @@ class PartialState:
     control. Designed to be used when only process control and device execution states are needed. Does *not* need to
     be initialized from `Accelerator`.
 
+    Args:
+        cpu (`bool`, *optional*):
+            Whether or not to force the script to execute on CPU. Will ignore any accelerators available if set to
+            `True` and force the execution on the CPU.
+        kwargs (additional keyword arguments, *optional*):
+            Additional keyword arguments to pass to the relevent `init_process_group` function. Valid `kwargs` can be
+            found in [`utils.InitProcessGroupKwargs`]. See the example section for detailed usage.
+
     **Available attributes:**
 
         - **device** (`torch.device`) -- The device to use.
@@ -131,9 +136,31 @@ class PartialState:
         - **is_main_process** (`bool`) -- Whether or not the current process is the main one.
         - **is_local_main_process** (`bool`) -- Whether or not the current process is the main one on the local node.
         - **debug** (`bool`) -- Whether or not the current script is being run in debug mode.
+
+    Example:
+    ```python
+    from accelerate.utils import InitProcessGroupKwargs
+
+    # To include `InitProcessGroupKwargs`, init then call `.to_kwargs()`
+    kwargs = InitProcessGroupKwargs(...).to_kwargs()
+    state = PartialState(**kwargs)
+    ```
     """
 
     _shared_state = SharedDict()
+    _known_attrs = [
+        "_cpu",
+        "_mixed_precision",
+        "_shared_state",
+        "backend",
+        "debug",
+        "device",
+        "distributed_type",
+        "fork_launched",
+        "local_process_index",
+        "num_processes",
+        "process_index",
+    ]
 
     def __init__(self, cpu: bool = False, **kwargs):
         self.__dict__ = self._shared_state
@@ -248,7 +275,10 @@ class PartialState:
                     int(os.environ.get("LOCAL_RANK", -1)) if dist_information is None else dist_information.local_rank
                 )
             self.set_device()
-
+            
+            # Set CPU affinity if enabled
+            if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
+                set_numa_affinity(self.local_process_index)
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
         # Check for old RTX 4000's that can't use P2P or IB and are on old drivers
@@ -259,25 +289,6 @@ class PartialState:
                     'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
                     "will do this automatically."
                 )
-
-        # Set CPU affinity if enabled
-        if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
-            # Eventually follow syntax here and update for other backends
-            if self.device.type == "cuda":
-                if not is_pynvml_available():
-                    raise ImportError("To set CPU affinity on CUDA GPUs the pynvml package must be installed.")
-                # The below code is based on https://github.com/NVIDIA/DeepLearningExamples/blob/master/TensorFlow2/LanguageModeling/BERT/gpu_affinity.py
-                nvml.nvmlInit()
-                num_elements = math.ceil(os.cpu_count() / 64)
-                handle = nvml.nvmlDeviceGetHandleByIndex(self.local_process_index)
-                affinity_string = ""
-                for j in nvml.nvmlDeviceGetCpuAffinity(handle, num_elements):
-                    # assume nvml returns list of 64 bit ints
-                    affinity_string = f"{j:064b}{affinity_string}"
-                affinity_list = [int(x) for x in affinity_string]
-                affinity_list.reverse()  # so core 0 is the 0th element
-                affinity_to_set = [i for i, e in enumerate(affinity_list) if e != 0]
-                os.sched_setaffinity(0, affinity_to_set)
 
     def __repr__(self) -> str:
         return (
@@ -762,6 +773,17 @@ class PartialState:
                 torch.npu.set_device(self.device)
             elif device == "cuda":
                 torch.cuda.set_device(self.device)
+    def __getattr__(self, name: str):
+        # By this point we know that no attributes of `self` contain `name`,
+        # so we just modify the error message
+        if name in self._known_attrs:
+            raise AttributeError(
+                f"`PartialState` object has no attribute `{name}`. "
+                "This happens if `PartialState._reset_state()` was called and "
+                "an `Accelerator` or `PartialState` was not reinitialized."
+            )
+        # Raise a typical AttributeError
+        raise AttributeError(f"'PartialState' object has no attribute '{name}'")
 
 
 class AcceleratorState:
@@ -786,6 +808,13 @@ class AcceleratorState:
     """
 
     _shared_state = SharedDict()
+    _known_attrs = PartialState._known_attrs + [
+        "deepspeed_plugin",
+        "use_ipex",
+        "fsdp_plugin",
+        "megatron_lm_plugin",
+        "dynamo_plugin",
+    ]
 
     def __init__(
         self,
@@ -1021,6 +1050,18 @@ class AcceleratorState:
 
     def print(self, *args, **kwargs):
         PartialState().print(*args, **kwargs)
+
+    def __getattr__(self, name: str):
+        # By this point we know that no attributes of `self` contain `name`,
+        # so we just modify the error message
+        if name in self._known_attrs:
+            raise AttributeError(
+                f"`AcceleratorState` object has no attribute `{name}`. "
+                "This happens if `AcceleratorState._reset_state()` was called and "
+                "an `Accelerator` or `PartialState` was not reinitialized."
+            )
+        # Raise a typical AttributeError
+        raise AttributeError(f"'AcceleratorState' object has no attribute '{name}'")
 
 
 class GradientState:

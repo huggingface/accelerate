@@ -26,7 +26,7 @@ from accelerate import DistributedType, infer_auto_device_map, init_empty_weight
 from accelerate.accelerator import Accelerator
 from accelerate.state import GradientState, PartialState
 from accelerate.test_utils import require_bnb, require_multi_device, require_non_cpu, slow, torch_device
-from accelerate.test_utils.testing import AccelerateTestCase, require_non_torch_xla
+from accelerate.test_utils.testing import AccelerateTestCase, require_cuda, require_non_torch_xla
 from accelerate.utils import patch_environment
 from accelerate.utils.modeling import load_checkpoint_in_model
 
@@ -106,6 +106,48 @@ class AcceleratorTester(AccelerateTestCase):
             assert "use_seedable_sampler" in deprecation_warning
             assert accelerator.use_seedable_sampler is False
 
+    def test_partial_state_after_reset(self):
+        # Verifies that custom getattr errors will be thrown
+        # if the state is reset, but only if trying to
+        # get expected attributes
+        state = PartialState()
+        assert state.num_processes > 0
+
+        with self.assertRaises(AttributeError) as cm:
+            state.someotherthing
+        assert "'PartialState' object has no attribute" in str(cm.exception)
+        assert "This happens if `PartialState._reset_state()`" not in str(cm.exception)
+
+        with self.assertRaises(AttributeError) as cm:
+            state._reset_state()
+            state.num_processes
+        assert "`PartialState` object has no attribute" in str(cm.exception)
+        assert "This happens if `PartialState._reset_state()`" in str(cm.exception)
+
+        state.someotherthing = "MyValue"
+        assert state.someotherthing == "MyValue"
+
+    def test_accelerator_state_after_reset(self):
+        # Verifies that custom getattr errors will be thrown
+        # if the state is reset, but only if trying to
+        # get expected attributes
+        accelerator = Accelerator()
+        assert accelerator.num_processes > 0
+
+        with self.assertRaises(AttributeError) as cm:
+            accelerator.state.someotherthing
+        assert "'AcceleratorState' object has no attribute" in str(cm.exception)
+        assert "This happens if `AcceleratorState._reset_state()`" not in str(cm.exception)
+
+        with self.assertRaises(AttributeError) as cm:
+            accelerator.state._reset_state()
+            accelerator.num_processes
+        assert "`AcceleratorState` object has no attribute" in str(cm.exception)
+        assert "This happens if `AcceleratorState._reset_state()`" in str(cm.exception)
+
+        accelerator.state.someotherthing = "MyValue"
+        assert accelerator.state.someotherthing == "MyValue"
+
     @require_non_cpu
     def test_accelerator_can_be_reinstantiated(self):
         _ = Accelerator()
@@ -113,6 +155,14 @@ class AcceleratorTester(AccelerateTestCase):
         assert PartialState._shared_state["device"].type in ["cuda", "mps", "npu", "xpu", "xla"]
         with self.assertRaises(ValueError):
             _ = Accelerator(cpu=True)
+
+    @require_cuda
+    def test_setting_cpu_affinity(self):
+        with patch_environment(accelerate_cpu_affinity=1, accelerate_debug_mode=1):
+            with self.assertLogs("accelerate.utils.environment", level="INFO") as cm:
+                _ = Accelerator()
+                assert any("Assigning" in log for log in cm.output)
+                assert any("cpu cores to process" in log for log in cm.output)
 
     def test_mutable_states(self):
         accelerator = Accelerator()

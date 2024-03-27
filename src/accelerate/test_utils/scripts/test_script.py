@@ -22,6 +22,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -379,6 +380,25 @@ def check_seedable_sampler():
     assert torch.allclose(original_items, new_items), "Did not obtain the same items with the same seed and epoch."
 
 
+def check_seedable_sampler_in_batch_sampler_shard():
+    set_seed(42)
+
+    config = DataLoaderConfiguration(use_seedable_sampler=True)
+    accelerator = Accelerator(dataloader_config=config)
+    assert accelerator.num_processes > 1, "This test requires more than one process."
+
+    dataloader = DataLoader(list(range(10)), batch_size=1, shuffle=True)
+    prepared_data_loader = prepare_data_loader(
+        dataloader=dataloader,
+        use_seedable_sampler=True,
+    )
+
+    target_sampler = prepared_data_loader.batch_sampler.batch_sampler.sampler
+    assert isinstance(
+        target_sampler, SeedableRandomSampler
+    ), "Sampler in BatchSamplerShard is not SeedableRandomSampler."
+
+
 def mock_training(length, batch_size, generator, use_seedable_sampler=False):
     set_seed(42)
     generator.manual_seed(42)
@@ -690,6 +710,20 @@ def test_trigger():
     assert accelerator.check_trigger() is False
 
 
+def test_reinstantiated_state():
+    AcceleratorState._reset_state()
+    simple_model = torch.nn.Linear(1, 1)
+    # First define an accelerator
+    accelerator = Accelerator()
+    # Then call `reset_state`, breaking the state existing in the accelerator
+    AcceleratorState._reset_state()
+    # Now try and prepare a simple model, should raise the custom error early
+    with pytest.raises(AttributeError) as cm:
+        accelerator.prepare(simple_model)
+    assert "`AcceleratorState` object has no attribute" in str(cm.value.args[0])
+    assert "This happens if `AcceleratorState._reset_state()`" in str(cm.value.args[0])
+
+
 def main():
     accelerator = Accelerator()
     state = accelerator.state
@@ -742,6 +776,9 @@ def main():
         custom_sampler_check()
         check_seedable_sampler()
 
+    if state.num_processes > 1:
+        check_seedable_sampler_in_batch_sampler_shard()
+
     # Trainings are not exactly the same in DeepSpeed and CPU mode
     if state.distributed_type == DistributedType.DEEPSPEED:
         return
@@ -754,6 +791,10 @@ def main():
     if state.local_process_index == 0:
         print("\n**Breakpoint trigger test**")
     test_trigger()
+
+    if state.local_process_index == 0:
+        print("\n**Test reinstantiated state**")
+    test_reinstantiated_state()
 
 
 if __name__ == "__main__":

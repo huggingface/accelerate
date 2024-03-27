@@ -443,6 +443,12 @@ epoch 4: 94.71
 
 And that's it!
 
+Please note that [`notebook_launcher`] ignores the 🤗 Accelerate config file, to launch based on the config use:
+
+```bash
+accelerate launch
+```
+
 ## Debugging 
 
 A common issue when running the `notebook_launcher` is receiving a CUDA has already been initialized issue. This usually stems
