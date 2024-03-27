@@ -215,6 +215,8 @@ def get_cpu_distributed_information() -> CPUInformation:
         1,
     )
     return CPUInformation(**information)
+
+
 def override_numa_affinity(local_process_index: int, verbose: Optional[bool] = None) -> None:
     """
     Overrides whatever NUMA affinity is set for the current process. This is very taxing and requires recalculating the

@@ -275,7 +275,7 @@ class PartialState:
                     int(os.environ.get("LOCAL_RANK", -1)) if dist_information is None else dist_information.local_rank
                 )
             self.set_device()
-            
+
             # Set CPU affinity if enabled
             if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
                 set_numa_affinity(self.local_process_index)
@@ -773,6 +773,7 @@ class PartialState:
                 torch.npu.set_device(self.device)
             elif device == "cuda":
                 torch.cuda.set_device(self.device)
+
     def __getattr__(self, name: str):
         # By this point we know that no attributes of `self` contain `name`,
         # so we just modify the error message
