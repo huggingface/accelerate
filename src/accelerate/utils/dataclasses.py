@@ -225,7 +225,7 @@ class FP8RecipeKwargs(KwargsHandler):
             What level of 8-bit collective communication should be used with MS-AMP. In general:
                 * O1: Weight gradients and `all_reduce` communications are done in fp8, reducing GPU
                     memory usage and communication bandwidth
-                * O2: First-order optimize@dr states are in 8-bit, and second order states are in FP16.
+                * O2: First-order optimizer states are in 8-bit, and second order states are in FP16.
                     Only available when using Adam or AdamW. This maintains accuracy and can potentially save the
                     highest memory.
                 * 03: Specifically for DeepSpeed, implements capabilities so weights and master weights of models
