@@ -1744,7 +1744,7 @@ def load_checkpoint_in_model(
         del loaded_checkpoint
         gc.collect()
 
-    if not strict:
+    if not strict and len(unexpected_keys) > 0:
         logger.warning(
             f"Some weights of the model checkpoint at {checkpoint} were not used when"
             f" initializing {model.__class__.__name__}: {unexpected_keys}. This may or may not be an issue - make sure that the checkpoint does not have unnecessary parameters, or that the model definition correctly corresponds to the checkpoint."
