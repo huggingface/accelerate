@@ -213,7 +213,6 @@ class PartialState:
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
                         use_deepspeed = True
-                        # self.distributed_type = DistributedType.DEEPSPEED
                     # Deal with all other backends but XPU and CPU, that gets handled special later
                     elif (
                         self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU)
