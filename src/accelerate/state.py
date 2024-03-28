@@ -182,7 +182,7 @@ class PartialState:
             backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, kwargs.pop("backend", None))
             self.backend = backend
             self.distributed_type = distributed_type
-
+            use_deepspeed = False
             if not cpu:
                 # Deal with XLA
                 if is_torch_xla_available():
