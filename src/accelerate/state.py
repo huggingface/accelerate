@@ -273,10 +273,10 @@ class PartialState:
                 self.local_process_index = (
                     int(os.environ.get("LOCAL_RANK", -1)) if dist_information is None else dist_information.local_rank
                 )
+            self.set_device()
             # Now we can change to deepseed
             if use_deepspeed:
                 self.distributed_type = DistributedType.DEEPSPEED
-            self.set_device()
 
             # Set CPU affinity if enabled
             if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
