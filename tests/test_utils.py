@@ -210,7 +210,7 @@ class UtilsTester(unittest.TestCase):
     @require_huggingface_suite
     def test_extract_model_recursive_fsdpv2(self):
         # Specifically tests for FSDPv2 extraction
-        # repored in https://github.com/huggingface/transformers/pull/29780
+        # reported in https://github.com/huggingface/transformers/pull/29780
         xr.use_spmd()
         from transformers import AutoModelForCausalLM
 
