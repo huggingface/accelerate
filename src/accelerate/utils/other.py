@@ -90,7 +90,7 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True, recursive
         model = model.module
 
     if recursive:
-
+        # This is needed in cases such as using FSDPv2 on XLA
         def _recursive_unwrap(module):
             if hasattr(module, "module"):
                 unwrapped_module = _recursive_unwrap(module.module)
