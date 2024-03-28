@@ -211,9 +211,9 @@ class PartialState:
                     is_deepspeed_available()
                 ), "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
                 self.distributed_type = DistributedType.DEEPSPEED
-                if not torch.distributed.is_initialized():
-                    from deepspeed import comm as dist
+                from deepspeed import comm as dist
 
+                if not dist.is_initialized():
                     # DeepSpeed always uses nccl
                     kwargs.pop("backend", None)
                     if is_xpu_available and is_ccl_available():
