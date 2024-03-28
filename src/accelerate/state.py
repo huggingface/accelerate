@@ -195,27 +195,31 @@ class PartialState:
                     else:
                         self.local_process_index = int(os.environ.get("LOCAL_RANK", -1))
                     self.distributed_type = DistributedType.XLA
-                if not torch.distributed.is_initialized():
-                    if int(os.environ.get("LOCAL_RANK", -1)) != -1:
-                        # Deal with spawning deepspeed
-                        if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
-                            if not is_deepspeed_available():
-                                raise ImportError(
-                                    "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
-                                )
-                            from deepspeed import comm as dist
+                if int(os.environ.get("LOCAL_RANK", -1)) != -1:
+                    # Deal with spawning deepspeed
+                    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
+                        if not is_deepspeed_available():
+                            raise ImportError(
+                                "DeepSpeed is not available => install it using `pip3 install deepspeed` or build it from source"
+                            )
+                        from deepspeed import comm as dist
 
-                            if is_xpu_available and is_ccl_available():
-                                os.environ["CCL_PROCESS_LAUNCHER"] = "none"
-                                os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
-                                os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
+                        if is_xpu_available and is_ccl_available():
+                            os.environ["CCL_PROCESS_LAUNCHER"] = "none"
+                            os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
+                            os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
+
+                        if not torch.distributed.is_initialized():
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
-                            # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
-                            use_deepspeed = True
-                            # self.distributed_type = DistributedType.DEEPSPEED
-                        # Deal with all other backends but XPU and CPU, that gets handled special later
-                        elif self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
-                            torch.distributed.init_process_group(backend=self.backend, **kwargs)
+                        # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
+                        use_deepspeed = True
+                        # self.distributed_type = DistributedType.DEEPSPEED
+                    # Deal with all other backends but XPU and CPU, that gets handled special later
+                    elif (
+                        self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU)
+                        and not torch.distributed.is_initialized()
+                    ):
+                        torch.distributed.init_process_group(backend=self.backend, **kwargs)
             # XPU and CPU require special env configs to be set
             if self.distributed_type in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                 dist_information = get_cpu_distributed_information()
