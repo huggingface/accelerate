@@ -217,6 +217,7 @@ class UtilsTester(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained("gpt2")
         orig_state_dict_keys = list(model.state_dict().keys())
         num_devices = xr.global_runtime_device_count()
+        # Set environment for FSDPv2 to be active
         xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
 
         def nested_wrap(model):

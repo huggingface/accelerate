@@ -92,6 +92,8 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True, recursive
     if recursive:
         # This is needed in cases such as using FSDPv2 on XLA
         def _recursive_unwrap(module):
+            # Wrapped modules are standardly wrapped as `module`, similar to the cases earlier
+            # with DDP, DataParallel, DeepSpeed, and FSDP
             if hasattr(module, "module"):
                 unwrapped_module = _recursive_unwrap(module.module)
             else:
