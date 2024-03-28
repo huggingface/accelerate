@@ -53,7 +53,7 @@ def is_compiled_module(module):
     return isinstance(module, torch._dynamo.eval_frame.OptimizedModule)
 
 
-def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
+def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True, recursive: bool = False):
     """
     Extract a model from its distributed containers.
 
@@ -62,6 +62,9 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
             The model to extract.
         keep_fp32_wrapper (`bool`, *optional*):
             Whether to remove mixed precision hooks from the model.
+        recursive (`bool`, *optional*, defaults to `False`):
+            Whether to recursively extract all cases of `module.module` from `model` as well as unwrap child sublayers
+            recursively, not just the top-level distributed containers.
 
     Returns:
         `torch.nn.Module`: The extracted model.
@@ -85,6 +88,21 @@ def extract_model_from_parallel(model, keep_fp32_wrapper: bool = True):
 
     while isinstance(model, options):
         model = model.module
+
+    if recursive:
+
+        def _recursive_unwrap(module):
+            if hasattr(module, "module"):
+                unwrapped_module = _recursive_unwrap(module.module)
+            else:
+                unwrapped_module = module
+            # Next unwrap child sublayers recursively
+            for name, child in unwrapped_module.named_children():
+                setattr(unwrapped_module, name, _recursive_unwrap(child))
+            return unwrapped_module
+
+        # Start with top-level
+        model = _recursive_unwrap(model)
 
     if not keep_fp32_wrapper:
         forward = model.forward
