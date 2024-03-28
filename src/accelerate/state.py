@@ -210,10 +210,9 @@ class PartialState:
                                 os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
                                 os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
-                            # Call now before setting `distributed_type` so it knows what device to set.
-                            # The second call will do nothing.
-                            self.set_device()
-                            self.distributed_type = DistributedType.DEEPSPEED
+                            # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
+                            use_deepspeed = True
+                            # self.distributed_type = DistributedType.DEEPSPEED
                         # Deal with all other backends but XPU and CPU, that gets handled special later
                         elif self.distributed_type not in (DistributedType.MULTI_XPU, DistributedType.MULTI_CPU):
                             torch.distributed.init_process_group(backend=self.backend, **kwargs)
@@ -274,6 +273,9 @@ class PartialState:
                 self.local_process_index = (
                     int(os.environ.get("LOCAL_RANK", -1)) if dist_information is None else dist_information.local_rank
                 )
+            # Now we can change to deepseed
+            if use_deepspeed:
+                self.distributed_type = DistributedType.DEEPSPEED
             self.set_device()
 
             # Set CPU affinity if enabled
