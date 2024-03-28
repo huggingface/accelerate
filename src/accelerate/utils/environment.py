@@ -18,6 +18,7 @@ import os
 import platform
 import subprocess
 import sys
+from dataclasses import dataclass, field
 from functools import lru_cache
 from shutil import which
 from typing import List, Optional
@@ -178,6 +179,42 @@ def check_fp8_capability():
     """
     cuda_device_capacity = torch.cuda.get_device_capability()
     return cuda_device_capacity >= (8, 9)
+
+
+@dataclass
+class CPUInformation:
+    """
+    Stores information about the CPU in a distributed environment. It contains the following attributes:
+    - rank: The rank of the current process.
+    - world_size: The total number of processes in the world.
+    - local_rank: The rank of the current process on the local node.
+    - local_world_size: The total number of processes on the local node.
+    """
+
+    rank: int = field(default=0, metadata={"help": "The rank of the current process."})
+    world_size: int = field(default=1, metadata={"help": "The total number of processes in the world."})
+    local_rank: int = field(default=0, metadata={"help": "The rank of the current process on the local node."})
+    local_world_size: int = field(default=1, metadata={"help": "The total number of processes on the local node."})
+
+
+def get_cpu_distributed_information() -> CPUInformation:
+    """
+    Returns various information about the environment in relation to CPU distributed training as a `CPUInformation`
+    dataclass.
+    """
+    information = {}
+    information["rank"] = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
+    information["world_size"] = get_int_from_env(
+        ["WORLD_SIZE", "PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE"], 1
+    )
+    information["local_rank"] = get_int_from_env(
+        ["LOCAL_RANK", "MPI_LOCALRANKID", "OMPI_COMM_WORLD_LOCAL_RANK", "MV2_COMM_WORLD_LOCAL_RANK"], 0
+    )
+    information["local_world_size"] = get_int_from_env(
+        ["LOCAL_WORLD_SIZE", "MPI_LOCALNRANKS", "OMPI_COMM_WORLD_LOCAL_SIZE", "MV2_COMM_WORLD_LOCAL_SIZE"],
+        1,
+    )
+    return CPUInformation(**information)
 
 
 def override_numa_affinity(local_process_index: int, verbose: Optional[bool] = None) -> None:
