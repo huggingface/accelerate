@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import numpy as np
 import os
 import pickle
 import tempfile
@@ -21,13 +20,19 @@ from collections import UserDict, namedtuple
 from typing import NamedTuple, Optional
 from unittest.mock import Mock, patch
 
+import numpy as np
 import pytest
 import torch
 from torch import nn
 
-from accelerate.big_modeling import init_empty_weights
 from accelerate.state import PartialState
-from accelerate.test_utils.testing import require_cuda, require_tpu, require_huggingface_suite, require_non_torch_xla, require_torch_min_version
+from accelerate.test_utils.testing import (
+    require_cuda,
+    require_huggingface_suite,
+    require_non_torch_xla,
+    require_torch_min_version,
+    require_tpu,
+)
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
     CannotPadNestedTensorWarning,
@@ -48,6 +53,7 @@ from accelerate.utils import (
     send_to_device,
 )
 from accelerate.utils.operations import is_namedtuple
+
 
 if is_torch_xla_available():
     import torch_xla.distributed.spmd as xs
@@ -205,21 +211,22 @@ class UtilsTester(unittest.TestCase):
     def test_extract_model_recursive_fsdpv2(self):
         # Specifically tests for FSDPv2 extraction
         # repored in https://github.com/huggingface/transformers/pull/29780
-
+        xr.use_spmd()
         from transformers import AutoModelForCausalLM
+
         model = AutoModelForCausalLM.from_pretrained("gpt2")
         orig_state_dict_keys = list(model.state_dict().keys())
         num_devices = xr.global_runtime_device_count()
         xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
 
         def nested_wrap(model):
-            layer = model.model.wte
+            layer = model.wte
             wrapped_layer = FSDPv2(layer)
-            model.model.wte = wrapped_layer
+            model.wte = wrapped_layer
             return model
-        
+
         wrapped_model = nested_wrap(model)
-        unwrapped_model = extract_model_from_parallel(wrapped_model)
+        unwrapped_model = extract_model_from_parallel(wrapped_model, recursive=True)
         unwrapped_state_dict_keys = list(unwrapped_model.state_dict().keys())
         for original_key, new_key in zip(orig_state_dict_keys, unwrapped_state_dict_keys):
             assert original_key == new_key, f"Keys did not align: {original_key} != {new_key}"
