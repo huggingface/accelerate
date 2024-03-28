@@ -41,6 +41,7 @@ from .utils import (
     is_npu_available,
     is_torch_version,
     is_xpu_available,
+    is_torch_xla_available,
     load_checkpoint_in_model,
     offload_state_dict,
     parse_flag_from_env,
@@ -484,6 +485,8 @@ def dispatch_model(
             device = f"mlu:{device}"
         elif is_xpu_available() and isinstance(device, int):
             device = f"xpu:{device}"
+        elif is_torch_xla_available() and isinstance(device, int):
+            device = f"xla:{device}"
         if device != "disk":
             model.to(device)
         else:

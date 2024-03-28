@@ -166,6 +166,12 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
                     device = f"npu:{device}"
             else:
                 raise error
+        except RuntimeError as error:
+            if is_torch_xla_available():
+                if isinstance(device, int):
+                    device = f"xla:{device}"
+            else:
+                raise error
         except Exception as error:
             if is_xpu_available():
                 if isinstance(device, int):

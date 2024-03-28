@@ -385,6 +385,8 @@ def set_module_tensor_to_device(
             device = f"npu:{device}"
         elif is_mlu_available() and isinstance(device, int):
             device = f"mlu:{device}"
+        elif is_torch_xla_available() and isinstance(device, int):
+            device = f"xla:{device}"
         if is_xpu_available() and isinstance(device, int):
             device = f"xpu:{device}"
         if value is None:
@@ -453,6 +455,9 @@ def set_module_tensor_to_device(
         torch.mlu.empty_cache()
     elif is_xpu_available():
         torch.xpu.empty_cache()
+    elif is_torch_xla_available():
+        import torch_xla.core.xla_model as xm
+        xm.mark_step()
     else:
         torch.cuda.empty_cache()
 
@@ -837,13 +842,16 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     # As gpu/npu/xpu are represented by int, we need to sort them first.
     gpu_devices = [k for k in max_memory.keys() if isinstance(k, int)]
     gpu_devices.sort()
-    # check if gpu/npu/xpu devices are available and if not, throw a warning
+    # check if gpu/npu/xpu/xla devices are available and if not, throw a warning
     if is_npu_available():
         num_devices = torch.npu.device_count()
     elif is_mlu_available():
         num_devices = torch.mlu.device_count()
     elif is_xpu_available():
         num_devices = torch.xpu.device_count()
+    elif is_torch_xla_available():
+        import torch_xla.core.xla_model as xm
+        num_devices = len(xm.get_xla_supported_devices())
     else:
         num_devices = torch.cuda.device_count()
     for device in gpu_devices:
@@ -855,7 +863,7 @@ def get_max_memory(max_memory: Optional[Dict[Union[int, str], Union[int, str]]] 
     for k in max_memory.keys():
         if k not in all_devices:
             raise ValueError(
-                f"Device {k} is not recognized, available devices are integers(for GPU/XPU), 'mps', 'cpu' and 'disk'"
+                f"Device {k} is not recognized, available devices are integers(for GPU/XPU/XLA), 'mps', 'cpu' and 'disk'"
             )
     max_memory = {k: max_memory[k] for k in all_devices}
 
