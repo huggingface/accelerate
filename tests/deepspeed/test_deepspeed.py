@@ -36,6 +36,7 @@ from accelerate.test_utils.testing import (
     execute_subprocess_async,
     path_in_accelerate_package,
     require_deepspeed,
+    require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
     slow,
@@ -1048,5 +1049,12 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             f"--output_dir={self.tmpdir}",
             f"--performance_lower_bound={self.performance_lower_bound}",
         ]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd)
+
+    @require_huggingface_suite
+    def test_zero3_integration(self):
+        self.test_file_path = self.test_scripts_folder / "test_zero3_integration.py"
+        cmd = ["accelerate", "launch", "--num_processes=2", "--num_machines=1", self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
