@@ -100,6 +100,7 @@ from .utils import (
     wait_for_everyone,
 )
 from .utils.constants import FSDP_PYTORCH_VERSION
+from .utils.dataclasses import InferencePlugin, DeepSpeedInferencePlugin
 from .utils.modeling import get_state_dict_offloaded_model
 from .utils.other import is_compiled_module
 
@@ -187,6 +188,9 @@ class Accelerator:
         fsdp_plugin ([`~utils.FullyShardedDataParallelPlugin`], *optional*):
             Tweak your FSDP related args using this argument. This argument is optional and can be configured directly
             using *accelerate config*
+        inference_plugin ([`~utils.InferencePlugin`], *optional*):
+            Tweak how inference should be performed if only using Accelerate for inference and wanting to use `Accelerator`
+            related enhancements.
         megatron_lm_plugin ([`~utils.MegatronLMPlugin`], *optional*):
             Tweak your MegatronLM related args using this argument. This argument is optional and can be configured
             directly using *accelerate config*
@@ -253,6 +257,7 @@ class Accelerator:
         dataloader_config: DataLoaderConfiguration | None = None,
         deepspeed_plugin: DeepSpeedPlugin | None = None,
         fsdp_plugin: FullyShardedDataParallelPlugin | None = None,
+        inference_plugin: InferencePlugin | None = None,
         megatron_lm_plugin: MegatronLMPlugin | None = None,
         rng_types: list[str | RNGType] | None = None,
         log_with: str | LoggerType | GeneralTracker | list[str | LoggerType | GeneralTracker] | None = None,

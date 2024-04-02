@@ -26,14 +26,17 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, get_args
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union, get_args
 
 import torch
 
 from .constants import FSDP_AUTO_WRAP_POLICY, FSDP_BACKWARD_PREFETCH, FSDP_SHARDING_STRATEGY, FSDP_STATE_DICT_TYPE
 from .environment import str_to_bool
-from .imports import is_cuda_available, is_npu_available, is_xpu_available
+from .imports import is_cuda_available, is_npu_available, is_xpu_available, is_deepspeed_available
 from .versions import compare_versions
+
+if is_deepspeed_available():
+    from deepspeed.inference.config import DeepSpeedTPConfig
 
 
 class KwargsHandler:
@@ -967,6 +970,136 @@ class DeepSpeedPlugin:
                 "The easiest method is to create a new config following the questionnaire via `accelerate config`.\n"
                 "It will only ask for the necessary config variables when using `deepspeed_config_file`."
             )
+
+@dataclass
+class DeepSpeedInferencePlugin:
+    """
+    Plugin to work with the deepspeed inference engine.
+    """
+
+    min_tokens: int = field(
+        default=1,
+        metadata={
+            "help": "Minimum number of tokens expected to need to generate."
+        }
+    )
+
+    max_tokens: int = field(
+        default=1024,
+        metadata={
+            "help": "Maximum number of tokens expected to work with, including input and output tokens."
+        }
+    )
+
+    replace_with_kernel_inject: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Set to true to inject inference kernels for models such as, Bert, GPT2, GPT-Neo and GPT-J. "
+                "Otherwise, the injection_dict provides the names of two linear layers as a tuple: "
+                "(attention_output projection, transformer output projection)"
+            )
+        }
+    )
+
+    enable_cuda_graph: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to capture CUDA graph of inference ops, so that iterative calls can be faster using graph replay."
+        }
+    )
+
+    injection_policy: Optional[dict] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Dictionary mapping a client `nn.Module` to its injection policy, such as "
+                "`{BertLayer: deepspeed.inference.HFBertLayerPolicy}`."
+            )
+        }
+    )
+
+    triangular_masking: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to use triangular masking for attention."
+        }
+    )
+
+    use_triton: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to use triton kernels for inference."
+        }
+    )
+
+    triton_autotune: bool = field(
+        default=False,
+        metadata={
+            "help": "Enabling allows for triton autotuning to be performed. Tuning it increases performance, while increases the initial time taken to run."
+        }
+    )
+
+
+
+    # dtype should be picked up from Accelerator
+
+    zero_config: Optional[Union[Dict[str, Any], "DeepSpeedZeroConfig"]] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Configuration for ZeRO when using the inference engine. If launching with `accelerate launch`, will "
+                "utilize this configuration."
+            )
+
+        }
+    )
+
+    tensor_parallel_config: Optional[Union[Dict[str, Any], "DeepSpeedTPConfig"]] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Configuration for tensor parallelism used to split the model across several GPUs. "
+                "Valid keys can be found in `deepspeed.inference.config.DeepSpeedTPConfig`."
+            )
+        }
+    )
+
+    moe_config: Optional[Union[Dict[str, Any], "DeepSpeedMoeConfig"]] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Configuration for Mixture of Experts (MoE) used to split the model across several GPUs. "
+                "Valid keys can be found in `deepspeed.inference.config.DeepSpeedMoEConfig`."
+            )
+        }
+    )
+
+
+@dataclass
+class InferencePlugin:
+    """
+    Plugin that helps determine how inference should be performed.
+    """
+    inference_dtype: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "The dtype to use for inference. If not specified, will default to the dtype configured "
+                "in the Accelerator"
+            )
+        }
+    )
+
+    deepspeed_config: Optional[DeepSpeedInferencePlugin] = field(
+        default=None,
+        metadata={
+            "help": "Configuration for DeepSpeed inference engine."
+        }
+    )
+
+
+
 
 
 @dataclass

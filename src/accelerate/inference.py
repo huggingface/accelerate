@@ -15,6 +15,8 @@ import math
 from types import MethodType
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from dataclasses import dataclass
+
 from .state import PartialState
 from .utils import (
     calculate_maximum_sizes,
@@ -26,6 +28,7 @@ from .utils import (
     pad_input_tensors,
     send_to_device,
 )
+from .utils.dataclasses import KwargsHandler
 
 
 if is_pippy_available():
