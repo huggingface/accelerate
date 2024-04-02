@@ -20,12 +20,19 @@ from collections import UserDict, namedtuple
 from typing import NamedTuple, Optional
 from unittest.mock import Mock, patch
 
+import numpy as np
 import pytest
 import torch
 from torch import nn
 
 from accelerate.state import PartialState
-from accelerate.test_utils.testing import require_cuda, require_non_torch_xla, require_torch_min_version
+from accelerate.test_utils.testing import (
+    require_cuda,
+    require_huggingface_suite,
+    require_non_torch_xla,
+    require_torch_min_version,
+    require_tpu,
+)
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
     CannotPadNestedTensorWarning,
@@ -36,6 +43,7 @@ from accelerate.utils import (
     convert_to_fp32,
     extract_model_from_parallel,
     find_device,
+    is_torch_xla_available,
     listify,
     pad_across_processes,
     pad_input_tensors,
@@ -46,6 +54,11 @@ from accelerate.utils import (
 )
 from accelerate.utils.operations import is_namedtuple
 
+
+if is_torch_xla_available():
+    import torch_xla.distributed.spmd as xs
+    import torch_xla.runtime as xr
+    from torch_xla.experimental.spmd_fully_sharded_data_parallel import SpmdFullyShardedDataParallel as FSDPv2
 
 ExampleNamedTuple = namedtuple("ExampleNamedTuple", "a b c")
 
@@ -192,6 +205,32 @@ class UtilsTester(unittest.TestCase):
         model_unwrapped = extract_model_from_parallel(distributed_model)
 
         assert model == model_unwrapped
+
+    @require_tpu
+    @require_huggingface_suite
+    def test_extract_model_recursive_fsdpv2(self):
+        # Specifically tests for FSDPv2 extraction
+        # reported in https://github.com/huggingface/transformers/pull/29780
+        xr.use_spmd()
+        from transformers import AutoModelForCausalLM
+
+        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        orig_state_dict_keys = list(model.state_dict().keys())
+        num_devices = xr.global_runtime_device_count()
+        # Set environment for FSDPv2 to be active
+        xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
+
+        def nested_wrap(model):
+            layer = model.wte
+            wrapped_layer = FSDPv2(layer)
+            model.wte = wrapped_layer
+            return model
+
+        wrapped_model = nested_wrap(model)
+        unwrapped_model = extract_model_from_parallel(wrapped_model, recursive=True)
+        unwrapped_state_dict_keys = list(unwrapped_model.state_dict().keys())
+        for original_key, new_key in zip(orig_state_dict_keys, unwrapped_state_dict_keys):
+            assert original_key == new_key, f"Keys did not align: {original_key} != {new_key}"
 
     @require_torch_min_version(version="2.0")
     def test_dynamo_extract_model(self):
