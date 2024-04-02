@@ -652,7 +652,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         del deepspeed_plugin.deepspeed_config["scheduler"]
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
-
             train_set = RegressionDataset(length=80)
             eval_set = RegressionDataset(length=20)
             train_dataloader = DataLoader(train_set, batch_size=16, shuffle=True)
