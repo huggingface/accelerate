@@ -327,9 +327,34 @@ class UtilsTester(unittest.TestCase):
         # We should expect there to be 66 items now
         assert result.shape == torch.Size([66, 4, 4])
 
-    def test_send_to_device_compiles(self):
+    def test_send_to_device_compile(self):
         compiled_send_to_device = torch.compile(send_to_device, fullgraph=True)
-        compiled_send_to_device(torch.zeros([1], dtype=torch.bfloat16), "cpu")
+        tensor = torch.randn(5, 2)
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+        result1 = compiled_send_to_device(tensor, device)
+        assert torch.equal(result1.cpu(), tensor)
+
+        result2 = compiled_send_to_device((tensor, [tensor, tensor], 1), device)
+        assert isinstance(result2, tuple)
+        assert isinstance(result2[1], list)
+        assert result2[2] == 1
+
+        result2 = compiled_send_to_device({"a": tensor, "b": [tensor, tensor], "c": 1}, device)
+        assert isinstance(result2, dict)
+        assert isinstance(result2["b"], list)
+        assert result2["c"] == 1
+
+        result3 = compiled_send_to_device(ExampleNamedTuple(a=tensor, b=[tensor, tensor], c=1), device)
+        assert isinstance(result3, ExampleNamedTuple)
+        assert isinstance(result3.b, list)
+        assert result3.c == 1
+
+        result4 = compiled_send_to_device(UserDict({"a": tensor, "b": [tensor, tensor], "c": 1}), device)
+        assert isinstance(result4, UserDict)
+        assert isinstance(result4["b"], list)
+
+        assert compiled_send_to_device
 
     def test_convert_to_fp32(self):
         compiled_convert_to_fp32 = torch.compile(convert_to_fp32, fullgraph=True)
