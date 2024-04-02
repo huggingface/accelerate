@@ -209,7 +209,7 @@ class PartialState:
                             os.environ["CCL_LOCAL_SIZE"] = os.environ.get("LOCAL_WORLD_SIZE", "1")
                             os.environ["CCL_LOCAL_RANK"] = os.environ.get("LOCAL_RANK", "0")
 
-                        if not torch.distributed.is_initialized():
+                        if not dist.is_initialized():
                             dist.init_distributed(dist_backend=self.backend, auto_mpi_discovery=False, **kwargs)
                         # We need to flag to `use_deepspeed` to be True to override `distributed_type` later
                         use_deepspeed = True
