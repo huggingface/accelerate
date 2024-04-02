@@ -109,7 +109,6 @@ def create_empty_model(model_name: str, library_name: str, trust_remote_code: bo
 
         auto_map = model_info.config.get("auto_map", False)
         config = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code, token=access_token)
-
         with init_empty_weights():
             # remote code could specify a specific `AutoModel` class in the `auto_map`
             constructor = AutoModel
@@ -205,6 +204,7 @@ def estimate_command_parser(subparsers=None):
         help="""Whether or not to allow for custom models defined on the Hub in their own modeling files. This flag
                 should only be used for repositories you trust and in which you have read the code, as it will execute
                 code present on the Hub on your local machine.""",
+        default=False,
     )
 
     if subparsers is not None:
