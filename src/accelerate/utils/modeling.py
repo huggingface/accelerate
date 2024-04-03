@@ -610,7 +610,7 @@ def find_tied_parameters(model: nn.Module, **kwargs):
     The signature accepts keyword arguments, but they are for the recursive part of this function and you should ignore
     them.
 
-    </Tip>
+        </Tip>
 
     Args:
         model (`torch.nn.Module`): The model to inspect.
@@ -1532,6 +1532,55 @@ def get_state_dict_offloaded_model(model: nn.Module):
             placeholders.remove(key)
     if placeholders:
         logger.warning(f"The following tensors were not saved because they were still on meta device: {placeholders}")
+
+    return state_dict
+
+
+def get_state_dict_from_offload(
+    module: nn.Module, 
+    module_name: str,
+    state_dict: Dict[str: Union(str, torch.Tensor)], 
+    device_to_put_offload: Optional[Union[int, str, torch.device]] = None
+    ):
+    """
+    Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device.
+
+    Args:
+        module: (`torch.nn.Module`): 
+            The module we want to retrieve a state dictionary from
+        module_name: (`str`):
+            The name of the module of interest
+        state_dict (`Dict[str: Union(str, torch.Tensor)]`): 
+            Dictionary of {module names: parameters} 
+        device_to_put_offload ('cpu' or 'gpu'):
+            Device to load offloaded parameters into, defaults to the execution device if not provided.
+    """
+
+    root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
+    preforward = False
+    if (
+        hasattr(module, "_hf_hook")
+        and isinstance(module._hf_hook, AlignDevicesHook)
+        and module._hf_hook.offload
+    ):  
+        # re-specify the execution device where onloaded params are sent
+        if device_to_put_offload:
+            original_device = module._hf_hook.execution_device
+            module._hf_hook.execution_device = device_to_put_offload
+
+        preforward = True
+        module._hf_hook.pre_forward(module)
+
+    for m_key in module.state_dict():
+        params = module.state_dict()[m_key]
+        if (root + f".{m_key}") in state_dict:
+            state_dict[root + f".{m_key}"] = params
+
+    if preforward:
+        # in case _hf_hook is not re-initialized
+        if device_to_put_offload:
+            module._hf_hook.execution_device = original_device
+        module._hf_hook.post_forward(module, torch.tensor([]))
 
     return state_dict
 
