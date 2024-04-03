@@ -360,6 +360,14 @@ def dispatch_model(
     # in the unique device and the user can decide where to dispatch the model.
     # If the model is quantized, we always force-dispatch the model
     if (len(set(device_map.values())) > 1) or is_bnb_quantized or force_hooks:
+        for name, device in device_map.items():
+            if is_npu_available() and isinstance(device, int):
+                device_map[name] = f"npu:{device}"
+            if is_mlu_available() and isinstance(device, int):
+                device_map[name] = f"mlu:{device}"
+            if is_xpu_available() and isinstance(device, int):
+                device_map[name] = f"xpu:{device}"
+
         if main_device is None:
             if set(device_map.values()) == {"cpu"} or set(device_map.values()) == {"cpu", "disk"}:
                 main_device = "cpu"
