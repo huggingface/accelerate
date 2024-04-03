@@ -31,7 +31,7 @@ from accelerate.hooks import (
 from accelerate.test_utils import require_multi_device, torch_device
 
 
-torch_device = f"{torch_device}:0"
+torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
 
 
 class ModelForTest(nn.Module):

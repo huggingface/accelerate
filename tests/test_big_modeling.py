@@ -46,7 +46,7 @@ from accelerate.test_utils import (
 from accelerate.utils import is_torch_version, offload_state_dict
 
 
-torch_device = f"{torch_device}:0"
+torch_device = f"{torch_device}:0" if torch_device != "cpu" else "cpu"
 
 
 class ModelForTest(nn.Module):
