@@ -25,18 +25,18 @@ This quicktour introduces the three main features of Accelerate:
 
 ## Unified launch interface
 
-Accelerate automatically selects the appropriate configuration values for any given distributed training framework (DeepSpeed, FSDP, etc.) through a unified configuration file generated from the [`accelerate config`](../../docs/source/package_reference/cli#accelerate-config) command. You could also pass the configuration values explicitly to the command line which is helpful in certain situations like if you're using SLURM.
+Accelerate automatically selects the appropriate configuration values for any given distributed training framework (DeepSpeed, FSDP, etc.) through a unified configuration file generated from the [`accelerate config`](package_reference/cli#accelerate-config) command. You could also pass the configuration values explicitly to the command line which is helpful in certain situations like if you're using SLURM.
 
 
-But in most cases, you should always run [`accelerate config`](../../docs/source/package_reference/cli#accelerate-config) first to help Accelerate learn about your training setup.
+But in most cases, you should always run [`accelerate config`](package_reference/cli#accelerate-config) first to help Accelerate learn about your training setup.
 
 ```bash
 accelerate config
 ```
 
-The [`accelerate config`](../../docs/source/package_reference/cli#accelerate-config) command creates and saves a default_config.yaml file in Accelerates cache folder. This file stores the configuration for your training environment, which helps Accelerate correctly launch your training script based on your machine.
+The [`accelerate config`](package_reference/cli#accelerate-config) command creates and saves a default_config.yaml file in Accelerates cache folder. This file stores the configuration for your training environment, which helps Accelerate correctly launch your training script based on your machine.
 
-After you've configured your environment, you can test your setup with [`accelerate test`](../../docs/source/package_reference/cli#accelerate-test), which launches a short script to test the distributed environment.
+After you've configured your environment, you can test your setup with [`accelerate test`](package_reference/cli#accelerate-test), which launches a short script to test the distributed environment.
 
 ```bash
 accelerate test
@@ -45,7 +45,7 @@ accelerate test
 > [!TIP]
 > Add `--config_file` to the `accelerate test` or `accelerate launch` command to specify the location of the configuration file if it is saved in a non-default location like the cache.
 
-Once your environment is setup, launch your training script with [`accelerate launch`](../../docs/source/package_reference/cli#accelerate-launch)!
+Once your environment is setup, launch your training script with [`accelerate launch`](package_reference/cli#accelerate-launch)!
 
 ```bash
 accelerate launch path_to_script.py --args_for_the_script
@@ -111,7 +111,7 @@ model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
 accelerator.backward(loss)
 ```
 
-Read [Accelerate’s internal mechanisms](../../docs/source/concept_guides/internal_mechanism) guide to learn more details about how Accelerate adapts your code.
+Read [Accelerate’s internal mechanisms](concept_guides/internal_mechanism) guide to learn more details about how Accelerate adapts your code.
 
 ### Distributed evaluation
 
@@ -140,7 +140,7 @@ for inputs, targets in validation_dataloader:
 Accelerate's Big Model Inference has two main features, [`~accelerate.init_empty_weights`] and [`~accelerate.load_checkpoint_and_dispatch`], to load large models for inference that typically don't fit into memory.
 
 > [!TIP]
-> Take a look at the [Handling big models for inference](../../docs/source/concept_guides/big_model_inference) guide for a better understanding of how Big Model Inference works under the hood.
+> Take a look at the [Handling big models for inference](concept_guides/big_model_inference) guide for a better understanding of how Big Model Inference works under the hood.
 
 ### Empty weights initialization
 
@@ -175,7 +175,7 @@ model = load_checkpoint_and_dispatch(
 
 Now that you've been introduced to the main Accelerate features, your next steps could include:
 
-* Check out the [tutorials](docs/source/basic_tutorials/overview) for a gentle walkthrough of Accelerate. This is especially useful if you're new to distributed training and the library.
-* Dive into the [guides](docs/source/usage_guides/explore) to see how to use Accelerate for specific use-cases.
-* Deepen your conceptual understanding of how Accelerate works internally by reading the [concept guides](docs/source/concept_guides/internal_mechanism).
-* Look up classes and commands in the [API reference](docs/source/package_reference/accelerator) to see what parameters and options are available.
+* Check out the [tutorials](basic_tutorials/overview) for a gentle walkthrough of Accelerate. This is especially useful if you're new to distributed training and the library.
+* Dive into the [guides](usage_guides/explore) to see how to use Accelerate for specific use-cases.
+* Deepen your conceptual understanding of how Accelerate works internally by reading the [concept guides](concept_guides/internal_mechanism).
+* Look up classes and commands in the [API reference](package_reference/accelerator) to see what parameters and options are available.
