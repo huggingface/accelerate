@@ -28,7 +28,10 @@ from accelerate.hooks import (
     remove_hook_from_module,
     remove_hook_from_submodules,
 )
-from accelerate.test_utils import require_multi_gpu
+from accelerate.test_utils import require_multi_device, torch_device
+
+
+torch_device = f"{torch_device}:0"
 
 
 class ModelForTest(nn.Module):
@@ -150,7 +153,7 @@ class HooksModelTester(unittest.TestCase):
         output1 = test_model(x)
         assert not output1.requires_grad
 
-    @require_multi_gpu
+    @require_multi_device
     def test_align_devices_as_model_parallelism(self):
         model = ModelForTest()
         # Everything is on CPU
@@ -175,7 +178,7 @@ class HooksModelTester(unittest.TestCase):
 
         # We can add a general hook to put back output on same device as input.
         add_hook_to_module(model, AlignDevicesHook(io_same_device=True))
-        x = torch.randn(2, 3).to(0)
+        x = torch.randn(2, 3).to(torch_device)
         output = model(x)
         assert output.device == torch.device(0)
 
@@ -188,7 +191,7 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear2.weight.device == torch.device("cpu")
 
         # This will move each submodule on different devices
-        hook_kwargs = {"execution_device": 0 if torch.cuda.is_available() else "cpu", "offload": True}
+        hook_kwargs = {"execution_device": torch_device, "offload": True}
 
         add_hook_to_module(model.linear1, AlignDevicesHook(**hook_kwargs))
         add_hook_to_module(model.batchnorm, AlignDevicesHook(**hook_kwargs))
@@ -216,7 +219,7 @@ class HooksModelTester(unittest.TestCase):
 
         # Now test with buffers included in the offload
         hook_kwargs = {
-            "execution_device": 0 if torch.cuda.is_available() else "cpu",
+            "execution_device": torch_device,
             "offload": True,
             "offload_buffers": True,
         }
@@ -252,7 +255,7 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear2.weight.device == torch.device("cpu")
 
         # This will move each submodule on different devices
-        execution_device = 0 if torch.cuda.is_available() else "cpu"
+        execution_device = torch_device
         attach_align_device_hook(model, execution_device=execution_device, offload=True)
 
         # Parameters have been offloaded, so on the meta device
@@ -301,7 +304,7 @@ class HooksModelTester(unittest.TestCase):
         assert model.linear2.weight.device == torch.device("cpu")
 
         # This will move each submodule on different devices
-        execution_device = 0 if torch.cuda.is_available() else "cpu"
+        execution_device = torch_device
         attach_align_device_hook(
             model, execution_device=execution_device, offload=True, weights_map=model.state_dict()
         )
