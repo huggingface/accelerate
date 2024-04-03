@@ -610,7 +610,7 @@ def find_tied_parameters(model: nn.Module, **kwargs):
     The signature accepts keyword arguments, but they are for the recursive part of this function and you should ignore
     them.
 
-        </Tip>
+    </Tip>
 
     Args:
         model (`torch.nn.Module`): The model to inspect.
