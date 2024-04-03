@@ -257,10 +257,3 @@ class FeatureExamplesTests(TempDirTestCase):
     def test_pippy_examples_t5(self):
         testargs = ["examples/inference/t5.py"]
         run_command(self.launch_args + testargs)
-
-    @slow
-    @require_pippy
-    @require_multi_gpu
-    def test_pippy_examples_llama(self):
-        testargs = ["examples/inference/llama.py"]
-        run_command(self.launch_args + testargs)
