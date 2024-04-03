@@ -117,6 +117,16 @@ class SequentialHook(ModelHook):
         return module
 
 
+def _new_forward(module, *args, **kwargs):
+    args, kwargs = module._hf_hook.pre_forward(module, *args, **kwargs)
+    if module._hf_hook.no_grad:
+        with torch.no_grad():
+            output = module._old_forward(*args, **kwargs)
+    else:
+        output = module._old_forward(*args, **kwargs)
+    return module._hf_hook.post_forward(module, output)
+
+
 def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False):
     """
     Adds a hook to a given module. This will rewrite the `forward` method of the module to include the hook, to remove
@@ -157,21 +167,12 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook, append: bool = False)
     module = hook.init_hook(module)
     module._hf_hook = hook
 
-    def new_forward(module, *args, **kwargs):
-        args, kwargs = module._hf_hook.pre_forward(module, *args, **kwargs)
-        if module._hf_hook.no_grad:
-            with torch.no_grad():
-                output = module._old_forward(*args, **kwargs)
-        else:
-            output = module._old_forward(*args, **kwargs)
-        return module._hf_hook.post_forward(module, output)
-
     # Overriding a GraphModuleImpl forward freezes the forward call and later modifications on the graph will fail.
     # Reference: https://pytorch.slack.com/archives/C3PDTEV8E/p1705929610405409
     if "GraphModuleImpl" in str(type(module)):
-        module.__class__.forward = functools.update_wrapper(functools.partial(new_forward, module), old_forward)
+        module.__class__.forward = functools.update_wrapper(functools.partial(_new_forward, module), old_forward)
     else:
-        module.forward = functools.update_wrapper(functools.partial(new_forward, module), old_forward)
+        module.forward = functools.update_wrapper(functools.partial(_new_forward, module), old_forward)
 
     return module
 
