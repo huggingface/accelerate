@@ -1537,32 +1537,29 @@ def get_state_dict_offloaded_model(model: nn.Module):
 
 
 def get_state_dict_from_offload(
-    module: nn.Module, 
+    module: nn.Module,
     module_name: str,
-    state_dict: Dict[str: Union(str, torch.Tensor)], 
-    device_to_put_offload: Optional[Union[int, str, torch.device]] = None
-    ):
+    state_dict: Dict[str : Union(str, torch.Tensor)],
+    device_to_put_offload: Optional[Union[int, str, torch.device]] = None,
+):
     """
     Retrieve the state dictionary (with parameters) from an offloaded module and load into a specified device.
 
     Args:
-        module: (`torch.nn.Module`): 
+        module: (`torch.nn.Module`):
             The module we want to retrieve a state dictionary from
         module_name: (`str`):
             The name of the module of interest
-        state_dict (`Dict[str: Union(str, torch.Tensor)]`): 
-            Dictionary of {module names: parameters} 
+        state_dict (`Dict[str: Union(str, torch.Tensor)]`):
+            Dictionary of {module names: parameters}
         device_to_put_offload ('cpu' or 'gpu'):
             Device to load offloaded parameters into, defaults to the execution device if not provided.
     """
+    from ..hooks import AlignDevicesHook
 
     root = module_name[: module_name.rfind(".")]  # module name without .weight or .bias
     preforward = False
-    if (
-        hasattr(module, "_hf_hook")
-        and isinstance(module._hf_hook, AlignDevicesHook)
-        and module._hf_hook.offload
-    ):  
+    if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload:
         # re-specify the execution device where onloaded params are sent
         if device_to_put_offload:
             original_device = module._hf_hook.execution_device
