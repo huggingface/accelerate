@@ -17,6 +17,7 @@
 import argparse
 import os
 import platform
+import subprocess
 
 import numpy as np
 import psutil
@@ -55,9 +56,12 @@ def env_command(args):
     if args.config_file is not None or os.path.isfile(default_config_file):
         accelerate_config = load_config_from_file(args.config_file).to_dict()
 
+    bash_location = subprocess.run(["which", "accelerate"], capture_output=True, text=True).stdout.strip()
+
     info = {
         "`Accelerate` version": version,
         "Platform": platform.platform(),
+        "`accelerate` bash location": bash_location,
         "Python version": platform.python_version(),
         "Numpy version": np.__version__,
         "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
