@@ -28,8 +28,8 @@ from torch import nn
 from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
     require_cuda,
-    require_non_cpu,
     require_huggingface_suite,
+    require_non_cpu,
     require_non_torch_xla,
     require_torch_min_version,
     require_tpu,

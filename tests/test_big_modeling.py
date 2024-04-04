@@ -35,7 +35,6 @@ from accelerate.hooks import remove_hook_from_submodules
 from accelerate.test_utils import (
     require_bnb,
     require_cuda,
-    require_mps,
     require_multi_device,
     require_multi_gpu,
     require_non_cpu,
