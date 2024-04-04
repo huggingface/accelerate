@@ -57,10 +57,9 @@ def env_command(args):
         accelerate_config = load_config_from_file(args.config_file).to_dict()
 
     # if we can run which, get it
-    bash_location = subprocess.run(["which", "accelerate"], capture_output=True, text=True)
-    if bash_location.returncode != 0:
-        bash_location = bash_location.stdout.strip()
-    else:
+    try:
+        bash_location = subprocess.check_output(["which", "accelerate"], text=True, stderr=subprocess.STDOUT).strip()
+    except subprocess.CalledProcessError:
         bash_location = "Not found"
     info = {
         "`Accelerate` version": version,
