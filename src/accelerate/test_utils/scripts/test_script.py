@@ -22,7 +22,6 @@ from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
-import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -711,6 +710,7 @@ def test_trigger():
 
 
 def test_reinstantiated_state():
+    import pytest
     AcceleratorState._reset_state()
     simple_model = torch.nn.Linear(1, 1)
     # First define an accelerator
