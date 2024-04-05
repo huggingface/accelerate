@@ -479,6 +479,12 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             self.iteration = epoch
         if hasattr(self.batch_sampler, "sampler") and hasattr(self.batch_sampler.sampler, "set_epoch"):
             self.batch_sampler.sampler.set_epoch(epoch)
+        if (
+            hasattr(self.batch_sampler, "batch_sampler") and
+            hasattr(self.batch_sampler.batch_sampler, "sampler") and
+            hasattr(self.batch_sampler.batch_sampler.sampler, "set_epoch")
+        ):
+            self.batch_sampler.batch_sampler.sampler.set_epoch(epoch)
         # We support if a custom `Dataset` implementation has `set_epoch`
         # or in general HF datasets `Datasets`
         elif hasattr(self.dataset, "set_epoch"):
