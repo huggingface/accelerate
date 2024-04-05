@@ -711,6 +711,7 @@ def test_trigger():
 
 def test_reinstantiated_state():
     import pytest
+
     AcceleratorState._reset_state()
     simple_model = torch.nn.Linear(1, 1)
     # First define an accelerator
