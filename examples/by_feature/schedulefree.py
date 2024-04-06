@@ -173,6 +173,7 @@ def training_function(config, args):
     # Now we train the model
     for epoch in range(num_epochs):
         model.train()
+        optimizer.train()
         for step, batch in enumerate(train_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
@@ -185,6 +186,7 @@ def training_function(config, args):
                 optimizer.zero_grad()
 
         model.eval()
+        optimizer.eval()
         for step, batch in enumerate(eval_dataloader):
             # We could avoid this line since we set the accelerator with `device_placement=True`.
             batch.to(accelerator.device)
