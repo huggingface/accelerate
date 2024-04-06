@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import os
 
 import evaluate
 import torch
@@ -20,11 +21,12 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, set_seed
 
 from accelerate import Accelerator, DistributedType
+from accelerate.utils import is_schedulefree_available
 
 
-try:
+if is_schedulefree_available():
     import schedulefree
-except ImportError:
+else:
     raise ImportError(
         "This example requires the `schedulefree` library. Please install it with `pip install schedulefree`"
     )
@@ -115,6 +117,15 @@ def get_dataloaders(accelerator: Accelerator, batch_size: int = 16):
     )
 
     return train_dataloader, eval_dataloader
+
+
+# For testing only
+
+
+if os.environ.get("TESTING_MOCKED_DATALOADERS", None) == "1":
+    from accelerate.test_utils.training import mocked_dataloaders
+
+    get_dataloaders = mocked_dataloaders  # noqa: F811
 
 
 def training_function(config, args):

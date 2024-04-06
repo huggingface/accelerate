@@ -30,6 +30,7 @@ from accelerate.test_utils.testing import (
     require_huggingface_suite,
     require_multi_gpu,
     require_pippy,
+    require_schedulefree,
     require_trackers,
     run_command,
     slow,
@@ -214,6 +215,11 @@ class FeatureExamplesTests(TempDirTestCase):
 
     def test_multi_process_metrics(self):
         testargs = ["examples/by_feature/multi_process_metrics.py"]
+        run_command(self.launch_args + testargs)
+
+    @require_schedulefree
+    def test_schedulefree(self):
+        testargs = ["examples/by_feature/schedulefree.py"]
         run_command(self.launch_args + testargs)
 
     @require_trackers
