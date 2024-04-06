@@ -33,7 +33,8 @@ else:
 
 
 ########################################################################
-# This is a fully working simple example to use Accelerate
+# This is a fully working simple example to use Accelerate and Facebook's
+# scheduler-free optimizer: https://github.com/facebookresearch/schedule_free/
 #
 # This example trains a Bert base model on GLUE MRPC
 # in any of the following settings (with the same script):
