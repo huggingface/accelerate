@@ -106,6 +106,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
             xm.send_cpu_data_to_device(state_dict, self.accelerator_state.device)
         self.optimizer.load_state_dict(state_dict)
 
+    def train(self):
+        return self.optimizer.train()
+    
     def state_dict(self):
         return self.optimizer.state_dict()
 
