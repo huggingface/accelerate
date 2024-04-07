@@ -164,10 +164,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
             if is_npu_available():
                 if isinstance(device, int):
                     device = f"npu:{device}"
-            else:
-                raise error
-        except Exception as error:
-            if is_xpu_available():
+            elif is_xpu_available():
                 if isinstance(device, int):
                     device = f"xpu:{device}"
             else:
