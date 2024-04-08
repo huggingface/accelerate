@@ -761,7 +761,7 @@ class PartialState:
         """
         if self.device is not None:
             return
-        if self.num_processes == 1:
+        if self.distributed_type == DistributedType.NO:
             self.device = torch.device("cpu") if self._cpu else self.default_device
             return
         device = str(self.distributed_type).split(".")[-1].replace("MULTI_", "").lower()
