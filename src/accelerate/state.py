@@ -183,7 +183,7 @@ class PartialState:
             self.backend = backend
             self.distributed_type = distributed_type
             use_deepspeed = False
-            if not cpu and not self.backend == "xla":
+            if not cpu and self.backend != "xla":
                 if int(os.environ.get("LOCAL_RANK", -1)) != -1:
                     # Deal with spawning deepspeed
                     if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false") == "true":
