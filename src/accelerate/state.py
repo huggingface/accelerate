@@ -292,6 +292,7 @@ class PartialState:
                         'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
                         "will do this automatically."
                     )
+        # Important: This should be the *only* code outside of `self.initialized!`
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
     def __repr__(self) -> str:
