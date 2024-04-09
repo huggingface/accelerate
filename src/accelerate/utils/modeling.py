@@ -1552,7 +1552,7 @@ def get_state_dict_from_offload(
             The name of the module of interest
         state_dict (`Dict[str: Union(str, torch.Tensor)]`):
             Dictionary of {module names: parameters}
-        device_to_put_offload ('cpu' or 'gpu'):
+        device_to_put_offload (Union[int, str, torch.device], *optional*):
             Device to load offloaded parameters into, defaults to the execution device if not provided.
     """
     from ..hooks import AlignDevicesHook
