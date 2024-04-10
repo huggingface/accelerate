@@ -682,7 +682,7 @@ class DeepSpeedPlugin:
         default=None,
         metadata={"help": "Possible options are 0,1,2,3; Default will be taken from environment variable"},
     )
-    is_train_batch_min: str = field(
+    is_train_batch_min: bool = field(
         default=True,
         metadata={"help": "If both train & eval dataloaders are specified, this will decide the train_batch_size"},
     )
