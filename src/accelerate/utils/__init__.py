@@ -93,6 +93,7 @@ from .imports import (
     is_pynvml_available,
     is_rich_available,
     is_sagemaker_available,
+    is_schedulefree_available,
     is_tensorboard_available,
     is_timm_available,
     is_torch_xla_available,

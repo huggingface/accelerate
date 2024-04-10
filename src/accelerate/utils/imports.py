@@ -89,6 +89,10 @@ def is_msamp_available():
     return _is_package_available("msamp", "ms-amp")
 
 
+def is_schedulefree_available():
+    return _is_package_available("schedulefree")
+
+
 def is_transformer_engine_available():
     return _is_package_available("transformer_engine")
 
