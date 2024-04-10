@@ -29,9 +29,11 @@ from accelerate.state import PartialState
 from accelerate.test_utils.testing import (
     require_cuda,
     require_huggingface_suite,
+    require_non_cpu,
     require_non_torch_xla,
     require_torch_min_version,
     require_tpu,
+    torch_device,
 )
 from accelerate.test_utils.training import RegressionModel
 from accelerate.utils import (
@@ -70,7 +72,7 @@ class UtilsTester(unittest.TestCase):
 
     def test_send_to_device(self):
         tensor = torch.randn(5, 2)
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        device = torch.device(f"{torch_device}:0")
 
         result1 = send_to_device(tensor, device)
         assert torch.equal(result1.cpu(), tensor)
@@ -178,11 +180,11 @@ class UtilsTester(unittest.TestCase):
         model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
         _ = pickle.dumps(model)
 
-    @require_cuda
+    @require_non_cpu
     def test_can_undo_fp16_conversion(self):
         model = RegressionModel()
         model._original_forward = model.forward
-        model.forward = torch.cuda.amp.autocast(dtype=torch.float16)(model.forward)
+        model.forward = torch.autocast(device_type=torch_device, dtype=torch.float16)(model.forward)
         model.forward = convert_outputs_to_fp32(model.forward)
         model = extract_model_from_parallel(model, keep_fp32_wrapper=False)
         _ = pickle.dumps(model)
