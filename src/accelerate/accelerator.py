@@ -1447,6 +1447,22 @@ class Accelerator:
                             ),
                             auto_wrap_policy=fsdp_plugin.auto_wrap_policy,
                         )
+
+                # NOTE: do we also need to check trainer.args.bf16 and trainer.args.fp16?
+                # - check the mixed precision setting on the FSDP root wrapper.
+                if model.mixed_precision:
+                    for module in model.module():
+                        if isinstance(module, FSDP):
+                            # module.params will hold a list of FlatParameter's
+                            for param in module.params:
+                                if param.dtype != torch.float32 and param.device != torch.device("meta"):
+                                    # TODO: make the warning issue only once
+                                    warnings.warn("Training FSDP with mixed precision. Upcasting parameters to full precision.")
+
+                                # upcasting to float32 because we are already using mixed precision
+                                # this should be passthrough if dtype already is float32
+                                param.data = param.data.to(torch.float32)
+
                 # if the previous and current models are same, delete the previous one
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
                     del self._models[-2]
