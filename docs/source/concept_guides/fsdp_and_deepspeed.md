@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Moving between FSDP And DeepSpeed [DRAFT]
+# Moving between FSDP And DeepSpeed (DRAFT)
 
 🤗 Accelerate offers flexibilty of training frameworks, by integrating two extremely powerful tools for distributed training, namely [Pytorch FSDP](../usage_guides/fsdp.md) and [Microsoft DeepSpeed](../usage_guides/deepspeed.md). The aim fo this article is to draw parallels, as well as to outline potential differences, to empower the user to switch seamlessly between these two frameworks.
 
@@ -32,7 +32,7 @@ The aim of this concept guide is to elucidate similarities/differences with empi
 
 This article is written with 🤗 Accelerate in mind, for single-node, multi-GPU, scenarios only. No TPU aspects will be considered.
 
-## Configuring Various Functionalities
+## Configuring Functionalities
 
 Model tensors are split into different GPUs in attempt scale up model sizes; this is termed *sharding* in FSDP, and *partitioning* in DeepSpeed. The FSDP sharding strategy and the DeepSpeed ZeRO Stages, are configured by `--fsdp_sharding_strategy`, and `--zero_stage`, respectively.  For example FSDP `FULL_SHARD` maps to DeepSpeed ZeRO stage `3`, see this for a comprehensive [mapping between FSDP sharding and DeepSpeed ZeRO settings](../usage_guides/fsdp#mapping-between-fsdp-sharding-strategies-and-deepspeed-zero-stages). There exists a host of other settings besides these two, summarized by similarity in the below table.
 
@@ -58,38 +58,70 @@ We reiterate again that for all possible settings for the above, refer to [`Acce
 </Tip>
 
 <!--
-Since the terminologies used in FSDP and DeepSpeed are disparate, there are various guides that [reconcile the mapping between FSDP sharding and DeepSpeed ZeRO](../usage_guides/fsdp#mapping-between-fsdp-sharding-strategies-and-deepspeed-zero-stages). This section aims to reconcile these differences for a 🤗 Accelerate user that desires to use both frameworks in an equivalent manner.
-In general, DeepSpeed offers more fine-grained control, but may incur extra memory consumption as model and optimizer parameters are always upcasted to `float32`. 
--->
-
-<Tip>
-    When using FSDP these are recommendations that should be followed.
-
-    - set `fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP`. Do not set `fsdp_transformer_layer_cls_to_wrap` if using the latest `transformers` versions.
-    - if `fsdp_cpu_ram_efficient_loading: True`, set `fsdp_sync_module_states: True` otherwise the model will not load properly.
-    - when using `torch.compile` set `fsdp_use_orig_params: True`.
-
-</Tip>
-
-<Tip>
-    When using DeepSpeed these are recommendations that should be followed.
-
-    - set `gradient_accumulation_steps: "auto"` and `gradient_clipping: "auto"` to automatically pick up values set in [`TrainingArguments`].
-
-</Tip>
 
 TODO: Consider elaborating on some points ? Maybe a small subsection for each?
-- on checkpoint sharding (DS does not have checkpoint sharding?) Des FSDP save the model in 16 bit also?
-- zero3 init in DS will be automatic if model is above a certain size. More details on this?
 - do I need to talk about bucketing in DS? this is how DS takes care of partitioning in an automatic manner without the wrap policy. Do I need to explain FSDP wrapping causes graph breaks in torch.compile and how this is being resolved?
 - how does DS take care of pipelining? I need to check further.
 - do we need to discuss parameter summoning for DS? maybe not because this is an advanced usage
 - should we discusss activation checkpointing in the configs or is this obvious?
 
+-->
+
+**Checkpointing**
+
+While FSDP can be configured via `--fsdp_state_dict_type` to save full / sharded checkpoints, DeepSpeed [saves sharded checkpoints by default](https://deepspeed.readthedocs.io/en/latest/model-checkpointing.html#saving-training-checkpoints).
+
+<Tip>
+
+    For DeepSpeed Zero3, it is recommended to also pass a `--zero3_save_16bit_model: true` in the [`Accelerate` launch arguments](../package_reference/cli#accelerate-launch) that is typically faster.
+
+</Tip>
+
+**Model Loading**
+
+While FSDP require an explicit `--fsdp_cpu_ram_efficient_loading: True` flag to activate efficient model loading, `transformers` will activate the similar feature whenever DeepSpeed Zero3 is used.
+
+<Tip>
+
+    For FSDP if you set `fsdp_cpu_ram_efficient_loading: True`, also set `fsdp_sync_module_states: True` otherwise the model will not load properly.
+
+</Tip>
+
+**Model**
+
+FSDP requires an explicit `--fsdp_auto_wrap_policy` for the algorithm to decide how to schedule the all-gather and reduce-scatter operations. But for DeepSpeed this is transparent to the user.
+
+<Tip>
+
+    For FSDP, simply set `fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP`. Do not set `fsdp_transformer_layer_cls_to_wrap` if using the latest `transformers` versions.
+
+</Tip>
+
+**Parameters Summoning**
+
+FSDP requires an explicit `--fsdp_use_orig_params` flag if using `torch.compile`; this is required so [`torch.dynamo`] can properly parse the model. For DeepSpeed this is transparent to the user.
+
+<Tip>
+
+    For FSDP when using `torch.compile` set `fsdp_use_orig_params: True`.
+
+</Tip>
+
+
+**Training**
+
+Deepspeed requires explicit `--gradient_accumulation_steps` and `--gradient_clipping` flags. For FSDP this is transparent to the user.
+
+<Tip>
+
+    When using DeepSpeed, set `gradient_accumulation_steps: "auto"` and `gradient_clipping: "auto"` to automatically pick up values set in [`TrainingArguments`].
+
+</Tip>
+
 
 ## On Data Precision
 
-To discuss the how data precision is handled in both FSDP and Deepspeed, it is instructive to first give a flow of how model parameters are handled in these frameworks. Before the model / optimizer parameters are distributed across GPUs, parameter preparation is involved to first "flatten" them to  one-dimensional [`torch.Tensor`]'s. The implementation of FSDP / DeepSpeed varies in the respect of the `dtype` in which these "flattened" parameters are stored, and there are ramnifications with regards to how [`torch.Optimizer`]'s allocate their `dtypes`'s. The table below outlines the processes for both frameworks; the "Local" column indicates the process occurring at a per-gpu level, therefore any memory overheads by upcasting should be understood to be amortized by the number of gpus used.
+To discuss the how data precision is handled in both FSDP and Deepspeed, it is instructive to first give a flow of how model parameters are handled in these frameworks. Before the model / optimizer parameters are distributed across GPUs, parameter preparation is involved to first "flatten" them to  one-dimensional [`torch.Tensor`]'s. The implementation of FSDP / DeepSpeed varies in the respect of the `dtype` in which these "flattened" parameters are stored, and there are ramifications with regards to how [`torch.Optimizer`]'s allocate their `dtypes`'s. The table below outlines the processes for both frameworks; the "Local" column indicates the process occurring at a per-gpu level, therefore any memory overheads by upcasting should be understood to be amortized by the number of gpus used.
 
 <!--
 TODO: for FSDP there are some mixed precision settings like `keep_low_precision_grads`, should we discuss them? NVM, because they way huggingface prepares the model, keep_low_precision_grads will never need to be used
