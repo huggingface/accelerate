@@ -738,7 +738,7 @@ class PartialState:
                 distributed_type = DistributedType.MULTI_XPU
             else:
                 distributed_type = DistributedType.MULTI_CPU
-            if backend is None:
+            if backend is None or backend == "ccl":
                 if is_ccl_available() and (
                     get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU
                 ):
