@@ -1356,8 +1356,10 @@ class Accelerator:
             if "fp8_format" in kwargs:
                 kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
             fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-
-            model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
+            # If we are in DDP or FSDP, we delay `autocast` until after FSDP/DDP has been initialized
+            # to make use of the process group
+            if self.distributed_type not in [DistributedType.MULTI_GPU, DistributedType.FSDP]:
+                model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
             model, "hf_device_map", False
@@ -1457,6 +1459,15 @@ class Accelerator:
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
+        # Now we can apply the FP8 autocast
+        if (
+            self.distributed_type in [DistributedType.MULTI_GPU, DistributedType.FSDP]
+            and self.mixed_precision == "fp8"
+            and self.fp8_recipe_handler.backend == "TE"
+        ):
+            model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe, fp8_group=model.process_group)(
+                model.forward
+            )
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if not is_torch_version(">=", "2.0"):
