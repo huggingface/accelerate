@@ -405,6 +405,7 @@ class UtilsTester(unittest.TestCase):
             valid_env_items = convert_dict_to_env_variables(env)
         assert valid_env_items == ["ACCELERATE_DEBUG_MODE=1\n", "OTHER_ENV=2\n"]
 
+
 class TqdmTester(unittest.TestCase):
     def test_tqdm(self):
         expected = [0, 1, 2]
