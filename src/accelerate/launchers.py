@@ -198,7 +198,7 @@ def notebook_launcher(
                 launcher = PrepareForLaunch(function, distributed_type="MULTI_GPU")
                 print(f"Launching training on {num_processes} GPUs.")
                 try:
-                    start_processes(launcher, args=args, nprocs=num_processes, start_method="fork")
+                    start_processes(launcher, args=args, nprocs=num_processes, start_method="spawn")
                 except ProcessRaisedException as e:
                     if "Cannot re-initialize CUDA in forked subprocess" in e.args[0]:
                         raise RuntimeError(
