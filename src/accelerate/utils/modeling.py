@@ -1228,7 +1228,7 @@ def infer_auto_device_map(
                 # -> split, we replace the module studied by its children + parameters
                 if verbose:
                     print(f"Splitting {name}.")
-                modules_children = list(module.named_parameters(recurse=False)) + modules_children
+                modules_children = list(module.named_parameters(recurse=False)) + list(module.named_buffers(recurse=False)) + modules_children
                 modules_to_treat = [(f"{name}.{n}", v) for n, v in modules_children] + modules_to_treat
                 # Update the max layer size.
                 max_layer_size, max_layer_names = get_max_layer_size(
@@ -1295,7 +1295,7 @@ def infer_auto_device_map(
 
                     if verbose:
                         print(f"Splitting {tied_module_name}.")
-                    tied_module_children = list(tied_module.named_parameters(recurse=False)) + tied_module_children
+                    tied_module_children = list(tied_module.named_parameters(recurse=False)) + list(module.named_buffers(recurse=False)) + tied_module_children
                     tied_module_children = [(f"{tied_module_name}.{n}", v) for n, v in tied_module_children]
                     tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if n == tied_module_name][0]
 
