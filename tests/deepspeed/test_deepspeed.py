@@ -825,6 +825,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
+            accelerator.deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = 1
             model = AutoModelForCausalLM.from_pretrained(QWEN_MOE)
             model = accelerator.prepare(model)
             from transformers.models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeSparseMoeBlock
