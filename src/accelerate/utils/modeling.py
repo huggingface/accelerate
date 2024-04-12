@@ -381,12 +381,13 @@ def set_module_tensor_to_device(
             device_quantization = device
             device = "cpu"
         # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if is_npu_available() and isinstance(device, int):
-            device = f"npu:{device}"
-        elif is_mlu_available() and isinstance(device, int):
-            device = f"mlu:{device}"
-        if is_xpu_available() and isinstance(device, int):
-            device = f"xpu:{device}"
+        if isinstance(device, int):
+            if is_npu_available():
+                device = f"npu:{device}"
+            elif is_mlu_available():
+                device = f"mlu:{device}"
+            elif is_xpu_available():
+                device = f"xpu:{device}"
         if value is None:
             new_value = old_value.to(device)
             if dtype is not None and device in ["meta", torch.device("meta")]:
@@ -447,14 +448,15 @@ def set_module_tensor_to_device(
                 if not getattr(module.weight, "quant_state", None) and device_index is not None:
                     module.weight = module.weight.cuda(device_index)
     # clean pre and post foward hook
-    if is_npu_available():
-        torch.npu.empty_cache()
-    elif is_mlu_available():
-        torch.mlu.empty_cache()
-    elif is_xpu_available():
-        torch.xpu.empty_cache()
-    else:
-        torch.cuda.empty_cache()
+    if device != "cpu":
+        if is_npu_available():
+            torch.npu.empty_cache()
+        elif is_mlu_available():
+            torch.mlu.empty_cache()
+        elif is_xpu_available():
+            torch.xpu.empty_cache()
+        else:
+            torch.cuda.empty_cache()
 
     # When handling tied weights, we update tied_params_map to keep track of the tied weights that have already been allocated on the device in
     # order to avoid duplicating memory, see above.
