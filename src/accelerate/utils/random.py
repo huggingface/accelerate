@@ -109,6 +109,8 @@ def synchronize_rng_state(rng_type: Optional[RNGType] = None, generator: Optiona
         torch.cuda.set_rng_state(rng_state)
     elif rng_type == RNGType.NPU:
         torch.npu.set_rng_state(rng_state)
+    elif rng_type == RNGType.MLU:
+        torch.mlu.set_rng_state(rng_state)
     elif rng_type == RNGType.XPU:
         torch.xpu.set_rng_state(rng_state)
     elif rng_type == RNGType.XLA:
