@@ -722,9 +722,8 @@ class DeepSpeedPlugin:
             self.gradient_accumulation_steps = int(gas) if gas.isdigit() else gas
 
         if self.gradient_clipping is None:
-            gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", "none")
-            if gradient_clipping != "none":
-                self.gradient_clipping = float(gradient_clipping)
+            gradient_clipping = os.environ.get("ACCELERATE_GRADIENT_CLIPPING", "auto")
+            self.gradient_clipping = gradient_clipping if gradient_clipping == "auto" else float(gradient_clipping)
 
         if self.zero_stage is None:
             self.zero_stage = int(os.environ.get("ACCELERATE_DEEPSPEED_ZERO_STAGE", 2))
