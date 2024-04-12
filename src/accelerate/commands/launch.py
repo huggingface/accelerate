@@ -490,7 +490,7 @@ def launch_command_parser(subparsers=None):
     deepspeed_args.add_argument(
         "--deepspeed_moe_layer_cls_names",
         default=None,
-        types=str,
+        type=str,
         help="comma-separated list of transformer MoE layer class names (case-sensitive) to wrap ,e.g, `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
         " (useful only when `use_deepspeed` flag is passed).",
     )
