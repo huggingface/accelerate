@@ -29,7 +29,6 @@ from .utils import (
     DistributedType,
     DynamoBackend,
     GradientAccumulationPlugin,
-    check_cuda_p2p_ib_support,
     check_fp8_capability,
     get_ccl_version,
     get_cpu_distributed_information,

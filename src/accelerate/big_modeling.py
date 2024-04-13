@@ -31,7 +31,6 @@ from .hooks import (
 )
 from .utils import (
     OffloadedWeightsLoader,
-    check_cuda_p2p_ib_support,
     check_device_map,
     extract_submodules_state_dict,
     find_tied_parameters,

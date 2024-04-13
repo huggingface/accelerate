@@ -35,7 +35,6 @@ from accelerate.utils import (
     DistributedType,
     PrepareForLaunch,
     _filter_args,
-    check_cuda_p2p_ib_support,
     convert_dict_to_env_variables,
     is_bf16_available,
     is_deepspeed_available,
