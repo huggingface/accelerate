@@ -687,17 +687,17 @@ def multi_gpu_launcher(args):
     import torch.distributed.run as distrib_run
 
     current_env = prepare_multi_gpu_env(args)
-    if not check_cuda_p2p_ib_support():
-        message = "Using RTX 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
-        warn = False
-        if "NCCL_P2P_DISABLE" not in current_env:
-            current_env["NCCL_P2P_DISABLE"] = "1"
-            warn = True
-        if "NCCL_IB_DISABLE" not in current_env:
-            current_env["NCCL_IB_DISABLE"] = "1"
-            warn = True
-        if warn:
-            logger.warning(message)
+    # if not check_cuda_p2p_ib_support():
+    #     message = "Using RTX 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
+    #     warn = False
+    #     if "NCCL_P2P_DISABLE" not in current_env:
+    #         current_env["NCCL_P2P_DISABLE"] = "1"
+    #         warn = True
+    #     if "NCCL_IB_DISABLE" not in current_env:
+    #         current_env["NCCL_IB_DISABLE"] = "1"
+    #         warn = True
+    #     if warn:
+    #         logger.warning(message)
 
     debug = getattr(args, "debug", False)
     args = _filter_args(
@@ -727,17 +727,17 @@ def deepspeed_launcher(args):
         from deepspeed.launcher.runner import DEEPSPEED_ENVIRONMENT_NAME
 
     cmd, current_env = prepare_deepspeed_cmd_env(args)
-    if not check_cuda_p2p_ib_support():
-        message = "Using RTX 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
-        warn = False
-        if "NCCL_P2P_DISABLE" not in current_env:
-            current_env["NCCL_P2P_DISABLE"] = "1"
-            warn = True
-        if "NCCL_IB_DISABLE" not in current_env:
-            current_env["NCCL_IB_DISABLE"] = "1"
-            warn = True
-        if warn:
-            logger.warning(message)
+    # if not check_cuda_p2p_ib_support():
+    #     message = "Using RTX 4000 series which doesn't support faster communication speedups. Ensuring P2P and IB communications are disabled."
+    #     warn = False
+    #     if "NCCL_P2P_DISABLE" not in current_env:
+    #         current_env["NCCL_P2P_DISABLE"] = "1"
+    #         warn = True
+    #     if "NCCL_IB_DISABLE" not in current_env:
+    #         current_env["NCCL_IB_DISABLE"] = "1"
+    #         warn = True
+    #     if warn:
+    #         logger.warning(message)
 
     if args.num_machines > 1 and args.deepspeed_multinode_launcher != DEEPSPEED_MULTINODE_LAUNCHERS[1]:
         with open(DEEPSPEED_ENVIRONMENT_NAME, "a") as f:

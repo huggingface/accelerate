@@ -284,14 +284,14 @@ class PartialState:
             if parse_flag_from_env("ACCELERATE_CPU_AFFINITY", False):
                 set_numa_affinity(self.local_process_index)
 
-            # Check for old RTX 4000's that can't use P2P or IB and are on old drivers
-            if self.device.type == "cuda" and not check_cuda_p2p_ib_support():
-                if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
-                    raise NotImplementedError(
-                        "Using RTX 4000 series doesn't support faster communication broadband via P2P or IB. "
-                        'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
-                        "will do this automatically."
-                    )
+            # # Check for old RTX 4000's that can't use P2P or IB and are on old drivers
+            # if self.device.type == "cuda" and not check_cuda_p2p_ib_support():
+            #     if "NCCL_P2P_DISABLE" not in os.environ or "NCCL_IB_DISABLE" not in os.environ:
+            #         raise NotImplementedError(
+            #             "Using RTX 4000 series doesn't support faster communication broadband via P2P or IB. "
+            #             'Please set `NCCL_P2P_DISABLE="1"` and `NCCL_IB_DISABLE="1" or use `accelerate launch` which '
+            #             "will do this automatically."
+            #         )
         # Important: This should be the *only* code outside of `self.initialized!`
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
 
