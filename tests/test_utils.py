@@ -53,6 +53,7 @@ from accelerate.utils import (
     recursively_apply,
     save,
     send_to_device,
+    tqdm,
 )
 from accelerate.utils.operations import is_namedtuple
 
@@ -403,3 +404,15 @@ class UtilsTester(unittest.TestCase):
         with self.assertLogs("accelerate.utils.environment", level="WARNING"):
             valid_env_items = convert_dict_to_env_variables(env)
         assert valid_env_items == ["ACCELERATE_DEBUG_MODE=1\n", "OTHER_ENV=2\n"]
+
+
+class TqdmTester(unittest.TestCase):
+    def test_tqdm(self):
+        expected = [0, 1, 2]
+        assert list(tqdm(range(3), main_process_only=True)) == expected
+        assert list(tqdm(main_process_only=True, iterable=range(3))) == expected
+
+        assert list(tqdm(range(3), main_process_only=False)) == expected
+        assert list(tqdm(main_process_only=False, iterable=range(3))) == expected
+
+        assert list(tqdm(range(3))) == expected
