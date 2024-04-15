@@ -33,7 +33,7 @@ def tqdm(*args, main_process_only: bool = True, **kwargs):
     """
     if not is_tqdm_available():
         raise ImportError("Accelerate's `tqdm` module requires `tqdm` to be installed. Please run `pip install tqdm`.")
-    if isinstance(args[0], bool):
+    if len(args) > 0 and isinstance(args[0], bool):
         warnings.warn(
             f"Passing `{args[0]}` as the first argument to Accelerate's `tqdm` wrapper is deprecated "
             "and will be removed in v0.33.0. Please use the `main_process_only` keyword argument instead.",
