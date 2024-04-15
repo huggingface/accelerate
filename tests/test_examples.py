@@ -248,6 +248,11 @@ class FeatureExamplesTests(TempDirTestCase):
         run_command(self.launch_args + testargs)
 
     @require_multi_gpu
+    def test_distributed_inference_examples_stable_diffusion(self):
+        testargs = ["examples/inference/distributed/stable_diffusion.py"]
+        run_command(self.launch_args + testargs)
+
+    @require_multi_gpu
     def test_distributed_inference_examples_phi2(self):
         testargs = ["examples/inference/distributed/phi2.py"]
         run_command(self.launch_args + testargs)
