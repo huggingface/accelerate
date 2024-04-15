@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import torch
-from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from accelerate import PartialState
@@ -59,7 +58,7 @@ tokenizer.padding_side = padding_side_default
 
 completions_per_process = []
 with distributed_state.split_between_processes(tokenized_prompts, apply_padding=True) as batched_prompts:
-    for batch in tqdm(batched_prompts, desc=f"Generating completions on device {distributed_state.device}"):
+    for batch in batched_prompts:
         # move the batch to the device
         batch = batch.to(distributed_state.device)
         outputs = model.generate(**batch, max_new_tokens=20)
