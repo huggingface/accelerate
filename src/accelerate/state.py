@@ -179,7 +179,10 @@ class PartialState:
                 )
 
             # Sets up self.backend + imports
-            backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, kwargs.pop("backend", None))
+            original_backend = kwargs.pop("backend", None)
+            backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, original_backend)
+            if original_backend and backend != original_backend:
+                logger.warning(f"The assigned backend is {original_backend}, but the real backend is {backend}")
             self.backend = backend
             self.distributed_type = distributed_type
             use_deepspeed = False
@@ -730,7 +733,8 @@ class PartialState:
                 elif is_npu_available():
                     backend = "hccl"
                     distributed_type = DistributedType.MULTI_NPU
-        if backend is None and (
+
+        if distributed_type is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1
             or get_int_from_env(["PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE", "WORLD_SIZE"], 1) > 1
         ):
@@ -738,8 +742,11 @@ class PartialState:
                 distributed_type = DistributedType.MULTI_XPU
             else:
                 distributed_type = DistributedType.MULTI_CPU
-            if is_ccl_available() and (
-                get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU
+
+            if (
+                (backend is None or backend == "ccl")
+                and is_ccl_available()
+                and (get_int_from_env(["CCL_WORKER_COUNT"], 0) > 0 or distributed_type == DistributedType.MULTI_XPU)
             ):
                 if get_ccl_version() >= "1.12":
                     import oneccl_bindings_for_pytorch  # noqa: F401
@@ -747,12 +754,13 @@ class PartialState:
                     import torch_ccl  # noqa: F401
 
                 backend = "ccl"
-            elif torch.distributed.is_mpi_available():
+            elif (backend is None or backend == "mpi") and torch.distributed.is_mpi_available():
                 backend = "mpi"
             else:
                 backend = "gloo"
         if distributed_type is None:
             distributed_type = DistributedType.NO
+
         return backend, distributed_type
 
     def set_device(self):
