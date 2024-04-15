@@ -44,9 +44,7 @@ batch_size = 2
 pad_to_multiple_of = 8
 
 # split into batch
-formatted_prompts = [
-    prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)
-]
+formatted_prompts = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
 
 # do the padding on the left since we are doing generation
 padding_side_default = tokenizer.padding_side
@@ -74,4 +72,3 @@ completions = completions_gather[: len(prompts)]
 
 if distributed_state.is_main_process:
     print(completions)
-
