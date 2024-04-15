@@ -721,18 +721,17 @@ class PartialState:
         elif is_torch_xla_available():
             backend = "xla"
             distributed_type = DistributedType.XLA
-        elif int(os.environ.get("LOCAL_RANK", -1)) != -1:
-            if not cpu:
-                if is_mlu_available():
-                    backend = "cncl"
-                    distributed_type = DistributedType.MULTI_MLU
-                elif torch.cuda.is_available():
-                    if backend is None:
-                        backend = "nccl"
-                    distributed_type = DistributedType.MULTI_GPU
-                elif is_npu_available():
-                    backend = "hccl"
-                    distributed_type = DistributedType.MULTI_NPU
+        elif int(os.environ.get("LOCAL_RANK", -1)) != -1 and not cpu:
+            if is_mlu_available():
+                backend = "cncl"
+                distributed_type = DistributedType.MULTI_MLU
+            elif torch.cuda.is_available():
+                if backend is None:
+                    backend = "nccl"
+                distributed_type = DistributedType.MULTI_GPU
+            elif is_npu_available():
+                backend = "hccl"
+                distributed_type = DistributedType.MULTI_NPU
 
         if distributed_type is None and (
             int(os.environ.get("LOCAL_RANK", -1)) != -1
