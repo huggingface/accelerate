@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Tuple
 
 import torch
 
-from ..commands.config.config_args import SageMakerConfig
+from ..commands.config.config_args import SageMakerConfig, load_config_from_file
 from ..utils import (
     DynamoBackend,
     PrecisionType,
@@ -71,6 +71,67 @@ def _get_mpirun_args():
     else:
         # Intel MPI and MVAPICH both use the same arg names
         return mpi_app, "-f", "-n", "-ppn"
+
+
+def prepare_env_from_config_file(config_file: str):
+    """
+    Prepares the current environment for distributed training based on a passed `config_file`. Will setup proper
+    settings for DeepSpeed, FSDP, etc.
+    """
+    if not os.path.isfile(config_file):
+        raise ValueError(f"Config file {config_file} does not exist")
+
+    config = load_config_from_file(config_file)
+    # Setup all env vars as needed
+    current_env = os.environ.copy()
+    prefix = "ACCELERATE_"
+    if config.use_cpu:
+        current_env[f"{prefix}USE_CPU"] = "true"
+    if config.mixed_precision is not None:
+        current_env[f"{prefix}MIXED_PRECISION"] = str(config.mixed_precision)
+    if config.deepspeed_config != {}:
+        deepspeed_config = config.deepspeed_config
+        # current_env[f"{prefix}CONFIG_DS_FIELDS"] = str(args.deepspeed_fields_from_accelerate_config).lower()
+        current_env[f"{prefix}USE_DEEPSPEED"] = "true"
+        if "gradient_accumulation_steps" in deepspeed_config:
+            current_env[f"{prefix}GRADIENT_ACCUMULATION_STEPS"] = str(
+                deepspeed_config.pop("gradient_accumulation_steps", None)
+            )
+        if "gradient_clipping" in deepspeed_config:
+            current_env[f"{prefix}GRADIENT_CLIPPING"] = str(deepspeed_config.pop("gradient_clipping", None))
+        deepspeed_prefix = f"{prefix}DEEPSPEED_"
+        for key, value in deepspeed_config.items():
+            if value is not None:
+                current_env[deepspeed_prefix + key.upper()] = str(value)
+    if config.fsdp_config != {}:
+        fsdp_config = config.fsdp_config
+        fsdp_prefix = "FSDP_"
+        if fsdp_config.get("cpu_ram_efficient_loading", False) and not fsdp_config.get("sync_module_states", False):
+            raise ValueError("When using `cpu_ram_efficient_loading` set `sync_module_states` to `True`")
+        for key, value in fsdp_config.items():
+            if value is not None:
+                current_env[fsdp_prefix + key.upper()] = str(value)
+
+    if config.dynamo_config is not None:
+        dynamo_config = config.dynamo_config
+        dynamo_prefix = "DYNAMO_"
+        backend = dynamo_config.pop("backend", "NO")
+        try:
+            dynamo_backend = DynamoBackend(backend)
+        except ValueError:
+            raise ValueError(f"Unknown dynamo backend: {backend}. Choose between {DynamoBackend.list()}.")
+        current_env[dynamo_prefix + "BACKEND"] = dynamo_backend.value
+        for key, value in dynamo_config.items():
+            if value is not None:
+                current_env[dynamo_prefix + key.upper()] = str(value)
+
+    if config.megatron_lm_config is not None:
+        megatron_lm_config = config.megatron_lm_config
+        megatron_lm_prefix = "MEGATRON_LM_"
+        for key, value in megatron_lm_config.items():
+            if value is not None:
+                current_env[megatron_lm_prefix + key.upper()] = str(value)
+    return current_env
 
 
 def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict[str, str]]:

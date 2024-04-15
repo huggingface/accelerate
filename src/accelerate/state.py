@@ -25,6 +25,8 @@ from typing import Any, Callable, Optional
 
 import torch
 
+from accelerate.utils.launch import prepare_env_from_config_file
+
 from .utils import (
     DistributedType,
     DynamoBackend,
@@ -294,6 +296,17 @@ class PartialState:
                     )
         # Important: This should be the *only* code outside of `self.initialized!`
         self.fork_launched = parse_flag_from_env("FORK_LAUNCHED", 0)
+
+    @classmethod
+    def from_config_file(cls, config_file: str, **kwargs):
+        """
+        Creates a `PartialState` from a config file. Comes with the added benefit of setting up environmental variables
+        for `Accelerator` to use for distributed configurations.
+        """
+        env = prepare_env_from_config_file(config_file)
+        for k, v in env.items():
+            os.environ[k] = v
+        return cls(**kwargs)
 
     def __repr__(self) -> str:
         return (
