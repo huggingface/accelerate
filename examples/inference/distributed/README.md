@@ -1,6 +1,6 @@
 # Distributed inference examples
 
-This folders contains a variety of tutorials for running distributed inference with the following strategy: 
+This folder contains a variety of tutorials for running distributed inference with the following strategy: 
 
 Load an entire model onto each GPU and sending chunks of a batch through each GPU’s model copy at a time
 
