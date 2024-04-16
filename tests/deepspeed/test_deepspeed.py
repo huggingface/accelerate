@@ -57,6 +57,7 @@ set_seed(42)
 
 GPT2_TINY = "sshleifer/tiny-gpt2"
 MOBILEVIT = "apple/mobilevit-xx-small"
+QWEN_MOE = "peft-internal-testing/tiny-random-qwen-1.5-MoE"
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
@@ -810,6 +811,28 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3_init_flag=True,
         )
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
+
+    def test_prepare_deepspeed_preapre_moe(self):
+        deepspeed_plugin = DeepSpeedPlugin(
+            zero3_init_flag=True,
+            gradient_accumulation_steps=1,
+            gradient_clipping=1.0,
+            zero_stage=3,
+            offload_optimizer_device="none",
+            offload_param_device="none",
+            zero3_save_16bit_model=True,
+            transformer_moe_cls_names="Qwen2MoeSparseMoeBlock",
+        )
+        with mockenv_context(**self.dist_env):
+            accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
+            accelerator.state.deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = 1
+            model = AutoModelForCausalLM.from_pretrained(QWEN_MOE)
+            model = accelerator.prepare(model)
+            from transformers.models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeSparseMoeBlock
+
+            for module in model.modules():
+                if isinstance(module, Qwen2MoeSparseMoeBlock):
+                    assert hasattr(module, "_z3_leaf") and module._z3_leaf
 
     def test_basic_run(self):
         test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_performance.py")

@@ -713,6 +713,13 @@ class DeepSpeedPlugin:
         default=None,
         metadata={"help": "Flag to indicate whether to save 16-bit model. Only applicable with ZeRO Stage-3."},
     )
+    transformer_moe_cls_names: str = field(
+        default=None,
+        metadata={
+            "help": "comma-separated list of transformers MoE layer class names (case-sensitive), e.g : "
+            " `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
+        },
+    )
 
     def __post_init__(self):
         from .deepspeed import HfDeepSpeedConfig
@@ -967,6 +974,24 @@ class DeepSpeedPlugin:
                 "It will only ask for the necessary config variables when using `deepspeed_config_file`."
             )
 
+    def set_moe_leaf_modules(self, model):
+        from deepspeed.utils import set_z3_leaf_modules
+
+        if self.transformer_moe_cls_names is None:
+            self.transformer_moe_cls_names = os.environ.get("ACCELERATE_DEEPSPEED_MOE_LAYER_CLS_NAMES", None)
+        if self.transformer_moe_cls_names is not None:
+            class_names = self.transformer_moe_cls_names.split(",")
+            transformer_moe_cls = []
+            for layer_class in class_names:
+                transformer_cls = get_module_class_from_name(model, layer_class)
+                if transformer_cls is None:
+                    raise Exception(
+                        f"Could not find a transformer layer class called '{layer_class}' to wrap in the model."
+                    )
+                else:
+                    transformer_moe_cls.append(transformer_cls)
+            set_z3_leaf_modules(model, transformer_moe_cls)  # z3_leaf
+
 
 @dataclass
 class FullyShardedDataParallelPlugin:
@@ -1121,26 +1146,6 @@ class FullyShardedDataParallelPlugin:
                 )
             self.param_init_fn = lambda x: x.to_empty(device=device, recurse=False)
 
-    @staticmethod
-    def get_module_class_from_name(module, name):
-        """
-        Gets a class from a module by its name.
-
-        Args:
-            module (`torch.nn.Module`): The module to get the class from.
-            name (`str`): The name of the class.
-        """
-        modules_children = list(module.children())
-        if module.__class__.__name__ == name:
-            return module.__class__
-        elif len(modules_children) == 0:
-            return
-        else:
-            for child_module in modules_children:
-                module_class = FullyShardedDataParallelPlugin.get_module_class_from_name(child_module, name)
-                if module_class is not None:
-                    return module_class
-
     def set_auto_wrap_policy(self, model):
         from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
@@ -1155,7 +1160,7 @@ class FullyShardedDataParallelPlugin:
                 ).split(",")
                 transformer_cls_to_wrap = set()
                 for layer_class in transformer_cls_names_to_wrap:
-                    transformer_cls = FullyShardedDataParallelPlugin.get_module_class_from_name(model, layer_class)
+                    transformer_cls = get_module_class_from_name(model, layer_class)
                     if transformer_cls is None:
                         raise Exception("Could not find the transformer layer class to wrap in the model.")
                     else:
@@ -1714,3 +1719,23 @@ class BnbQuantizationConfig:
 
         if not isinstance(self.torch_dtype, torch.dtype):
             raise ValueError("torch_dtype must be a torch.dtype")
+
+
+def get_module_class_from_name(module, name):
+    """
+    Gets a class from a module by its name.
+
+    Args:
+        module (`torch.nn.Module`): The module to get the class from.
+        name (`str`): The name of the class.
+    """
+    modules_children = list(module.children())
+    if module.__class__.__name__ == name:
+        return module.__class__
+    elif len(modules_children) == 0:
+        return
+    else:
+        for child_module in modules_children:
+            module_class = get_module_class_from_name(child_module, name)
+            if module_class is not None:
+                return module_class

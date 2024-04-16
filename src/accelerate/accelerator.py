@@ -1571,6 +1571,8 @@ class Accelerator:
                 )
 
         if model is not None:
+            # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
+            deepspeed_plugin.set_moe_leaf_modules(model)
             # deal with config keys that use `auto` value and rely on model's hidden_size
             hidden_size_based_keys = [
                 "zero_optimization.reduce_bucket_size",

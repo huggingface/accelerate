@@ -487,6 +487,13 @@ def launch_command_parser(subparsers=None):
         type=str,
         help="DeepSpeed multi-node launcher to use. If unspecified, will default to `pdsh`.",
     )
+    deepspeed_args.add_argument(
+        "--deepspeed_moe_layer_cls_names",
+        default=None,
+        type=str,
+        help="comma-separated list of transformer MoE layer class names (case-sensitive) to wrap ,e.g, `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ..."
+        " (useful only when `use_deepspeed` flag is passed).",
+    )
 
     # fsdp arguments
     fsdp_args = parser.add_argument_group("FSDP Arguments", "Arguments related to Fully Shared Data Parallelism.")
