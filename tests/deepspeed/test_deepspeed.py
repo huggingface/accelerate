@@ -51,6 +51,7 @@ from accelerate.utils.deepspeed import (
     DummyScheduler,
 )
 from accelerate.utils.other import patch_environment
+from accelerate.utils.versions import compare_versions
 
 
 set_seed(42)
@@ -813,6 +814,8 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
 
     def test_prepare_deepspeed_preapre_moe(self):
+        if compare_versions("transformers", "<", "4.40"):
+            return
         deepspeed_plugin = DeepSpeedPlugin(
             zero3_init_flag=True,
             gradient_accumulation_steps=1,
