@@ -986,7 +986,7 @@ class DeepSpeedPlugin:
             for layer_class in class_names:
                 transformer_cls = get_module_class_from_name(model, layer_class)
                 if transformer_cls is None:
-                    raise Exception("Could not find the transformer layer class to wrap in the model.")
+                    raise Exception(f"Could not find a transformer layer class called '{layer_class}' to wrap in the model.")
                 else:
                     transformer_moe_cls.append(transformer_cls)
             set_z3_leaf_modules(model, transformer_moe_cls)  # z3_leaf
