@@ -19,6 +19,7 @@ from accelerate import PartialState
 from accelerate.utils import gather_object
 
 
+# Start up the distributed environment without needing the Accelerator.
 distributed_state = PartialState()
 
 # You can change the model to any LLM such as mistralai/Mistral-7B-v0.1 or meta-llama/Llama-2-7b-chat-hf
@@ -28,7 +29,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-# needed for geenration
+# Need to set the padding token to the eos token for generation
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
 prompts = [
@@ -42,10 +43,10 @@ prompts = [
 batch_size = 2
 pad_to_multiple_of = 8
 
-# split into batch
+# Split into batches
 formatted_prompts = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
 
-# do the padding on the left since we are doing generation
+# Apply padding on the left since we are doing generation
 padding_side_default = tokenizer.padding_side
 tokenizer.padding_side = "left"
 # tokenize each batch
@@ -53,7 +54,7 @@ tokenized_prompts = [
     tokenizer(formatted_prompt, padding=True, pad_to_multiple_of=pad_to_multiple_of, return_tensors="pt")
     for formatted_prompt in formatted_prompts
 ]
-# put back padding
+# Put back the original padding behavior
 tokenizer.padding_side = padding_side_default
 
 completions_per_process = []
