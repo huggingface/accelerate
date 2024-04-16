@@ -55,11 +55,11 @@ For detailed descriptions of the above, refer to [🤗 `Accelerate` launch docum
 
 **Checkpointing**
 
-Do note that while FSDP can be configured via `--fsdp_state_dict_type` to save either full / sharded checkpoints, but DeepSpeed [only saves sharded checkpoints](https://deepspeed.readthedocs.io/en/latest/model-checkpointing.html#saving-training-checkpoints).
+Do note that while FSDP can be configured via `--fsdp_state_dict_type` to save either full / sharded checkpoints.
 
 <Tip>
 
-    For DeepSpeed Zero3, it is recommended to also pass a `--zero3_save_16bit_model true` in the [`Accelerate` launch arguments](../package_reference/cli#accelerate-launch) as this is typically much more efficient.
+    For DeepSpeed Zero3, it is recommended to also pass a `--zero3_save_16bit_model true` in the [`Accelerate` launch arguments](../package_reference/cli#accelerate-launch), which conviniently consolidates the model to a single rank and saves; this is the FSDP equivalent of `fsdp_state_dict_type: FULL_STATE_DICT`.
 
 </Tip>
 
@@ -94,7 +94,7 @@ FSDP requires an explicit `--fsdp_auto_wrap_policy` for the algorithm to decide 
 
 <Tip>
 
-    For FSDP, simply set `fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP`. Do not set `fsdp_transformer_layer_cls_to_wrap` if using the latest `transformers` versions.
+    For FSDP, simply set `fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP`. With the latest [`transformers`] versions, we try our best to figure out the suitable `fsdp_transformer_layer_cls_to_wrap` for HF transformers models. However, if you get an error regarding it, please specify this.
 
 </Tip>
 
@@ -124,6 +124,12 @@ Deepspeed requires explicit `--gradient_accumulation_steps` and `--gradient_clip
 
 To discuss the how data precision is handled in both FSDP and Deepspeed, it is instructive to first give a flow of how model parameters are handled in these frameworks. Before the model / optimizer parameters are distributed across GPUs, parameter preparation is involved to first "flatten" them to  one-dimensional [`torch.Tensor`](https://pytorch.org/docs/stable/tensors.html#torch-tensor)'s. The implementation of FSDP / DeepSpeed varies in the respect of the `dtype` in which these "flattened" parameters are stored, and there are ramifications with regards to how [`torch.Optimizer`](https://pytorch.org/docs/stable/optim.html#module-torch.optim)'s allocate their `dtypes`'s. The table below outlines the processes for both frameworks; the "Local" column indicates the process occurring at a per-gpu level, therefore any memory overheads by upcasting should be understood to be amortized by the number of gpus used.
 
+<Tip>
+
+    As a rule of thumb, for stable training with automatic mixed precision, all the trainable parameters have to be in `torch.float32`.
+
+</Tip>
+
 Process | Local | Framework | Details
 --|--|--|--
 Loading, i.e., [`AutoModel.from_pretrained(..., torch_dtype)`] |  
@@ -139,11 +145,15 @@ Optimizer (Actual Step) | ✅ | FSDP<br>DeepSpeed  | occurs in `torch_dtype` <br
 
 </Tip>
 
-<Tip warning={true}>
+<Tip>
 
     With FSDP, in the absence of mixed precision, it is possible to operate the [`torch.Optimizer`](https://pytorch.org/docs/stable/optim.html#module-torch.optim) in low precision `torch_dtype`, which may be helpful when using small number of GPUs. 
 
-    On the other hand with mixed precision, then FSDP (like DeepSpeed) will upcast in the model preperation step (c.f. table above).
+</Tip>
+
+<Tip warning={true}>
+
+    With mixed precision, then FSDP and DeepSpeed will upcast in the model preperation step (c.f. table above). But do note that FSDP will then save checkpoints in the upcasted precision; Deepspeed may still save low precision checkpoints if `--zero3_save_16bit_model` is specified.
 
 </Tip>
 
