@@ -163,7 +163,7 @@ Currently, `Accelerate` supports following config through the CLI:
 `zero3_init_flag`: Decides whether to enable `deepspeed.zero.Init` for constructing massive models. Only applicable with ZeRO Stage-3.
 `zero3_save_16bit_model`: Decides whether to save 16-bit model weights when using ZeRO Stage-3.
 `mixed_precision`: `no` for FP32 training, `fp16` for FP16 mixed-precision training and `bf16` for BF16 mixed-precision training.
-`deepspeed_moe_layer_cls_names`: Comma-separated list of transformer MoE layer class names (case-sensitive) to wrap ,e.g, `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ...
+`deepspeed_moe_layer_cls_names`: Comma-separated list of transformer Mixture-of-Experts (MoE) layer class names (case-sensitive) to wrap ,e.g, `MixtralSparseMoeBlock`, `Qwen2MoeSparseMoeBlock`, `JetMoEAttention,JetMoEBlock` ...
 `deepspeed_hostfile`: DeepSpeed hostfile for configuring multi-node compute resources.
 `deepspeed_exclusion_filter`: DeepSpeed exclusion filter string when using mutli-node setup.
 `deepspeed_inclusion_filter`: DeepSpeed inclusion filter string when using mutli-node setup.
