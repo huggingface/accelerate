@@ -753,7 +753,7 @@ class PartialState:
                     import torch_ccl  # noqa: F401
 
                 backend = "ccl"
-            elif (backend is None or backend == "mpi") and torch.distributed.is_mpi_available():
+            elif (backend in (None, "mpi")) and torch.distributed.is_mpi_available():
                 backend = "mpi"
             else:
                 backend = "gloo"
