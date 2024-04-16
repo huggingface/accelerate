@@ -25,8 +25,6 @@ from typing import Any, Callable, Optional
 
 import torch
 
-from accelerate.utils.launch import prepare_env_from_config_file
-
 from .utils import (
     DistributedType,
     DynamoBackend,
@@ -303,6 +301,9 @@ class PartialState:
         Creates a `PartialState` from a config file. Comes with the added benefit of setting up environmental variables
         for `Accelerator` to use for distributed configurations.
         """
+        # To avoid circular imports
+        from accelerate.utils.launch import prepare_env_from_config_file
+
         env = prepare_env_from_config_file(config_file)
         for k, v in env.items():
             os.environ[k] = v
