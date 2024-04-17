@@ -181,7 +181,7 @@ class PartialState:
             # Sets up self.backend + imports
             original_backend = kwargs.pop("backend", None)
             backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, original_backend)
-            if original_backend and backend != original_backend:
+            if original_backend is not None and backend != original_backend:
                 raise ValueError("Your assigned backend {original_backend} is not avaliable, please use {backend}")
             self.backend = backend
             self.distributed_type = distributed_type
