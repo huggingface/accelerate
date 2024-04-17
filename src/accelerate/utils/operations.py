@@ -75,10 +75,10 @@ def honor_type(obj, generator):
     Cast a generator to the same type as obj (list, tuple, or namedtuple)
     """
     # Some objects may not be able to instantiate from a generator directly
-    if is_namedtuple(obj):
-        return type(obj)(*list(generator))
-    else:
-        return type(obj)(generator)
+    # if is_namedtuple(obj):
+    #     return type(obj)(*list(generator))
+    # else:
+    return type(obj)(generator)
 
 
 def recursively_apply(func, data, *args, test_type=is_torch_tensor, error_on_other_type=False, **kwargs):
@@ -145,7 +145,7 @@ def send_to_device(tensor, device, non_blocking=False, skip_keys=None):
     Returns:
         The same data structure as `tensor` with all tensors sent to the proper device.
     """
-    if is_torch_tensor(tensor) or hasattr(tensor, "to"):
+    if is_torch_tensor(tensor):
         # `torch.Tensor.to("npu")` could not find context when called for the first time (see this [issue](https://gitee.com/ascend/pytorch/issues/I8KECW?from=project-issue)).
         if device == "npu":
             device = "npu:0"
