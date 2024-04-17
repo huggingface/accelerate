@@ -121,6 +121,18 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
                     raise ValueError("`set_to_none` for Optimizer.zero_grad` is not supported by this optimizer.")
                 self.optimizer.zero_grad()
 
+    def train(self):
+        """
+        Sets the optimizer to "train" mode. Useful for optimizers like `schedule_free`
+        """
+        return self.optimizer.train()
+
+    def eval(self):
+        """
+        Sets the optimizer to "eval" mode. Useful for optimizers like `schedule_free`
+        """
+        return self.optimizer.eval()
+
     def step(self, closure=None):
         if (
             not self.gradient_state.is_xla_gradients_synced

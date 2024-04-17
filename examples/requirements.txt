@@ -1,3 +1,5 @@
 accelerate # used to be installed in Amazon SageMaker environment
 evaluate
 datasets==2.3.2
+schedulefree
+huggingface_hub>=0.20.0
