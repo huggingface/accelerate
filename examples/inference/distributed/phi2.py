@@ -30,7 +30,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 # Need to set the padding token to the eos token for generation
-tokenizer.pad_token_id = tokenizer.eos_token_id
+tokenizer.pad_token = tokenizer.eos_token
 
 prompts = [
     "I would like to",
@@ -40,16 +40,20 @@ prompts = [
     "welcome to the hotel",
 ]
 
+# You can change the batch size depending on your GPU RAM
 batch_size = 2
+# We set it to 8 since it is better for some hardware. More information here https://github.com/huggingface/tokenizers/issues/991
 pad_to_multiple_of = 8
 
 # Split into batches
+# We will get the following results:
+# [ ["I would like to", "hello how are you"], [ "what is going on", "roses are red and"], [ "welcome to the hotel"] ]
 formatted_prompts = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
 
 # Apply padding on the left since we are doing generation
 padding_side_default = tokenizer.padding_side
 tokenizer.padding_side = "left"
-# tokenize each batch
+# Tokenize each batch
 tokenized_prompts = [
     tokenizer(formatted_prompt, padding=True, pad_to_multiple_of=pad_to_multiple_of, return_tensors="pt")
     for formatted_prompt in formatted_prompts
@@ -58,17 +62,24 @@ tokenized_prompts = [
 tokenizer.padding_side = padding_side_default
 
 completions_per_process = []
+# We automatically split the batched data we passed to it across all the processes. We also set apply_padding=True
+# so that the GPUs will have the same number of prompts, and you can then gather the results.
+# For example, if we have 2 gpus, the distribution will be:
+# GPU 0: ["I would like to", "hello how are you"],  "what is going on", "roses are red and"]
+# GPU 1: ["welcome to the hotel"], ["welcome to the hotel"] -> this prompt is duplicated to ensure that all gpus have the same number of prompts
 with distributed_state.split_between_processes(tokenized_prompts, apply_padding=True) as batched_prompts:
     for batch in batched_prompts:
-        # move the batch to the device
+        # Move the batch to the device
         batch = batch.to(distributed_state.device)
+        # We generate the text, decode it and add it to the list completions_per_process
         outputs = model.generate(**batch, max_new_tokens=20)
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         completions_per_process.extend(generated_text)
 
+print(completions_per_process)
 completions_gather = gather_object(completions_per_process)
-# Drop duplicates produced by apply_padding in  split_between_processes
+
+# Drop duplicates produced by apply_padding in split_between_processes
 completions = completions_gather[: len(prompts)]
 
-if distributed_state.is_main_process:
-    print(completions)
+distributed_state.print(completions)
