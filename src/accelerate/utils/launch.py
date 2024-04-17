@@ -28,6 +28,7 @@ from ..utils import (
     DynamoBackend,
     PrecisionType,
     is_ipex_available,
+    is_mlu_available,
     is_npu_available,
     is_torch_xla_available,
     is_xpu_available,
@@ -103,6 +104,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if args.gpu_ids != "all" and args.gpu_ids is not None:
         if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = args.gpu_ids
+        elif is_mlu_available():
+            current_env["MLU_VISIBLE_DEVICES"] = args.gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = args.gpu_ids
         else:
@@ -141,6 +144,8 @@ def prepare_simple_launcher_cmd_env(args: argparse.Namespace) -> Tuple[List[str]
     if is_ipex_available():
         current_env["ACCELERATE_USE_IPEX"] = str(args.ipex).lower()
         current_env["ACCELERATE_USE_XPU"] = str(args.use_xpu).lower()
+    if args.enable_cpu_affinity:
+        current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     return cmd, current_env
 
 
@@ -193,6 +198,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
     if gpu_ids != "all" and args.gpu_ids is not None:
         if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
+        elif is_mlu_available():
+            current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         else:
@@ -260,6 +267,8 @@ def prepare_multi_gpu_env(args: argparse.Namespace) -> Dict[str, str]:
             current_env[prefix + "USE_DISTRIBUTED_OPTIMIZER"] = str(args.megatron_lm_use_distributed_optimizer)
 
     current_env["OMP_NUM_THREADS"] = str(args.num_cpu_threads_per_process)
+    if args.enable_cpu_affinity:
+        current_env["ACCELERATE_CPU_AFFINITY"] = "1"
     return current_env
 
 
@@ -297,6 +306,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
             )
         else:
             cmd.extend(["--num_gpus", str(args.num_processes // args.num_machines)])
+        if main_process_ip:
+            cmd.extend(["--master_addr", str(main_process_ip)])
         cmd.extend(["--master_port", str(main_process_port)])
         if args.module and args.no_python:
             raise ValueError("--module and --no_python cannot be used together")
@@ -347,6 +358,8 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
     if gpu_ids != "all" and args.gpu_ids is not None:
         if is_xpu_available():
             current_env["ZE_AFFINITY_MASK"] = gpu_ids
+        elif is_mlu_available():
+            current_env["MLU_VISIBLE_DEVICES"] = gpu_ids
         elif is_npu_available():
             current_env["ASCEND_RT_VISIBLE_DEVICES"] = gpu_ids
         else:
@@ -389,6 +402,10 @@ def prepare_deepspeed_cmd_env(args: argparse.Namespace) -> Tuple[List[str], Dict
         current_env["ACCELERATE_DEEPSPEED_ZERO3_SAVE_16BIT_MODEL"] = str(args.zero3_save_16bit_model).lower()
     if args.deepspeed_config_file is not None:
         current_env["ACCELERATE_DEEPSPEED_CONFIG_FILE"] = str(args.deepspeed_config_file)
+    if args.enable_cpu_affinity:
+        current_env["ACCELERATE_CPU_AFFINITY"] = "1"
+    if args.deepspeed_moe_layer_cls_names is not None:
+        current_env["ACCELERATE_DEEPSPEED_MOE_LAYER_CLS_NAMES"] = str(args.deepspeed_moe_layer_cls_names)
     return cmd, current_env
 
 
@@ -605,6 +622,7 @@ class PrepareForLaunch:
             )
         elif self.distributed_type in (
             DistributedType.MULTI_GPU,
+            DistributedType.MULTI_MLU,
             DistributedType.MULTI_NPU,
             DistributedType.MULTI_XPU,
             DistributedType.MULTI_CPU,

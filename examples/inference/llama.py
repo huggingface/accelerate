@@ -27,7 +27,7 @@ model.eval()
 # Input configs
 # Create example inputs for the model
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-prompts = ("I would like to", "I really like to", "The weather is")  # bs = 3
+prompts = ("I would like to", "I really like to", "The weather is pretty")  # bs = 3
 tokenizer.pad_token = tokenizer.eos_token
 inputs = tokenizer(prompts, return_tensors="pt", padding=True)
 
@@ -35,7 +35,7 @@ inputs = tokenizer(prompts, return_tensors="pt", padding=True)
 # Using `auto` is equivalent to letting `device_map="auto"` figure
 # out device mapping and will also split the model according to the
 # number of total GPUs available if it fits on one GPU
-model = prepare_pippy(model, split_points="auto", example_args=inputs)
+model = prepare_pippy(model, split_points="auto", example_kwargs=inputs)
 
 # You can pass `gather_output=True` to have the output from the model
 # available on all GPUs
@@ -43,7 +43,7 @@ model = prepare_pippy(model, split_points="auto", example_args=inputs)
 
 # currently we don't support `model.generate`
 # output = model.generate(**inputs, max_new_tokens=1)
-
+inputs = inputs.to(0)
 with torch.no_grad():
     output = model(**inputs)
 

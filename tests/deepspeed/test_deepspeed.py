@@ -37,6 +37,7 @@ from accelerate.test_utils.testing import (
     path_in_accelerate_package,
     require_cuda,
     require_deepspeed,
+    require_huggingface_suite,
     require_multi_device,
     require_non_cpu,
     slow,
@@ -51,12 +52,14 @@ from accelerate.utils.deepspeed import (
     DummyScheduler,
 )
 from accelerate.utils.other import patch_environment
+from accelerate.utils.versions import compare_versions
 
 
 set_seed(42)
 
 GPT2_TINY = "sshleifer/tiny-gpt2"
 MOBILEVIT = "apple/mobilevit-xx-small"
+QWEN_MOE = "peft-internal-testing/tiny-random-qwen-1.5-MoE"
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
@@ -652,7 +655,6 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         del deepspeed_plugin.deepspeed_config["scheduler"]
         with mockenv_context(**self.dist_env):
             accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
-
             train_set = RegressionDataset(length=80)
             eval_set = RegressionDataset(length=20)
             train_dataloader = DataLoader(train_set, batch_size=16, shuffle=True)
@@ -833,6 +835,30 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
             zero3_init_flag=True,
         )
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
+
+    def test_prepare_deepspeed_preapre_moe(self):
+        if compare_versions("transformers", "<", "4.40"):
+            return
+        deepspeed_plugin = DeepSpeedPlugin(
+            zero3_init_flag=True,
+            gradient_accumulation_steps=1,
+            gradient_clipping=1.0,
+            zero_stage=3,
+            offload_optimizer_device="none",
+            offload_param_device="none",
+            zero3_save_16bit_model=True,
+            transformer_moe_cls_names="Qwen2MoeSparseMoeBlock",
+        )
+        with mockenv_context(**self.dist_env):
+            accelerator = Accelerator(mixed_precision="fp16", deepspeed_plugin=deepspeed_plugin)
+            accelerator.state.deepspeed_plugin.deepspeed_config["train_micro_batch_size_per_gpu"] = 1
+            model = AutoModelForCausalLM.from_pretrained(QWEN_MOE)
+            model = accelerator.prepare(model)
+            from transformers.models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeSparseMoeBlock
+
+            for module in model.modules():
+                if isinstance(module, Qwen2MoeSparseMoeBlock):
+                    assert hasattr(module, "_z3_leaf") and module._z3_leaf
 
     def test_basic_run(self):
         test_file_path = path_in_accelerate_package("test_utils", "scripts", "external_deps", "test_performance.py")
@@ -1072,6 +1098,13 @@ class DeepSpeedIntegrationTest(TempDirTestCase):
             f"--output_dir={self.tmpdir}",
             f"--performance_lower_bound={self.performance_lower_bound}",
         ]
+        with patch_environment(omp_num_threads=1):
+            execute_subprocess_async(cmd)
+
+    @require_huggingface_suite
+    def test_zero3_integration(self):
+        self.test_file_path = self.test_scripts_folder / "test_zero3_integration.py"
+        cmd = ["accelerate", "launch", "--num_processes=2", "--num_machines=1", self.test_file_path]
         with patch_environment(omp_num_threads=1):
             execute_subprocess_async(cmd)
 

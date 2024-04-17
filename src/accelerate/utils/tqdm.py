@@ -21,7 +21,7 @@ if is_tqdm_available():
 from ..state import PartialState
 
 
-def tqdm(main_process_only: bool = True, *args, **kwargs):
+def tqdm(*args, main_process_only: bool = True, **kwargs):
     """
     Wrapper around `tqdm.tqdm` that optionally displays only on the main process.
 

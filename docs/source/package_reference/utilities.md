@@ -166,6 +166,10 @@ These functionalities check the state of the current working environment includi
 
 When setting up 🤗 Accelerate for the first time, rather than running `accelerate config` [~utils.write_basic_config] can be used as an alternative for quick configuration.
 
+[[autodoc]] utils.set_numa_affinity
+
+[[autodoc]] utils.environment.override_numa_affinity
+
 ## Memory
 
 [[autodoc]] utils.find_executable_batch_size

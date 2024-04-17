@@ -80,6 +80,7 @@ from .utils import (
     is_fp8_available,
     is_ipex_available,
     is_megatron_lm_available,
+    is_mlu_available,
     is_msamp_available,
     is_npu_available,
     is_torch_version,
@@ -293,7 +294,10 @@ class Accelerator:
         if deepspeed_plugin:
             if not is_deepspeed_available():
                 raise ImportError("DeepSpeed is not installed => run `pip install deepspeed` or build it from source.")
-            if compare_versions("deepspeed", "<", "0.9.3"):
+            if is_mlu_available():
+                if compare_versions("deepspeed-mlu", "<", "0.10.1"):
+                    raise ImportError("DeepSpeed MLU version must be >= 0.10.1. Please update DeepSpeed MLU.")
+            elif compare_versions("deepspeed", "<", "0.9.3"):
                 raise ImportError("DeepSpeed version must be >= 0.9.3. Please update DeepSpeed.")
 
             mixed_precision = (
@@ -446,7 +450,7 @@ class Accelerator:
             and self.distributed_type not in (DistributedType.DEEPSPEED, DistributedType.MEGATRON_LM)
         ):
             self.native_amp = True
-            if self.device.type not in ("xpu", "cuda", "mps", "npu", "xla") or is_torch_xla_available(
+            if self.device.type not in ("xpu", "cuda", "mps", "npu", "xla", "mlu") or is_torch_xla_available(
                 check_is_tpu=True
             ):
                 raise ValueError(f"fp16 mixed precision requires a GPU (not {self.device.type!r}).")
@@ -457,6 +461,8 @@ class Accelerator:
                 self.scaler = ShardedGradScaler(**kwargs)
             elif is_torch_xla_available(check_is_gpu=True):
                 self.scaler = xamp.GradScaler(**kwargs)
+            elif is_mlu_available():
+                self.scaler = torch.mlu.amp.GradScaler(**kwargs)
             elif is_npu_available():
                 self.scaler = torch.npu.amp.GradScaler(**kwargs)
             else:
@@ -1078,7 +1084,12 @@ class Accelerator:
         ...         optimizer.zero_grad()
         ```
         """
-        if self.distributed_type in (DistributedType.MULTI_GPU, DistributedType.MULTI_NPU, DistributedType.MULTI_XPU):
+        if self.distributed_type in (
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_NPU,
+            DistributedType.MULTI_MLU,
+            DistributedType.MULTI_XPU,
+        ):
             dl_even_batches_values = []
 
             if even_batches is not None:
@@ -1377,6 +1388,7 @@ class Accelerator:
         if not evaluation_mode:
             if self.distributed_type in (
                 DistributedType.MULTI_GPU,
+                DistributedType.MULTI_MLU,
                 DistributedType.MULTI_NPU,
                 DistributedType.MULTI_XPU,
             ):
@@ -1559,6 +1571,8 @@ class Accelerator:
                 )
 
         if model is not None:
+            # if the model is an MOE, set the appropriate MOE layers as leaf Z3 modules
+            deepspeed_plugin.set_moe_leaf_modules(model)
             # deal with config keys that use `auto` value and rely on model's hidden_size
             hidden_size_based_keys = [
                 "zero_optimization.reduce_bucket_size",
@@ -2964,6 +2978,7 @@ class Accelerator:
         if map_location is None:
             if self.num_processes > 1 and self.distributed_type in (
                 DistributedType.MULTI_GPU,
+                DistributedType.MULTI_MLU,
                 DistributedType.MULTI_NPU,
             ):
                 map_location = "on_device"

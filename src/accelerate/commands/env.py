@@ -17,6 +17,7 @@
 import argparse
 import os
 import platform
+import subprocess
 
 import numpy as np
 import psutil
@@ -25,7 +26,7 @@ import torch
 from accelerate import __version__ as version
 from accelerate.commands.config import default_config_file, load_config_from_file
 
-from ..utils import is_npu_available, is_xpu_available
+from ..utils import is_mlu_available, is_npu_available, is_xpu_available
 
 
 def env_command_parser(subparsers=None):
@@ -47,6 +48,7 @@ def env_command(args):
     pt_version = torch.__version__
     pt_cuda_available = torch.cuda.is_available()
     pt_xpu_available = is_xpu_available()
+    pt_mlu_available = is_mlu_available()
     pt_npu_available = is_npu_available()
 
     accelerate_config = "Not found"
@@ -54,14 +56,25 @@ def env_command(args):
     if args.config_file is not None or os.path.isfile(default_config_file):
         accelerate_config = load_config_from_file(args.config_file).to_dict()
 
+    # if we can run which, get it
+    command = None
+    bash_location = "Not found"
+    if os.name == "nt":
+        command = ["where", "accelerate"]
+    elif os.name == "posix":
+        command = ["which", "accelerate"]
+    if command is not None:
+        bash_location = subprocess.check_output(command, text=True, stderr=subprocess.STDOUT).strip()
     info = {
         "`Accelerate` version": version,
         "Platform": platform.platform(),
+        "`accelerate` bash location": bash_location,
         "Python version": platform.python_version(),
         "Numpy version": np.__version__,
         "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
         "PyTorch XPU available": str(pt_xpu_available),
         "PyTorch NPU available": str(pt_npu_available),
+        "PyTorch MLU available": str(pt_mlu_available),
         "System RAM": f"{psutil.virtual_memory().total / 1024 ** 3:.2f} GB",
     }
     if pt_cuda_available:

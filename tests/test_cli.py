@@ -20,6 +20,7 @@ from unittest.mock import patch
 import torch
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
+from accelerate.commands.config.config_args import BaseConfig, ClusterConfig, SageMakerConfig
 from accelerate.commands.estimate import estimate_command, estimate_command_parser, gather_data
 from accelerate.commands.launch import _validate_launch_command, launch_command_parser
 from accelerate.test_utils import execute_subprocess_async
@@ -188,6 +189,73 @@ class LaunchArgTester(unittest.TestCase):
                     assert help_return.count(bad_arg) == 1, f"Found {bad_arg} in `accelerate launch -h`"
                 else:
                     assert bad_arg not in help_return, f"Found {bad_arg} in `accelerate launch -h`"
+
+
+class ClusterConfigTester(unittest.TestCase):
+    """
+    Test case for verifying the config dataclasses work
+    """
+
+    def test_base_config(self):
+        # Tests that all the dataclasses can be initialized
+        config = BaseConfig(
+            compute_environment="LOCAL_MACHINE",
+            distributed_type="NO",
+            mixed_precision="fp16",
+            debug=False,
+            use_cpu=False,
+        )
+
+        assert config.compute_environment == "LOCAL_MACHINE"
+        assert config.distributed_type == "NO"
+        assert config.mixed_precision == "fp16"
+        assert config.debug is False
+
+    def test_cluster_config(self):
+        # First normally
+        config = ClusterConfig(
+            compute_environment="LOCAL_MACHINE",
+            distributed_type="NO",
+            mixed_precision="fp16",
+            num_processes=2,
+            debug=False,
+            use_cpu=False,
+        )
+
+        assert config.compute_environment == "LOCAL_MACHINE"
+        assert config.distributed_type == "NO"
+        assert config.mixed_precision == "fp16"
+        assert config.debug is False
+
+        # Then check with other compute environments
+        config = ClusterConfig(
+            compute_environment="LOCAL_MACHINE",
+            distributed_type="MULTI_GPU",
+            mixed_precision="fp16",
+            debug=False,
+            num_processes=2,
+            enable_cpu_affinity=True,
+            use_cpu=False,
+        )
+
+        assert config.distributed_type == "MULTI_GPU"
+        assert config.num_processes == 2
+        assert config.enable_cpu_affinity is True
+
+    def test_sagemaker_config(self):
+        config = SageMakerConfig(
+            compute_environment="AMAZON_SAGEMAKER",
+            distributed_type="NO",
+            mixed_precision="fp16",
+            debug=False,
+            use_cpu=False,
+            ec2_instance_type="MY_TYPE",
+            iam_role_name="MY_ROLE",
+        )
+
+        assert config.compute_environment == "AMAZON_SAGEMAKER"
+        assert config.ec2_instance_type == "MY_TYPE"
+        assert config.iam_role_name == "MY_ROLE"
 
 
 class TpuConfigTester(unittest.TestCase):
@@ -402,8 +470,8 @@ class ModelEstimatorTester(unittest.TestCase):
             assert (
                 total_size_estimate == output[i][2]
             ), f"Calculation for total size in `{precision_str}` is incorrect."
-            assert (
-                total_training_size_estimate == output[i][3]
+            assert total_training_size_estimate == max(
+                output[i][3].values()
             ), f"Calculation for total training size in `{precision_str}` is incorrect."
 
     @require_transformers
