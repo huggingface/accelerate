@@ -182,7 +182,7 @@ class PartialState:
             original_backend = kwargs.pop("backend", None)
             backend, distributed_type = self._prepare_backend(cpu, use_sagemaker_dp, original_backend)
             if original_backend and backend != original_backend:
-                logger.warning(f"The assigned backend is {original_backend}, but the real backend is {backend}")
+                raise ValueError("Your assigned backend {original_backend} is not avaliable, please use {backend}")
             self.backend = backend
             self.distributed_type = distributed_type
             use_deepspeed = False
@@ -753,7 +753,7 @@ class PartialState:
                     import torch_ccl  # noqa: F401
 
                 backend = "ccl"
-            elif (backend in (None, "mpi")) and torch.distributed.is_mpi_available():
+            elif backend in (None, "mpi") and torch.distributed.is_mpi_available():
                 backend = "mpi"
             else:
                 backend = "gloo"
