@@ -1349,7 +1349,7 @@ class Accelerator:
         if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
-            autocast_context = get_mixed_precision_context_manager(True, self.autocast_handler)
+            autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
             new_forward = autocast_context(model_forward_func)
             if hasattr(model.forward, "__func__"):
                 model.forward = MethodType(new_forward, model)
