@@ -76,7 +76,6 @@ with distributed_state.split_between_processes(tokenized_prompts, apply_padding=
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         completions_per_process.extend(generated_text)
 
-print(completions_per_process)
 completions_gather = gather_object(completions_per_process)
 
 # Drop duplicates produced by apply_padding in split_between_processes
