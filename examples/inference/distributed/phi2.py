@@ -76,6 +76,8 @@ with distributed_state.split_between_processes(tokenized_prompts, apply_padding=
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         completions_per_process.extend(generated_text)
 
+# We are gathering string, so we need to use gather_object.
+# If you need to gather tensors, you can use gather from accelerate.utils
 completions_gather = gather_object(completions_per_process)
 
 # Drop duplicates produced by apply_padding in split_between_processes

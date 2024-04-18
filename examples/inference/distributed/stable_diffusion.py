@@ -23,5 +23,8 @@ distributed_state = PartialState()
 pipe.to(distributed_state.device)
 
 # Assume two processes
+# On the first GPU, the prompts will be ["a dog", "a cat"],
+# and on the second GPU it will be ["a chicken", "a chicken"].
+# Make sure to drop the final sample, as it will be a duplicate of the previous one.
 with distributed_state.split_between_processes(["a dog", "a cat", "a chicken"], apply_padding=True) as prompt:
     result = pipe(prompt).images
