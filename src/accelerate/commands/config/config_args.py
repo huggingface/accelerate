@@ -109,8 +109,6 @@ class BaseConfig:
             config_dict["use_cpu"] = False
         if "debug" not in config_dict:
             config_dict["debug"] = False
-        if "enable_cpu_affinity" not in config_dict:
-            config_dict["enable_cpu_affinity"] = False
         extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
         if len(extra_keys) > 0:
             raise ValueError(
@@ -145,8 +143,6 @@ class BaseConfig:
             config_dict["use_cpu"] = False
         if "debug" not in config_dict:
             config_dict["debug"] = False
-        if "enable_cpu_affinity" not in config_dict:
-            config_dict["enable_cpu_affinity"] = False
         extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
         if len(extra_keys) > 0:
             raise ValueError(
@@ -182,7 +178,6 @@ class ClusterConfig(BaseConfig):
     rdzv_backend: Optional[str] = "static"
     same_network: Optional[bool] = False
     main_training_function: str = "main"
-    enable_cpu_affinity: bool = False
 
     # args for deepspeed_plugin
     deepspeed_config: dict = None
