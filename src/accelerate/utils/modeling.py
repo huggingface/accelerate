@@ -1775,8 +1775,7 @@ def get_mixed_precision_context_manager(native_amp: bool = False, autocast_kwarg
         autocast_kwargs = {}
     else:
         autocast_kwargs = autocast_kwargs.to_kwargs()
-    # With FP8 we need to cast to bf16
-    if native_amp or state.mixed_precision == "fp8":
+    if native_amp:
         device_type = (
             "cuda"
             if (state.distributed_type == DistributedType.XLA and is_torch_xla_available(check_is_gpu=True))
