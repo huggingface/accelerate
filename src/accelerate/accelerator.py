@@ -383,8 +383,15 @@ class Accelerator:
             **kwargs,
         )
 
-        if self.fp8_recipe_handler is None and self.state.mixed_precision == "fp8":
-            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP" if is_msamp_available() else "TE")
+        self.delayed_fp8_autocast = False
+        if self.fp8_recipe_handler is not None:
+            # We already check if FP8 is available during `self.state`
+            if self.state.mixed_precision != "fp8":
+                raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
+            self.delayed_fp8_autocast = self.fp8_recipe_handler.backend == "TE" and self.distributed_type in (
+                DistributedType.MULTI_GPU,
+                DistributedType.FSDP,
+            )
 
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
@@ -478,6 +485,10 @@ class Accelerator:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available():
                 raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
+
+        elif self.state.mixed_precision == "fp8":
+            # We always enable `native_amp` for FP8
+            self.native_amp = True
 
         # Start of internal step tracking
         self.step = 0
@@ -1335,10 +1346,10 @@ class Accelerator:
                 " Please rerun your script specifying `--num_processes=1` or by launching with `python {{myscript.py}}`."
             )
 
-        if self.native_amp or self.mixed_precision == "fp8":
+        if self.native_amp:
             model._original_forward = model.forward
             model_forward_func = model.forward.__func__ if hasattr(model.forward, "__func__") else model.forward
-            autocast_context = get_mixed_precision_context_manager(self.native_amp, self.autocast_handler)
+            autocast_context = get_mixed_precision_context_manager(True, self.autocast_handler)
             new_forward = autocast_context(model_forward_func)
             if hasattr(model.forward, "__func__"):
                 model.forward = MethodType(new_forward, model)
@@ -1346,7 +1357,7 @@ class Accelerator:
             else:
                 model.forward = convert_outputs_to_fp32(new_forward)
         # We prepare fp8 after, allowing for bf16 autocast to happen first
-        if self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
+        if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
                     convert_model(model)
@@ -1358,7 +1369,7 @@ class Accelerator:
             fp8_recipe = te_recipe.DelayedScaling(**kwargs)
             # If we are in DDP or FSDP, we delay `autocast` until after FSDP/DDP has been initialized
             # to make use of the process group
-            if self.distributed_type not in [DistributedType.MULTI_GPU, DistributedType.FSDP]:
+            if not self.delayed_fp8_autocast:
                 model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
@@ -1460,11 +1471,7 @@ class Accelerator:
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
         # Now we can apply the FP8 autocast
-        if (
-            self.distributed_type in [DistributedType.MULTI_GPU, DistributedType.FSDP]
-            and self.mixed_precision == "fp8"
-            and self.fp8_recipe_handler.backend == "TE"
-        ):
+        if self.delayed_fp8_autocast:
             model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe, fp8_group=model.process_group)(
                 model.forward
             )
