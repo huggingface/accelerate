@@ -458,7 +458,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             try:
                 # But we still move it to the device so it is done before `StopIteration` is reached
                 if self.device is not None:
-                    current_batch = send_to_device(current_batch, self.device)
+                    current_batch = send_to_device(current_batch, self.device, non_blocking=True)
                 next_batch = next(dataloader_iter)
                 if batch_index >= self.skip_batches:
                     yield current_batch
@@ -660,7 +660,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             if self.state.process_index != 0:
                 # Initialize tensors on other processes than process 0.
                 batch = initialize_tensors(batch_info[0])
-            batch = send_to_device(batch, self.state.device)
+            batch = send_to_device(batch, self.state.device, non_blocking=True)
             # Broadcast the batch before splitting it.
             batch = broadcast(batch, from_process=0)
 
