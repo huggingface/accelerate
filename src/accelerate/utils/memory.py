@@ -60,7 +60,8 @@ def release_memory(*objects):
     elif is_npu_available():
         torch.npu.empty_cache()
     elif is_mps_available():
-        torch.mps.empty_cache()
+        if hasattr(torch, "mps"):
+            torch.mps.empty_cache()
     else:
         torch.cuda.empty_cache()
     return objects
