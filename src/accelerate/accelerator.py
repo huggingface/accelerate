@@ -383,8 +383,15 @@ class Accelerator:
             **kwargs,
         )
 
-        if self.fp8_recipe_handler is None and self.state.mixed_precision == "fp8":
-            self.fp8_recipe_handler = FP8RecipeKwargs(backend="MSAMP" if is_msamp_available() else "TE")
+        self.delayed_fp8_autocast = False
+        if self.fp8_recipe_handler is not None:
+            # We already check if FP8 is available during `self.state`
+            if self.state.mixed_precision != "fp8":
+                raise ValueError("Passing in a `FP8RecipeKwargs` object requires setting `mixed_precision='fp8'`.")
+            self.delayed_fp8_autocast = self.fp8_recipe_handler.backend == "TE" and self.distributed_type in (
+                DistributedType.MULTI_GPU,
+                DistributedType.FSDP,
+            )
 
         trackers = filter_trackers(log_with, self.logging_dir)
         if len(trackers) < 1 and log_with is not None:
@@ -478,6 +485,10 @@ class Accelerator:
                 self.native_amp = is_bf16_available(True)
             if mixed_precision == "bf16" and not self.native_amp and not is_torch_xla_available():
                 raise ValueError("bf16 mixed precision requires PyTorch >= 1.10 and a supported device.")
+
+        elif self.state.mixed_precision == "fp8":
+            # We always enable `native_amp` for FP8
+            self.native_amp = True
 
         # Start of internal step tracking
         self.step = 0
@@ -1345,18 +1356,22 @@ class Accelerator:
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
             else:
                 model.forward = convert_outputs_to_fp32(new_forward)
-        elif self.mixed_precision == "fp8" and self.fp8_recipe_handler.backend == "TE":
+
+        # We prepare fp8 after, allowing for bf16 autocast to happen first
+        if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
             if not has_transformer_engine_layers(model):
                 with torch.no_grad():
                     convert_model(model)
                 model._converted_to_transformer_engine = True
-            model._original_forward = model.forward
 
             kwargs = self.fp8_recipe_handler.to_kwargs() if self.fp8_recipe_handler is not None else {}
             if "fp8_format" in kwargs:
                 kwargs["fp8_format"] = getattr(te_recipe.Format, kwargs["fp8_format"])
             fp8_recipe = te_recipe.DelayedScaling(**kwargs)
-            model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
+            # If we are in DDP or FSDP, we delay `autocast` until after FSDP/DDP has been initialized
+            # to make use of the process group
+            if not self.delayed_fp8_autocast:
+                model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)(model.forward)
 
         if (getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False)) and getattr(
             model, "hf_device_map", False
@@ -1456,6 +1471,11 @@ class Accelerator:
                 model = torch.nn.parallel.DistributedDataParallel(model, **kwargs)
             elif self.distributed_type == DistributedType.XLA and self.state.fork_launched:
                 model = xmp.MpModelWrapper(model).to(self.device)
+        # Now we can apply the FP8 autocast
+        if self.delayed_fp8_autocast:
+            model.forward = fp8_autocast(enabled=True, fp8_recipe=fp8_recipe, fp8_group=model.process_group)(
+                model.forward
+            )
         # torch.compile should be called last and only if the model isn't already compiled.
         if self.state.dynamo_plugin.backend != DynamoBackend.NO and not is_compiled_module(model):
             if not is_torch_version(">=", "2.0"):
