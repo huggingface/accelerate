@@ -1356,6 +1356,7 @@ class Accelerator:
                 model.forward = MethodType(convert_outputs_to_fp32(model.forward.__func__), model)
             else:
                 model.forward = convert_outputs_to_fp32(new_forward)
+
         # We prepare fp8 after, allowing for bf16 autocast to happen first
         if getattr(self.fp8_recipe_handler, "backend", None) == "TE":
             if not has_transformer_engine_layers(model):
