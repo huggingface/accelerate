@@ -562,6 +562,10 @@ class Accelerator:
         return self.dataloader_config.use_seedable_sampler
 
     @property
+    def non_blocking(self):
+        return self.dataloader_config.non_blocking
+
+    @property
     def project_dir(self):
         return self.project_configuration.project_dir
 
@@ -1926,6 +1930,7 @@ class Accelerator:
             even_batches=self.even_batches,
             slice_fn_for_dispatch=slice_fn_for_dispatch,
             use_seedable_sampler=self.use_seedable_sampler,
+            non_blocking=self.non_blocking,
         )
         self._dataloaders.append(prepared_data_loader)
         return prepared_data_loader
