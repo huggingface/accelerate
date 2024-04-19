@@ -429,6 +429,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         synchronized_generator=None,
         skip_batches=0,
         _drop_last: bool = False,
+        _non_blocking: bool = False,
         **kwargs,
     ):
         super().__init__(dataset, **kwargs)
@@ -438,6 +439,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
         self.skip_batches = skip_batches
         self.gradient_state = GradientState()
         self._drop_last = _drop_last
+        self._non_blocking = _non_blocking
         self.iteration = 0
 
     def __iter__(self):
@@ -458,7 +460,7 @@ class DataLoaderShard(DataLoader, DataLoaderStateMixin):
             try:
                 # But we still move it to the device so it is done before `StopIteration` is reached
                 if self.device is not None:
-                    current_batch = send_to_device(current_batch, self.device, non_blocking=True)
+                    current_batch = send_to_device(current_batch, self.device, non_blocking=self._non_blocking)
                 next_batch = next(dataloader_iter)
                 if batch_index >= self.skip_batches:
                     yield current_batch
@@ -571,7 +573,14 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
     """
 
     def __init__(
-        self, dataset, split_batches: bool = False, skip_batches=0, _drop_last: bool = False, slice_fn=None, **kwargs
+        self,
+        dataset,
+        split_batches: bool = False,
+        skip_batches=0,
+        _drop_last: bool = False,
+        _non_blocking: bool = False,
+        slice_fn=None,
+        **kwargs
     ):
         shuffle = False
         if is_torch_version(">=", "1.11.0"):
@@ -588,6 +597,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
         self._drop_last = _drop_last
+        self._non_blocking = _non_blocking
         self.skip_batches = skip_batches
 
         self.slice_fn = slice_tensors if slice_fn is None else slice_fn
@@ -660,7 +670,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
             if self.state.process_index != 0:
                 # Initialize tensors on other processes than process 0.
                 batch = initialize_tensors(batch_info[0])
-            batch = send_to_device(batch, self.state.device, non_blocking=True)
+            batch = send_to_device(batch, self.state.device, non_blocking=self._non_blocking)
             # Broadcast the batch before splitting it.
             batch = broadcast(batch, from_process=0)
 
@@ -754,6 +764,7 @@ def prepare_data_loader(
     even_batches: bool = True,
     slice_fn_for_dispatch: Optional[Callable] = None,
     use_seedable_sampler: bool = False,
+    non_blocking: bool = False,
 ) -> DataLoader:
     """
     Wraps a PyTorch `DataLoader` to generate batches for one of the processes only.
@@ -812,6 +823,10 @@ def prepare_data_loader(
             reproducability. Comes at a cost of potentially different performances due to different shuffling
             algorithms but ensures results will be the *exact* same. Should be paired with `set_seed()` at every
             `self.set_epoch`
+        non_blocking (`bool`, *optional*, defaults to `False`):
+            If set to `True`, dataloader will utilize non-blocking host-to-device transfers.  If the dataloader has
+            `pin_memory` set to `True`, this will help to increase overlap between data transfer and computations.
+
 
     Returns:
         `torch.utils.data.dataloader.DataLoader`: A new data loader that will yield the portion of the batches
@@ -941,6 +956,7 @@ def prepare_data_loader(
             split_batches=split_batches,
             batch_sampler=new_batch_sampler,
             _drop_last=dataloader.drop_last,
+            _non_blocking=non_blocking,
             slice_fn=slice_fn_for_dispatch,
             **kwargs,
         )
@@ -952,6 +968,7 @@ def prepare_data_loader(
             batch_size=dataloader.batch_size,
             rng_types=rng_types,
             _drop_last=dataloader.drop_last,
+            _non_blocking=non_blocking,
             synchronized_generator=synchronized_generator,
             **kwargs,
         )
@@ -963,6 +980,7 @@ def prepare_data_loader(
             rng_types=rng_types,
             synchronized_generator=synchronized_generator,
             _drop_last=dataloader.drop_last,
+            _non_blocking=non_blocking,
             **kwargs,
         )
 
