@@ -1459,6 +1459,7 @@ class Accelerator:
                 #   * if model is loaded in 16bit, and even if mixed_precision.param_dtype is None,
                 #     we sill want to upcast the flat_param.
                 if self.mixed_precision != "no":  # if mixed precision is set
+                    upcasted_log = []
                     for module in FSDP.fsdp_modules(model):
                         # Referencing DeepSpeed Zero3
                         # - in Init, params are converted to 16bit while partitioning.
@@ -1487,19 +1488,26 @@ class Accelerator:
                             and param.device != torch.device("meta")
                             and param.requires_grad
                         ):
-                            # TODO: make the warning issue only once
-                            if self.is_main_process:
-                                warnings.warn(
-                                    f"Upcasting low precision parameters in {module.module.__class__.__name__}, "
-                                    "mixed precision is turned on: "
-                                    f"{','.join(module._flat_param._fqns)}."
-                                )
+                            # keep log of names_params that was upcasted
+                            # NOTE: resorted to this because warnings.simplefilter("once") is somehow not working
+                            name_param_log = (module.module.__class__.__name__, ",".join(module._flat_param._fqns))
+                            if name_param_log not in upcasted_log:
+                                upcasted_log.append(name_param_log)
 
                             # this works because of FSDP's _runtime_utils.lazy_init.
                             # Have to be careful not to call anything before this that
                             # triggers lazy_init (e.g., _is_fsdp_root).
                             param.data = param.data.to(torch.float32)  # upcasting
                             module._handle._orig_param_dtype = torch.float32  # update
+
+                    # report the warnings
+                    # some messages can be quite repetitive, especially when reporting about layers that have identical architecture.
+                    if self.is_main_process:
+                        for name_log, param_log in upcasted_log:
+                            warnings.warn(
+                                f"Upcasted low precision parameters in {name_log} because mixed precision turned on in FSDP. "
+                                f"Affects: {param_log}."
+                            )
 
                 # if the previous and current models are same, delete the previous one
                 if len(self._models) > 1 and (self._models[-2] is self._models[-1]):
