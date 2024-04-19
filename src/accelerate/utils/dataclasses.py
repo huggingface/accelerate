@@ -524,6 +524,14 @@ class DataLoaderConfiguration:
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
+    non_blocking: bool = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, the dataloader prepared by the Accelerator will utilize non-blocking host-to-device"
+            " transfers, allowing for better overlap between dataloader communication and computation.  Requires that the"
+            " prepared dataloader has `pin_memory` set to `True` to work properly."
+        },
+    )
 
 
 @dataclass
