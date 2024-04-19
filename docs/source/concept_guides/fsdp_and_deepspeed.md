@@ -56,7 +56,7 @@ For detailed descriptions of the above, refer to [🤗 `Accelerate` launch docum
     
 </Tip>
 
-**Checkpointing**
+### Checkpointing
 
 Do note that while FSDP can be configured via `--fsdp_state_dict_type` to save either full / sharded checkpoints.
 
@@ -66,11 +66,11 @@ Do note that while FSDP can be configured via `--fsdp_state_dict_type` to save e
 
 </Tip>
 
-**Offloading**
+### Offloading
 
 FSDP only allows *all-or-nothing* offload, but DeepSpeed can offload parameters and optimizer differently. Furthermore, DeepSpeed also supports [offloading to NVME](https://www.deepspeed.ai/docs/config-json/#parameter-offloading).
 
-**Prefetching**
+### Prefetching
 
 FSDP allows two prefetching configurations `--fsdp_forward_prefetch` and `--fsdp_backward_prefetch` to improve overlap of comms / computation at a cost of extra memory, see [FSDP documentation](https://pytorch.org/docs/stable/fsdp.html). 
 For DeepSpeed, the prefetching is always on, and only certain hyperparams like `stage3_prefetch_bucket_size` [can be configured for Zero3](https://www.deepspeed.ai/docs/config-json/#parameter-offloading); 🤗 [`accelerate`] will set these hyperparams automatically.
@@ -81,7 +81,7 @@ For DeepSpeed, the prefetching is always on, and only certain hyperparams like `
 
 </Tip>
 
-**Model Loading**
+### Model Loading
 
 While FSDP require an explicit `--fsdp_cpu_ram_efficient_loading true` to activate efficient model loading, 🤗 `transformers` will activate the similar feature whenever DeepSpeed Zero3 is used.
 
@@ -91,7 +91,7 @@ While FSDP require an explicit `--fsdp_cpu_ram_efficient_loading true` to activa
 
 </Tip>
 
-**Model**
+### Model
 
 FSDP requires an explicit `--fsdp_auto_wrap_policy` for the algorithm to decide how to schedule the all-gather and reduce-scatter operations. But for DeepSpeed this is transparent to the user.
 
@@ -101,7 +101,7 @@ FSDP requires an explicit `--fsdp_auto_wrap_policy` for the algorithm to decide 
 
 </Tip>
 
-**Parameters Summoning**
+### Parameters Summoning
 
 FSDP requires an explicit `--fsdp_use_orig_params` flag if using `torch.compile`, see [the pytorch documenation](https://pytorch.org/docs/stable/fsdp.html#module-torch.distributed.fsdp). For DeepSpeed this is transparent to the user.
 
@@ -112,7 +112,7 @@ FSDP requires an explicit `--fsdp_use_orig_params` flag if using `torch.compile`
 </Tip>
 
 
-**Training**
+## Training
 
 Deepspeed requires explicit `--gradient_accumulation_steps` and `--gradient_clipping` flags. For FSDP this is transparent to the user.
 
