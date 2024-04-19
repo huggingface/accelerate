@@ -15,18 +15,21 @@ rendered properly in your Markdown viewer.
 
 # Moving between FSDP And DeepSpeed (DRAFT)
 
-🤗 Accelerate offers flexibilty of training frameworks, by integrating two extremely powerful tools for distributed training, namely [Pytorch FSDP](../usage_guides/fsdp.md) and [Microsoft DeepSpeed](../usage_guides/deepspeed.md). The aim fo this article is to draw parallels, as well as to outline potential differences, to empower the user to switch seamlessly between these two frameworks.
+🤗 Accelerate offers flexibilty of training frameworks, by integrating two extremely powerful tools for distributed training, namely [Pytorch FSDP](../usage_guides/fsdp.md) and [Microsoft DeepSpeed](../usage_guides/deepspeed.md). The aim of this tutorial is to draw parallels, as well as to outline potential differences, to empower the user to switch seamlessly between these two frameworks.
 
 <Tip>
-  To switch between the frameworks, we recommend 🤗 `accelerate launch`.
 
-  Simply pass [FSDP and DeepSpeed arguments](../package_reference/cli#accelerate-launch) directly to `accelerate launch` or pass `--config_file`. No need for any code instrumentation!
+  To switch between the frameworks, we recommend launching code 🤗 `accelerate launch` passing in the correct config file with `--config_file`, or passing in the respective arguments directly for [FSDP and DeepSpeed](../package_reference/cli#accelerate-launch) .
 
-  Exemplar 🤗 Accelerate configurations can be found here for [DeepSpeed](../usage_guides/deepspeed#accelerate-deepspeed-plugin) and [FSDP](../usage_guides/fsdp#how-it-works-out-of-the-box). 
+  Example 🤗 Accelerate configurations can be found here for [DeepSpeed](../usage_guides/deepspeed#accelerate-deepspeed-plugin) and [FSDP](../usage_guides/fsdp#how-it-works-out-of-the-box), or in the [example zoo under "Launch Configurations"](../usage_guides/explore)
  
 </Tip>
 
-This article is written with 🤗 Accelerate in mind, for single-node, multi-GPU, scenarios only. No TPU aspects will be considered.
+<Tip warning={true}>
+
+This tutorial is for single-node, multi-GPU, scenarios only.
+
+</Tip>
 
 ## Configuring Functionalities
 
@@ -49,7 +52,7 @@ For detailed descriptions of the above, refer to [🤗 `Accelerate` launch docum
 <Tip>
 
     To access other DeepSpeed configurations, such as mixed precision settings, 
-    you need to link a `deepspeed_config_file`, see the [documentation](../usage_guides/deepspeed#deepspeed-config-file).  
+    you need to pass in a `--deepspeed_config_file`, see the [documentation](../usage_guides/deepspeed#deepspeed-config-file).  
     
 </Tip>
 
@@ -59,7 +62,7 @@ Do note that while FSDP can be configured via `--fsdp_state_dict_type` to save e
 
 <Tip>
 
-    For DeepSpeed Zero3, it is recommended to also pass a `--zero3_save_16bit_model true` in the [`Accelerate` launch arguments](../package_reference/cli#accelerate-launch), which conviniently consolidates the model to a single rank and saves; this is the FSDP equivalent of `fsdp_state_dict_type: FULL_STATE_DICT`.
+    For DeepSpeed Zero3, it is recommended to also pass a `--zero3_save_16bit_model true`, which conveniently consolidates the model to a single rank and saves; this is the FSDP equivalent of `fsdp_state_dict_type: FULL_STATE_DICT`.
 
 </Tip>
 
