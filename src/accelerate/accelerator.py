@@ -79,6 +79,7 @@ from .utils import (
     is_deepspeed_available,
     is_fp8_available,
     is_ipex_available,
+    is_lomo_available,
     is_megatron_lm_available,
     is_mlu_available,
     is_msamp_available,
@@ -1952,6 +1953,11 @@ class Accelerator:
         >>> optimizer = accelerator.prepare_optimizer(optimizer, device_placement=True)
         ```
         """
+        if is_lomo_available():
+            from lomo_optim import AdaLomo, Lomo
+
+            self._has_lomo_optimizer = isinstance(optimizer, (Lomo, AdaLomo))
+
         # Ensure we can't double wrap an optimizer due to `find_batch_size`
         if getattr(optimizer, "_is_accelerate_prepared", False):
             if optimizer not in self._optimizers:
@@ -2022,6 +2028,8 @@ class Accelerator:
         >>> accelerator.backward(loss)
         ```
         """
+        learning_rate = kwargs.get("learning_rate")
+
         if self.distributed_type != DistributedType.DEEPSPEED:
             # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
             loss = loss / self.gradient_accumulation_steps
@@ -2031,6 +2039,8 @@ class Accelerator:
             return
         elif self.scaler is not None:
             self.scaler.scale(loss).backward(**kwargs)
+        elif learning_rate is not None and getattr(self, "_has_lomo_optimizer", False):
+            self._lomo_backward(loss, learning_rate)
         else:
             loss.backward(**kwargs)
 
@@ -3279,3 +3289,16 @@ class Accelerator:
                 return True
 
         return False
+
+    def _lomo_backward(self, loss: torch.Tensor, learning_rate: float) -> None:
+        """
+        Runs backward pass on LOMO optimizers.
+        """
+        if is_lomo_available():
+            from lomo_optim import AdaLomo, Lomo
+        else:
+            raise ValueError("`lomo_optim` package is needed to call backward on LOMO optimizers")
+
+        for optimizer in self._optimizers:
+            if isinstance(optimizer.optimizer, (Lomo, AdaLomo)):
+                optimizer.optimizer.fused_backward(loss, learning_rate)

@@ -100,6 +100,7 @@ def is_transformer_engine_available():
 def is_lomo_available():
     return _is_package_available("lomo_optim")
 
+
 def is_fp8_available():
     return is_msamp_available() or is_transformer_engine_available()
 

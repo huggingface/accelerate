@@ -18,14 +18,11 @@ import warnings
 import torch
 
 from .state import AcceleratorState, GradientState
-from .utils import DistributedType, honor_type, is_torch_xla_available, is_lomo_available
+from .utils import DistributedType, honor_type, is_lomo_available, is_torch_xla_available
 
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
-
-if is_lomo_available():
-    from lomo_optim import AdaLomo, Lomo
 
 
 def move_to_device(state, device):
@@ -137,6 +134,9 @@ class AcceleratedOptimizer(torch.optim.Optimizer):
         return self.optimizer.eval()
 
     def step(self, closure=None):
+        if is_lomo_available():
+            from lomo_optim import AdaLomo, Lomo
+
         if (
             not self.gradient_state.is_xla_gradients_synced
             and self.accelerator_state.distributed_type == DistributedType.XLA
