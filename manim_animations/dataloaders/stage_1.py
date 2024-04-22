@@ -14,7 +14,6 @@
 
 from manim import *
 
-%%manim -qh -v WARNING Stage01
 class Stage01(Scene):
     def construct(self):
         mascot = ImageMobject("mascot_bookie.png")
