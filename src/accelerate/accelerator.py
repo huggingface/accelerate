@@ -341,6 +341,8 @@ class Accelerator:
         self.init_handler = None
         self.fp8_recipe_handler = None
         self.autocast_handler = None
+        self._has_lomo_optimizer = False 
+
         if kwargs_handlers is not None:
             for handler in kwargs_handlers:
                 assert isinstance(
@@ -2039,7 +2041,7 @@ class Accelerator:
             return
         elif self.scaler is not None:
             self.scaler.scale(loss).backward(**kwargs)
-        elif learning_rate is not None and getattr(self, "_has_lomo_optimizer", False):
+        elif learning_rate is not None and self._has_lomo_optimizer:
             self._lomo_backward(loss, learning_rate)
         else:
             loss.backward(**kwargs)
