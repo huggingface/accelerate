@@ -20,10 +20,46 @@ from typing import List
 from unittest.mock import Mock
 
 import torch
-from torch.utils.data import DataLoader, IterableDataset, TensorDataset
+from torch.utils.data import (
+    BatchSampler,
+    DataLoader,
+    Dataset,
+    IterableDataset,
+    RandomSampler,
+    TensorDataset,
+    default_collate,
+)
 
 from accelerate.accelerator import Accelerator, DataLoaderConfiguration
 from accelerate.utils.dataclasses import DistributedType
+
+
+NUM_ELEMENTS = 22
+NUM_WORKERS = 4
+BATCH_SIZE = 4
+
+
+class DummyDataset(Dataset):
+    def __len__(self):
+        return NUM_ELEMENTS
+
+    def __getitem__(self, index):
+        squeeze = False
+
+        if isinstance(index, int):
+            index = [index]
+            squeeze = True
+        elif isinstance(index, slice):
+            index = list(range(*index.indices(self.size)))
+        else:
+            index = list(index)
+
+        batch = [{"index": i, "label": i % 2, "random_augmentation": torch.rand(1).item()} for i in index]
+
+        if squeeze:
+            batch = batch[0]
+
+        return batch
 
 
 class DummyIterableDataset(IterableDataset):
@@ -206,8 +242,28 @@ def test_join_raises_warning_for_iterable_when_overriding_even_batches():
         assert "only supported for map-style datasets" in str(w[-1].message)
 
 
+def test_data_loader(data_loader, accelerator):
+    # Prepare the DataLoader
+    data_loader = accelerator.prepare(data_loader)
+
+    all_examples = []
+    for i, batch in enumerate(data_loader):
+        index, _ = accelerator.gather_for_metrics((batch["index"], batch["label"]))
+        all_examples.extend(index.detach().cpu().numpy().tolist())
+
+    # Sort the examples
+    sorted_all_examples = sorted(all_examples)
+
+    # Check if all elements are present in the sorted list of iterated samples
+    label_data = list(range(NUM_ELEMENTS))
+    assert set(sorted_all_examples).intersection(set(label_data)) == set(
+        label_data
+    ), "Not all the dataset elements have been iterated in an epoch due to duplication of samples across processes."
+
+
 def main():
     accelerator = create_accelerator()
+    torch.manual_seed(accelerator.process_index)
 
     accelerator.print("Test that even_batches variable ensures uniform batches across processes")
     test_default_ensures_even_batch_sizes()
@@ -232,6 +288,25 @@ def main():
     accelerator.state.distributed_type = DistributedType.FSDP
     test_join_raises_warning_for_non_ddp_distributed(accelerator)
     accelerator.state.distributed_type = original_state
+
+    dataset = DummyDataset()
+    # Conventional Dataloader with shuffle=False
+    loader = DataLoader(dataset, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+    test_data_loader(loader, accelerator)
+
+    # Conventional Dataloader with shuffle=True
+    loader = DataLoader(dataset, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+    test_data_loader(loader, accelerator)
+
+    # Dataloader with batch_sampler
+    sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
+    loader = DataLoader(dataset, batch_sampler=sampler, num_workers=NUM_WORKERS)
+    test_data_loader(loader, accelerator)
+
+    # Dataloader with sampler as an instance of `BatchSampler`
+    sampler = BatchSampler(RandomSampler(dataset), batch_size=BATCH_SIZE, drop_last=False)
+    loader = DataLoader(dataset, sampler=sampler, batch_size=None, collate_fn=default_collate, num_workers=NUM_WORKERS)
+    test_data_loader(loader, accelerator)
 
 
 if __name__ == "__main__":
