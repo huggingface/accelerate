@@ -1490,7 +1490,7 @@ class Accelerator:
                         ):
                             # keep log of names_params that was upcasted
                             # NOTE: resorted to this because warnings.simplefilter("once") is somehow not working
-                            name_param_log = (module.module.__class__.__name__, ",".join(module._flat_param._fqns))
+                            name_param_log = (module.module.__class__.__name__, ", ".join(module._flat_param._fqns))
                             if name_param_log not in upcasted_log:
                                 upcasted_log.append(name_param_log)
 
@@ -1507,6 +1507,11 @@ class Accelerator:
                             warnings.warn(
                                 f"Upcasted low precision parameters in {name_log} because mixed precision turned on in FSDP. "
                                 f"Affects: {param_log}."
+                            )
+
+                        if len(upcasted_log) > 0:
+                            warnings.warn(
+                                "FSDP upcast of low precision paramters may affect precision of model checkpoints."
                             )
 
                 # if the previous and current models are same, delete the previous one
