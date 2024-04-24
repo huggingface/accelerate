@@ -528,7 +528,7 @@ class DataLoaderConfiguration:
         default=False,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator will utilize non-blocking host-to-device"
-            " transfers, allowing for better overlap between dataloader communication and computation.  Requires that the"
+            " transfers, allowing for better overlap between dataloader communication and computation.  Recommended that the"
             " prepared dataloader has `pin_memory` set to `True` to work properly."
         },
     )
