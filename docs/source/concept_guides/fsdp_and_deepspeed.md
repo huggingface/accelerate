@@ -81,7 +81,7 @@ FSDP only allows *all-or-nothing* offload, but DeepSpeed can offload parameters 
 ### Prefetching
 
 FSDP allows two prefetching configurations `--fsdp_forward_prefetch` and `--fsdp_backward_prefetch` to improve overlap of comms / computation at a cost of extra memory, see [FSDP documentation](https://pytorch.org/docs/stable/fsdp.html). 
-For DeepSpeed, the prefetching is always on, and only certain hyperparams like `stage3_prefetch_bucket_size` [can be configured for Zero3](https://www.deepspeed.ai/docs/config-json/#parameter-offloading); 🤗 [`accelerate`] will set these hyperparams automatically.
+For DeepSpeed, the prefetching is always on, and only certain hyperparams like `stage3_prefetch_bucket_size` [can be configured for Zero3](https://www.deepspeed.ai/docs/config-json/#parameter-offloading); 🤗 `accelerate` will set these hyperparams automatically.
 
 <Tip>
 
@@ -126,7 +126,7 @@ Deepspeed requires explicit `--gradient_accumulation_steps` and `--gradient_clip
 
 <Tip>
 
-    When using DeepSpeed, set `gradient_accumulation_steps: "auto"` and `gradient_clipping: "auto"` to automatically pick up values set in [`TrainingArguments`].
+    When using DeepSpeed, set `gradient_accumulation_steps: "auto"` and `gradient_clipping: "auto"` to automatically pick up values set in the [`Accelerator`] or [`TrainingArguments`] (if using `transformers`).
 
 </Tip>
 
@@ -164,7 +164,7 @@ Optimizer (Actual Step) | ✅ | FSDP<br>DeepSpeed  | occurs in `torch_dtype` <br
 
 <Tip warning={true}>
 
-    With mixed precision, then FSDP and DeepSpeed will upcast in the model preperation step (c.f. table above). But do note that FSDP will then save checkpoints in the upcasted precision; Deepspeed may still save low precision checkpoints if `--zero3_save_16bit_model` is specified.
+    With mixed precision, FSDP and DeepSpeed will upcast in the model preparation step (c.f. table above). But do note that FSDP will then save checkpoints in the upcasted precision; Deepspeed may still save low precision checkpoints if `--zero3_save_16bit_model` is specified.
 
 </Tip>
 
