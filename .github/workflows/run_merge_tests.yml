@@ -29,6 +29,11 @@ jobs:
           pip install -e .[testing,test_trackers] -U;
           pip install pytest-reportlog tabulate  ;
 
+      - name: Show installed libraries
+        run: |
+          source activate accelerate;
+          pip freeze
+
       - name: Run CLI tests (use make cli)
         working-directory: accelerate
         run: |
@@ -75,6 +80,11 @@ jobs:
           git checkout ${{ github.sha }};
           pip install -e .[testing,test_trackers] -U;
           pip install pytest-reportlog tabulate
+
+      - name: Show installed libraries
+        run: |
+          source activate accelerate;
+          pip freeze
 
       - name: Run test on GPUs
         working-directory: accelerate

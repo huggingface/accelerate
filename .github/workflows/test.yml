@@ -51,6 +51,11 @@ jobs:
         if [[ ${{ matrix.test-kind }} = test_rest ]]; then pip uninstall comet_ml -y; fi
         if [[ ${{ matrix.test-kind }} = minimum ]]; then pip install torch==1.10.0; fi
         pip install pytest-reportlog tabulate setuptools
+
+    - name: Show installed libraries
+      run: |
+        source activate accelerate;
+        pip freeze
     
     - name: Run Tests
       env: 
