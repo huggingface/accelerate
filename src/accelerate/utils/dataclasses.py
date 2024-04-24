@@ -975,11 +975,13 @@ class DeepSpeedPlugin:
             )
 
     def set_moe_leaf_modules(self, model):
-        from deepspeed.utils import set_z3_leaf_modules
-
         if self.transformer_moe_cls_names is None:
             self.transformer_moe_cls_names = os.environ.get("ACCELERATE_DEEPSPEED_MOE_LAYER_CLS_NAMES", None)
         if self.transformer_moe_cls_names is not None:
+            if compare_versions("deepspeed", "<", "0.14.0"):
+                raise ImportError("DeepSpeed version must be >= 0.14.0 to use MOE support. Please update DeepSpeed.")
+            from deepspeed.utils import set_z3_leaf_modules
+
             class_names = self.transformer_moe_cls_names.split(",")
             transformer_moe_cls = []
             for layer_class in class_names:
