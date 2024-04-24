@@ -813,7 +813,7 @@ class DeepSpeedConfigIntegration(AccelerateTestCase):
         )
         assert deepspeed_plugin.zero_stage == int(stage.replace("zero", ""))
 
-    def test_prepare_deepspeed_preapre_moe(self):
+    def test_prepare_deepspeed_prepare_moe(self):
         if compare_versions("transformers", "<", "4.40") and compare_versions("deepspeed", "<", "0.14"):
             return
         deepspeed_plugin = DeepSpeedPlugin(
