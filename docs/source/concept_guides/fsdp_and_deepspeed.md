@@ -76,7 +76,7 @@ Do note that while FSDP can be configured via `--fsdp_state_dict_type` to save e
 
 ### Offloading
 
-FSDP only allows *all-or-nothing* offload, but DeepSpeed can offload parameters and optimizer differently. Furthermore, DeepSpeed also supports [offloading to NVME](https://www.deepspeed.ai/docs/config-json/#parameter-offloading).
+FSDP only allows *all-or-nothing* offload (i.e., either offload parameters, gradients, and optimizer, or keep them all in GPU), but DeepSpeed can offload parameters and optimizer differently. Furthermore, DeepSpeed also supports [offloading to NVME](https://www.deepspeed.ai/docs/config-json/#parameter-offloading).
 
 ### Prefetching
 
