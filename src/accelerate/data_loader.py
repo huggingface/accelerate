@@ -580,7 +580,7 @@ class DataLoaderDispatcher(DataLoader, DataLoaderStateMixin):
         _drop_last: bool = False,
         _non_blocking: bool = False,
         slice_fn=None,
-        **kwargs
+        **kwargs,
     ):
         shuffle = False
         if is_torch_version(">=", "1.11.0"):
@@ -824,7 +824,7 @@ def prepare_data_loader(
             algorithms but ensures results will be the *exact* same. Should be paired with `set_seed()` at every
             `self.set_epoch`
         non_blocking (`bool`, *optional*, defaults to `False`):
-            If set to `True`, dataloader will utilize non-blocking host-to-device transfers.  If the dataloader has
+            If set to `True`, dataloader will utilize non-blocking host-to-device transfers. If the dataloader has
             `pin_memory` set to `True`, this will help to increase overlap between data transfer and computations.
 
 
