@@ -166,7 +166,7 @@ class InitProcessGroupKwargs(KwargsHandler):
 
     backend: Optional[str] = "nccl"
     init_method: Optional[str] = None
-    timeout: timedelta = timedelta(seconds=600)
+    timeout: Optional[timedelta] = None
 
 
 # Literals
