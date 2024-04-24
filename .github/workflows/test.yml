@@ -54,7 +54,6 @@ jobs:
 
     - name: Show installed libraries
       run: |
-        source activate accelerate;
         pip freeze
     
     - name: Run Tests
