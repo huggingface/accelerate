@@ -2280,9 +2280,9 @@ class Accelerator:
         except TypeError:
             all_tensors = False
 
-        use_gather_oject = use_gather_object or not all_tensors
+        use_gather_object = use_gather_object or not all_tensors
 
-        if use_gather_oject:
+        if use_gather_object:
             data = gather_object(input_data)
         else:
             data = self.gather(input_data)
