@@ -157,7 +157,7 @@ def launch_command_parser(subparsers=None):
     parser.add_argument(
         "--quiet",
         "-q",
-        action="store_true",
+        type=bool,
         help="Silence subprocess errors from the launch stack trace and only show the relevant tracebacks. (Only applicable to DeepSpeed and single-process configurations)",
     )
     # Hardware selection arguments
@@ -165,21 +165,21 @@ def launch_command_parser(subparsers=None):
         "Hardware Selection Arguments", "Arguments for selecting the hardware to be used."
     )
     hardware_args.add_argument(
-        "--cpu", default=False, action="store_true", help="Whether or not to force the training on the CPU."
+        "--cpu", default=False, type=bool, help="Whether or not to force the training on the CPU."
     )
     hardware_args.add_argument(
         "--multi_gpu",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether or not this should launch a distributed GPU training.",
     )
     hardware_args.add_argument(
-        "--tpu", default=False, action="store_true", help="Whether or not this should launch a TPU training."
+        "--tpu", default=False, type=bool, help="Whether or not this should launch a TPU training."
     )
     hardware_args.add_argument(
         "--ipex",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether or not this should launch a Intel PyTorch Extension (IPEX) training.",
     )
 
@@ -210,7 +210,7 @@ def launch_command_parser(subparsers=None):
     resource_args.add_argument(
         "--enable_cpu_affinity",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether or not CPU affinity and balancing should be enabled. Currently only supported on NVIDIA hardware.",
     )
 
@@ -232,13 +232,13 @@ def launch_command_parser(subparsers=None):
     resource_args.add_argument(
         "--dynamo_use_fullgraph",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether to use full graph mode for dynamo or it is ok to break model into several subgraphs",
     )
     resource_args.add_argument(
         "--dynamo_use_dynamic",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether to enable dynamic shape tracing.",
     )
 
@@ -249,25 +249,25 @@ def launch_command_parser(subparsers=None):
     paradigm_args.add_argument(
         "--use_deepspeed",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether to use deepspeed.",
     )
     paradigm_args.add_argument(
         "--use_fsdp",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether to use fsdp.",
     )
     paradigm_args.add_argument(
         "--use_megatron_lm",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether to use Megatron-LM.",
     )
     paradigm_args.add_argument(
         "--use_xpu",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether to use IPEX plugin to speed up training on XPU specifically.",
     )
 
@@ -281,7 +281,7 @@ def launch_command_parser(subparsers=None):
     distributed_args.add_argument(
         "--same_network",
         default=False,
-        action="store_true",
+        type=bool,
         help="Whether all machines used for multinode training exist on the same local network.",
     )
     distributed_args.add_argument(
@@ -337,12 +337,12 @@ def launch_command_parser(subparsers=None):
     parser.add_argument(
         "-m",
         "--module",
-        action="store_true",
+        type=bool,
         help="Change each process to interpret the launch script as a Python module, executing with the same behavior as 'python -m'.",
     )
     parser.add_argument(
         "--no_python",
-        action="store_true",
+        type=bool,
         help="Skip prepending the training script with 'python' - just execute it directly. Useful when the script is not a Python script.",
     )
 
@@ -350,19 +350,19 @@ def launch_command_parser(subparsers=None):
     tpu_args = parser.add_argument_group("TPU", "Arguments related to TPU.")
     tpu_args.add_argument(
         "--tpu_cluster",
-        action="store_true",
+        type=bool,
         dest="tpu_use_cluster",
         help="Whether to use a GCP TPU pod for training.",
     )
     tpu_args.add_argument(
         "--no_tpu_cluster",
-        action="store_false",
+        type=bool,
         dest="tpu_use_cluster",
         help="Should not be passed explicitly, this is for internal use only.",
     )
     tpu_args.add_argument(
         "--tpu_use_sudo",
-        action="store_true",
+        type=bool,
         help="Whether to use `sudo` when running the TPU training script in each pod.",
     )
     tpu_args.add_argument(
@@ -388,7 +388,7 @@ def launch_command_parser(subparsers=None):
     )
     tpu_args.add_argument(
         "--downcast_bf16",
-        action="store_true",
+        type=bool,
         help="Whether when using bf16 precision on TPUs if both float and double tensors are cast to bfloat16 or if double tensors remain as float32.",
     )
 
@@ -642,7 +642,7 @@ def launch_command_parser(subparsers=None):
     )
     parser.add_argument(
         "--debug",
-        action="store_true",
+        type=bool,
         help="Whether to print out the torch.distributed stack trace when something fails.",
     )
     parser.add_argument(
