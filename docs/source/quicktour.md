@@ -124,7 +124,7 @@ To perform distributed evaluation, pass your validation dataloader to the [`~Acc
 validation_dataloader = accelerator.prepare(validation_dataloader)
 ```
 
-Each device in your distributed setup only receives a part of the evaluation data, which means you should group your predictions together with the [`~Accelerator.gather_for_metrics`] method. This method requires all tensors to be the same size on each process, so if your tensors have different sizes on each process (for instance when dynamically padding to the maximum length in a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad you tensor to the largest size across processes.
+Each device in your distributed setup only receives a part of the evaluation data, which means you should group your predictions together with the [`~Accelerator.gather_for_metrics`] method. This method requires all tensors to be the same size on each process, so if your tensors have different sizes on each process (for instance when dynamically padding to the maximum length in a batch), you should use the [`~Accelerator.pad_across_processes`] method to pad you tensor to the largest size across processes. Note that the tensors needs to be 1D and that we concatenate the tensors along the first dimension. 
 
 ```python
 for inputs, targets in validation_dataloader:
@@ -133,6 +133,11 @@ for inputs, targets in validation_dataloader:
     all_predictions, all_targets = accelerator.gather_for_metrics((predictions, targets))
     # Example of use with a *Datasets.Metric*
     metric.add_batch(all_predictions, all_targets)
+```
+
+For more complex cases (e.g. 2D tensors, don't want to concatenate tensors, dict of 3D tensors), you can pass `use_gather_object=True`. This will return the list of objects after gathering. Note that using it with GPU tensors is not well supported and inefficient.
+```python
+all_predictions, all_targets = accelerator.gather_for_metrics((predictions, targets), use_gather_object=True)
 ```
 
 > [!TIP]

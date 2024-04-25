@@ -2243,7 +2243,7 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_for_metrics(self, input_data, use_gather_oject=False):
+    def gather_for_metrics(self, input_data, use_gather_object=False):
         """
         Gathers `input_data` and potentially drops duplicates in the last batch if on a distributed system. Should be
         used for gathering the inputs and targets for metric calculation.
@@ -2251,7 +2251,7 @@ class Accelerator:
         Args:
             input (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
                 The tensors or objects for calculating metrics across all processes
-            use_gather_oject(`bool`):
+            use_gather_object(`bool`):
                 Whether to use or not gather_object instead of gather. This flag can be useful for gathering tensors with different sizes
                 that we don't want to pad and concatenate along the first dimension. Using it with GPU tensors is not well supported and inefficient as
                 it incurs GPU -> CPU transfer since tensors would be pickled.
@@ -2279,7 +2279,7 @@ class Accelerator:
         except TypeError:
             all_tensors = False
 
-        use_gather_oject = use_gather_oject or not all_tensors
+        use_gather_oject = use_gather_object or not all_tensors
 
         if use_gather_oject:
             data = gather_object(input_data)
@@ -2298,6 +2298,11 @@ class Accelerator:
                 elif self.gradient_state.remainder > 0 and self.distributed_type != DistributedType.NO:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
+                        if tensor.dim > 1 and not use_gather_object:
+                            logger.warning_once("You are using `gather_for_metrics` on a tensor that is not 1D."
+                                                "This is not supported and you might get unexpected results with the last batch."
+                                                "As an alternative, you can pass `use_gather_object=True` in `gather_for_metrics`"
+                                                "or drop the last batch.")
                         return tensor[: self.gradient_state.remainder]
 
                     if use_gather_oject:
