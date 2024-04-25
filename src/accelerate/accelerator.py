@@ -2243,7 +2243,7 @@ class Accelerator:
         """
         return gather(tensor)
 
-    def gather_for_metrics(self, input_data, use_gather_oject=False):
+    def gather_for_metrics(self, input_data, use_gather_object=False):
         """
         Gathers `input_data` and potentially drops duplicates in the last batch if on a distributed system. Should be
         used for gathering the inputs and targets for metric calculation.
@@ -2280,7 +2280,7 @@ class Accelerator:
         except TypeError:
             all_tensors = False
 
-        use_gather_oject = use_gather_oject or not all_tensors
+        use_gather_oject = use_gather_object or not all_tensors
 
         if use_gather_oject:
             data = gather_object(input_data)
@@ -2301,7 +2301,7 @@ class Accelerator:
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
 
-                    if use_gather_oject:
+                    if use_gather_object:
                         # gather_object put the objects in a list
                         return _adjust_samples(data)
                     else:
