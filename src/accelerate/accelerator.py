@@ -2296,7 +2296,7 @@ class Accelerator:
                         "The used dataset had no length, returning gathered tensors. You should drop the remainder yourself."
                     )
                     return data
-                elif self.gradient_state.remainder > 0 and self.distributed_type != DistributedType.NO:
+                elif self.gradient_state.remainder > 0:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
