@@ -2299,6 +2299,7 @@ class Accelerator:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
                         return tensor[: self.gradient_state.remainder]
+
                     if use_gather_oject:
                         # gather_object put the objects in a list
                         return _adjust_samples(data)
