@@ -2252,7 +2252,7 @@ class Accelerator:
             input (`torch.Tensor`, `object`, a nested tuple/list/dictionary of `torch.Tensor`, or a nested tuple/list/dictionary of `object`):
                 The tensors or objects for calculating metrics across all processes
             use_gather_object(`bool`):
-                Whether to use or not gather_object instead of gather. This flag can be useful for gathering tensors
+                Whether to forcibly use gather_object instead of gather (which is already done if all objects passed do not contain tensors). This flag can be useful for gathering tensors
                 with different sizes that we don't want to pad and concatenate along the first dimension. Using it with
                 GPU tensors is not well supported and inefficient as it incurs GPU -> CPU transfer since tensors would
                 be pickled.
