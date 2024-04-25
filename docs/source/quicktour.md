@@ -135,10 +135,7 @@ for inputs, targets in validation_dataloader:
     metric.add_batch(all_predictions, all_targets)
 ```
 
-For more complex cases (e.g. 2D tensors, don't want to concatenate tensors, dict of 3D tensors), you can pass `use_gather_object=True`. This will return the list of objects after gathering. Note that using it with GPU tensors is not well supported and inefficient.
-```python
-all_predictions, all_targets = accelerator.gather_for_metrics((predictions, targets), use_gather_object=True)
-```
+For more complex cases (e.g. 2D tensors, don't want to concatenate tensors, dict of 3D tensors), you can pass `use_gather_object=True` in `gather_for_metrics`. This will return the list of objects after gathering. Note that using it with GPU tensors is not well supported and inefficient.
 
 > [!TIP]
 > Data at the end of a dataset may be duplicated so the batch can be equally divided among all workers. The [`~Accelerator.gather_for_metrics`] method automatically removes the duplicated data to calculate a more accurate metric.
