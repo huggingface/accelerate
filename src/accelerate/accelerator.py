@@ -3032,7 +3032,7 @@ class Accelerator:
             for index, obj in enumerate(self._custom_objects):
                 load_custom_state(obj, input_dir, index)
 
-    def free_memory(self):
+    def free_memory(self, *objects):
         """
         Will release all references to the internal objects stored and call the garbage collector. You should call this
         method between two trainings with different models/optimizers. Also will reset `Accelerator.step` to 0.
@@ -3045,8 +3045,7 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> model, optimizer, scheduler = ...
         >>> model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
-        >>> accelerator.free_memory()
-        >>> del model, optimizer, scheduler
+        >>> model, optimizer, scheduler = accelerator.free_memory(model, optimizer, scheduler)
         ```
         """
         self._schedulers = []
@@ -3055,9 +3054,9 @@ class Accelerator:
         self._dataloaders = []
         self.deepspeed_engine_wrapped = None
         self.step = 0
-        release_memory()
+        release_memory(*objects)
 
-    def clear(self):
+    def clear(self, *objects):
         """
         Alias for [`Accelerate.free_memory`], releases all references to the internal objects stored and call the
         garbage collector. You should call this method between two trainings with different models/optimizers.
@@ -3070,11 +3069,10 @@ class Accelerator:
         >>> accelerator = Accelerator()
         >>> model, optimizer, scheduler = ...
         >>> model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
-        >>> accelerator.free_memory()
-        >>> del model, optimizer, scheduler
+        >>> model, optimizer, scheduler = accelerator.clear(model, optimizer, scheduler)
         ```
         """
-        self.free_memory()
+        self.free_memory(*objects)
 
     def _get_named_parameters(self, *args):
         named_parameters = {}
