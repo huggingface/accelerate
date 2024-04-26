@@ -1388,7 +1388,7 @@ class Accelerator:
                     " Therefore you should not specify that you are under any distributed regime in your accelerate config."
                 )
             else:
-                # single device case
+                # single gpu case
                 current_device = list(model_devices)[0]
                 current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
 
@@ -1400,10 +1400,10 @@ class Accelerator:
                             "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
                         )
 
-            if "cpu" in model_devices or "disk" in model_devices:
-                raise ValueError(
-                    "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
-                )
+                if "cpu" in model_devices or "disk" in model_devices:
+                    raise ValueError(
+                        "You can't train a model that has been loaded in 8-bit precision with CPU or disk offload."
+                    )
         elif device_placement and not self.verify_device_map(model):
             model = model.to(self.device)
         if not evaluation_mode:
