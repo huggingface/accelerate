@@ -1387,16 +1387,18 @@ class Accelerator:
                     " In order to use 8-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
                     " Therefore you should not specify that you are under any distributed regime in your accelerate config."
                 )
-            current_device = list(model_devices)[0]
-            current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
+            else:
+                # single device case
+                current_device = list(model_devices)[0]
+                current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
 
-            if torch.device(current_device_index) != self.device:
-                # if on the first device (GPU 0) we don't care
-                if (self.device.index is not None) or (current_device_index != 0):
-                    raise ValueError(
-                        "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
-                        "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
-                    )
+                if torch.device(current_device_index) != self.device:
+                    # if on the first device (GPU 0) we don't care
+                    if (self.device.index is not None) or (current_device_index != 0):
+                        raise ValueError(
+                            "You can't train a model that has been loaded in 8-bit precision on a different device than the one "
+                            "you're training on. Make sure you loaded the model on the correct device using for example `device_map={'':torch.cuda.current_device() or device_map={'':torch.xpu.current_device()}"
+                        )
 
             if "cpu" in model_devices or "disk" in model_devices:
                 raise ValueError(
