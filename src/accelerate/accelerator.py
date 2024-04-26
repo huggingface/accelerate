@@ -1387,7 +1387,7 @@ class Accelerator:
                     " In order to use 8-bit models that have been loaded across multiple GPUs the solution is to use Naive Pipeline Parallelism."
                     " Therefore you should not specify that you are under any distributed regime in your accelerate config."
                 )
-            else:
+            elif len(model_devices) == 1:
                 # single gpu case
                 current_device = list(model_devices)[0]
                 current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
