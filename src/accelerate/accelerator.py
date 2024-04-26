@@ -1388,7 +1388,6 @@ class Accelerator:
                     " Therefore you should not specify that you are under any distributed regime in your accelerate config."
                 )
             elif len(model_devices) == 1:
-                # single gpu case
                 current_device = list(model_devices)[0]
                 current_device_index = current_device.index if isinstance(current_device, torch.device) else current_device
 
