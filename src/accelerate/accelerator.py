@@ -3048,13 +3048,14 @@ class Accelerator:
         >>> model, optimizer, scheduler = accelerator.free_memory(model, optimizer, scheduler)
         ```
         """
+        objects = release_memory(*objects)
         self._schedulers = []
         self._optimizers = []
         self._models = []
         self._dataloaders = []
         self.deepspeed_engine_wrapped = None
         self.step = 0
-        return release_memory(*objects)
+        return objects
 
     def clear(self, *objects):
         """
