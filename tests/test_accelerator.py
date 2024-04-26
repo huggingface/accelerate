@@ -212,7 +212,8 @@ class AcceleratorTester(AccelerateTestCase):
         assert len(accelerator._optimizers) == 0
         assert len(accelerator._schedulers) == 0
         assert len(accelerator._dataloaders) == 0
-        assert free_cpu_ram_after < free_cpu_ram_before
+        # The less-than comes *specifically* from CUDA CPU things/won't be present on CPU builds
+        assert free_cpu_ram_after <= free_cpu_ram_before
 
     @require_non_torch_xla
     def test_env_var_device(self):
