@@ -3054,7 +3054,7 @@ class Accelerator:
         self._dataloaders = []
         self.deepspeed_engine_wrapped = None
         self.step = 0
-        release_memory(*objects)
+        return release_memory(*objects)
 
     def clear(self, *objects):
         """
@@ -3072,7 +3072,7 @@ class Accelerator:
         >>> model, optimizer, scheduler = accelerator.clear(model, optimizer, scheduler)
         ```
         """
-        self.free_memory(*objects)
+        return self.free_memory(*objects)
 
     def _get_named_parameters(self, *args):
         named_parameters = {}
